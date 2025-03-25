@@ -5,3 +5,4 @@ pkg/static/dist/**
 dist/
 grok.json
 tmp/*
+logsonic

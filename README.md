@@ -69,6 +69,7 @@ swag init -g pkg/server/server.go
    cd frontend
    npm ci
    npm run build
+   npm run build:copy
    cd ..
    ```
 
@@ -76,8 +77,6 @@ swag init -g pkg/server/server.go
    ```bash
    cd backend
    go mod download
-   mkdir -p ./pkg/static/dist/
-   cp -rf ../frontend/dist ./pkg/static/dist/
    go build -o logsonic .
    ```
 
