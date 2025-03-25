@@ -1,0 +1,271 @@
+/* Styles for TanStack Table */
+
+/* Container styles */
+.tanstack-table-container {
+  position: relative;
+  overflow: auto;
+  width: 100%;
+  height: 100%;
+}
+
+/* Style for when table is locked */
+.locked-table th {
+  cursor: default !important;
+  pointer-events: none !important;
+}
+
+/* Table header styles */
+thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/* Column resizer styles */
+.resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 5px;
+  background: rgba(0, 0, 0, 0.05);
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.resizer:hover,
+.resizer.isResizing {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* Drag handle styles */
+.drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.drag-handle:hover {
+  opacity: 1;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Ensure text doesn't wrap in headers */
+th span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Style for expandable rows */
+tr.expanded {
+  background-color: #f8fafc !important; /* slate-50 equivalent */
+}
+
+/* Style for the expanded content */
+td[colspan] {
+  padding: 0 !important;
+}
+
+/* Style for expander button */
+.expander-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  border-radius: 4px;
+  transition: background-color 0.2s ease-in-out;
+
+  margin: 0 auto;
+}
+
+.expander-button:hover {
+  background-color: #f1f5f9;
+}
+
+/* Style for checkbox */
+input[type="checkbox"] {
+  width: 16px !important;
+  height: 16px !important;
+  cursor: pointer !important;
+  border-radius: 3px !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+/* Ensure consistent padding for all cells */
+.tanstack-table-container th, .tanstack-table-container td {
+  padding: 8px 12px !important;
+}
+
+/* Fix data alignment with headers */
+td {
+  font-size: 0.875rem !important;
+}
+
+/* Style for selected row indicator */
+.fixed.bottom-4.right-4 {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e2e8f0;
+}
+
+/* Truncate long text in cells */
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Ensure the table takes up the full width of its container */
+table {
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+/* Fix for header alignment */
+th {
+  text-align: left;
+  font-weight: 600;
+}
+
+/* Custom log row styles */
+.log-table .log-row {
+  transition: all 0.1s ease-in-out;
+}
+
+/* Hover effect for log rows that doesn't override background color */
+.log-table .log-row:hover {
+  filter: brightness(0.95);
+  box-shadow: inset 0 0 0 1000px rgba(0, 0, 0, 0.03);
+}
+
+/* Selected row styling - make it extremely visible */
+.log-table .selected-row {
+  position: relative;
+  outline: 3px solid #3b82f6 !important; /* Bold blue outline */
+  outline-offset: -3px !important;
+  z-index: 1; /* Ensure the outline appears above other elements */
+  /* Add subtle highlight effect */
+  box-shadow: inset 0 0 0 2000px rgba(59, 130, 246, 0.1) !important; /* Light blue overlay */
+}
+
+/* Add a visual indicator with a pattern on the left side */
+.log-table .selected-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  background-color: #3b82f6; /* Same blue as outline */
+  background-image: repeating-linear-gradient(
+    45deg,
+    #3b82f6,
+    #3b82f6 5px,
+    #60a5fa 5px,
+    #60a5fa 10px
+  );
+}
+
+/* Add a visual indicator to the right side as well */
+.log-table .selected-row::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  background-color: #3b82f6; /* Same blue as outline */
+}
+
+/* Ensure table cells have relative positioning for the resizer */
+.tanstack-table-container th {
+  position: relative;
+}
+
+/* Ensure the header group has proper hover state for the resizer */
+.tanstack-table-container th:hover .group-hover\/header\:opacity-100 {
+  opacity: 1;
+}
+
+/* Ensure the resizer handle is properly positioned */
+.group\/resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Add right margin to create space between the icon and column edge */
+  right: 4px;
+}
+
+/* Add padding to the header cells to accommodate the resizer */
+.tanstack-table-container th {
+  padding-right: 16px !important;
+}
+
+/* Special styling for utility columns (select and expander) */
+.tanstack-table-container th[data-column-id="select"],
+.tanstack-table-container th[data-column-id="expander"] {
+  padding: 8px !important;
+  text-align: center !important;
+  width: 40px !important;
+  min-width: 40px !important;
+  max-width: 40px !important;
+}
+
+/* Ensure checkboxes are visible and properly sized */
+.tanstack-table-container input[type="checkbox"] {
+  width: 16px !important;
+  height: 16px !important;
+  cursor: pointer !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: inline-block !important;
+}
+
+/* Ensure the overlay has proper z-index */
+.fixed.inset-0.z-50 {
+  z-index: 50;
+}
+
+/* Ensure table cells have proper z-index to stay above selection indicators */
+.log-table td {
+  position: relative;
+  z-index: 2;
+}
+
+/* Add styling for search term highlights */
+.bg-yellow-300 {
+  background-color: #fde047; /* Bright yellow */
+  color: #000 !important;
+  padding: 0 2px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+  font-weight: 500;
+  display: inline;
+  position: relative;
+  z-index: 1; /* Ensure highlights appear above row colors */
+}
+
+/* Ensure highlights are visible on all row colors */
+.log-row:hover .bg-yellow-300 {
+  background-color: #facc15; /* Slightly darker yellow on hover */
+}
+
+/* Ensure highlights work with row coloring */
+.selected-row .bg-yellow-300 {
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+} 

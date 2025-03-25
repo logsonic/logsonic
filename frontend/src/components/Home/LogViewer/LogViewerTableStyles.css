@@ -1,0 +1,163 @@
+/* Styles for react-data-table-component */
+
+/* Style for when table is locked */
+.locked-table .rdt_TableCol {
+  cursor: default !important;
+  pointer-events: none !important;
+}
+
+/* Improve the appearance of the table */
+.rdt_TableHeader {
+  background-color: white;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.rdt_TableRow:hover {
+  background-color: #f1f5f9 !important; /* slate-50 equivalent */
+}
+
+/* Make the table fill the container */
+.rdt_Table {
+  height: 100%;
+}
+
+/* Scrollable content */
+.rdt_TableBody {
+  overflow-y: auto;
+}
+
+/* Fix for header alignment */
+.rdt_TableCol_Sortable {
+  justify-content: flex-start !important;
+}
+
+/* Fix for column width */
+.rdt_TableCol, .rdt_TableCell {
+  min-width: 150px;
+}
+
+/* Ensure column headers have enough space for sort indicators */
+.rdt_TableCol {
+  padding-right: 24px !important;
+}
+
+/* Style for sort indicators */
+.rdt_TableCol .flex.items-center {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+/* Ensure text doesn't wrap in headers */
+.rdt_TableCol span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Style for expandable rows */
+.rdt_ExpanderRow {
+  background-color: #f8fafc !important; /* slate-50 equivalent */
+  border-bottom: 1px solid #e2e8f0;
+}
+
+/* Style for the expanded content */
+.rdt_ExpanderRow > div {
+  padding: 0 !important;
+}
+
+/* Hover effect for copy buttons */
+.hover\:bg-slate-100:hover {
+  background-color: #f1f5f9;
+}
+
+/* Transition for copy icon */
+.text-green-500 {
+  transition: color 0.2s ease-in-out;
+}
+
+/* Style for expander button */
+.rdt_ExpanderButton {
+  background-color: transparent !important;
+  border: none !important;
+  padding: 4px !important;
+  margin-right: 8px !important;
+  border-radius: 4px !important;
+  transition: background-color 0.2s ease-in-out !important;
+}
+
+.rdt_ExpanderButton:hover {
+  background-color: #f1f5f9 !important;
+}
+
+/* Style for checkbox */
+.rdt_TableCell input[type="checkbox"],
+.rdt_TableCol input[type="checkbox"] {
+  width: 16px !important;
+  height: 16px !important;
+  cursor: pointer !important;
+  border-radius: 3px !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+/* Fix checkbox alignment */
+.rdt_TableCol:first-child,
+.rdt_TableCell:first-child {
+  padding-left: 16px !important;
+  padding-right: 0 !important;
+  justify-content: center !important;
+  width: 48px !important;
+  max-width: 48px !important;
+  min-width: 48px !important;
+}
+
+/* Align the select-all checkbox with row checkboxes */
+.rdt_TableCol:first-child div[role="checkbox"] {
+  margin: 0 auto !important;
+}
+
+/* Fix alignment between header and cell content */
+.rdt_TableCol > div,
+.rdt_TableCell > div {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Ensure consistent padding for all cells */
+.rdt_TableCol,
+.rdt_TableCell {
+  padding: 8px 12px !important;
+}
+
+/* Fix expander column alignment */
+.rdt_TableCol:nth-child(2),
+.rdt_TableCell:nth-child(2) {
+  padding-left: 0 !important;
+  width: 42px !important;
+  max-width: 42px !important;
+  min-width: 42px !important;
+}
+
+/* Fix data alignment with headers */
+.rdt_TableCell {
+  font-size: 0.875rem !important;
+}
+
+/* Ensure content alignment */
+.rdt_TableCol > div,
+.rdt_TableCell > div {
+  width: 100% !important;
+}
+
+/* Fix header text alignment */
+.rdt_TableCol .flex.items-center span {
+  padding-left: 0 !important;
+}
+
+/* Style for selected row indicator */
+.fixed.bottom-4.right-4 {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e2e8f0;
+} 

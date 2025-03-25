@@ -1,0 +1,658 @@
+basePath: /api/v1
+definitions:
+  handlers.PingResponse:
+    properties:
+      status:
+        type: string
+    type: object
+  types.AutosuggestResult:
+    properties:
+      custom_patterns:
+        additionalProperties:
+          type: string
+        type: object
+      parsed_logs:
+        items:
+          additionalProperties: true
+          type: object
+        type: array
+      pattern:
+        type: string
+      pattern_description:
+        type: string
+      pattern_name:
+        type: string
+      score:
+        type: number
+    type: object
+  types.ErrorResponse:
+    description: Standardized error response structure used across all API endpoints
+    properties:
+      code:
+        description: Error code for programmatic handling
+        type: string
+      details:
+        description: Additional error details
+        type: string
+      error:
+        description: Main error message
+        type: string
+      status:
+        description: Status will always be "error" for error responses
+        type: string
+    type: object
+  types.GrokPatternRequest:
+    description: Request structure for creating or updating Grok patterns
+    properties:
+      custom_patterns:
+        additionalProperties:
+          type: string
+        description: Map of custom pattern definitions used by this pattern
+        type: object
+      description:
+        description: Human-readable description of the pattern
+        type: string
+      name:
+        description: Name of the Grok pattern
+        type: string
+      pattern:
+        description: The Grok pattern string
+        type: string
+      priority:
+        description: Priority of the pattern (higher numbers are matched first)
+        type: integer
+    type: object
+  types.GrokPatternResponse:
+    description: Response structure for Grok pattern operations
+    properties:
+      error:
+        description: Error message if status is "error"
+        type: string
+      patterns:
+        description: List of Grok patterns
+        items:
+          $ref: '#/definitions/types.GrokPatternRequest'
+        type: array
+      status:
+        description: Status of the operation
+        type: string
+    type: object
+  types.IngestRequest:
+    properties:
+      logs:
+        items:
+          type: string
+        type: array
+      session_id:
+        type: string
+    type: object
+  types.IngestResponse:
+    properties:
+      error:
+        type: string
+      failed:
+        type: integer
+      filename:
+        type: string
+      processed:
+        type: integer
+      session_id:
+        type: string
+      status:
+        type: string
+    type: object
+  types.IngestSessionOptions:
+    properties:
+      custom_patterns:
+        additionalProperties:
+          type: string
+        type: object
+      force_start_day:
+        type: string
+      force_start_month:
+        type: string
+      force_start_year:
+        type: string
+      force_timezone:
+        type: string
+      name:
+        type: string
+      pattern:
+        type: string
+      priority:
+        type: integer
+      smart_decoder:
+        type: boolean
+      source:
+        type: string
+    type: object
+  types.LogDistributionEntry:
+    properties:
+      count:
+        type: integer
+      end_time:
+        type: string
+      source_counts:
+        additionalProperties:
+          type: integer
+        type: object
+      start_time:
+        type: string
+    type: object
+  types.LogResponse:
+    properties:
+      available_columns:
+        items:
+          type: string
+        type: array
+      count:
+        type: integer
+      end_date:
+        type: string
+      index_query_time:
+        type: integer
+      limit:
+        type: integer
+      log_distribution:
+        items:
+          $ref: '#/definitions/types.LogDistributionEntry'
+        type: array
+      logs:
+        items:
+          additionalProperties: true
+          type: object
+        type: array
+      offset:
+        type: integer
+      query:
+        type: string
+      sort_by:
+        type: string
+      sort_order:
+        type: string
+      start_date:
+        type: string
+      status:
+        type: string
+      time_taken:
+        type: integer
+      total_count:
+        type: integer
+    type: object
+  types.ParseRequest:
+    properties:
+      custom_patterns:
+        additionalProperties:
+          type: string
+        type: object
+      grok_pattern:
+        type: string
+      logs:
+        items:
+          type: string
+        type: array
+      session_options:
+        $ref: '#/definitions/types.IngestSessionOptions'
+    type: object
+  types.ParseResponse:
+    description: Response from the parse endpoint, containing parsed logs and potential
+      error information
+    properties:
+      custom_patterns:
+        additionalProperties:
+          type: string
+        description: Custom patterns used (optional)
+        type: object
+      failed:
+        description: Number of log lines that failed to parse
+        type: integer
+      logs:
+        description: Array of parsed log entries, where each entry is a key-value
+          map
+        items:
+          additionalProperties: true
+          type: object
+        type: array
+      pattern:
+        description: Pattern used for parsing (optional)
+        type: string
+      pattern_description:
+        description: Description of the pattern (optional)
+        type: string
+      processed:
+        description: Number of log lines processed
+        type: integer
+      status:
+        description: |-
+          Status of the parse operation
+          @Example "success" or "error"
+        type: string
+    type: object
+  types.SuggestResponse:
+    properties:
+      results:
+        items:
+          $ref: '#/definitions/types.AutosuggestResult'
+        type: array
+      status:
+        type: string
+      type:
+        type: string
+    type: object
+  types.SystemInfoResponse:
+    properties:
+      status:
+        type: string
+      storage_info:
+        properties:
+          available_dates:
+            items:
+              type: string
+            type: array
+          source_names:
+            items:
+              type: string
+            type: array
+          storage_directory:
+            type: string
+          storage_size_bytes:
+            type: integer
+          total_indices:
+            type: integer
+          total_log_entries:
+            type: integer
+        type: object
+      system_info:
+        properties:
+          architecture:
+            type: string
+          go_version:
+            type: string
+          hostname:
+            type: string
+          memory_usage:
+            properties:
+              alloc_bytes:
+                type: integer
+              num_gc:
+                type: integer
+              sys_bytes:
+                type: integer
+              total_alloc_bytes:
+                type: integer
+            type: object
+          num_cpu:
+            type: integer
+          os_type:
+            type: string
+        type: object
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: API for ingesting, storing, and querying log data with Grok pattern
+    support
+  title: LogSonic API
+  version: "1.0"
+paths:
+  /api/v1/grok:
+    delete:
+      consumes:
+      - application/json
+      description: Create, read, update, and delete Grok patterns for log parsing
+      parameters:
+      - description: Grok pattern definition
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.GrokPatternRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Success response with patterns
+          schema:
+            $ref: '#/definitions/types.GrokPatternResponse'
+        "201":
+          description: Pattern created successfully
+          schema:
+            $ref: '#/definitions/types.GrokPatternResponse'
+        "400":
+          description: Invalid request format or missing required fields
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "404":
+          description: Pattern not found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "405":
+          description: Method not allowed
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Manage Grok patterns
+      tags:
+      - grok
+    get:
+      consumes:
+      - application/json
+      description: Create, read, update, and delete Grok patterns for log parsing
+      parameters:
+      - description: Grok pattern definition
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.GrokPatternRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Success response with patterns
+          schema:
+            $ref: '#/definitions/types.GrokPatternResponse'
+        "201":
+          description: Pattern created successfully
+          schema:
+            $ref: '#/definitions/types.GrokPatternResponse'
+        "400":
+          description: Invalid request format or missing required fields
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "404":
+          description: Pattern not found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "405":
+          description: Method not allowed
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Manage Grok patterns
+      tags:
+      - grok
+    post:
+      consumes:
+      - application/json
+      description: Create, read, update, and delete Grok patterns for log parsing
+      parameters:
+      - description: Grok pattern definition
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.GrokPatternRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Success response with patterns
+          schema:
+            $ref: '#/definitions/types.GrokPatternResponse'
+        "201":
+          description: Pattern created successfully
+          schema:
+            $ref: '#/definitions/types.GrokPatternResponse'
+        "400":
+          description: Invalid request format or missing required fields
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "404":
+          description: Pattern not found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "405":
+          description: Method not allowed
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Manage Grok patterns
+      tags:
+      - grok
+  /info:
+    get:
+      description: Retrieve detailed information about the system, storage, and application
+      parameters:
+      - description: Force a cache refresh if set to true
+        in: query
+        name: refresh
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.SystemInfoResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Get system and storage information
+      tags:
+      - system
+  /ingest:
+    post:
+      consumes:
+      - application/json
+      description: Ingest log data using existing Grok patterns and store them into
+        the index
+      parameters:
+      - description: Log ingest request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.IngestRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.IngestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Ingest log data
+      tags:
+      - ingest
+  /ingest/end:
+    post:
+      consumes:
+      - application/json
+      description: End the specified log ingest session and cleanup its resources
+      parameters:
+      - description: Session end request with session_id
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.IngestRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.IngestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: End log ingest session
+      tags:
+      - ingest
+  /ingest/start:
+    post:
+      consumes:
+      - application/json
+      description: Start a new log ingest session with specific options and returns
+        a session ID
+      parameters:
+      - description: Log ingest session start request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.IngestSessionOptions'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.IngestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Start log ingest session
+      tags:
+      - ingest
+  /logs:
+    delete:
+      consumes:
+      - application/json
+      description: Delete all stored logs from the system
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Success message
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Clear all logs
+      tags:
+      - logs
+    get:
+      consumes:
+      - application/json
+      description: Retrieve all stored logs with pagination, sorting, time distribution
+        support
+      parameters:
+      - description: 'Maximum number of logs to return (default: 1000)'
+        in: query
+        name: limit
+        type: integer
+      - description: 'Number of logs to skip (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      - description: 'Field to sort by (default: timestamp)'
+        in: query
+        name: sort_by
+        type: string
+      - description: 'Sort order (asc or desc, default: desc)'
+        in: query
+        name: sort_order
+        type: string
+      - description: Start date for log retrieval (RFC3339 format)
+        in: query
+        name: start_date
+        type: string
+      - description: End date for log retrieval (RFC3339 format)
+        in: query
+        name: end_date
+        type: string
+      - description: Optional search query to filter logs
+        in: query
+        name: query
+        type: string
+      - description: Optional comma-separated source filter
+        in: query
+        name: _src
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Logs with pagination, sorting, and time distribution metadata
+          schema:
+            $ref: '#/definitions/types.LogResponse'
+        "400":
+          description: Bad request due to invalid parameters
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Read all logs
+      tags:
+      - logs
+  /parse:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Parse logs using existing or temporary Grok patterns without storing them into the database.
+        If no grok_pattern is provided, this endpoint will suggest the best matching patterns for the logs.
+        When a grok_pattern is provided, it will parse the logs using that pattern.
+      parameters:
+      - description: Log parsing request with optional grok_pattern and custom_patterns
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.ParseRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Autosuggest results when no pattern provided
+          schema:
+            $ref: '#/definitions/types.SuggestResponse'
+        "400":
+          description: Invalid request or pattern
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Parse logs or suggest patterns
+      tags:
+      - parsing
+  /ping:
+    get:
+      description: Check if the API is running
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.PingResponse'
+      summary: Ping the API
+      tags:
+      - System
+swagger: "2.0"

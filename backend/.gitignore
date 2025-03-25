@@ -1,0 +1,7 @@
+.logsonic/**
+pkg/static/dist/**
+.patterns.json
+# Added by goreleaser init:
+dist/
+grok.json
+tmp/*
