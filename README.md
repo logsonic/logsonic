@@ -60,7 +60,7 @@ swag init -g pkg/server/server.go
 #### Steps
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/logsonic.git
+   git clone https://github.com/logsonic/logsonic.git
    cd logsonic
    ```
 
@@ -151,10 +151,12 @@ HOST=0.0.0.0 PORT=9000 STORAGE_PATH=/var/logs/storage logsonic
 
 The frontend is built with React, TypeScript, and Vite:
 
+In developement setup, we run the UI on port 8081 while the backend is running on 8081
+
 ```bash
 cd frontend
 npm ci
-npm run dev
+PORT=8081 npm run dev
 ```
 
 ### Backend
@@ -169,6 +171,8 @@ air
 # Or standard Go run
 go run main.go
 ```
+Open http://localhost:8081 in your broser for local developement 
+
 
 ## Architecture
 
