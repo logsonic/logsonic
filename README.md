@@ -144,7 +144,7 @@ HOST=0.0.0.0 PORT=9000 STORAGE_PATH=/var/logs/storage logsonic
 
 The frontend is built with React, TypeScript, and Vite:
 
-In development setup, we run the UI on port 8081 while the backend is running on 8081
+In development setup, we run the UI on port 8081 while the backend is running on 8080
 
 ```bash
 cd frontend
@@ -164,7 +164,7 @@ cd backend
 # Or standard Go run
 go run main.go
 ```
-Open http://localhost:8081 in your broser for local development 
+Open http://localhost:8081 in your browser for local development 
 
 
 ## Architecture
