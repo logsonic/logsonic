@@ -18,6 +18,8 @@ import { useNavigate } from 'react-router-dom';
 import { useSearchQueryParamsStore } from '../stores/useSearchParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import React from 'react';
+import { SourceSelection } from '@/components/Import/UploadSteps/SourceSelection';
+import CloudWatchSelection from '@/components/Import/UploadSteps/CloudWatchSelection';
 
 const Import: FC  = () => {
   const { toast } = useToast(); 
@@ -37,7 +39,7 @@ const Import: FC  = () => {
 
   // Define steps data
   const steps = [
-    { number: 1, label: "Choose Log File" },
+    { number: 1, label: "Choose Import Source" },
     { number: 2, label: "Define Log Pattern" },
     { number: 3, label: "Confirm Import" }
   ];
@@ -63,7 +65,10 @@ const Import: FC  = () => {
     selectedFile,
     filePreview,
     selectedPattern,
+    importSource,
     handleFileSelect,
+    setFileFromBlob,
+    setImportSource,
     setSelectedPattern,
     setFilePreview,
     currentStep,
@@ -122,6 +127,14 @@ const Import: FC  = () => {
     fetchPatterns();
   }, []);
 
+  // Handle CloudWatch log selection
+  const handleCloudWatchLogSelect = (logData: string, filename: string) => {
+    // Use the setFileFromBlob function to prepare CloudWatch logs for pattern detection
+    setFileFromBlob(logData, filename);
+    // Note: setFileFromBlob should automatically advance to step 2 for pattern detection
+    console.log("CloudWatch logs selected, advancing to step 2");
+  };
+
   // Function to handle pattern save dialog close
   const handleSavePatternDialogClose = () => {
     setShowSavePatternDialog(false);
@@ -129,14 +142,33 @@ const Import: FC  = () => {
     setCurrentStep(3);
   };
 
+  // Handle source selection
+  const handleSourceSelect = (source: 'file' | 'cloudwatch') => {
+    setImportSource(source);
+  };
+
+  // Handle back button for CloudWatch selection
+  const handleBackToSourceSelection = () => {
+    setImportSource(null);
+  };
+
   //Invoked when user clicks next button
   const handleNext = async () => {
     try {
       switch (currentStep) {
         case 1:
-          // Trigger file selection and move to analyzing step
-          if (!selectedFile) {
-            // Don't proceed if no file is selected
+          // If source is not selected yet, don't proceed
+          if (!importSource) {
+            toast({
+              title: "Source Required",
+              description: "Please select an import source before proceeding.",
+              variant: "destructive",
+            });
+            return;
+          }
+          
+          // If file source but no file is selected, don't proceed
+          if (importSource === 'file' && !selectedFile) {
             toast({
               title: "File Required",
               description: "Please select a file to import before proceeding.",
@@ -145,20 +177,31 @@ const Import: FC  = () => {
             return;
           }
           
-          if (selectedFile) {
+          // For CloudWatch, the step changes when a log is imported
+          if (importSource === 'file' && selectedFile) {
             setCurrentStep(2);
           }
           break;
         case 2:
           // Check if there's a custom pattern that needs to be saved
           if (detectionResult?.isOngoing === false) {
+            console.log("Step 2 Next button clicked - manually advancing to step 3");
             // If user created a custom pattern, show save dialog first
             if (importStore.isCreateNewPatternSelected) {
+              console.log("Custom pattern selected, showing save dialog before step 3");
               setShowSavePatternDialog(true);
             } else {
-              // Otherwise proceed directly to step 3
+              // Otherwise proceed directly to step 3 
+              console.log("Standard pattern selected, manually advancing to step 3");
               setCurrentStep(3);
             }
+          } else {
+            console.log("Cannot proceed - pattern detection is still ongoing");
+            toast({
+              title: "Pattern Detection In Progress",
+              description: "Please wait for pattern detection to complete.",
+              variant: "destructive",
+            });
           }
           break;
         case 3:
@@ -249,43 +292,82 @@ const Import: FC  = () => {
       return;
     }
     
-    setCurrentStep((currentStep - 1) as UploadStep);
-  };
-
-
-  // Invoked when auto-detection is complete
-  const handleDetectionComplete = (result: DetectionResult) => {
-    if (result.suggestedPattern) {
-      // Check if the suggested pattern matches any server pattern
-      const matchingServerPattern = importStore.availablePatterns.find(p => 
-        p.pattern === result.suggestedPattern?.pattern
-      );
-      
-      if (matchingServerPattern) {
-        // Use the server pattern if it matches
-        setSelectedPattern(matchingServerPattern);
+    if (currentStep > 1) {
+      if (currentStep === 2 && importSource === 'cloudwatch') {
+        // For CloudWatch, go back to source selection
+        setImportSource(null);
+        setCurrentStep(1 as UploadStep);
       } else {
-        // Use the default pattern if no server pattern matches
-        importStore.setCreateNewPattern(DEFAULT_PATTERN);
+        setCurrentStep((currentStep - 1) as UploadStep);
       }
     } else {
-      // Use the default pattern if no server pattern matches
-      importStore.setCreateNewPattern(DEFAULT_PATTERN);
+      navigate('/');
     }
+  };
+
+  const handleDetectionComplete = (result: DetectionResult) => {
+    console.log("Detection completed with result:", {
+      hasError: !!result.error,
+      isOngoing: result.isOngoing,
+      hasSuggestedPattern: !!result.suggestedPattern,
+      hasSelectedPattern: !!selectedPattern,
+      importSource
+    });
     
-    // Store the detection result in the import store
     setDetectionResult(result);
+    
+    // We're disabling auto-advancing behavior - let user manually navigate with Next button
+    if (!result.error && result.isOngoing === false && result.suggestedPattern) {
+      console.log("Pattern detection successful, but NOT auto-advancing - user should use Next button");
+      
+      // Still set the suggested pattern if available
+      if (result.suggestedPattern) {
+        setSelectedPattern(result.suggestedPattern);
+      }
+    } else if (result.error) {
+      console.log("Detection completed with error:", result.error);
+      // Don't auto-advance on error, let user modify pattern
+    }
   };
 
   const renderStep = () => {
+    // Debug logging
+    console.log("Rendering step", currentStep, "importSource:", importSource);
+    
     switch (currentStep) {
       case 1:
-        return (
-          <FileSelection
-            onFileSelect={handleFileSelect}
-          />
-        );
+        // If no source selected yet, show source selection
+        if (!importSource) {
+          return (
+            <SourceSelection 
+              onSelectSource={handleSourceSelect}
+            />
+          );
+        }
+        
+        // If source is file, show file selection
+        if (importSource === 'file') {
+          return (
+            <FileSelection
+              onFileSelect={handleFileSelect}
+            />
+          );
+        }
+        
+        // If source is cloudwatch, show cloudwatch selection
+        if (importSource === 'cloudwatch') {
+          return (
+            <CloudWatchSelection
+              onBackToSourceSelection={handleBackToSourceSelection}
+              onCloudWatchLogSelect={handleCloudWatchLogSelect}
+            />
+          );
+        }
+        
+        return null;
       case 2:
+        // Both file uploads and CloudWatch logs use the same pattern detection workflow
+        console.log("Rendering FileAnalyzing, filePreview:", filePreview?.lines?.length);
         return (
           <FileAnalyzing 
            onDetectionComplete={handleDetectionComplete}
@@ -349,37 +431,34 @@ const Import: FC  = () => {
                 {error}
               </div>
             )}
-
+            
+            {/* Navigation Buttons */}
             <div className="flex justify-between pt-4">
-              <Button
-                variant="outline"
+              <Button 
+                variant="outline" 
                 onClick={handleBack}
-                className="h-12 w-32"
-                disabled={currentStep === 1}
+                disabled={isUploading}
               >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back
+                {currentStep === 1 ? 'Cancel' : 'Back'}
               </Button>
               
-              <Button
-                onClick={handleNext}
-                className="bg-blue-600 text-white h-12 w-32"
-                disabled={
-                  (currentStep === 1 && !selectedFile) ||
-                  (currentStep === 3 && isUploading && !uploadSummary?.showSummary)
-                }
-              >
-                {currentStep === 3 ? (
-                  uploadSummary?.showSummary ? 
-                    "Go to Home" : 
-                    (isUploading ? "Uploading..." : "Import")
-                ) : (
-                  <>
-                    Next
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </>
-                )}
-              </Button>
+              {/* In step 1, only show next if file source is selected (CloudWatch handles its own navigation) */}
+              {(currentStep !== 1 || importSource === 'file') && (
+                <Button 
+                  onClick={handleNext}
+                  disabled={
+                    isUploading || 
+                    (currentStep === 1 && (!selectedFile || !importSource || importSource !== 'file'))
+                  }
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {currentStep === 3 ? (
+                    uploadSummary?.showSummary ? 'Go to Home' : 'Import'
+                  ) : (
+                    'Next'
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         </Card>

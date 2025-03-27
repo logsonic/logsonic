@@ -1,6 +1,6 @@
 import { FC, useEffect } from 'react';
 import { Progress } from '../../../components/ui/progress';
-import { Loader2, FileText, Code, CheckCircle } from 'lucide-react';
+import { Loader2, FileText, Code, CheckCircle, File, Cloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as ProgressPrimitive from "@radix-ui/react-progress";
 
@@ -14,7 +14,15 @@ export const SuccessSummary: FC<{
     redirectCountdown: number;
   };
 }> = ({ uploadSummary }) => {
-  const { selectedFile } = useImportStore();
+  const { selectedFile, importSource, sessionOptionsFileName } = useImportStore();
+
+  // Set the icon and filename label based on the import source
+  const sourceIcon = importSource === 'cloudwatch' 
+    ? <Cloud className="h-6 w-6 text-blue-500 mr-2" />
+    : <File className="h-6 w-6 text-blue-500 mr-2" />;
+  
+  const fileLabel = importSource === 'cloudwatch' ? 'CloudWatch Log:' : 'File Name:';
+  const fileName = importSource === 'cloudwatch' ? sessionOptionsFileName : selectedFile?.name;
 
   return (
     <div className="space-y-6 py-4">
@@ -28,9 +36,10 @@ export const SuccessSummary: FC<{
         </p>
         <div className="rounded-lg p-6">
         <div className="space-y-2">
-          <div className="flex justify-center">
-            <span className="text-gray-600 mr-2">File Name: </span>
-            <span className="font-medium">{selectedFile?.name}</span>
+          <div className="flex justify-center items-center">
+            {sourceIcon}
+            <span className="text-gray-600 mr-2">{fileLabel}</span>
+            <span className="font-medium">{fileName}</span>
           </div>
           <div className="flex justify-center">
             <span className="text-gray-600 mr-2">Pattern Used: </span>
@@ -86,6 +95,8 @@ export const ImportConfirm: FC = ({
     sessionOptionsYear,
     sessionOptionsMonth,
     sessionOptionsDay,
+    importSource,
+    sessionOptionsFileName,
     setApproxLines
   } = useImportStore();
 
@@ -113,24 +124,36 @@ export const ImportConfirm: FC = ({
     }
   }, [approxLines, estimatedLines, setApproxLines]);
 
+  // Set the icon, title, and information based on the import source
+  const sourceIcon = importSource === 'cloudwatch' 
+    ? <Cloud className="h-5 w-5 text-blue-500 mr-2" />
+    : <FileText className="h-5 w-5 text-blue-500 mr-2" />;
+  
+  const sourceTitle = importSource === 'cloudwatch' 
+    ? 'CloudWatch Logs Information' 
+    : 'File Information';
+  
+  const fileLabel = importSource === 'cloudwatch' ? 'Source Log:' : 'File Name:';
+  const fileName = importSource === 'cloudwatch' ? sessionOptionsFileName : selectedFile?.name;
+
   return (
     <div className="space-y-6">
       
       <div className="space-y-4 mx-auto">
         <div className="p-5 rounded-lg shadow-sm border border-blue-100">
           <div className="flex items-center mb-3">
-            <FileText className="h-5 w-5 text-blue-500 mr-2" />
-            <h3 className="text-lg font-medium text-blue-700">Importing File Information</h3>
+            {sourceIcon}
+            <h3 className="text-lg font-medium text-blue-700">{sourceTitle}</h3>
           </div>
           <table className="w-full text-lg">
             <tbody>
               <tr>
-                <td className="py-1 text-gray-800 font-bold w-[150px]">File Name:</td>
-                <td className="py-1  text-gray-800">{selectedFile?.name}</td>
+                <td className="py-1 text-gray-800 font-bold w-[150px]">{fileLabel}</td>
+                <td className="py-1 text-gray-800">{fileName}</td>
               </tr>
               <tr>
                 <td className="py-1 text-gray-800 font-bold">File Size:</td>
-                <td className="py-1  text-gray-800">{formatFileSize(selectedFile?.size || 0)}</td>
+                <td className="py-1 text-gray-800">{formatFileSize(selectedFile?.size || 0)}</td>
               </tr>
               <tr>
                 <td className="py-1 text-gray-800 font-bold">Estimated Lines:</td>
@@ -156,6 +179,12 @@ export const ImportConfirm: FC = ({
                 <td className="py-1 text-gray-800 font-bold">Force Day:</td>
                 <td className="py-1 text-gray-800">{sessionOptionsDay || 'Auto-detect'}</td>
               </tr>
+              {importSource === 'cloudwatch' && (
+                <tr>
+                  <td className="py-1 text-gray-800 font-bold">Source:</td>
+                  <td className="py-1 text-gray-800">AWS CloudWatch</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

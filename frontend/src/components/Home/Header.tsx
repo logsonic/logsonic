@@ -33,7 +33,6 @@ import { formatBytes } from '@/lib/utils';
 import { Pie } from 'recharts';
 import { useBackendStatus } from '@/hooks/useBackendStatus';
 import { getSystemInfo } from '@/lib/api-client';
-import CloudWatchMenuButton from "../Import/CloudWatchMenuButton";
 
 // Custom navigation menu trigger style with blue hover effect
 const blueNavigationMenuTriggerStyle = cn(
@@ -57,11 +56,6 @@ const NavigationMenuItems = () => (
           </div>
         </Link>
       </NavigationMenuLink>
-    </NavigationMenuItem>
-
-    {/* CloudWatch Import */}
-    <NavigationMenuItem>
-      <CloudWatchMenuButton className={blueNavigationMenuTriggerStyle} />
     </NavigationMenuItem>
   </NavigationMenuList>
 );

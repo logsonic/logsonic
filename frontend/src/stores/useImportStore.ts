@@ -23,10 +23,14 @@ export const DEFAULT_PATTERN: Pattern = {
 
 
 export type UploadStep = 1 | 2 | 3;
+export type ImportSource = 'file' | 'cloudwatch' | null;
 
 interface ImportState {
   // Upload step tracking
   currentStep: UploadStep;
+  
+  // Import source
+  importSource: ImportSource;
   
   // File data
   selectedFile: File | null;
@@ -71,6 +75,7 @@ interface ImportState {
   
   // Actions
   setCurrentStep: (step: UploadStep) => void;
+  setImportSource: (source: ImportSource) => void;
   setSelectedFile: (file: File | null) => void;
   setFilePreview: (preview: FilePreview | null) => void;
   setAvailablePatterns: (patterns: GrokPatternRequest[]) => void;
@@ -98,6 +103,7 @@ interface ImportState {
   setIsTestingPattern: (isTestingPattern: boolean) => void;
   
   handleFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
+  setFileFromBlob: (content: string, fileName: string) => Promise<void>;
   handlePatternOperation: (pattern: Pattern, updateStore?: boolean, onSuccess?: (parsedLogs: Record<string, any>[]) => void, onError?: (error: string) => void) => Promise<void>;
   testPattern: () => Promise<void>;
   reset: () => void;
@@ -110,6 +116,7 @@ interface ImportState {
 export const useImportStore = create<ImportState>((set, get) => ({
 
   currentStep: 1,
+  importSource: null,
   selectedFile: null,
   filePreview: null,
   availablePatterns: [DEFAULT_PATTERN as unknown as GrokPatternRequest],
@@ -139,6 +146,8 @@ export const useImportStore = create<ImportState>((set, get) => ({
   
   // Actions
   setCurrentStep: (currentStep) => set({ currentStep }),
+  
+  setImportSource: (importSource) => set({ importSource }),
   
   setSelectedFile: (selectedFile) => set({ selectedFile }),
   
@@ -248,26 +257,31 @@ export const useImportStore = create<ImportState>((set, get) => ({
       const previewReader = new FileReader();
       const MAX_PREVIEW_SIZE = 10 * 1024; // 10KB
       const previewBlob = file.slice(0, MAX_PREVIEW_SIZE);
-    
+      
       previewReader.onload = (e) => {
         const previewContent = e.target?.result as string || '';
-        const lines = previewContent.split('\n').filter(line => line.trim() !== '');
-        const previewLines = lines.slice(0, 20); // Show first 20 lines
+        const previewLines = previewContent.split('\n');
         
-        // Count total lines (approximate for large files)
-        const bytesPerLine = previewContent.length / (lines.length || 1);
-        const approxTotalLines = Math.ceil(file.size / bytesPerLine);
+        // Calculate an approximation of total lines based on the average line size in the preview
+        const avgLineSize = previewContent.length / (previewLines.length || 1);
+        const approxLines = Math.ceil(file.size / avgLineSize);
         
-        const filePreview = {
-          lines: previewLines,
-          totalLines: approxTotalLines,
-          fileSize: file.size
-        };
+        set({ 
+          filePreview: {
+            lines: previewLines.slice(0, 100), // Limit display lines to 100
+            totalLines: previewLines.length,
+            fileSize: file.size,
+          },
+          approxLines,
+        });
         
-        set({ filePreview });
-        
-        // Automatically move to step 2 if a file is selected
-        set({ currentStep: 2 });
+        // Go to the next step automatically if on step 1
+        if (get().currentStep === 1) {
+          set({ 
+            currentStep: 2,
+            importSource: 'file'
+          });
+        }
       };
       
       previewReader.readAsText(previewBlob);
@@ -275,124 +289,139 @@ export const useImportStore = create<ImportState>((set, get) => ({
     
     reader.readAsText(contentBlob);
   },
+
+  // Create a file from blob content (used for CloudWatch logs)
+  setFileFromBlob: async (content, fileName) => {
+    console.log(`Setting file from blob: ${fileName}, content length: ${content.length} bytes`);
+    
+    // Create a File object
+    const file = new File([content], fileName, { type: 'text/plain' });
+    
+    // Set selected file
+    set({ 
+      selectedFile: file, 
+      error: null,
+      importSource: 'cloudwatch'
+    });
+    
+    // Validate file content
+    if (!content || content.length === 0) {
+      const error = "Empty content provided for CloudWatch logs";
+      console.error(error);
+      set({ error });
+      return;
+    }
+
+    // Generate preview
+    const previewLines = content.split('\n');
+    const approxLines = previewLines.length;
+    
+    console.log(`Generated preview with ${previewLines.length} lines, using first ${Math.min(100, previewLines.length)} for display`);
+    
+    // Set preview data and move to step 2
+    set({ 
+      filePreview: {
+        lines: previewLines.slice(0, 100), // Limit display lines to 100
+        totalLines: previewLines.length,
+        fileSize: content.length,
+      },
+      approxLines,
+      sessionOptionsFileName: fileName, // Set the filename for the session
+      currentStep: 2 // Ensure we move to step 2 for pattern detection
+    });
+    
+    console.log("CloudWatch logs ready for pattern detection, advancing to step 2");
+  },
   
-  // Simplified test pattern function
-  testPattern: async () => {
-    const { selectedPattern, handlePatternOperation } = get();
+  // Handle pattern operations
+  handlePatternOperation: async (pattern, updateStore = true, onSuccess, onError) => {
+    const { selectedFile, filePreview } = get();
     
-    if (!selectedPattern) return;
+    if (!selectedFile || !filePreview) {
+      const errorMsg = 'No file selected or file preview not available';
+      set({ error: errorMsg });
+      if (onError) onError(errorMsg);
+      return;
+    }
     
-    set({ isTestingPattern: true, error: null });
+    set({ isTestingPattern: true });
     
     try {
-      await handlePatternOperation(
-        selectedPattern,
-        false,
-        (parsedLogs) => {
-          set({ parsedLogs });
-        },
-        (error) => {
-          set({ error });
-        }
-      );
+      if (!filePreview.lines || filePreview.lines.length === 0) {
+        throw new Error('No preview lines available to parse');
+      }
+      
+      const previewLines = filePreview.lines.slice(0, 20); // Use first 20 lines for parsing test
+      
+      const parseResult = await parseLogs({
+        logs: previewLines,
+        grok_pattern: pattern.pattern,
+        custom_patterns: pattern.custom_patterns || {},
+      });
+      
+      const parsedLogs = parseResult.logs || [];
+      
+      if (updateStore) {
+        set({ 
+          parsedLogs,
+          selectedPattern: pattern,
+        });
+      }
+      
+      if (onSuccess) onSuccess(parsedLogs);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to test pattern';
-      set({ error: errorMessage });
+      const errorMsg = error instanceof Error ? error.message : 'Failed to test pattern';
+      set({ error: errorMsg });
+      if (onError) onError(errorMsg);
     } finally {
       set({ isTestingPattern: false });
     }
   },
-  
-  // Pattern operations
-  handlePatternOperation: async (pattern: Pattern, updateStore: boolean = false, onSuccess?: (parsedLogs: Record<string, any>[]) => void, onError?: (error: string) => void) => {
-    const {
-      filePreview,
-      sessionOptionsFileName,
-      sessionOptionsSmartDecoder,
-      sessionOptionsTimezone,
-      sessionOptionsYear,
-      sessionOptionsMonth,
-      sessionOptionsDay,
-      setSelectedPattern,
-      setError,
-      setParsedLogs
-    } = get();
 
-    // Add fields to the pattern if not already present
-    const patternWithFields = {
-      ...pattern,
-      fields: pattern.fields || extractFields(pattern.pattern),
-      custom_patterns: pattern.custom_patterns || {}
-    };
+  // Test the current pattern
+  testPattern: async () => {
+    const { selectedPattern, isCreateNewPatternSelected, createNewPattern } = get();
     
-    // Set the selected pattern in the store if updateStore is true
-    if (updateStore) {
-      setSelectedPattern(patternWithFields);
+    const pattern = isCreateNewPatternSelected ? createNewPattern : selectedPattern;
+    
+    if (!pattern) {
+      set({ error: 'No pattern selected' });
+      return;
     }
     
-    // Only analyze if we have a pattern and preview lines
-    if (patternWithFields.pattern && filePreview?.lines?.length) {
-      set({ error: null });
-      
-      try {
-        const parseResponse = await parseLogs({
-          logs: filePreview.lines,
-          grok_pattern: patternWithFields.pattern,
-          custom_patterns: patternWithFields.custom_patterns || {},
-          session_options: {
-            source: sessionOptionsFileName,
-            smart_decoder: sessionOptionsSmartDecoder,
-            force_timezone: sessionOptionsTimezone,
-            force_start_year: sessionOptionsYear,
-            force_start_month: sessionOptionsMonth,
-            force_start_day: sessionOptionsDay
-          }
-        });
-        
-        if (parseResponse.logs) {
-          // Update parsed logs in store
-          setParsedLogs(parseResponse.logs);
-          
-          if (onSuccess) {
-            onSuccess(parseResponse.logs);
-          }
-        }
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to parse logs with the selected pattern';
-        setError(errorMessage);
-        setParsedLogs([]);
-        if (onError) {
-          onError(errorMessage);
-        }
-      }
-    }
+    await get().handlePatternOperation(pattern);
   },
-  
-  reset: () => set({
-    currentStep: 1,
-    selectedFile: null,
-    filePreview: null,
-    selectedPattern: DEFAULT_PATTERN,
-    createNewPattern: DEFAULT_PATTERN,
-    isCreateNewPatternSelected: false,
-    detectionResult: null,
-    suggestResponse: null,
-    parsedLogs: [],
-    isTestingPattern: false,
-    isUploading: false,
-    uploadProgress: 0,
-    approxLines: 0,
-    error: null,
-    sessionID: null,
-    // Keep available patterns to avoid refetching
-    availablePatterns: [DEFAULT_PATTERN as unknown as GrokPatternRequest, ...get().availablePatterns.filter(p => p.name !== DEFAULT_PATTERN.name)],
-    // Keep session options as they might be user preferences
-    sessionOptionsFileName: '',
-    sessionOptionsSmartDecoder: true,
-    sessionOptionsTimezone: '',
-    sessionOptionsYear: '', 
-    sessionOptionsMonth: '',
-    sessionOptionsDay: '',
-  }),
 
-})); 
+  // Reset the store to default values
+  reset: () => {
+    set({
+      currentStep: 1,
+      importSource: null,
+      selectedFile: null,
+      filePreview: null,
+      selectedPattern: DEFAULT_PATTERN,
+      isCreateNewPatternSelected: false,
+      createNewPattern: DEFAULT_PATTERN,
+      createNewPatternTokens: {},
+      createNewPatternName: DEFAULT_PATTERN.name,
+      createNewPatternDescription: DEFAULT_PATTERN.description,
+      createNewPatternPriority: DEFAULT_PATTERN.priority,
+      detectionResult: null,
+      suggestResponse: null,
+      parsedLogs: [],
+      isTestingPattern: false,
+      isUploading: false,
+      uploadProgress: 0,
+      approxLines: 0,
+      selectedSources: [],
+      sessionID: null,
+      sessionOptionsFileName: '',
+      sessionOptionsSmartDecoder: true,
+      sessionOptionsTimezone: '',
+      sessionOptionsYear: '',
+      sessionOptionsMonth: '',
+      sessionOptionsDay: '',
+      error: null,
+    });
+  },
+})) 

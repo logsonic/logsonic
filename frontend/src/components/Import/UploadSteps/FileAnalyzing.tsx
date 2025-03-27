@@ -1,5 +1,5 @@
 import { FC, useEffect, useState } from 'react';
-import { Loader2, ChevronDown } from 'lucide-react';
+import { Loader2, ChevronDown, File, Cloud } from 'lucide-react';
 import { suggestPatterns, parseLogs, getGrokPatterns } from '../../../lib/api-client';
 import type { DetectionResult, Pattern } from '../types';
 import { LogPatternSelection } from './LogPatternSelection';
@@ -40,26 +40,45 @@ export const FileAnalyzing: FC<FileAnalyzingProps> = ({
     setCreateNewPattern,
     handlePatternOperation,
     setParsedLogs,
-    setError: setStoreError
+    setError: setStoreError,
+    importSource,
+    sessionOptionsFileName
   } = useImportStore();
 
   useEffect(() => {
     const analyzeFile = async () => {
-      if (!filePreview?.lines?.length || !selectedFile) return;
+      // Enhanced debugging info
+      console.log("FileAnalyzing useEffect triggered", { 
+        hasFilePreview: !!filePreview, 
+        previewLines: filePreview?.lines?.length,
+        hasSelectedFile: !!selectedFile,
+        importSource,
+        currentStep
+      });
+      
+      if (!filePreview?.lines?.length || !selectedFile) {
+        console.error("Missing file preview or selected file, aborting analysis");
+        return;
+      }
 
+      console.log("Analyzing file in FileAnalyzing component", importSource, filePreview.lines.length, "lines");
+      
       try {
         setIsAnalyzing(true);
         setError(null);
         setStoreError(null);
 
         // Try to auto-detect the pattern
+        console.log("Starting pattern suggestion...");
         const suggestResponse = await suggestPatterns({
           logs: filePreview.lines
         });
+        console.log("Pattern suggestion complete", suggestResponse.results?.length || 0, "patterns found");
 
       
         if (suggestResponse.results && suggestResponse.results.length > 0) {
           const bestMatch = suggestResponse.results[0];
+          console.log("Testing best match pattern:", bestMatch.pattern);
           
           // Test the suggested pattern
           const parseResponse = await parseLogs({
@@ -69,6 +88,7 @@ export const FileAnalyzing: FC<FileAnalyzingProps> = ({
           });
 
           if (parseResponse.logs && parseResponse.logs.length > 0) {
+            console.log("Pattern successfully parsed logs");
             // Check if the suggested pattern matches any server pattern
             let suggestedPattern: Pattern;
             const matchingServerPattern = availablePatterns.find(p => 
@@ -92,6 +112,7 @@ export const FileAnalyzing: FC<FileAnalyzingProps> = ({
             setSelectedPattern(suggestedPattern);
             setParsedLogs(parseResponse.logs);
             
+            console.log("Calling onDetectionComplete with successful match", suggestedPattern.name, "- will NOT auto-advance");
             onDetectionComplete({
               isOngoing: false,
               suggestedPattern,
@@ -99,6 +120,7 @@ export const FileAnalyzing: FC<FileAnalyzingProps> = ({
             });
           } else {
             // Pattern detection failed to parse logs, switch to custom pattern
+            console.log("Pattern detected but failed to parse logs, switching to custom pattern");
             setCreateNewPattern(createNewPattern);
             handlePatternChange(selectedPattern);
             onDetectionComplete({
@@ -108,7 +130,7 @@ export const FileAnalyzing: FC<FileAnalyzingProps> = ({
           }
         } else {
           // No pattern detected, show custom pattern selector
-  
+          console.log("No patterns could be detected, switching to default pattern");
           setCreateNewPattern(DEFAULT_PATTERN);
           handlePatternChange(DEFAULT_PATTERN);
           onDetectionComplete({
@@ -119,6 +141,7 @@ export const FileAnalyzing: FC<FileAnalyzingProps> = ({
       } catch (err) {
         // Any error in the process, switch to custom pattern
         const errorMessage = err instanceof Error ? err.message : 'Failed to analyze log file';
+        console.error("Error during pattern detection:", errorMessage);
         setError(errorMessage);
         setStoreError(errorMessage);
 
@@ -129,6 +152,7 @@ export const FileAnalyzing: FC<FileAnalyzingProps> = ({
           error: errorMessage
         });
       } finally {
+        console.log("Analysis completed, isAnalyzing set to false");
         setIsAnalyzing(false);
       }
     };
@@ -178,9 +202,30 @@ export const FileAnalyzing: FC<FileAnalyzingProps> = ({
     );
   };
 
+  // Determine what type of logs we're analyzing
+  const getLogSourceInfo = () => {
+    if (importSource === 'cloudwatch') {
+      return {
+        icon: <Cloud className="h-5 w-5 text-blue-500 mr-2" />,
+        text: `Analyzing CloudWatch logs: ${sessionOptionsFileName || 'Unknown'}`
+      };
+    } else {
+      return {
+        icon: <File className="h-5 w-5 text-blue-500 mr-2" />,
+        text: `Analyzing file: ${selectedFile?.name || 'Unknown'}`
+      };
+    }
+  };
+
+  const logSourceInfo = getLogSourceInfo();
+
   return (
     <div className="space-y-6">
-
+      {/* Log Source Information */}
+      <div className="flex items-center p-3 bg-blue-50 text-blue-700 rounded-md">
+        {logSourceInfo.icon}
+        <span className="text-sm font-medium">{logSourceInfo.text}</span>
+      </div>
       
       {isAnalyzing ? (
         <div className="flex flex-col items-center justify-center py-8">
