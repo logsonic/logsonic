@@ -1,7 +1,7 @@
 import { FC, useEffect, useState } from 'react';  
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { ArrowLeft, ArrowRight, CheckCircle, Store, FileUp } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle, Store, FileUp, Cloud } from "lucide-react";
 import { 
   FileSelection, 
   FileAnalyzing, 
@@ -19,7 +19,7 @@ import { useSearchQueryParamsStore } from '../stores/useSearchParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import React from 'react';
 import { SourceSelection } from '@/components/Import/UploadSteps/SourceSelection';
-import CloudWatchSelection from '@/components/Import/UploadSteps/CloudWatchSelection';
+import CloudWatchSelection, { CloudWatchSelectionRef } from '@/components/Import/UploadSteps/CloudWatchSelection';
 
 const Import: FC  = () => {
   const { toast } = useToast(); 
@@ -152,7 +152,10 @@ const Import: FC  = () => {
     setImportSource(null);
   };
 
-  //Invoked when user clicks next button
+  // CloudWatch log component reference for accessing its handleImport method
+  const cloudWatchComponentRef = React.useRef<CloudWatchSelectionRef>(null);
+
+  // Handle Next button press
   const handleNext = async () => {
     try {
       switch (currentStep) {
@@ -167,7 +170,7 @@ const Import: FC  = () => {
             return;
           }
           
-          // If file source but no file is selected, don't proceed
+          // For file source, check if file is selected
           if (importSource === 'file' && !selectedFile) {
             toast({
               title: "File Required",
@@ -177,10 +180,39 @@ const Import: FC  = () => {
             return;
           }
           
-          // For CloudWatch, the step changes when a log is imported
-          if (importSource === 'file' && selectedFile) {
-            setCurrentStep(2);
+          // For CloudWatch source, use the cloudWatchComponentRef to import logs
+          if (importSource === 'cloudwatch') {
+            // If a stream is selected, import it
+            if (cloudWatchComponentRef.current?.handleImport) {
+              console.log("Importing selected CloudWatch log stream");
+              
+              try {
+                await cloudWatchComponentRef.current.handleImport();
+                // Note: The component will call handleCloudWatchLogSelect after successful import
+                // which will set filePreview and advance to step 2
+                return; // Exit early since the component handles next step
+              } catch (importErr) {
+                console.error("Failed to import CloudWatch logs:", importErr);
+                toast({
+                  title: "Import Failed",
+                  description: "Failed to import CloudWatch logs. Please try again.",
+                  variant: "destructive",
+                });
+                return;
+              }
+            } else {
+              toast({
+                title: "Stream Selection Required",
+                description: "Please select a CloudWatch log stream before proceeding.",
+                variant: "destructive",
+              });
+              return;
+            }
           }
+          
+          // Set current step to 2 (pattern detection) for non-CloudWatch sources
+          console.log(`Advancing to step 2 with import source: ${importSource}`);
+          setCurrentStep(2);
           break;
         case 2:
           // Check if there's a custom pattern that needs to be saved
@@ -336,35 +368,78 @@ const Import: FC  = () => {
     
     switch (currentStep) {
       case 1:
-        // If no source selected yet, show source selection
-        if (!importSource) {
-          return (
-            <SourceSelection 
-              onSelectSource={handleSourceSelect}
-            />
-          );
-        }
+        return (
+          <div className="space-y-6">
+            {/* Source Selection Radio Buttons */}
+            <div className="flex flex-col space-y-4">
+              <h2 className="text-lg font-semibold text-gray-800">Select Import Source</h2>
+              
+              <div className="grid grid-cols-2 gap-4">
+                {/* File option */}
+                <div 
+                  className={`p-4 rounded-lg border-2 flex items-center space-x-3 cursor-pointer transition-colors
+                    ${importSource === 'file' 
+                      ? 'border-blue-500 bg-blue-50' 
+                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
+                  onClick={() => handleSourceSelect('file')}
+                >
+                  <div className={`h-5 w-5 rounded-full border flex items-center justify-center 
+                    ${importSource === 'file' ? 'border-blue-500' : 'border-gray-400'}`}>
+                    {importSource === 'file' && (
+                      <div className="h-3 w-3 rounded-full bg-blue-500"></div>
+                    )}
+                  </div>
+                  <div className="flex items-center">
+                    <FileUp className="h-5 w-5 text-gray-600 mr-2" />
+                    <span className="font-medium">Upload Log File</span>
+                  </div>
+                </div>
+                
+                {/* CloudWatch option */}
+                <div 
+                  className={`p-4 rounded-lg border-2 flex items-center space-x-3 cursor-pointer transition-colors
+                    ${importSource === 'cloudwatch' 
+                      ? 'border-blue-500 bg-blue-50' 
+                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
+                  onClick={() => handleSourceSelect('cloudwatch')}
+                >
+                  <div className={`h-5 w-5 rounded-full border flex items-center justify-center 
+                    ${importSource === 'cloudwatch' ? 'border-blue-500' : 'border-gray-400'}`}>
+                    {importSource === 'cloudwatch' && (
+                      <div className="h-3 w-3 rounded-full bg-blue-500"></div>
+                    )}
+                  </div>
+                  <div className="flex items-center">
+                    <Cloud className="h-5 w-5 text-gray-600 mr-2" />
+                    <span className="font-medium">AWS CloudWatch Logs</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Render component based on selection */}
+            <div className="mt-6">
+              {importSource === 'file' && (
+                <FileSelection onFileSelect={handleFileSelect} />
+              )}
+              
+              {importSource === 'cloudwatch' && (
+                <CloudWatchSelection
+                  ref={cloudWatchComponentRef}
+                  onBackToSourceSelection={handleBackToSourceSelection}
+                  onCloudWatchLogSelect={handleCloudWatchLogSelect}
+                />
+              )}
+              
+              {!importSource && (
+                <div className="text-center p-8 text-gray-500">
+                  <p>Please select an import source above to continue</p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
         
-        // If source is file, show file selection
-        if (importSource === 'file') {
-          return (
-            <FileSelection
-              onFileSelect={handleFileSelect}
-            />
-          );
-        }
-        
-        // If source is cloudwatch, show cloudwatch selection
-        if (importSource === 'cloudwatch') {
-          return (
-            <CloudWatchSelection
-              onBackToSourceSelection={handleBackToSourceSelection}
-              onCloudWatchLogSelect={handleCloudWatchLogSelect}
-            />
-          );
-        }
-        
-        return null;
       case 2:
         // Both file uploads and CloudWatch logs use the same pattern detection workflow
         console.log("Rendering FileAnalyzing, filePreview:", filePreview?.lines?.length);
@@ -442,23 +517,24 @@ const Import: FC  = () => {
                 {currentStep === 1 ? 'Cancel' : 'Back'}
               </Button>
               
-              {/* In step 1, only show next if file source is selected (CloudWatch handles its own navigation) */}
-              {(currentStep !== 1 || importSource === 'file') && (
-                <Button 
-                  onClick={handleNext}
-                  disabled={
-                    isUploading || 
-                    (currentStep === 1 && (!selectedFile || !importSource || importSource !== 'file'))
-                  }
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  {currentStep === 3 ? (
-                    uploadSummary?.showSummary ? 'Go to Home' : 'Import'
-                  ) : (
-                    'Next'
-                  )}
-                </Button>
-              )}
+              {/* Always show Next button regardless of source selection */}
+              <Button 
+                onClick={handleNext}
+                disabled={
+                  isUploading || 
+                  (currentStep === 1 && (
+                    !importSource || 
+                    (importSource === 'file' && !selectedFile)
+                  ))
+                }
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {currentStep === 3 ? (
+                  uploadSummary?.showSummary ? 'Go to Home' : 'Import'
+                ) : (
+                  'Next'
+                )}
+              </Button>
             </div>
           </div>
         </Card>
