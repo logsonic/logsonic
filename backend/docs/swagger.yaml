@@ -1,5 +1,74 @@
 basePath: /api/v1
 definitions:
+  cloudwatch.GetLogEventsRequest:
+    properties:
+      end_time:
+        type: integer
+      log_group_name:
+        type: string
+      log_stream_name:
+        type: string
+      profile:
+        type: string
+      region:
+        type: string
+      start_time:
+        type: integer
+    type: object
+  cloudwatch.GetLogEventsResponse:
+    properties:
+      log_events:
+        items:
+          additionalProperties: true
+          type: object
+        type: array
+      region:
+        type: string
+      status:
+        type: string
+    type: object
+  cloudwatch.ListLogGroupsRequest:
+    properties:
+      profile:
+        type: string
+      region:
+        type: string
+    type: object
+  cloudwatch.ListLogGroupsResponse:
+    properties:
+      log_groups:
+        items:
+          type: string
+        type: array
+      region:
+        type: string
+      status:
+        type: string
+    type: object
+  cloudwatch.ListLogStreamsRequest:
+    properties:
+      end_time:
+        type: integer
+      log_group_name:
+        type: string
+      profile:
+        type: string
+      region:
+        type: string
+      start_time:
+        type: integer
+    type: object
+  cloudwatch.ListLogStreamsResponse:
+    properties:
+      log_streams:
+        items:
+          type: string
+        type: array
+      region:
+        type: string
+      status:
+        type: string
+    type: object
   handlers.PingResponse:
     properties:
       status:
@@ -115,6 +184,13 @@ definitions:
         type: string
       force_timezone:
         type: string
+      meta:
+        additionalProperties: true
+        description: |-
+          Meta contains additional fields to be added to each log entry
+          These fields will be directly added to the JSON output for each log
+          Example: for CloudWatch logs: {"aws_region": "us-west-2", "log_group": "my-group", "log_stream": "stream-1"}
+        type: object
       name:
         type: string
       pattern:
@@ -419,6 +495,98 @@ paths:
       summary: Manage Grok patterns
       tags:
       - grok
+  /cloudwatch/log-events:
+    post:
+      consumes:
+      - application/json
+      description: Get log events from a specific CloudWatch log stream in a time
+        range
+      parameters:
+      - description: Log stream and time range parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cloudwatch.GetLogEventsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cloudwatch.GetLogEventsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Get CloudWatch log events
+      tags:
+      - cloudwatch
+  /cloudwatch/log-groups:
+    post:
+      consumes:
+      - application/json
+      description: List all CloudWatch log groups in the specified AWS account
+      parameters:
+      - description: AWS auth and region parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cloudwatch.ListLogGroupsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cloudwatch.ListLogGroupsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: List CloudWatch log groups
+      tags:
+      - cloudwatch
+  /cloudwatch/log-streams:
+    post:
+      consumes:
+      - application/json
+      description: List CloudWatch log streams in a log group for the specified time
+        range
+      parameters:
+      - description: Log group and time range parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cloudwatch.ListLogStreamsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cloudwatch.ListLogStreamsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: List CloudWatch log streams
+      tags:
+      - cloudwatch
   /info:
     get:
       description: Retrieve detailed information about the system, storage, and application

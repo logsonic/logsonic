@@ -48,7 +48,8 @@ const initialState = {
   loadingStreams: {},
   searchQuery: '',
   selectedStream: null,
-  
+
+
   // Loading states
   isLoading: false,
   error: null,
@@ -64,9 +65,10 @@ export const useCloudWatchStore = create<CloudWatchState>((set) => ({
   
   setLogGroups: (groups) => set({ 
     logGroups: groups,
-    // Reset selection and expansion when setting new log groups
-    expandedGroups: {},
-    selectedStream: null,
+    // Only reset expansion, but keep the selection to maintain it between steps
+    expandedGroups: {}
+    // Don't reset selectedStream here
+    // selectedStream: null,
   }),
   
   setStreamsForGroup: (groupName, streams) => set((state) => {
@@ -93,7 +95,7 @@ export const useCloudWatchStore = create<CloudWatchState>((set) => ({
   })),
   
   setSelectedStream: (groupName, streamName) => set({
-    selectedStream: groupName && streamName ? { groupName, streamName } : null
+    selectedStream: groupName && streamName ? { groupName, streamName } : null,
   }),
   
   setSearchQuery: (query) => set({ searchQuery: query }),

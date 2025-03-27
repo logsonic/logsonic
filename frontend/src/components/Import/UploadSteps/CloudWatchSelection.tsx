@@ -12,8 +12,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { DateRangePicker } from '../../DateRangePicker/DateRangePicker';
 import { Cloud, CloudOff, ChevronRight, ChevronDown, Search, Loader2, Info, ArrowLeft } from "lucide-react";
+import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";
 
 const DEFAULT_REGIONS = [
   'us-east-1',
@@ -54,7 +54,6 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
   onCloudWatchLogSelect
 }, ref) => {
   const dateRangeStore = useSearchQueryParamsStore();
-  const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
   
   // Use the CloudWatch store
   const {
@@ -71,7 +70,9 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
   // Reset the store when the component is unmounted
   useEffect(() => {
     return () => {
-      reset();
+      console.log("CloudWatchSelection component cleanup - NOT resetting store to preserve selection");
+      // Don't reset here - we want to preserve the selection
+      // reset();
     };
   }, [reset]);
 
@@ -107,7 +108,16 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
       };
 
       const response = await cloudwatchService.listLogGroups(authData);
-      const groups = response.logGroups || [];
+      
+      // Create log group objects from the string array that comes from the backend
+      const groups = (response.log_groups || []).map(groupName => ({
+        name: groupName,
+        arn: "",
+        creationTime: "",
+        storedBytes: 0,
+        retentionDays: 0
+      }));
+      
       setLogGroups(groups);
       
       // If log groups were found, automatically fetch streams for all of them
@@ -145,19 +155,38 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
   // Function to fetch streams for a specific group (used by fetchLogGroups)
   const fetchLogStreamsForGroup = async (logGroupName: string) => {
     try {
-      const startTime = dateRangeStore.UTCTimeSince ? new Date(dateRangeStore.UTCTimeSince).toISOString() : undefined;
-      const endTime = dateRangeStore.UTCTimeTo ? new Date(dateRangeStore.UTCTimeTo).toISOString() : undefined;
+      // Get dates from the store
+      const startTime = dateRangeStore.UTCTimeSince 
+        ? new Date(dateRangeStore.UTCTimeSince).getTime() 
+        : undefined;
+      
+      const endTime = dateRangeStore.UTCTimeTo 
+        ? new Date(dateRangeStore.UTCTimeTo).getTime() 
+        : undefined;
+      
+      console.log(`Fetching log streams for ${logGroupName} with time range: ${startTime} to ${endTime}`);
       
       const authData = {
         region,
         profile,
-        logGroupName,
-        startTime,
-        endTime
+        log_group_name: logGroupName,
+        start_time: startTime,
+        end_time: endTime
       };
       
       const response = await cloudwatchService.listLogStreams(authData);
-      setStreamsForGroup(logGroupName, response.logStreams || []);
+      
+      // Convert string array to CloudWatchLogStream objects
+      const streams = (response.log_streams || []).map(streamName => ({
+        name: streamName,
+        log_group_name: logGroupName,
+        creation_time: "",
+        first_event_time: "",
+        last_event_time: "",
+        stored_bytes: 0
+      }));
+      
+      setStreamsForGroup(logGroupName, streams);
       return response;
     } catch (err) {
       console.error(`Failed to fetch streams for ${logGroupName}:`, err);
@@ -199,6 +228,7 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
   };
 
   const handleImport = async () => {
+    // Verify selectedStream is not null first
     if (!selectedStream) {
       setError("Please select a log stream to import");
       return;
@@ -208,30 +238,37 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
     setLoading(true);
     
     try {
-      // Get time range from the date range store
-      const startTime = dateRangeStore.UTCTimeSince ? new Date(dateRangeStore.UTCTimeSince).toISOString() : undefined;
-      const endTime = dateRangeStore.UTCTimeTo ? new Date(dateRangeStore.UTCTimeTo).toISOString() : undefined;
+      // Get dates from the store
+      const startTime = dateRangeStore.UTCTimeSince 
+        ? new Date(dateRangeStore.UTCTimeSince).getTime() 
+        : undefined;
+      
+      const endTime = dateRangeStore.UTCTimeTo 
+        ? new Date(dateRangeStore.UTCTimeTo).getTime() 
+        : undefined;
+      
+      console.log(`Fetching log events for ${selectedStream.groupName}/${selectedStream.streamName} with time range: ${startTime} to ${endTime}`);
       
       // Prepare request data for fetching log events
       const authData = {
         region,
         profile,
-        logGroupName: selectedStream.groupName,
-        logStreamName: selectedStream.streamName,
-        startTime,
-        endTime
+        log_group_name: selectedStream.groupName,
+        log_stream_name: selectedStream.streamName,
+        start_time: startTime,
+        end_time: endTime
       };
       
       // Fetch log events from CloudWatch
       const response = await cloudwatchService.getLogEvents(authData);
       
-      if (!response.logEvents || response.logEvents.length === 0) {
+      if (!response.log_events || response.log_events.length === 0) {
         setError("No log events found in the selected time range");
-        return;
+        return; 
       }
       
       // Format log data for import
-      const logData = response.logEvents.map(event => {
+      const logData = response.log_events.map(event => {
         const timestamp = new Date(event.timestamp).toISOString();
         return `${timestamp} ${event.message}`; //Prepend timestamp to each line
       }).join('\n');
@@ -256,10 +293,6 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
     }
   };
 
-  const handleDateRangeClose = () => {
-    setShowDatePicker(false);
-  };
-  
   const filteredLogGroups = searchQuery 
     ? logGroups
         .map(group => ({
@@ -278,9 +311,9 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
       <Card>
         <CardContent className="p-4">
           <div className="space-y-4">
-            {/* Region, AWS Profile and Date Picker in one line */}
-            <div className="flex items-center space-x-4">
-              <div className="w-1/3">
+            {/* Region, AWS Profile, Time Range and Connect button in one line */}
+            <div className="flex items-end space-x-4">
+              <div className="w-1/5">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Region</label>
                 <Select
                   value={region}
@@ -297,7 +330,7 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
                 </Select>
               </div>
               
-              <div className="w-1/3">
+              <div className="w-1/5">
                 <label className="block text-sm font-medium text-gray-700 mb-1">AWS Profile</label>
                 <Input
                   placeholder="default"
@@ -307,44 +340,27 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
                 />
               </div>
               
-              <div className="w-1/3 flex items-end">
-                <Button 
-                  variant="ghost" 
-                  size="default"
-                  onClick={() => setShowDatePicker(!showDatePicker)}
-                  className="text-slate-600 hover:text-blue-700 hover:bg-blue-50 h-10 w-full justify-start"
-                >
-                  <div className="flex items-center">
-                    {showDatePicker ? <ChevronDown className="h-4 w-4 mr-2" /> : <ChevronRight className="h-4 w-4 mr-2" />}
-                    {showDatePicker ? 'Hide Date Range' : 'Select Date Range'}
-                  </div>
-                </Button>
+              <div className="w-2/5 flex-grow">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Time Range</label>
+                <div className="flex h-10 w-full ">
+                  <DateTimeRangeButton />
+                </div>
               </div>
-            </div>
-            
-            {/* Date Range Picker */}
-            {showDatePicker && (
-              <div className="mb-4">
-                <DateRangePicker onApply={() => setShowDatePicker(false)} />
-              </div>
-            )}
-            
-            {/* Connect Button */}
-            <div className="flex justify-end">
+              
               <Button 
                 onClick={fetchLogGroups}
                 disabled={isLoading}
-                className="bg-blue-600 hover:bg-blue-700"
+                className="bg-blue-600 hover:bg-blue-700 h-10"
               >
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Fetching CloudWatch Data...
+                    Fetching...
                   </>
                 ) : (
                   <>
                     <Cloud className="mr-2 h-4 w-4" />
-                    Connect & Load All Log Streams
+                    Load Log Streams
                   </>
                 )}
               </Button>

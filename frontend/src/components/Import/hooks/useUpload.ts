@@ -6,6 +6,7 @@ import type {
 import { useImportStore } from '@/stores/useImportStore';
 import { useIngestEnd, useIngestFile, useIngestLogs, useIngestStart, useTokenizerOperations } from '@/hooks/useApi';
 import { IngestSessionOptions } from '@/lib/api-types';
+import { useCloudWatchStore } from '@/stores/useCloudWatchStore';
 
 export const useUpload = (): UploadProgressHookResult => {
   const {
@@ -23,21 +24,30 @@ export const useUpload = (): UploadProgressHookResult => {
     sessionOptionsTimezone,
     sessionOptionsYear,
     sessionOptionsMonth,
-    sessionOptionsDay
+    sessionOptionsDay,
+    sessionOptionsFileName
+
   } = useImportStore();
   
+
+
   // Use a ref to track the current progress value
   const progressRef = useRef(0);
   
   // Get the API functions from hooks outside the handleUpload function
   const ingestStartApi = useIngestStart();
   const ingestLogsApi = useIngestLogs();
-  const ingestEndApi = useIngestEnd();
+  const ingestEndApi = useIngestEnd();    
   
-  const handleUpload = useCallback(async () => {
+  const handleUpload = useCallback(async (metadata?: Record<string, any>) => {
     if (!selectedFile || !selectedPattern) {
       throw new Error('No file or pattern selected');
     }
+
+
+    console.log("Starting upload");
+
+
     
     try {
       setIsUploading(true);
@@ -47,6 +57,7 @@ export const useUpload = (): UploadProgressHookResult => {
       // Step 1: Start the ingestion session
       const ingestSessionOptions: IngestSessionOptions = {
         pattern: selectedPattern.pattern,
+        name: selectedPattern.name,
         custom_patterns: selectedPattern.custom_patterns,
         priority: selectedPattern.priority,
         source: selectedFile.name,
@@ -54,7 +65,8 @@ export const useUpload = (): UploadProgressHookResult => {
         force_timezone: sessionOptionsTimezone,
         force_start_year: sessionOptionsYear,
         force_start_month: sessionOptionsMonth,
-        force_start_day: sessionOptionsDay
+        force_start_day: sessionOptionsDay,
+        meta: metadata
       };
       
       const startResponse = await ingestStartApi.execute(ingestSessionOptions);

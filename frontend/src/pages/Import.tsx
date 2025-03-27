@@ -20,6 +20,7 @@ import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import React from 'react';
 import { SourceSelection } from '@/components/Import/UploadSteps/SourceSelection';
 import CloudWatchSelection, { CloudWatchSelectionRef } from '@/components/Import/UploadSteps/CloudWatchSelection';
+import { useCloudWatchStore } from '@/stores/useCloudWatchStore';
 
 const Import: FC  = () => {
   const { toast } = useToast(); 
@@ -78,6 +79,9 @@ const Import: FC  = () => {
     createNewPattern
   } = importStore;
 
+  // Access the CloudWatch store to check if a stream is selected
+  const { selectedStream, region, profile } = useCloudWatchStore();
+
   // Reset the import store when the component mounts
   useEffect(() => {
     // Reset the store to default values on first load
@@ -135,6 +139,19 @@ const Import: FC  = () => {
     console.log("CloudWatch logs selected, advancing to step 2");
   };
 
+  // Set default date range values in useEffect to avoid state updates during render
+  useEffect(() => {
+    // Only set date range if CloudWatch source is selected and store exists
+    if (importSource === 'cloudwatch') {
+      setTimeout(() => {
+        const store = useSearchQueryParamsStore.getState();
+        store.isRelative = true;
+        store.relativeValue = '24h';
+        console.log(`Default date range set to last 24 hours for CloudWatch`);
+      }, 0);
+    }
+  }, [importSource]);
+
   // Function to handle pattern save dialog close
   const handleSavePatternDialogClose = () => {
     setShowSavePatternDialog(false);
@@ -182,6 +199,16 @@ const Import: FC  = () => {
           
           // For CloudWatch source, use the cloudWatchComponentRef to import logs
           if (importSource === 'cloudwatch') {
+            // If no stream is selected, show error message
+            if (!selectedStream) {
+              toast({
+                title: "Stream Selection Required",
+                description: "Please select a CloudWatch log stream before proceeding.",
+                variant: "destructive",
+              });
+              return;
+            }
+            
             // If a stream is selected, import it
             if (cloudWatchComponentRef.current?.handleImport) {
               console.log("Importing selected CloudWatch log stream");
@@ -202,8 +229,8 @@ const Import: FC  = () => {
               }
             } else {
               toast({
-                title: "Stream Selection Required",
-                description: "Please select a CloudWatch log stream before proceeding.",
+                title: "Error",
+                description: "Something went wrong. Please try again.",
                 variant: "destructive",
               });
               return;
@@ -251,7 +278,18 @@ const Import: FC  = () => {
           });
           
           try {
-            const result = await handleUpload();
+            // If we're uploading from CloudWatch, add the metadata
+            let metadata: Record<string, any> = {};
+            if (selectedStream && selectedStream.streamName && selectedStream.groupName) {
+              metadata = {
+                _aws_region: region,
+                _aws_profile: profile,
+                _log_group_name: selectedStream.groupName,
+                _log_stream_name: selectedStream.streamName
+              };
+            }
+            
+            const result = await handleUpload(metadata);
             toast({
               title: "Upload successful",
               description: "Your log file has been processed successfully.",
@@ -524,7 +562,8 @@ const Import: FC  = () => {
                   isUploading || 
                   (currentStep === 1 && (
                     !importSource || 
-                    (importSource === 'file' && !selectedFile)
+                    (importSource === 'file' && !selectedFile) ||
+                    (importSource === 'cloudwatch' && !selectedStream)
                   ))
                 }
                 className="bg-blue-600 hover:bg-blue-700"

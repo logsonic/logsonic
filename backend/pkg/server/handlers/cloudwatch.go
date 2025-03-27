@@ -67,10 +67,16 @@ func (h *Services) HandleListCloudWatchLogGroups(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Convert LogGroup objects to strings containing the group names
+	logGroupNames := make([]string, 0, len(logGroups))
+	for _, group := range logGroups {
+		logGroupNames = append(logGroupNames, group.Name)
+	}
+
 	// Return successful response
 	json.NewEncoder(w).Encode(cloudwatch.ListLogGroupsResponse{
 		Status:    "success",
-		LogGroups: logGroups,
+		LogGroups: logGroupNames,
 		Region:    cwClient.GetRegion(),
 	})
 }
@@ -131,8 +137,19 @@ func (h *Services) HandleListCloudWatchLogStreams(w http.ResponseWriter, r *http
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
+	// Convert epoch timestamps to time.Time if provided
+	var startTime, endTime *time.Time
+	if req.StartTime > 0 {
+		st := time.Unix(0, req.StartTime*int64(time.Millisecond))
+		startTime = &st
+	}
+	if req.EndTime > 0 {
+		et := time.Unix(0, req.EndTime*int64(time.Millisecond))
+		endTime = &et
+	}
+
 	// List log streams
-	logStreams, err := cwClient.ListLogStreams(ctx, req.LogGroupName, req.StartTime, req.EndTime)
+	logStreams, err := cwClient.ListLogStreams(ctx, req.LogGroupName, startTime, endTime)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(types.ErrorResponse{
@@ -144,10 +161,16 @@ func (h *Services) HandleListCloudWatchLogStreams(w http.ResponseWriter, r *http
 		return
 	}
 
+	// Convert LogStream objects to strings containing the stream names
+	logStreamNames := make([]string, 0, len(logStreams))
+	for _, stream := range logStreams {
+		logStreamNames = append(logStreamNames, stream.Name)
+	}
+
 	// Return successful response
 	json.NewEncoder(w).Encode(cloudwatch.ListLogStreamsResponse{
 		Status:     "success",
-		LogStreams: logStreams,
+		LogStreams: logStreamNames,
 		Region:     cwClient.GetRegion(),
 	})
 }
@@ -218,8 +241,19 @@ func (h *Services) HandleGetCloudWatchLogEvents(w http.ResponseWriter, r *http.R
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
+	// Convert epoch timestamps to time.Time if provided
+	var startTime, endTime *time.Time
+	if req.StartTime > 0 {
+		st := time.Unix(0, req.StartTime*int64(time.Millisecond))
+		startTime = &st
+	}
+	if req.EndTime > 0 {
+		et := time.Unix(0, req.EndTime*int64(time.Millisecond))
+		endTime = &et
+	}
+
 	// Get log events
-	logEvents, err := cwClient.GetLogEvents(ctx, req.LogGroupName, req.LogStreamName, req.StartTime, req.EndTime)
+	logEvents, err := cwClient.GetLogEvents(ctx, req.LogGroupName, req.LogStreamName, startTime, endTime)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(types.ErrorResponse{
@@ -231,10 +265,22 @@ func (h *Services) HandleGetCloudWatchLogEvents(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Convert LogEvent objects to maps for the response
+	eventMaps := make([]map[string]interface{}, 0, len(logEvents))
+	for _, event := range logEvents {
+		eventMap := map[string]interface{}{
+			"timestamp":  event.Timestamp.UnixMilli(),
+			"message":    event.Message,
+			"log_stream": event.LogStream,
+			"log_group":  event.LogGroup,
+		}
+		eventMaps = append(eventMaps, eventMap)
+	}
+
 	// Return successful response
 	json.NewEncoder(w).Encode(cloudwatch.GetLogEventsResponse{
 		Status:    "success",
-		LogEvents: logEvents,
+		LogEvents: eventMaps,
 		Region:    cwClient.GetRegion(),
 	})
 }

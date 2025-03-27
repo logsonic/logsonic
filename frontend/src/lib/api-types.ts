@@ -55,6 +55,7 @@ export interface IngestSessionOptions {
   force_start_year?: string;
   force_start_month?: string;
   force_start_day?: string;
+  meta?: Record<string, any>;
 }
 
 // Log Query Types
@@ -172,11 +173,11 @@ export interface CloudWatchLogGroup {
 
 export interface CloudWatchLogStream {
   name: string;
-  logGroupName: string;
-  creationTime: string;
-  firstEventTime: string;
-  lastEventTime: string;
-  storedBytes: number;
+  log_group_name: string;
+  creation_time: string; 
+  first_event_time: string;
+  last_event_time: string;
+  stored_bytes: number;
 }
 
 export interface CloudWatchLogEvent {
@@ -190,37 +191,37 @@ export interface ListLogGroupsRequest extends CloudWatchAuth {}
 
 export interface ListLogGroupsResponse {
   status: string;
-  logGroups: CloudWatchLogGroup[];
+  log_groups: string[];
   region: string;
 }
 
 export interface ListLogStreamsRequest extends CloudWatchAuth {
-  logGroupName: string;
-  startTime?: string;
-  endTime?: string;
+  log_group_name: string;
+  start_time?: number;
+  end_time?: number;
 }
 
 export interface ListLogStreamsResponse {
   status: string;
-  logStreams: CloudWatchLogStream[];
+  log_streams: string[];
   region: string;
 }
 
 export interface GetLogEventsRequest extends CloudWatchAuth {
-  logGroupName: string;
-  logStreamName: string;
-  startTime?: string;
-  endTime?: string;
+  log_group_name: string;
+  log_stream_name: string;
+  start_time?: number;
+  end_time?: number;
 }
 
 export interface GetLogEventsResponse {
   status: string;
-  logEvents: CloudWatchLogEvent[];
+  log_events: any[];
   region: string;
 }
 
 export interface SelectedCloudWatchLog {
-  logGroupName: string;
+  log_group_name: string;
   selected: boolean;
   streams?: CloudWatchLogStream[];
   selectedStreams?: string[];

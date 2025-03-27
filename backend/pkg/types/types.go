@@ -13,6 +13,10 @@ type IngestSessionOptions struct {
 	ForceStartYear  string            `json:"force_start_year,omitempty"`
 	ForceStartMonth string            `json:"force_start_month,omitempty"`
 	ForceStartDay   string            `json:"force_start_day,omitempty"`
+	// Meta contains additional fields to be added to each log entry
+	// These fields will be directly added to the JSON output for each log
+	// Example: for CloudWatch logs: {"aws_region": "us-west-2", "log_group": "my-group", "log_stream": "stream-1"}
+	Meta map[string]interface{} `json:"meta,omitempty"`
 }
 
 // GrokPatternDefinition represents a comprehensive Grok pattern definition

@@ -310,11 +310,20 @@ func (t *Tokenizer) ParseLogs(logLines []string, ingestSessionOptions types.Inge
 	// If no patterns are available, mark all logs as failed
 	if len(t.patterns) == 0 {
 		for _, logLine := range logLines {
-			parsedLogs = append(parsedLogs, map[string]interface{}{
+			failedLog := map[string]interface{}{
 				"error":     "No patterns available for parsing",
-				"raw":       logLine,
+				"message":   logLine,
 				"timestamp": time.Now(),
-			})
+			}
+
+			// Add metadata fields
+			if ingestSessionOptions.Meta != nil {
+				for key, value := range ingestSessionOptions.Meta {
+					failedLog[key] = value
+				}
+			}
+
+			parsedLogs = append(parsedLogs, failedLog)
 			failedCount++
 		}
 
@@ -324,11 +333,20 @@ func (t *Tokenizer) ParseLogs(logLines []string, ingestSessionOptions types.Inge
 	// Safe guard for nil tokenizer
 	if t.preparedTokenizer == nil {
 		for _, logLine := range logLines {
-			parsedLogs = append(parsedLogs, map[string]interface{}{
+			failedLog := map[string]interface{}{
 				"error":     "Tokenizer not initialized properly",
-				"raw":       logLine,
+				"message":   logLine,
 				"timestamp": time.Now(),
-			})
+			}
+
+			// Add metadata fields
+			if ingestSessionOptions.Meta != nil {
+				for key, value := range ingestSessionOptions.Meta {
+					failedLog[key] = value
+				}
+			}
+
+			parsedLogs = append(parsedLogs, failedLog)
 			failedCount++
 		}
 		return parsedLogs, successCount, failedCount, nil
@@ -347,6 +365,13 @@ func (t *Tokenizer) ParseLogs(logLines []string, ingestSessionOptions types.Inge
 
 				parsedInterface["_raw"] = logLine
 				parsedInterface["_src"] = ingestSessionOptions.Source
+
+				// Add metadata fields if provided
+				if ingestSessionOptions.Meta != nil {
+					for key, value := range ingestSessionOptions.Meta {
+						parsedInterface[key] = value
+					}
+				}
 
 				// Convert timestamp string to time.Time
 				if tsStr, ok := parsed["timestamp"]; ok {
@@ -373,11 +398,20 @@ func (t *Tokenizer) ParseLogs(logLines []string, ingestSessionOptions types.Inge
 		}
 		if !matched {
 			failedCount++
-			parsedLogs = append(parsedLogs, map[string]interface{}{
+			failedLog := map[string]interface{}{
 				"error":     "No grok pattern matches given log line",
 				"_raw":      logLine,
 				"timestamp": time.Now(),
-			})
+			}
+
+			// Add metadata fields to failed logs too
+			if ingestSessionOptions.Meta != nil {
+				for key, value := range ingestSessionOptions.Meta {
+					failedLog[key] = value
+				}
+			}
+
+			parsedLogs = append(parsedLogs, failedLog)
 		}
 	}
 
