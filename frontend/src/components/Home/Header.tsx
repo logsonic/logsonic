@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Info, Trash2, Upload, Regex, BarChart, Settings, Database, PieChart, HardDrive, Sparkles, Bell } from 'lucide-react';
+import { Info, Trash2, Upload, Regex, BarChart, Settings, Database, PieChart, HardDrive, Sparkles, Bell, Cloud } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { 
   AlertDialog, 
@@ -33,11 +33,37 @@ import { formatBytes } from '@/lib/utils';
 import { Pie } from 'recharts';
 import { useBackendStatus } from '@/hooks/useBackendStatus';
 import { getSystemInfo } from '@/lib/api-client';
+import CloudWatchMenuButton from "../Import/CloudWatchMenuButton";
 
 // Custom navigation menu trigger style with blue hover effect
 const blueNavigationMenuTriggerStyle = cn(
   navigationMenuTriggerStyle(),
   "hover:bg-blue-50 hover:text-blue-700 focus:bg-blue-50 focus:text-blue-700 data-[active]:bg-blue-100 data-[state=open]:bg-blue-100"
+);
+
+// Move the navigation menu list content to its own variable for readability
+const NavigationMenuItems = () => (
+  <NavigationMenuList className="space-x-2">
+    {/* Import Logs */}
+    <NavigationMenuItem>
+      <NavigationMenuLink asChild>
+        <Link 
+          to="/import" 
+          className={blueNavigationMenuTriggerStyle}
+        >
+          <div className="flex items-center gap-2">
+            <Upload className="h-4 w-4 text-blue-600" />
+            <span>Import Logs</span>
+          </div>
+        </Link>
+      </NavigationMenuLink>
+    </NavigationMenuItem>
+
+    {/* CloudWatch Import */}
+    <NavigationMenuItem>
+      <CloudWatchMenuButton className={blueNavigationMenuTriggerStyle} />
+    </NavigationMenuItem>
+  </NavigationMenuList>
 );
 
 /**
@@ -92,24 +118,7 @@ export const Header = () => {
           
 
           <NavigationMenu>
-            <NavigationMenuList className="space-x-2">
-              {/* Import Logs */}
-              <NavigationMenuItem>
-                <NavigationMenuLink asChild>
-                  <Link 
-                    to="/import" 
-                    className={blueNavigationMenuTriggerStyle}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Upload className="h-4 w-4 text-blue-600" />
-                      <span>Import Logs</span>
-                    </div>
-                  </Link>
-                </NavigationMenuLink>
-              </NavigationMenuItem>
-
-
-            </NavigationMenuList>
+            <NavigationMenuItems />
           </NavigationMenu>
         </div>
         

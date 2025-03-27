@@ -153,7 +153,79 @@ export interface SystemInfoResponse {
   status?: string;
   storage_info?: StorageInfo;
   system_info?: SystemInfo;
+}
 
+// CloudWatch Types
+export interface CloudWatchAuth {
+  region?: string;
+  profile?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+}
+
+export interface CloudWatchLogGroup {
+  name: string;
+  arn: string;
+  creationTime: string;
+  storedBytes: number;
+  retentionDays: number;
+  streams?: CloudWatchLogStream[];
+}
+
+export interface CloudWatchLogStream {
+  name: string;
+  logGroupName: string;
+  creationTime: string;
+  firstEventTime: string;
+  lastEventTime: string;
+  storedBytes: number;
+}
+
+export interface CloudWatchLogEvent {
+  timestamp: string;
+  message: string;
+  logStream: string;
+  logGroup: string;
+}
+
+export interface ListLogGroupsRequest extends CloudWatchAuth {}
+
+export interface ListLogGroupsResponse {
+  status: string;
+  logGroups: CloudWatchLogGroup[];
+  region: string;
+}
+
+export interface ListLogStreamsRequest extends CloudWatchAuth {
+  logGroupName: string;
+  startTime?: string;
+  endTime?: string;
+}
+
+export interface ListLogStreamsResponse {
+  status: string;
+  logStreams: CloudWatchLogStream[];
+  region: string;
+}
+
+export interface GetLogEventsRequest extends CloudWatchAuth {
+  logGroupName: string;
+  logStreamName: string;
+  startTime?: string;
+  endTime?: string;
+}
+
+export interface GetLogEventsResponse {
+  status: string;
+  logEvents: CloudWatchLogEvent[];
+  region: string;
+}
+
+export interface SelectedCloudWatchLog {
+  logGroupName: string;
+  selected: boolean;
+  streams?: CloudWatchLogStream[];
+  selectedStreams?: string[];
 }
 
 // Query Parameters
