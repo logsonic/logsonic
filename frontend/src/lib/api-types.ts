@@ -159,8 +159,6 @@ export interface SystemInfoResponse {
 export interface CloudWatchAuth {
   region?: string;
   profile?: string;
-  accessKeyId?: string;
-  secretAccessKey?: string;
 }
 
 export interface CloudWatchLogGroup {

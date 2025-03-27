@@ -52,10 +52,8 @@ type LogEvent struct {
 
 // Config holds the configuration for the CloudWatch client
 type Config struct {
-	Region          string
-	Profile         string
-	AccessKeyID     string
-	SecretAccessKey string
+	Region  string
+	Profile string
 }
 
 // NewClient creates a new CloudWatch client
@@ -66,31 +64,10 @@ func NewClient(cfg Config) (*Client, error) {
 	ctx := context.Background()
 
 	// Try to load AWS configuration from different sources in order:
-	// 1. Explicit credentials if provided
-	// 2. Named profile if provided
-	// 3. Default AWS config from environment or credentials file
+	// 1. Named profile if provided
+	// 2. Default AWS config from environment or credentials file
 
-	if cfg.AccessKeyID != "" && cfg.SecretAccessKey != "" {
-		// Use explicit credentials
-		customProvider := config.WithCredentialsProvider(aws.CredentialsProviderFunc(
-			func(ctx context.Context) (aws.Credentials, error) {
-				return aws.Credentials{
-					AccessKeyID:     cfg.AccessKeyID,
-					SecretAccessKey: cfg.SecretAccessKey,
-				}, nil
-			},
-		))
-
-		region := cfg.Region
-		if region == "" {
-			region = "us-east-1" // Default region if not specified
-		}
-
-		awsConfig, err = config.LoadDefaultConfig(ctx,
-			customProvider,
-			config.WithRegion(region),
-		)
-	} else if cfg.Profile != "" {
+	if cfg.Profile != "" {
 		// Use named profile
 		awsConfig, err = config.LoadDefaultConfig(ctx,
 			config.WithSharedConfigProfile(cfg.Profile),

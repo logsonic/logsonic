@@ -4,10 +4,8 @@ import "time"
 
 // ListLogGroupsRequest defines the request parameters for listing CloudWatch log groups
 type ListLogGroupsRequest struct {
-	Region          string `json:"region,omitempty"`
-	Profile         string `json:"profile,omitempty"`
-	AccessKeyID     string `json:"accessKeyId,omitempty"`
-	SecretAccessKey string `json:"secretAccessKey,omitempty"`
+	Region  string `json:"region,omitempty"`
+	Profile string `json:"profile,omitempty"`
 }
 
 // ListLogGroupsResponse defines the response for listing CloudWatch log groups
@@ -19,13 +17,11 @@ type ListLogGroupsResponse struct {
 
 // ListLogStreamsRequest defines the request parameters for listing CloudWatch log streams
 type ListLogStreamsRequest struct {
-	LogGroupName    string     `json:"logGroupName"`
-	StartTime       *time.Time `json:"startTime,omitempty"`
-	EndTime         *time.Time `json:"endTime,omitempty"`
-	Region          string     `json:"region,omitempty"`
-	Profile         string     `json:"profile,omitempty"`
-	AccessKeyID     string     `json:"accessKeyId,omitempty"`
-	SecretAccessKey string     `json:"secretAccessKey,omitempty"`
+	LogGroupName string     `json:"logGroupName"`
+	StartTime    *time.Time `json:"startTime,omitempty"`
+	EndTime      *time.Time `json:"endTime,omitempty"`
+	Region       string     `json:"region,omitempty"`
+	Profile      string     `json:"profile,omitempty"`
 }
 
 // ListLogStreamsResponse defines the response for listing CloudWatch log streams
@@ -37,14 +33,12 @@ type ListLogStreamsResponse struct {
 
 // GetLogEventsRequest defines the request parameters for retrieving log events
 type GetLogEventsRequest struct {
-	LogGroupName    string     `json:"logGroupName"`
-	LogStreamName   string     `json:"logStreamName"`
-	StartTime       *time.Time `json:"startTime,omitempty"`
-	EndTime         *time.Time `json:"endTime,omitempty"`
-	Region          string     `json:"region,omitempty"`
-	Profile         string     `json:"profile,omitempty"`
-	AccessKeyID     string     `json:"accessKeyId,omitempty"`
-	SecretAccessKey string     `json:"secretAccessKey,omitempty"`
+	LogGroupName  string     `json:"logGroupName"`
+	LogStreamName string     `json:"logStreamName"`
+	StartTime     *time.Time `json:"startTime,omitempty"`
+	EndTime       *time.Time `json:"endTime,omitempty"`
+	Region        string     `json:"region,omitempty"`
+	Profile       string     `json:"profile,omitempty"`
 }
 
 // GetLogEventsResponse defines the response for retrieving log events
@@ -56,14 +50,12 @@ type GetLogEventsResponse struct {
 
 // ImportCloudWatchLogsRequest defines the request parameters for importing CloudWatch logs
 type ImportCloudWatchLogsRequest struct {
-	LogGroups       []string   `json:"logGroups"`
-	LogStreams      []string   `json:"logStreams,omitempty"`
-	StartTime       *time.Time `json:"startTime,omitempty"`
-	EndTime         *time.Time `json:"endTime,omitempty"`
-	Region          string     `json:"region,omitempty"`
-	Profile         string     `json:"profile,omitempty"`
-	AccessKeyID     string     `json:"accessKeyId,omitempty"`
-	SecretAccessKey string     `json:"secretAccessKey,omitempty"`
+	LogGroups  []string   `json:"logGroups"`
+	LogStreams []string   `json:"logStreams,omitempty"`
+	StartTime  *time.Time `json:"startTime,omitempty"`
+	EndTime    *time.Time `json:"endTime,omitempty"`
+	Region     string     `json:"region,omitempty"`
+	Profile    string     `json:"profile,omitempty"`
 }
 
 // ImportCloudWatchLogsResponse defines the response for importing CloudWatch logs

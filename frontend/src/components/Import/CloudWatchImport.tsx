@@ -21,14 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
-import { Cloud, CloudOff, ChevronRight, ChevronDown, Search, Loader2 } from "lucide-react";
+import { Cloud, CloudOff, ChevronRight, ChevronDown, Search, Loader2, Info } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -65,11 +59,11 @@ const CloudWatchImport: React.FC<Props> = ({ open, onClose }) => {
   
   // Use the CloudWatch store instead of local state
   const {
-    authMethod, region, profile, accessKeyId, secretAccessKey,
+    authMethod, region, profile,
     logGroups, expandedGroups, loadingStreams, searchQuery, selectedStream,
     isLoading, error,
     
-    setAuthMethod, setRegion, setProfile, setAccessKeys,
+    setAuthMethod, setRegion, setProfile,
     setLogGroups, setStreamsForGroup, toggleGroupExpanded,
     setLoadingStreams, setSelectedStream, setSearchQuery,
     setLoading, setError, reset
@@ -90,12 +84,6 @@ const CloudWatchImport: React.FC<Props> = ({ open, onClose }) => {
       case 'profile':
         setProfile(value);
         break;
-      case 'accessKeyId':
-        setAccessKeys(value, secretAccessKey);
-        break;
-      case 'secretAccessKey':
-        setAccessKeys(accessKeyId, value);
-        break;
     }
   };
 
@@ -106,14 +94,8 @@ const CloudWatchImport: React.FC<Props> = ({ open, onClose }) => {
     try {
       const authData: CloudWatchAuth = {
         region,
+        profile
       };
-
-      if (authMethod === 'profile') {
-        authData.profile = profile;
-      } else {
-        authData.accessKeyId = accessKeyId;
-        authData.secretAccessKey = secretAccessKey;
-      }
 
       const response = await cloudwatchService.listLogGroups(authData);
       setLogGroups(response.logGroups || []);
@@ -148,9 +130,7 @@ const CloudWatchImport: React.FC<Props> = ({ open, onClose }) => {
       
       const authData = {
         region,
-        profile: authMethod === 'profile' ? profile : undefined,
-        accessKeyId: authMethod === 'keys' ? accessKeyId : undefined,
-        secretAccessKey: authMethod === 'keys' ? secretAccessKey : undefined,
+        profile,
         logGroupName,
         startTime,
         endTime
@@ -169,22 +149,71 @@ const CloudWatchImport: React.FC<Props> = ({ open, onClose }) => {
     setSelectedStream(groupName, streamName);
   };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!selectedStream) {
       setError("Please select a log stream to import");
       return;
     }
     
-    console.log('Log stream selected for import:', selectedStream);
-    console.log('Time range:', {
-      startTime: dateRangeStore.UTCTimeSince,
-      endTime: dateRangeStore.UTCTimeTo
-    });
+    setError(null);
+    setLoading(true);
     
-    // Here we would normally implement the actual import logic
-    // But as per requirements, we are only implementing the UI
-    
-    onClose();
+    try {
+      // Get time range from the date range store
+      const startTime = dateRangeStore.UTCTimeSince ? new Date(dateRangeStore.UTCTimeSince).toISOString() : undefined;
+      const endTime = dateRangeStore.UTCTimeTo ? new Date(dateRangeStore.UTCTimeTo).toISOString() : undefined;
+      
+      // Prepare request data for fetching log events
+      const authData = {
+        region,
+        profile,
+        logGroupName: selectedStream.groupName,
+        logStreamName: selectedStream.streamName,
+        startTime,
+        endTime
+      };
+      
+      // Fetch log events from CloudWatch
+      const response = await cloudwatchService.getLogEvents(authData);
+      
+      if (!response.logEvents || response.logEvents.length === 0) {
+        setError("No log events found in the selected time range");
+        return;
+      }
+      
+      // Format log data for download
+      const logData = response.logEvents.map(event => {
+        const timestamp = new Date(event.timestamp).toISOString();
+        return `[${timestamp}] ${event.message}`;
+      }).join('\n');
+      
+      // Generate filename based on log group and stream
+      const sanitizedGroupName = selectedStream.groupName.replace(/[^a-z0-9]/gi, '-');
+      const sanitizedStreamName = selectedStream.streamName.replace(/[^a-z0-9]/gi, '-');
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `cloudwatch-${sanitizedGroupName}-${sanitizedStreamName}-${timestamp}.log`;
+      
+      // Create a downloadable blob and trigger download
+      const blob = new Blob([logData], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      link.parentNode?.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      // Close the dialog after successful download
+      onClose();
+    } catch (err) {
+      setError(`Failed to download log events: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDateRangeClose = () => {
@@ -219,73 +248,52 @@ const CloudWatchImport: React.FC<Props> = ({ open, onClose }) => {
           <Card>
             <CardContent className="pt-6">
               <h3 className="text-sm font-medium mb-2">AWS Authentication</h3>
-              <Tabs value={authMethod} onValueChange={(value) => setAuthMethod(value as 'profile' | 'keys')} className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-4">
-                  <TabsTrigger value="profile">Profile</TabsTrigger>
-                  <TabsTrigger value="keys">Access Keys</TabsTrigger>
-                </TabsList>
+              
+              <div className="mb-3 p-3 bg-blue-50 text-blue-700 rounded-md text-sm flex">
+                <Info className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
+                <div>
+                  AWS credentials are read from your server environment variables. 
+                  You only need to specify which profile and region to use.
+                </div>
+              </div>
 
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">Region</label>
-                    <Select value={region || ''} onValueChange={(value) => handleAuthChange('region', value)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Region" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DEFAULT_REGIONS.map((r) => (
-                          <SelectItem key={r} value={r}>{r}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <TabsContent value="profile">
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">AWS Profile</label>
-                      <Input 
-                        placeholder="default" 
-                        value={profile || ''} 
-                        onChange={(e) => handleAuthChange('profile', e.target.value)} 
-                      />
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="keys">
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-sm font-medium mb-1 block">Access Key ID</label>
-                        <Input 
-                          value={accessKeyId || ''} 
-                          onChange={(e) => handleAuthChange('accessKeyId', e.target.value)} 
-                        />
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium mb-1 block">Secret Access Key</label>
-                        <Input 
-                          type="password" 
-                          value={secretAccessKey || ''} 
-                          onChange={(e) => handleAuthChange('secretAccessKey', e.target.value)} 
-                        />
-                      </div>
-                    </div>
-                  </TabsContent>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Region</label>
+                  <Select value={region || ''} onValueChange={(value) => handleAuthChange('region', value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Region" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DEFAULT_REGIONS.map((r) => (
+                        <SelectItem key={r} value={r}>{r}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <Button 
-                  onClick={fetchLogGroups}
-                  disabled={isLoading || (!profile && authMethod === 'profile') || 
-                          (authMethod === 'keys' && (!accessKeyId || !secretAccessKey))}
-                  className="mt-4"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Fetching...
-                    </>
-                  ) : 'Fetch Log Groups'}
-                </Button>
-              </Tabs>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">AWS Profile</label>
+                  <Input 
+                    placeholder="default" 
+                    value={profile || ''} 
+                    onChange={(e) => handleAuthChange('profile', e.target.value)} 
+                  />
+                </div>
+              </div>
+
+              <Button 
+                onClick={fetchLogGroups}
+                disabled={isLoading || !profile}
+                className="mt-4"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Fetching...
+                  </>
+                ) : 'Fetch Log Groups'}
+              </Button>
             </CardContent>
           </Card>
 
@@ -423,10 +431,19 @@ const CloudWatchImport: React.FC<Props> = ({ open, onClose }) => {
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button 
             onClick={handleImport} 
-            disabled={!selectedStream}
+            disabled={!selectedStream || isLoading}
           >
-            <Cloud className="mr-2 h-4 w-4" />
-            Import Selected Stream
+            {isLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Downloading...
+              </>
+            ) : (
+              <>
+                <Cloud className="mr-2 h-4 w-4" />
+                Download Logs
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

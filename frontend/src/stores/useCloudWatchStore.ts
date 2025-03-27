@@ -6,8 +6,6 @@ interface CloudWatchState {
   authMethod: 'profile' | 'keys';
   region: string;
   profile: string;
-  accessKeyId: string;
-  secretAccessKey: string;
   
   // Log Groups & Streams data
   logGroups: CloudWatchLogGroup[];
@@ -24,7 +22,6 @@ interface CloudWatchState {
   setAuthMethod: (method: 'profile' | 'keys') => void;
   setRegion: (region: string) => void;
   setProfile: (profile: string) => void;
-  setAccessKeys: (accessKeyId: string, secretAccessKey: string) => void;
   setLogGroups: (groups: CloudWatchLogGroup[]) => void;
   setStreamsForGroup: (groupName: string, streams: CloudWatchLogStream[]) => void;
   toggleGroupExpanded: (groupName: string) => void;
@@ -44,8 +41,6 @@ const initialState = {
   authMethod: 'profile' as const,
   region: 'us-east-1',
   profile: 'default',
-  accessKeyId: '',
-  secretAccessKey: '',
   
   // Log Groups & Streams data
   logGroups: [],
@@ -66,7 +61,6 @@ export const useCloudWatchStore = create<CloudWatchState>((set) => ({
   setAuthMethod: (method) => set({ authMethod: method }),
   setRegion: (region) => set({ region }),
   setProfile: (profile) => set({ profile }),
-  setAccessKeys: (accessKeyId, secretAccessKey) => set({ accessKeyId, secretAccessKey }),
   
   setLogGroups: (groups) => set({ 
     logGroups: groups,

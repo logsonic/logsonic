@@ -72,7 +72,18 @@ func (h *Services) HandleParse(w http.ResponseWriter, r *http.Request) {
 
 	// If a grok pattern is provided, proceed with parsing (original HandleParse behavior)
 	// Temporary tokenizer for this request
-	tempTokenizer := h.tokenizer
+	// Create a new tokenizer for each request
+	tempTokenizer, err := tokenizer.NewTokenizer()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(types.ErrorResponse{
+			Status:  "error",
+			Error:   "Failed to create tokenizer",
+			Code:    "TOKENIZER_ERROR",
+			Details: err.Error(),
+		})
+		return
+	}
 
 	// If a custom Grok pattern is provided, add it temporarily
 	if req.GrokPattern != "" {
@@ -87,6 +98,7 @@ func (h *Services) HandleParse(w http.ResponseWriter, r *http.Request) {
 						Code:    "PATTERN_ERROR",
 						Details: err.Error(),
 					})
+					tempTokenizer.ClearPatterns()
 					return
 				}
 			}
@@ -101,6 +113,7 @@ func (h *Services) HandleParse(w http.ResponseWriter, r *http.Request) {
 				Code:    "PATTERN_ERROR",
 				Details: err.Error(),
 			})
+			tempTokenizer.ClearPatterns()
 			return
 		}
 	}
@@ -115,6 +128,7 @@ func (h *Services) HandleParse(w http.ResponseWriter, r *http.Request) {
 			Code:    "PARSE_ERROR",
 			Details: err.Error(),
 		})
+		tempTokenizer.ClearPatterns()
 		return
 	}
 	// Remove _raw and _src fields from parsedLogs
@@ -136,6 +150,7 @@ func (h *Services) HandleParse(w http.ResponseWriter, r *http.Request) {
 		CustomPatterns:     req.CustomPatterns,
 		Logs:               parsedLogs,
 	})
+	tempTokenizer.ClearPatterns()
 }
 
 func (h *Services) autosuggestPatterns(logs []string) ([]types.AutosuggestResult, error) {

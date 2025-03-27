@@ -36,10 +36,8 @@ func (h *Services) HandleListCloudWatchLogGroups(w http.ResponseWriter, r *http.
 
 	// Create CloudWatch client
 	cwClient, err := cloudwatch.NewClient(cloudwatch.Config{
-		Region:          req.Region,
-		Profile:         req.Profile,
-		AccessKeyID:     req.AccessKeyID,
-		SecretAccessKey: req.SecretAccessKey,
+		Region:  req.Region,
+		Profile: req.Profile,
 	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -115,10 +113,8 @@ func (h *Services) HandleListCloudWatchLogStreams(w http.ResponseWriter, r *http
 
 	// Create CloudWatch client
 	cwClient, err := cloudwatch.NewClient(cloudwatch.Config{
-		Region:          req.Region,
-		Profile:         req.Profile,
-		AccessKeyID:     req.AccessKeyID,
-		SecretAccessKey: req.SecretAccessKey,
+		Region:  req.Region,
+		Profile: req.Profile,
 	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -204,10 +200,8 @@ func (h *Services) HandleGetCloudWatchLogEvents(w http.ResponseWriter, r *http.R
 
 	// Create CloudWatch client
 	cwClient, err := cloudwatch.NewClient(cloudwatch.Config{
-		Region:          req.Region,
-		Profile:         req.Profile,
-		AccessKeyID:     req.AccessKeyID,
-		SecretAccessKey: req.SecretAccessKey,
+		Region:  req.Region,
+		Profile: req.Profile,
 	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
