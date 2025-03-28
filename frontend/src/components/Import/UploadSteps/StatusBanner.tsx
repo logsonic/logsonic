@@ -1,6 +1,5 @@
-import React from 'react';
 import { CheckCircle, AlertTriangle, X } from 'lucide-react';
-
+import { FC } from 'react';
 interface StatusBannerProps {
   type: 'success' | 'error' | 'warning';
   title: string;
@@ -8,7 +7,7 @@ interface StatusBannerProps {
   onClose: () => void;
 }
 
-export const StatusBanner: React.FC<StatusBannerProps> = ({
+export const StatusBanner: FC<StatusBannerProps> = ({
   type,
   title,
   message,
