@@ -1,7 +1,6 @@
 import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import { Upload } from 'lucide-react';
-import { LogSourceProviderRef } from '@/pages/Import';
-import type { FileSelectionProps as OriginalFileSelectionProps } from '../types';
+import type { FileSelectionProps as OriginalFileSelectionProps, LogSourceProviderRef } from '../types';
 import { useImportStore } from '../../../stores/useImportStore';
 
 // Extend the original props to include the ref
@@ -32,6 +31,19 @@ const FileSelection = forwardRef<LogSourceProviderRef, FileSelectionProps>(
             reject(new Error("File input reference is not available"));
           }
         });
+      },
+      validateCanProceed: async () => {
+        // For file selection, check if a file has been selected
+        const { readyToSelectPattern } = useImportStore.getState();
+        
+        if (!readyToSelectPattern) {
+          return {
+            canProceed: false,
+            errorMessage: "Please select a log file before proceeding."
+          };
+        }
+        
+        return { canProceed: true };
       }
     }));
 

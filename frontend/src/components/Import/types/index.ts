@@ -80,4 +80,18 @@ export interface CustomPatternEditorProps {
   customPatterns: Record<string, string>;
   onPatternChange: (pattern: string) => void;
   onCustomPatternsChange: (patterns: Record<string, string>) => void;
+}
+
+// Interface for log source providers
+export interface LogSourceProvider {
+  id: string;
+  name: string;
+  icon: React.ComponentType<any>;
+  component: React.ForwardRefExoticComponent<any>;
+}
+
+// Interface for log provider components that implement ref functionality
+export interface LogSourceProviderRef {
+  handleImport: () => Promise<void>;
+  validateCanProceed: () => Promise<{ canProceed: boolean; errorMessage?: string }>;
 } 

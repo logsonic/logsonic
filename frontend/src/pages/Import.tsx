@@ -6,10 +6,12 @@ import {
   FileSelection, 
   FileAnalyzing, 
   ImportConfirm,
-  SuccessSummary
+  SuccessSummary,
+  LogSourceStep,
+  LogSourceProviderRef
 } from '../components/Import/UploadSteps';
 import { useUpload } from '../components/Import/hooks';
-import type { Pattern, DetectionResult } from '../components/Import/types';
+import type { Pattern, DetectionResult, LogSourceProvider } from '../components/Import/types';
 import { useToast } from "../components/ui/use-toast";
 import { clearTokenizer, getGrokPatterns, getSystemInfo } from '../lib/api-client';
 import { extractFields } from '../components/Import/utils/patternUtils';
@@ -17,23 +19,12 @@ import { useImportStore, UploadStep, DEFAULT_PATTERN } from '../stores/useImport
 import { useNavigate } from 'react-router-dom';
 import { useSearchQueryParamsStore } from '../stores/useSearchParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
-import { SourceSelection } from '@/components/Import/UploadSteps/SourceSelection';
 import { CloudWatchSelection } from '@/components/Import/UploadSteps';
 import type { CloudWatchSelectionRef } from '@/components/Import/UploadSteps';
 import { useCloudWatchStore } from '@/stores/useCloudWatchStore';
 
-// Define a common interface for all log source providers
-export interface LogSourceProviderRef {
-  handleImport: () => Promise<void>;
-}
-
-// Registry of available log source providers
-interface LogSourceProvider {
-  id: string;
-  name: string;
-  icon: React.ComponentType<any>;
-  component: React.ForwardRefExoticComponent<any>;
-}
+// Define the interface in types/index.ts, then re-export from UploadSteps/index.ts
+// We should eventually remove this from here
 
 const Import: FC  = () => {
   const { toast } = useToast(); 
@@ -224,26 +215,26 @@ const Import: FC  = () => {
             return;
           }
           
-          // For file source, check if file is selected
-          if (importSource === 'file' && readyToSelectPattern === false) {
-            toast({
-              title: "Choose Log Source",
-              description: "Please select a log source before proceeding.",
-              variant: "destructive",
-            });
-            return;
-          }
-          
-          // For providers that require their own import handling
-          if (importSource !== 'file') {
-            // Use the generic logProviderRef to handle import
-            if (logProviderRef.current?.handleImport) {
+          // Provider-agnostic validation - ask the provider if we can proceed
+          if (logProviderRef.current) {
+            const { canProceed, errorMessage } = await logProviderRef.current.validateCanProceed();
+            
+            if (!canProceed) {
+              toast({
+                title: "Validation Failed",
+                description: errorMessage || "Cannot proceed. Please check your selection.",
+                variant: "destructive",
+              });
+              return;
+            }
+            
+            // For non-file providers that need their own import handling
+            if (importSource !== 'file') {
               console.log(`Importing logs from ${importSource}`);
               
               try {
                 await logProviderRef.current.handleImport();
-                // The provider component will call handleLogInput after successful import
-                // which will set filePreview and prepare for step 2
+                // The provider will update importStore state as needed
                 return; // Exit early since the component handles next step
               } catch (importErr) {
                 console.error(`Failed to import logs from ${importSource}:`, importErr);
@@ -254,17 +245,10 @@ const Import: FC  = () => {
                 });
                 return;
               }
-            } else {
-              toast({
-                title: "Error",
-                description: "Something went wrong. Please try again.",
-                variant: "destructive",
-              });
-              return;
             }
           }
           
-          // Set current step to 2 (pattern detection) for file source
+          // Set current step to 2 (pattern detection)
           console.log(`Advancing to step 2 with import source: ${importSource}`);
           setCurrentStep(2);
           break;
@@ -425,82 +409,15 @@ const Import: FC  = () => {
     switch (currentStep) {
       case 1:
         return (
-          <div className="space-y-6">
-            {/* Source Selection Radio Buttons */}
-            <div className="flex flex-col space-y-4">
-              <h2 className="text-lg font-semibold text-gray-800">Select Import Source</h2>
-              
-              <div className="grid grid-cols-2 gap-4">
-                {/* Generate provider options dynamically */}
-                {logSourceProviders.map(provider => (
-                  <div 
-                    key={provider.id}
-                    className={`p-4 rounded-lg border-2 flex items-center space-x-3 cursor-pointer transition-colors
-                      ${importSource === provider.id 
-                        ? 'border-blue-500 bg-blue-50' 
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
-                    onClick={() => handleSourceSelect(provider.id)}
-                  >
-                    <div className={`h-5 w-5 rounded-full border flex items-center justify-center 
-                      ${importSource === provider.id ? 'border-blue-500' : 'border-gray-400'}`}>
-                      {importSource === provider.id && (
-                        <div className="h-3 w-3 rounded-full bg-blue-500"></div>
-                      )}
-                    </div>
-                    <div className="flex items-center">
-                      <provider.icon className="h-5 w-5 text-gray-600 mr-2" />
-                      <span className="font-medium">{provider.name}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            {/* Render component based on selection */}
-            <div className="mt-6">
-              {importSource && (
-                (() => {
-                  const selectedProvider = logSourceProviders.find(p => p.id === importSource);
-                  if (!selectedProvider) return null;
-                  
-                  const ProviderComponent = selectedProvider.component;
-                  
-                  // Special handling for each provider type
-                  if (importSource === 'file') {
-                    return (
-                      <ProviderComponent
-                        ref={logProviderRef}
-                        onFileSelect={handleFileInputSelect}
-                        onBackToSourceSelection={handleBackToSourceSelection}
-                      />
-                    );
-                  } else if (importSource === 'cloudwatch') {
-                    return (
-                      <ProviderComponent
-                        ref={logProviderRef as React.RefObject<CloudWatchSelectionRef>}
-                        onBackToSourceSelection={handleBackToSourceSelection}
-                        onCloudWatchLogSelect={handleCloudWatchLogSelect}
-                      />
-                    );
-                  }
-                  
-                  // Generic fallback for future providers
-                  return (
-                    <ProviderComponent
-                      ref={logProviderRef}
-                      onBackToSourceSelection={handleBackToSourceSelection}
-                    />
-                  );
-                })()
-              )}
-              
-              {!importSource && (
-                <div className="text-center p-8 text-gray-500">
-                  <p>Please select an import source above to continue</p>
-                </div>
-              )}
-            </div>
-          </div>
+          <LogSourceStep
+            providers={logSourceProviders}
+            importSource={importSource}
+            providerRef={logProviderRef}
+            handleSourceSelect={handleSourceSelect}
+            handleFileInputSelect={handleFileInputSelect}
+            handleCloudWatchLogSelect={handleCloudWatchLogSelect}
+            handleBackToSourceSelection={handleBackToSourceSelection}
+          />
         );
         
       case 2:

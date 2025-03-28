@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Cloud, CloudOff, ChevronRight, ChevronDown, Search, Loader2, Info, ArrowLeft } from "lucide-react";
 import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";
 import { useImportStore } from '@/stores/useImportStore';
+import { LogSourceProviderRef } from '@/components/Import/types';
 
 const DEFAULT_REGIONS = [
   'us-east-1',
@@ -46,9 +47,7 @@ interface CloudWatchSelectionProps {
 }
 
 // Export the interface for the ref
-export interface CloudWatchSelectionRef {
-  handleImport: () => Promise<void>;
-}
+export interface CloudWatchSelectionRef extends LogSourceProviderRef {}
 
 export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatchSelectionProps>(({ 
   onBackToSourceSelection,
@@ -85,6 +84,17 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
         throw new Error("Please select a log stream to import");
       }
       return handleImport();
+    },
+    validateCanProceed: async () => {
+      // For CloudWatch, check if a stream has been selected
+      if (!selectedStream) {
+        return {
+          canProceed: false,
+          errorMessage: "Please select a log stream before proceeding."
+        };
+      }
+      
+      return { canProceed: true };
     }
   }));
 

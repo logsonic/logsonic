@@ -3,4 +3,6 @@ export { default as FileAnalyzing } from '@/components/Import/UploadSteps/FileAn
 export { ImportConfirm, SuccessSummary } from '@/components/Import/UploadSteps/ImportConfirm';
 export { SourceSelection } from '@/components/Import/UploadSteps/SourceSelection';
 export { default as CloudWatchSelection } from '@/components/Import/UploadSteps/CloudWatchSelection';
-export type { CloudWatchSelectionRef } from '@/components/Import/UploadSteps/CloudWatchSelection'; 
+export type { CloudWatchSelectionRef } from '@/components/Import/UploadSteps/CloudWatchSelection';
+export { default as LogSourceStep } from '@/components/Import/UploadSteps/LogSourceStep';
+export type { LogSourceProviderRef } from '@/components/Import/types'; 
