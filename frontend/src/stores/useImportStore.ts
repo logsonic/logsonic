@@ -50,7 +50,7 @@ interface ImportState {
   suggestResponse: SuggestResponse | null;
   
   // Parsed logs data
-  parsedLogs: Record<string, any>[];
+  parsedLogs: Record<string, string>[];
   isTestingPattern: boolean;
   
   // Upload status
@@ -74,7 +74,7 @@ interface ImportState {
   error: string | null;
   
   // Metadata
-  metadata: Record<string, any>;
+  metadata: Record<string, string | number | boolean>;
   
   // Actions
   setCurrentStep: (step: UploadStep) => void;
@@ -102,13 +102,13 @@ interface ImportState {
   setSessionOptionMonth: (month: string) => void;
   setSessionOptionDay: (day: string) => void;
   setError: (error: string | null) => void;
-  setParsedLogs: (logs: Record<string, any>[]) => void;
+  setParsedLogs: (logs: Record<string, string>[]) => void;
   setIsTestingPattern: (isTestingPattern: boolean) => void;
-  setMetadata: (metadata: Record<string, any>) => void;
+  setMetadata: (metadata: Record<string, string | number | boolean>) => void;
   setReadyToSelectPattern: (ready: boolean) => void;
   handleFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
   setFileFromBlob: (content: string, fileName: string) => Promise<void>;
-  handlePatternOperation: (pattern: Pattern, updateStore?: boolean, onSuccess?: (parsedLogs: Record<string, any>[]) => void, onError?: (error: string) => void) => Promise<void>;
+  handlePatternOperation: (pattern: Pattern, updateStore?: boolean, onSuccess?: (parsedLogs: Record<string, string>[]) => void, onError?: (error: string) => void) => Promise<void>;
   testPattern: () => Promise<void>;
   reset: () => void;
 }
@@ -398,7 +398,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
     
     await get().handlePatternOperation(pattern);
   },
-    setMetadata: (metadata: Record<string, any>) => set({ metadata }),
+  setMetadata: (metadata: Record<string, string | number | boolean>) => set({ metadata }),
 
   // Reset the store to default values
   reset: () => {
