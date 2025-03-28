@@ -203,6 +203,144 @@ const docTemplate = `{
                 }
             }
         },
+        "/cloudwatch/log-events": {
+            "post": {
+                "description": "Get log events from a specific CloudWatch log stream in a time range",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cloudwatch"
+                ],
+                "summary": "Get CloudWatch log events",
+                "parameters": [
+                    {
+                        "description": "Log stream and time range parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cloudwatch.GetLogEventsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cloudwatch.GetLogEventsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/cloudwatch/log-groups": {
+            "post": {
+                "description": "List all CloudWatch log groups in the specified AWS account",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cloudwatch"
+                ],
+                "summary": "List CloudWatch log groups",
+                "parameters": [
+                    {
+                        "description": "AWS auth and region parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cloudwatch.ListLogGroupsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cloudwatch.ListLogGroupsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/cloudwatch/log-streams": {
+            "post": {
+                "description": "List CloudWatch log streams in a log group for the specified time range",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cloudwatch"
+                ],
+                "summary": "List CloudWatch log streams",
+                "parameters": [
+                    {
+                        "description": "Log group and time range parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cloudwatch.ListLogStreamsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cloudwatch.ListLogStreamsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/info": {
             "get": {
                 "description": "Retrieve detailed information about the system, storage, and application",
@@ -556,6 +694,167 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "cloudwatch.GetLogEventsRequest": {
+            "type": "object",
+            "properties": {
+                "end_time": {
+                    "type": "integer"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "log_group_name": {
+                    "type": "string"
+                },
+                "log_stream_name": {
+                    "type": "string"
+                },
+                "next_token": {
+                    "type": "string"
+                },
+                "profile": {
+                    "type": "string"
+                },
+                "region": {
+                    "type": "string"
+                },
+                "start_time": {
+                    "type": "integer"
+                }
+            }
+        },
+        "cloudwatch.GetLogEventsResponse": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "log_events": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                    }
+                },
+                "next_token": {
+                    "type": "string"
+                },
+                "region": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "cloudwatch.ListLogGroupsRequest": {
+            "type": "object",
+            "properties": {
+                "profile": {
+                    "type": "string"
+                },
+                "region": {
+                    "type": "string"
+                }
+            }
+        },
+        "cloudwatch.ListLogGroupsResponse": {
+            "type": "object",
+            "properties": {
+                "log_groups": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cloudwatch.LogGroup"
+                    }
+                },
+                "region": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "cloudwatch.ListLogStreamsRequest": {
+            "type": "object",
+            "properties": {
+                "end_time": {
+                    "type": "integer"
+                },
+                "log_group_name": {
+                    "type": "string"
+                },
+                "profile": {
+                    "type": "string"
+                },
+                "region": {
+                    "type": "string"
+                },
+                "start_time": {
+                    "type": "integer"
+                }
+            }
+        },
+        "cloudwatch.ListLogStreamsResponse": {
+            "type": "object",
+            "properties": {
+                "log_streams": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cloudwatch.LogStream"
+                    }
+                },
+                "region": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "cloudwatch.LogGroup": {
+            "type": "object",
+            "properties": {
+                "arn": {
+                    "type": "string"
+                },
+                "creationTime": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "retentionDays": {
+                    "type": "integer"
+                },
+                "storedBytes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "cloudwatch.LogStream": {
+            "type": "object",
+            "properties": {
+                "creationTime": {
+                    "type": "string"
+                },
+                "firstEventTime": {
+                    "type": "string"
+                },
+                "lastEventTime": {
+                    "type": "string"
+                },
+                "logGroupName": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "storedBytes": {
+                    "type": "integer"
+                }
+            }
+        },
         "handlers.PingResponse": {
             "type": "object",
             "properties": {
@@ -723,6 +1022,11 @@ const docTemplate = `{
                 },
                 "force_timezone": {
                     "type": "string"
+                },
+                "meta": {
+                    "description": "Meta contains additional fields to be added to each log entry\nThese fields will be directly added to the JSON output for each log\nExample: for CloudWatch logs: {\"aws_region\": \"us-west-2\", \"log_group\": \"my-group\", \"log_stream\": \"stream-1\"}",
+                    "type": "object",
+                    "additionalProperties": true
                 },
                 "name": {
                     "type": "string"

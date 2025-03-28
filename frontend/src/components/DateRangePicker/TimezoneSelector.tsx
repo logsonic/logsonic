@@ -1,8 +1,8 @@
-import React from "react";
 import { TimezoneSelectorCommon } from "@/components/common/TimezoneSelectorCommon";
 import { useSearchQueryParamsStore } from "@/stores/useSearchParams";
+import { FC } from "react";
 
-export const TimezoneSelector: React.FC = () => {
+export const TimezoneSelector: FC = () => {
   const { timeZone, setTimeZone } = useSearchQueryParamsStore();
 
   return (

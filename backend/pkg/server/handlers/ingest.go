@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"logsonic/pkg/tokenizer"
 	"logsonic/pkg/types"
 	"net/http"
 	"sync"
@@ -24,12 +25,14 @@ var defaultIngestSessionOptions = types.IngestSessionOptions{
 	ForceStartYear:  "",
 	ForceStartMonth: "",
 	ForceStartDay:   "",
+	Meta:            nil,
 }
 
 // IngestSession tracks an ingest session and its expiration time
 type IngestSession struct {
 	Options      types.IngestSessionOptions
 	CreationTime time.Time
+	Tokenizer    *tokenizer.Tokenizer
 }
 
 // Map to store session options by session ID
@@ -75,6 +78,7 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 	sessionMapMutex.RLock()
 	session, exists := sessionMap[req.SessionID]
 	sessionOptions := session.Options
+	sessionTokenizer := session.Tokenizer
 	sessionMapMutex.RUnlock()
 
 	if !exists || req.SessionID == "" {
@@ -87,7 +91,7 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonOutput, successCount, failedCount, err := h.tokenizer.ParseLogs(req.Logs, sessionOptions)
+	jsonOutput, successCount, failedCount, err := sessionTokenizer.ParseLogs(req.Logs, sessionOptions)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(types.ErrorResponse{
@@ -167,6 +171,19 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create a new tokenizer for the session
+	tempTokenizer, err := tokenizer.NewTokenizer()
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(types.ErrorResponse{
+			Status:  "error",
+			Error:   "Failed to create tokenizer",
+			Code:    "TOKENIZER_ERROR",
+			Details: err.Error(),
+		})
+		return
+	}
+
 	patternToLoad := types.GrokPatternDefinition{
 		Name:           req.Name,
 		Pattern:        req.Pattern,
@@ -177,7 +194,7 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 	// Add custom patterns first
 	if len(patternToLoad.CustomPatterns) > 0 {
 		for name, pattern := range patternToLoad.CustomPatterns {
-			if err := h.tokenizer.AddCustomPattern(name, pattern); err != nil {
+			if err := tempTokenizer.AddCustomPattern(name, pattern); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(types.ErrorResponse{
 					Status:  "error",
@@ -192,7 +209,7 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 
 	// Add the main pattern and prepare all patterns at once
 	// This avoids multiple pattern preparations when adding custom patterns
-	if err := h.tokenizer.AddPattern(patternToLoad.Pattern, patternToLoad.Priority); err != nil {
+	if err := tempTokenizer.AddPattern(patternToLoad.Pattern, patternToLoad.Priority); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(types.ErrorResponse{
 			Status:  "error",
@@ -214,6 +231,10 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		ForceStartYear:  req.ForceStartYear,
 		ForceStartMonth: req.ForceStartMonth,
 		ForceStartDay:   req.ForceStartDay,
+		// Meta field can be used to add additional attributes to all logs
+		// For example, when ingesting CloudWatch logs, add metadata like:
+		// "aws_region", "log_group", "log_stream", etc.
+		Meta: req.Meta,
 	}
 
 	// Store in the session map
@@ -221,6 +242,7 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 	sessionMap[sessionID] = IngestSession{
 		Options:      sessionOptions,
 		CreationTime: time.Now(),
+		Tokenizer:    tempTokenizer,
 	}
 	sessionMapMutex.Unlock()
 

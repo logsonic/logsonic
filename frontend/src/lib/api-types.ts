@@ -55,6 +55,7 @@ export interface IngestSessionOptions {
   force_start_year?: string;
   force_start_month?: string;
   force_start_day?: string;
+  meta?: Record<string, any>;
 }
 
 // Log Query Types
@@ -153,7 +154,87 @@ export interface SystemInfoResponse {
   status?: string;
   storage_info?: StorageInfo;
   system_info?: SystemInfo;
+}
 
+// CloudWatch Types
+export interface CloudWatchAuth {
+  region?: string;
+  profile?: string;
+}
+
+export interface CloudWatchLogGroup {
+  name: string;
+  arn: string;
+  creationTime: string | Date;
+  storedBytes: number;
+  retentionDays: number;
+  streams?: CloudWatchLogStream[];
+}
+
+export interface CloudWatchLogStream {
+  name: string;
+  logGroupName: string;
+  creationTime: string | Date;
+  firstEventTime: string | Date;
+  lastEventTime: string | Date;
+  storedBytes: number;
+  // Include snake_case versions for compatibility
+  log_group_name?: string;
+  creation_time?: string | Date; 
+  first_event_time?: string | Date;
+  last_event_time?: string | Date;
+  stored_bytes?: number;
+}
+
+export interface CloudWatchLogEvent {
+  timestamp: string | Date;
+  message: string;
+  logStream: string;
+  logGroup: string;
+}
+
+export interface ListLogGroupsRequest extends CloudWatchAuth {}
+
+export interface ListLogGroupsResponse {
+  status: string;
+  log_groups: CloudWatchLogGroup[];
+  region: string;
+}
+
+export interface ListLogStreamsRequest extends CloudWatchAuth {
+  log_group_name: string;
+  start_time?: number;
+  end_time?: number;
+}
+
+export interface ListLogStreamsResponse {
+  status: string;
+  log_streams: CloudWatchLogStream[];
+  region: string;
+}
+
+export interface GetLogEventsRequest extends CloudWatchAuth {
+  log_group_name: string;
+  log_stream_name: string;
+  start_time?: number;
+  end_time?: number;
+  next_token?: string;
+  limit?: number;
+}
+
+export interface GetLogEventsResponse {
+  status: string;
+  log_events: any[];
+  region: string;
+  next_token?: string;
+  has_more: boolean;
+}
+
+export interface SelectedCloudWatchLog {
+  log_group_name: string;
+  selected: boolean;
+  streams?: CloudWatchLogStream[];
+  selectedStreams?: string[];
 }
 
 // Query Parameters

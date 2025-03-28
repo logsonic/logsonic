@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, FC } from 'react';
 import { Loader2, ChevronDown, ChevronRight, ChevronLeft, ArrowRight } from 'lucide-react';
 import type { PatternTestResultsProps } from '../types';
 import { getFieldColors, highlightLogLine } from '../utils/patternUtils';
 import StatusBanner from './StatusBanner';
 import { useImportStore } from '@/stores/useImportStore';
 
-export const PatternTestResults: React.FC<Omit<PatternTestResultsProps, 'parsedLogs' | 'isLoading' | 'error'>> = ({
+export const PatternTestResults: FC<Omit<PatternTestResultsProps, 'parsedLogs' | 'isLoading' | 'error'>> = ({
   logs,
   pattern,
   customPatterns

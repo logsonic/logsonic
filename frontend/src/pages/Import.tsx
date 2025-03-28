@@ -1,15 +1,17 @@
-import { FC, useEffect, useState } from 'react';  
+import { FC, Fragment, useEffect, useRef, useState } from 'react';  
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { ArrowLeft, ArrowRight, CheckCircle, Store, FileUp } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle, Store, FileUp, Cloud } from "lucide-react";
 import { 
   FileSelection, 
-  FileAnalyzing, 
+  FileAnalyzing,      
   ImportConfirm,
-  SuccessSummary
+  SuccessSummary,
+  LogSourceStep,
 } from '../components/Import/UploadSteps';
 import { useUpload } from '../components/Import/hooks';
-import type { Pattern, DetectionResult } from '../components/Import/types';
+import type { Pattern, DetectionResult, LogSourceProvider } from '../components/Import/types';
+import { LogSourceProviderRef } from '../components/Import/types';
 import { useToast } from "../components/ui/use-toast";
 import { clearTokenizer, getGrokPatterns, getSystemInfo } from '../lib/api-client';
 import { extractFields } from '../components/Import/utils/patternUtils';
@@ -17,7 +19,11 @@ import { useImportStore, UploadStep, DEFAULT_PATTERN } from '../stores/useImport
 import { useNavigate } from 'react-router-dom';
 import { useSearchQueryParamsStore } from '../stores/useSearchParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
-import React from 'react';
+import { CloudWatchSelection, useCloudWatchStore } from '@/components/CloudWatch';
+import type { CloudWatchSelectionRef } from '@/components/CloudWatch';
+
+// Define the interface in types/index.ts, then re-export from UploadSteps/index.ts
+// We should eventually remove this from here
 
 const Import: FC  = () => {
   const { toast } = useToast(); 
@@ -37,7 +43,7 @@ const Import: FC  = () => {
 
   // Define steps data
   const steps = [
-    { number: 1, label: "Choose Log File" },
+    { number: 1, label: "Choose Log Source" },
     { number: 2, label: "Define Log Pattern" },
     { number: 3, label: "Confirm Import" }
   ];
@@ -62,8 +68,12 @@ const Import: FC  = () => {
   const {
     selectedFile,
     filePreview,
+    readyToSelectPattern,
     selectedPattern,
+    importSource,
     handleFileSelect,
+    setFileFromBlob,
+    setImportSource,
     setSelectedPattern,
     setFilePreview,
     currentStep,
@@ -72,6 +82,43 @@ const Import: FC  = () => {
     setDetectionResult,
     createNewPattern
   } = importStore;
+
+  // Generic reference for the current log provider component
+  const logProviderRef = useRef<LogSourceProviderRef>(null);
+
+  // Internal common handler function
+  const processLogData = (logData: string, filename: string) => {
+    setFileFromBlob(logData, filename);
+    console.log(`Logs selected from ${importSource}, advancing to step 2`);
+  };
+
+  // Type-specific handler for file selection events
+  const handleFileInputSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    // Call the original handleFileSelect for file selection logic
+    await handleFileSelect(event);
+  };
+  
+  // Type-specific handler for CloudWatch log selection
+  const handleCloudWatchLogSelect = (logData: string, filename: string) => {
+    processLogData(logData, filename);
+  };
+
+  // Define available log source providers
+  const logSourceProviders: LogSourceProvider[] = [
+    {
+      id: 'file',
+      name: 'Upload Log File',
+      icon: FileUp,
+      component: FileSelection
+    },
+    {
+      id: 'cloudwatch',
+      name: 'AWS CloudWatch Logs',
+      icon: Cloud,
+      component: CloudWatchSelection
+    },
+    // Add new providers here in the future (S3, Azure, etc.)
+  ];
 
   // Reset the import store when the component mounts
   useEffect(() => {
@@ -122,6 +169,19 @@ const Import: FC  = () => {
     fetchPatterns();
   }, []);
 
+  // Set default date range values in useEffect to avoid state updates during render
+  useEffect(() => {
+    // Only set date range if CloudWatch source is selected and store exists
+    if (importSource === 'cloudwatch') {
+      setTimeout(() => {
+        const store = useSearchQueryParamsStore.getState();
+        store.isRelative = true;
+        store.relativeValue = '24h';
+        console.log(`Default date range set to last 24 hours for CloudWatch`);
+      }, 0);
+    }
+  }, [importSource]);
+
   // Function to handle pattern save dialog close
   const handleSavePatternDialogClose = () => {
     setShowSavePatternDialog(false);
@@ -129,36 +189,88 @@ const Import: FC  = () => {
     setCurrentStep(3);
   };
 
-  //Invoked when user clicks next button
+  // Handle source selection
+  const handleSourceSelect = (source: string) => {
+    setImportSource(source);
+  };
+
+  // Handle back button for any provider
+  const handleBackToSourceSelection = () => {
+    setImportSource(null);
+  };
+
+  // Handle Next button press
   const handleNext = async () => {
     try {
       switch (currentStep) {
         case 1:
-          // Trigger file selection and move to analyzing step
-          if (!selectedFile) {
-            // Don't proceed if no file is selected
+          // If source is not selected yet, don't proceed
+          if (!importSource) {
             toast({
-              title: "File Required",
-              description: "Please select a file to import before proceeding.",
+              title: "Source Required",
+              description: "Please select an import source before proceeding.",
               variant: "destructive",
             });
             return;
           }
           
-          if (selectedFile) {
-            setCurrentStep(2);
+          // Provider-agnostic validation - ask the provider if we can proceed
+          if (logProviderRef.current) {
+            const { canProceed, errorMessage } = await logProviderRef.current.validateCanProceed();
+            
+            if (!canProceed) {
+              toast({
+                title: "Validation Failed",
+                description: errorMessage || "Cannot proceed. Please check your selection.",
+                variant: "destructive",
+              });
+              return;
+            }
+            
+            // For non-file providers that need their own import handling
+            if (importSource !== 'file') {
+              console.log(`Importing logs from ${importSource}`);
+              
+              try {
+                await logProviderRef.current.handleImport();
+                // The provider will update importStore state as needed
+                return; // Exit early since the component handles next step
+              } catch (importErr) {
+                console.error(`Failed to import logs from ${importSource}:`, importErr);
+                toast({
+                  title: "Import Failed",
+                  description: `Failed to import logs from ${importSource}. Please try again.`,
+                  variant: "destructive",
+                });
+                return;
+              }
+            }
           }
+          
+          // Set current step to 2 (pattern detection)
+          console.log(`Advancing to step 2 with import source: ${importSource}`);
+          setCurrentStep(2);
           break;
         case 2:
           // Check if there's a custom pattern that needs to be saved
           if (detectionResult?.isOngoing === false) {
+            console.log("Step 2 Next button clicked - manually advancing to step 3");
             // If user created a custom pattern, show save dialog first
             if (importStore.isCreateNewPatternSelected) {
+              console.log("Custom pattern selected, showing save dialog before step 3");
               setShowSavePatternDialog(true);
             } else {
-              // Otherwise proceed directly to step 3
+              // Otherwise proceed directly to step 3 
+              console.log("Standard pattern selected, manually advancing to step 3");
               setCurrentStep(3);
             }
+          } else {
+            console.log("Cannot proceed - pattern detection is still ongoing");
+            toast({
+              title: "Pattern Detection In Progress",
+              description: "Please wait for pattern detection to complete.",
+              variant: "destructive",
+            });
           }
           break;
         case 3:
@@ -176,8 +288,10 @@ const Import: FC  = () => {
           });
           
           try {
+
+            
             const result = await handleUpload();
-            toast({
+            toast({ 
               title: "Upload successful",
               description: "Your log file has been processed successfully.",
               variant: "default",
@@ -249,43 +363,65 @@ const Import: FC  = () => {
       return;
     }
     
-    setCurrentStep((currentStep - 1) as UploadStep);
-  };
-
-
-  // Invoked when auto-detection is complete
-  const handleDetectionComplete = (result: DetectionResult) => {
-    if (result.suggestedPattern) {
-      // Check if the suggested pattern matches any server pattern
-      const matchingServerPattern = importStore.availablePatterns.find(p => 
-        p.pattern === result.suggestedPattern?.pattern
-      );
-      
-      if (matchingServerPattern) {
-        // Use the server pattern if it matches
-        setSelectedPattern(matchingServerPattern);
+    if (currentStep > 1) {
+      if (currentStep === 2 && importSource !== 'file') {
+        // For non-file providers, go back to source selection
+        setImportSource(null);
+        setCurrentStep(1 as UploadStep);
       } else {
-        // Use the default pattern if no server pattern matches
-        importStore.setCreateNewPattern(DEFAULT_PATTERN);
+        setCurrentStep((currentStep - 1) as UploadStep);
       }
     } else {
-      // Use the default pattern if no server pattern matches
-      importStore.setCreateNewPattern(DEFAULT_PATTERN);
+      navigate('/');
     }
+  };
+
+  const handleDetectionComplete = (result: DetectionResult) => {
+    console.log("Detection completed with result:", {
+      hasError: !!result.error,
+      isOngoing: result.isOngoing,
+      hasSuggestedPattern: !!result.suggestedPattern,
+      hasSelectedPattern: !!selectedPattern,
+      importSource
+    });
     
-    // Store the detection result in the import store
     setDetectionResult(result);
+    
+    // We're disabling auto-advancing behavior - let user manually navigate with Next button
+    if (!result.error && result.isOngoing === false && result.suggestedPattern) {
+      console.log("Pattern detection successful, but NOT auto-advancing - user should use Next button");
+      
+      // Still set the suggested pattern if available
+      if (result.suggestedPattern) {
+        setSelectedPattern(result.suggestedPattern);
+      }
+    } else if (result.error) {
+      console.log("Detection completed with error:", result.error);
+      // Don't auto-advance on error, let user modify pattern
+    }
   };
 
   const renderStep = () => {
+    // Debug logging
+    console.log("Rendering step", currentStep, "importSource:", importSource);
+    
     switch (currentStep) {
       case 1:
         return (
-          <FileSelection
-            onFileSelect={handleFileSelect}
+          <LogSourceStep
+            providers={logSourceProviders}
+            importSource={importSource}
+            providerRef={logProviderRef}
+            handleSourceSelect={handleSourceSelect}
+            handleFileInputSelect={handleFileInputSelect}
+            handleCloudWatchLogSelect={handleCloudWatchLogSelect}
+            handleBackToSourceSelection={handleBackToSourceSelection}
           />
         );
+        
       case 2:
+        // All log sources use the same pattern detection workflow
+        console.log("Rendering FileAnalyzing, filePreview:", filePreview?.lines?.length);
         return (
           <FileAnalyzing 
            onDetectionComplete={handleDetectionComplete}
@@ -329,7 +465,7 @@ const Import: FC  = () => {
             {/* Step Indicator */}
             <div className="flex items-center justify-between">
               {steps.map((step, index) => (
-                <React.Fragment key={step.number}>
+                <Fragment key={step.number}>
                   <StepIndicator 
                     number={step.number} 
                     label={step.label} 
@@ -338,7 +474,7 @@ const Import: FC  = () => {
                   {index < steps.length - 1 && (
                     <div className="h-px bg-gray-300 flex-grow mx-2"></div>
                   )}
-                </React.Fragment>
+                </Fragment>
               ))}
             </div>
             
@@ -349,35 +485,33 @@ const Import: FC  = () => {
                 {error}
               </div>
             )}
-
+            
+            {/* Navigation Buttons */}
             <div className="flex justify-between pt-4">
-              <Button
-                variant="outline"
+              <Button 
+                variant="outline" 
                 onClick={handleBack}
-                className="h-12 w-32"
-                disabled={currentStep === 1}
+                disabled={isUploading}
               >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back
+                {currentStep === 1 ? 'Cancel' : 'Back'}
               </Button>
               
-              <Button
+              {/* Next button logic */}
+              <Button 
                 onClick={handleNext}
-                className="bg-blue-600 text-white h-12 w-32"
                 disabled={
-                  (currentStep === 1 && !selectedFile) ||
-                  (currentStep === 3 && isUploading && !uploadSummary?.showSummary)
+                  isUploading || 
+                  (currentStep === 1 && (
+                    !importSource || 
+                    (importSource === 'file' && !selectedFile)
+                  ))
                 }
+                className="bg-blue-600 hover:bg-blue-700"
               >
                 {currentStep === 3 ? (
-                  uploadSummary?.showSummary ? 
-                    "Go to Home" : 
-                    (isUploading ? "Uploading..." : "Import")
+                  uploadSummary?.showSummary ? 'Go to Home' : 'Import'
                 ) : (
-                  <>
-                    Next
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </>
+                  'Next'
                 )}
               </Button>
             </div>

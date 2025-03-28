@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, FC } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -33,9 +33,7 @@ import {
   KeyboardSensor,
   DragEndEvent,
 } from '@dnd-kit/core';
-import { GrokPatternRequest } from '@/lib/api-types';
-import { toast } from '@/components/ui/use-toast';
-import { useToast } from '@/components/ui/use-toast';
+
   
 // Common Grok patterns for reuse
 const COMMON_GROK_PATTERNS = [
@@ -128,7 +126,7 @@ interface CustomPatternSelectorProps {
   onSaveDialogClose?: () => void;
 }
 
-export const CustomPatternSelector: React.FC<CustomPatternSelectorProps> = ({
+export const CustomPatternSelector: FC<CustomPatternSelectorProps> = ({
   previewLines,
   onPatternTest,
   showSaveDialog = false,

@@ -1,15 +1,14 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, FC } from "react";
 import { Button } from "@/components/ui/button";
 import { Calendar, ChevronDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import DateRangePicker from "./DateRangePicker";
-import { DateRangeType } from "./types";
 import { useSearchQueryParamsStore } from "@/stores/useSearchParams";
 import { RELATIVE_DATE_PRESETS } from "@/lib/date-utils";
 
-export const DateTimeRangeButton: React.FC = () => {
+export const DateTimeRangeButton: FC = () => {
   const store = useSearchQueryParamsStore();
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string>(store.isRelative ? "relative" : "absolute");

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState, FC } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -9,10 +9,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { DateRangeType } from "./types";
 import { ChevronRight } from "lucide-react";
 import { useSearchQueryParamsStore } from "@/stores/useSearchParams";
-import { calculateRelativeDate, calculateRelativeDateRange } from "@/lib/date-utils";
+import { calculateRelativeDate } from "@/lib/date-utils";
 import { RELATIVE_DATE_OPTIONS_WITH_ICONS, TIME_UNITS } from "@/lib/date-utils";
 
 type DateOption = {
@@ -44,7 +43,7 @@ const DateOptionButton: React.FC<{
   </Button>
 );
 
-export const RelativeDateSelector: React.FC = () => {
+export const RelativeDateSelector: FC = () => {
   // Get the store directly using the hook
   const store = useSearchQueryParamsStore();
   

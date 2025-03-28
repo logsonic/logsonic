@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, FC } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Button } from "../ui/button";
 import { Card, CardContent } from "../ui/card";
@@ -17,7 +17,7 @@ export interface DateRangePickerProps {
 }
 // Allows relative and absolute date range selection with timezone support
 
-export const DateRangePicker: React.FC<DateRangePickerProps> = ({
+export const DateRangePicker: FC<DateRangePickerProps> = ({
   onApply,
   initialActiveTab,
 }) => {

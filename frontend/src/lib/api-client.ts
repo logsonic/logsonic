@@ -10,10 +10,21 @@ import {
   ParseResponse,
   SuggestResponse,
   SystemInfoResponse,
-  IngestSessionOptions
+  IngestSessionOptions,
 } from './api-types';
 
+import {
+  CloudWatchAuth,
+  ListLogGroupsResponse,
+  ListLogStreamsRequest,
+  ListLogStreamsResponse,
+  GetLogEventsRequest,
+  GetLogEventsResponse
+} from '@/components/CloudWatch';
+
 // API base configuration
+// For local development, use port 8080
+// For production, use relative URL
 const API_BASE_URL = (import.meta.env.DEV
   ? 'http://localhost:8080'
   : '') + '/api/v1';
@@ -144,4 +155,17 @@ export interface PingResponse {
 
 export async function pingServer(): Promise<PingResponse> {
   return apiRequest<PingResponse>('/ping', 'GET');
+}
+
+// CloudWatch API
+export async function listCloudWatchLogGroups(auth: CloudWatchAuth): Promise<ListLogGroupsResponse> {
+  return apiRequest<ListLogGroupsResponse>('/cloudwatch/log-groups', 'POST', auth);
+}
+
+export async function listCloudWatchLogStreams(request: ListLogStreamsRequest): Promise<ListLogStreamsResponse> {
+  return apiRequest<ListLogStreamsResponse>('/cloudwatch/log-streams', 'POST', request);
+}
+
+export async function getCloudWatchLogEvents(request: GetLogEventsRequest): Promise<GetLogEventsResponse> {
+  return apiRequest<GetLogEventsResponse>('/cloudwatch/log-events', 'POST', request);
 } 

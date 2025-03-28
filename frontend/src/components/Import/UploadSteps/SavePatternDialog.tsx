@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, FC } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,7 +28,7 @@ interface SavePatternDialogProps {
   onPatternDescriptionChange: (description: string) => void;
 }
 
-export const SavePatternDialog: React.FC<SavePatternDialogProps> = ({
+export const SavePatternDialog: FC<SavePatternDialogProps> = ({
   open,
   onClose,
   patternName,

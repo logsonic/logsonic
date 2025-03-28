@@ -31,7 +31,7 @@ LogSonic is a Desktop-First Log Analysis Application designed to be minimal, sim
    ./logsonic
    ```
 
-> **Note**: On MacOS, unsigned download binaries are not allowed to run by default. In order to run the downloaded binary, open System Preferences, choose the Security control panel, select the General tab. Look for the message: “logSonic was blocked from opening because it is not from an identified developer.” Click the Open Anyway button to the right of the message. Alternatively, you could build the binary yourself as per steps below or build the Docker image. 
+> **Note**: On MacOS, unsigned download binaries are not allowed to run by default. In order to run the downloaded binary, open System Preferences, choose the Security control panel, select the General tab. Look for the message: "logSonic was blocked from opening because it is not from an identified developer." Click the Open Anyway button to the right of the message. Alternatively, you could build the binary yourself as per steps below or build the Docker image. 
 
 
 4. Open your browser and navigate to `http://localhost:8080`
@@ -219,10 +219,3 @@ For issues, feature requests, or questions, please create an issue on the [GitHu
 ## License
 
 LogSonic is released under the [MIT License](LICENSE).
-
-
-
-
-
-
-
