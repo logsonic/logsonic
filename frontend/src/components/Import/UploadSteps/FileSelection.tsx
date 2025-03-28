@@ -4,7 +4,16 @@ import { FC } from 'react';
 import { useImportStore } from '../../../stores/useImportStore';
 
 export const FileSelection: FC<FileSelectionProps> = ({ onFileSelect }) => {
-  const { error } = useImportStore();
+  const { error, setMetadata } = useImportStore();
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setMetadata({ _src: 'file', _file_name: file.name });
+    }
+    onFileSelect(event);
+  };
+
   return (
     <div className="space-y-4 pt-10 pb-10">
       <h2 className="text-2xl font-bold text-center bg-clip-text text-transparent">Import Log File</h2>
@@ -15,7 +24,7 @@ export const FileSelection: FC<FileSelectionProps> = ({ onFileSelect }) => {
           type="file"
           id="file-upload"
           className="hidden"
-          onChange={onFileSelect}
+          onChange={handleFileSelect}
         />
         <label
           htmlFor="file-upload"

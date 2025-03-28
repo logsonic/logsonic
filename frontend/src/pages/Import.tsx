@@ -1,4 +1,4 @@
-import { FC, useEffect, useState } from 'react';  
+import { FC, Fragment, useEffect, useRef, useState } from 'react';  
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { ArrowLeft, ArrowRight, CheckCircle, Store, FileUp, Cloud } from "lucide-react";
@@ -17,7 +17,6 @@ import { useImportStore, UploadStep, DEFAULT_PATTERN } from '../stores/useImport
 import { useNavigate } from 'react-router-dom';
 import { useSearchQueryParamsStore } from '../stores/useSearchParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
-import React from 'react';
 import { SourceSelection } from '@/components/Import/UploadSteps/SourceSelection';
 import CloudWatchSelection, { CloudWatchSelectionRef } from '@/components/Import/UploadSteps/CloudWatchSelection';
 import { useCloudWatchStore } from '@/stores/useCloudWatchStore';
@@ -40,7 +39,7 @@ const Import: FC  = () => {
 
   // Define steps data
   const steps = [
-    { number: 1, label: "Choose Import Source" },
+    { number: 1, label: "Choose Log Source" },
     { number: 2, label: "Define Log Pattern" },
     { number: 3, label: "Confirm Import" }
   ];
@@ -65,6 +64,7 @@ const Import: FC  = () => {
   const {
     selectedFile,
     filePreview,
+    readyToSelectPattern,
     selectedPattern,
     importSource,
     handleFileSelect,
@@ -79,8 +79,6 @@ const Import: FC  = () => {
     createNewPattern
   } = importStore;
 
-  // Access the CloudWatch store to check if a stream is selected
-  const { selectedStream, region, profile } = useCloudWatchStore();
 
   // Reset the import store when the component mounts
   useEffect(() => {
@@ -170,7 +168,7 @@ const Import: FC  = () => {
   };
 
   // CloudWatch log component reference for accessing its handleImport method
-  const cloudWatchComponentRef = React.useRef<CloudWatchSelectionRef>(null);
+  const cloudWatchComponentRef = useRef<CloudWatchSelectionRef>(null);
 
   // Handle Next button press
   const handleNext = async () => {
@@ -188,10 +186,10 @@ const Import: FC  = () => {
           }
           
           // For file source, check if file is selected
-          if (importSource === 'file' && !selectedFile) {
+          if (readyToSelectPattern === false) {
             toast({
-              title: "File Required",
-              description: "Please select a file to import before proceeding.",
+              title: "Choose Log Source",
+              description: "Please select a log source before proceeding.",
               variant: "destructive",
             });
             return;
@@ -199,15 +197,7 @@ const Import: FC  = () => {
           
           // For CloudWatch source, use the cloudWatchComponentRef to import logs
           if (importSource === 'cloudwatch') {
-            // If no stream is selected, show error message
-            if (!selectedStream) {
-              toast({
-                title: "Stream Selection Required",
-                description: "Please select a CloudWatch log stream before proceeding.",
-                variant: "destructive",
-              });
-              return;
-            }
+
             
             // If a stream is selected, import it
             if (cloudWatchComponentRef.current?.handleImport) {
@@ -278,19 +268,10 @@ const Import: FC  = () => {
           });
           
           try {
-            // If we're uploading from CloudWatch, add the metadata
-            let metadata: Record<string, any> = {};
-            if (selectedStream && selectedStream.streamName && selectedStream.groupName) {
-              metadata = {
-                _aws_region: region,
-                _aws_profile: profile,
-                _log_group_name: selectedStream.groupName,
-                _log_stream_name: selectedStream.streamName
-              };
-            }
+
             
-            const result = await handleUpload(metadata);
-            toast({
+            const result = await handleUpload();
+            toast({ 
               title: "Upload successful",
               description: "Your log file has been processed successfully.",
               variant: "default",
@@ -524,7 +505,7 @@ const Import: FC  = () => {
             {/* Step Indicator */}
             <div className="flex items-center justify-between">
               {steps.map((step, index) => (
-                <React.Fragment key={step.number}>
+                <Fragment key={step.number}>
                   <StepIndicator 
                     number={step.number} 
                     label={step.label} 
@@ -533,7 +514,7 @@ const Import: FC  = () => {
                   {index < steps.length - 1 && (
                     <div className="h-px bg-gray-300 flex-grow mx-2"></div>
                   )}
-                </React.Fragment>
+                </Fragment>
               ))}
             </div>
             
@@ -563,7 +544,7 @@ const Import: FC  = () => {
                   (currentStep === 1 && (
                     !importSource || 
                     (importSource === 'file' && !selectedFile) ||
-                    (importSource === 'cloudwatch' && !selectedStream)
+                    (importSource === 'cloudwatch')
                   ))
                 }
                 className="bg-blue-600 hover:bg-blue-700"

@@ -97,7 +97,8 @@ export const ImportConfirm: FC = ({
     sessionOptionsDay,
     importSource,
     sessionOptionsFileName,
-    setApproxLines
+    setApproxLines,
+    metadata
   } = useImportStore();
 
   const formatFileSize = (bytes: number): string => {
@@ -179,12 +180,12 @@ export const ImportConfirm: FC = ({
                 <td className="py-1 text-gray-800 font-bold">Force Day:</td>
                 <td className="py-1 text-gray-800">{sessionOptionsDay || 'Auto-detect'}</td>
               </tr>
-              {importSource === 'cloudwatch' && (
-                <tr>
-                  <td className="py-1 text-gray-800 font-bold">Source:</td>
-                  <td className="py-1 text-gray-800">AWS CloudWatch</td>
-                </tr>
-              )}
+              <tr>
+                <td className="py-1 text-gray-800 font-bold">Metadata:</td>
+                
+                <td className="py-1 text-gray-800">{JSON.stringify(metadata)}</td>
+              </tr>
+
             </tbody>
           </table>
         </div>

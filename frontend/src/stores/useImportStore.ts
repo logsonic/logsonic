@@ -31,7 +31,7 @@ interface ImportState {
   
   // Import source
   importSource: ImportSource;
-  
+  readyToSelectPattern: boolean;
   // File data
   selectedFile: File | null;
   filePreview: FilePreview | null;
@@ -73,6 +73,9 @@ interface ImportState {
   // Error handling
   error: string | null;
   
+  // Metadata
+  metadata: Record<string, any>;
+  
   // Actions
   setCurrentStep: (step: UploadStep) => void;
   setImportSource: (source: ImportSource) => void;
@@ -101,7 +104,8 @@ interface ImportState {
   setError: (error: string | null) => void;
   setParsedLogs: (logs: Record<string, any>[]) => void;
   setIsTestingPattern: (isTestingPattern: boolean) => void;
-  
+  setMetadata: (metadata: Record<string, any>) => void;
+  setReadyToSelectPattern: (ready: boolean) => void;
   handleFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
   setFileFromBlob: (content: string, fileName: string) => Promise<void>;
   handlePatternOperation: (pattern: Pattern, updateStore?: boolean, onSuccess?: (parsedLogs: Record<string, any>[]) => void, onError?: (error: string) => void) => Promise<void>;
@@ -119,6 +123,8 @@ export const useImportStore = create<ImportState>((set, get) => ({
   importSource: null,
   selectedFile: null,
   filePreview: null,
+  readyToSelectPattern: false,
+
   availablePatterns: [DEFAULT_PATTERN as unknown as GrokPatternRequest],
   selectedPattern: DEFAULT_PATTERN,
   createNewPattern: DEFAULT_PATTERN,
@@ -143,6 +149,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
   sessionOptionsMonth: '',
   sessionOptionsDay: '',
   error: null,
+  metadata: {},
   
   // Actions
   setCurrentStep: (currentStep) => set({ currentStep }),
@@ -150,7 +157,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
   setImportSource: (importSource) => set({ importSource }),
   
   setSelectedFile: (selectedFile) => set({ selectedFile }),
-  
+  setReadyToSelectPattern: (readyToSelectPattern) => set({ readyToSelectPattern }),
   setFilePreview: (filePreview) => set({ filePreview }),
   
   setAvailablePatterns: (availablePatterns) => {
@@ -391,6 +398,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
     
     await get().handlePatternOperation(pattern);
   },
+    setMetadata: (metadata: Record<string, any>) => set({ metadata }),
 
   // Reset the store to default values
   reset: () => {

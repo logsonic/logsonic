@@ -14,6 +14,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Cloud, CloudOff, ChevronRight, ChevronDown, Search, Loader2, Info, ArrowLeft } from "lucide-react";
 import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";
+import { useImportStore } from '@/stores/useImportStore';
 
 const DEFAULT_REGIONS = [
   'us-east-1',
@@ -60,12 +61,13 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
     authMethod, region, profile,
     logGroups, expandedGroups, loadingStreams, searchQuery, selectedStream,
     isLoading, error,
-    
     setAuthMethod, setRegion, setProfile,
     setLogGroups, setStreamsForGroup, toggleGroupExpanded,
     setLoadingStreams, setSelectedStream, setSearchQuery,
     setLoading, setError, reset
   } = useCloudWatchStore();
+
+  const { setMetadata } = useImportStore();
   
   // Reset the store when the component is unmounted
   useEffect(() => {
@@ -273,7 +275,16 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
         return `${timestamp} ${event.message}`; //Prepend timestamp to each line
       }).join('\n');
       
-      
+      //set Metadata
+      setMetadata({
+        _aws_region: region,
+        _aws_profile: profile,
+        _log_group_name: selectedStream.groupName,
+        _log_stream_name: selectedStream.streamName,
+        _src: 'cloudwatch',
+      });
+
+
       if (logData.trim().length === 0) {
         setError("Log data is empty after processing. Please try a different log stream or time range.");
         return;

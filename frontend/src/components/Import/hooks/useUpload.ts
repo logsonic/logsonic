@@ -13,6 +13,7 @@ export const useUpload = (): UploadProgressHookResult => {
     selectedFile,
     selectedPattern,
     sessionID,
+    metadata,
     setSessionID,
     isUploading,
     uploadProgress,
@@ -39,7 +40,7 @@ export const useUpload = (): UploadProgressHookResult => {
   const ingestLogsApi = useIngestLogs();
   const ingestEndApi = useIngestEnd();    
   
-  const handleUpload = useCallback(async (metadata?: Record<string, any>) => {
+  const handleUpload = useCallback(async () => {
     if (!selectedFile || !selectedPattern) {
       throw new Error('No file or pattern selected');
     }

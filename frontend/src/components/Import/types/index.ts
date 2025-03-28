@@ -42,7 +42,7 @@ export interface UploadProgressHookResult {
   isUploading: boolean;
   uploadProgress: number;
   approxLines: number;
-  handleUpload: (metadata?: Record<string, any>) => Promise<void>;
+  handleUpload: () => Promise<void>;
 }
 
 export interface FileParserHookResult {
