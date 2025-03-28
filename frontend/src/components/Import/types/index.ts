@@ -27,6 +27,7 @@ export interface DetectionResult {
 
 export interface FileSelectionProps {
   onFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onBackToSourceSelection?: () => void;
 }
 
 

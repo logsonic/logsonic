@@ -23,7 +23,7 @@ export const DEFAULT_PATTERN: Pattern = {
 
 
 export type UploadStep = 1 | 2 | 3;
-export type ImportSource = 'file' | 'cloudwatch' | null;
+export type ImportSource = string | null;
 
 interface ImportState {
   // Upload step tracking

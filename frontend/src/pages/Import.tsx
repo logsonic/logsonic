@@ -18,8 +18,22 @@ import { useNavigate } from 'react-router-dom';
 import { useSearchQueryParamsStore } from '../stores/useSearchParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import { SourceSelection } from '@/components/Import/UploadSteps/SourceSelection';
-import CloudWatchSelection, { CloudWatchSelectionRef } from '@/components/Import/UploadSteps/CloudWatchSelection';
+import { CloudWatchSelection } from '@/components/Import/UploadSteps';
+import type { CloudWatchSelectionRef } from '@/components/Import/UploadSteps';
 import { useCloudWatchStore } from '@/stores/useCloudWatchStore';
+
+// Define a common interface for all log source providers
+export interface LogSourceProviderRef {
+  handleImport: () => Promise<void>;
+}
+
+// Registry of available log source providers
+interface LogSourceProvider {
+  id: string;
+  name: string;
+  icon: React.ComponentType<any>;
+  component: React.ForwardRefExoticComponent<any>;
+}
 
 const Import: FC  = () => {
   const { toast } = useToast(); 
@@ -79,6 +93,42 @@ const Import: FC  = () => {
     createNewPattern
   } = importStore;
 
+  // Generic reference for the current log provider component
+  const logProviderRef = useRef<LogSourceProviderRef>(null);
+
+  // Internal common handler function
+  const processLogData = (logData: string, filename: string) => {
+    setFileFromBlob(logData, filename);
+    console.log(`Logs selected from ${importSource}, advancing to step 2`);
+  };
+
+  // Type-specific handler for file selection events
+  const handleFileInputSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    // Call the original handleFileSelect for file selection logic
+    await handleFileSelect(event);
+  };
+  
+  // Type-specific handler for CloudWatch log selection
+  const handleCloudWatchLogSelect = (logData: string, filename: string) => {
+    processLogData(logData, filename);
+  };
+
+  // Define available log source providers
+  const logSourceProviders: LogSourceProvider[] = [
+    {
+      id: 'file',
+      name: 'Upload Log File',
+      icon: FileUp,
+      component: FileSelection
+    },
+    {
+      id: 'cloudwatch',
+      name: 'AWS CloudWatch Logs',
+      icon: Cloud,
+      component: CloudWatchSelection
+    },
+    // Add new providers here in the future (S3, Azure, etc.)
+  ];
 
   // Reset the import store when the component mounts
   useEffect(() => {
@@ -129,14 +179,6 @@ const Import: FC  = () => {
     fetchPatterns();
   }, []);
 
-  // Handle CloudWatch log selection
-  const handleCloudWatchLogSelect = (logData: string, filename: string) => {
-    // Use the setFileFromBlob function to prepare CloudWatch logs for pattern detection
-    setFileFromBlob(logData, filename);
-    // Note: setFileFromBlob should automatically advance to step 2 for pattern detection
-    console.log("CloudWatch logs selected, advancing to step 2");
-  };
-
   // Set default date range values in useEffect to avoid state updates during render
   useEffect(() => {
     // Only set date range if CloudWatch source is selected and store exists
@@ -158,17 +200,14 @@ const Import: FC  = () => {
   };
 
   // Handle source selection
-  const handleSourceSelect = (source: 'file' | 'cloudwatch') => {
+  const handleSourceSelect = (source: string) => {
     setImportSource(source);
   };
 
-  // Handle back button for CloudWatch selection
+  // Handle back button for any provider
   const handleBackToSourceSelection = () => {
     setImportSource(null);
   };
-
-  // CloudWatch log component reference for accessing its handleImport method
-  const cloudWatchComponentRef = useRef<CloudWatchSelectionRef>(null);
 
   // Handle Next button press
   const handleNext = async () => {
@@ -186,7 +225,7 @@ const Import: FC  = () => {
           }
           
           // For file source, check if file is selected
-          if (readyToSelectPattern === false) {
+          if (importSource === 'file' && readyToSelectPattern === false) {
             toast({
               title: "Choose Log Source",
               description: "Please select a log source before proceeding.",
@@ -195,24 +234,22 @@ const Import: FC  = () => {
             return;
           }
           
-          // For CloudWatch source, use the cloudWatchComponentRef to import logs
-          if (importSource === 'cloudwatch') {
-
-            
-            // If a stream is selected, import it
-            if (cloudWatchComponentRef.current?.handleImport) {
-              console.log("Importing selected CloudWatch log stream");
+          // For providers that require their own import handling
+          if (importSource !== 'file') {
+            // Use the generic logProviderRef to handle import
+            if (logProviderRef.current?.handleImport) {
+              console.log(`Importing logs from ${importSource}`);
               
               try {
-                await cloudWatchComponentRef.current.handleImport();
-                // Note: The component will call handleCloudWatchLogSelect after successful import
-                // which will set filePreview and advance to step 2
+                await logProviderRef.current.handleImport();
+                // The provider component will call handleLogInput after successful import
+                // which will set filePreview and prepare for step 2
                 return; // Exit early since the component handles next step
               } catch (importErr) {
-                console.error("Failed to import CloudWatch logs:", importErr);
+                console.error(`Failed to import logs from ${importSource}:`, importErr);
                 toast({
                   title: "Import Failed",
-                  description: "Failed to import CloudWatch logs. Please try again.",
+                  description: `Failed to import logs from ${importSource}. Please try again.`,
                   variant: "destructive",
                 });
                 return;
@@ -227,7 +264,7 @@ const Import: FC  = () => {
             }
           }
           
-          // Set current step to 2 (pattern detection) for non-CloudWatch sources
+          // Set current step to 2 (pattern detection) for file source
           console.log(`Advancing to step 2 with import source: ${importSource}`);
           setCurrentStep(2);
           break;
@@ -344,8 +381,8 @@ const Import: FC  = () => {
     }
     
     if (currentStep > 1) {
-      if (currentStep === 2 && importSource === 'cloudwatch') {
-        // For CloudWatch, go back to source selection
+      if (currentStep === 2 && importSource !== 'file') {
+        // For non-file providers, go back to source selection
         setImportSource(null);
         setCurrentStep(1 as UploadStep);
       } else {
@@ -394,60 +431,67 @@ const Import: FC  = () => {
               <h2 className="text-lg font-semibold text-gray-800">Select Import Source</h2>
               
               <div className="grid grid-cols-2 gap-4">
-                {/* File option */}
-                <div 
-                  className={`p-4 rounded-lg border-2 flex items-center space-x-3 cursor-pointer transition-colors
-                    ${importSource === 'file' 
-                      ? 'border-blue-500 bg-blue-50' 
-                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
-                  onClick={() => handleSourceSelect('file')}
-                >
-                  <div className={`h-5 w-5 rounded-full border flex items-center justify-center 
-                    ${importSource === 'file' ? 'border-blue-500' : 'border-gray-400'}`}>
-                    {importSource === 'file' && (
-                      <div className="h-3 w-3 rounded-full bg-blue-500"></div>
-                    )}
+                {/* Generate provider options dynamically */}
+                {logSourceProviders.map(provider => (
+                  <div 
+                    key={provider.id}
+                    className={`p-4 rounded-lg border-2 flex items-center space-x-3 cursor-pointer transition-colors
+                      ${importSource === provider.id 
+                        ? 'border-blue-500 bg-blue-50' 
+                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
+                    onClick={() => handleSourceSelect(provider.id)}
+                  >
+                    <div className={`h-5 w-5 rounded-full border flex items-center justify-center 
+                      ${importSource === provider.id ? 'border-blue-500' : 'border-gray-400'}`}>
+                      {importSource === provider.id && (
+                        <div className="h-3 w-3 rounded-full bg-blue-500"></div>
+                      )}
+                    </div>
+                    <div className="flex items-center">
+                      <provider.icon className="h-5 w-5 text-gray-600 mr-2" />
+                      <span className="font-medium">{provider.name}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center">
-                    <FileUp className="h-5 w-5 text-gray-600 mr-2" />
-                    <span className="font-medium">Upload Log File</span>
-                  </div>
-                </div>
-                
-                {/* CloudWatch option */}
-                <div 
-                  className={`p-4 rounded-lg border-2 flex items-center space-x-3 cursor-pointer transition-colors
-                    ${importSource === 'cloudwatch' 
-                      ? 'border-blue-500 bg-blue-50' 
-                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
-                  onClick={() => handleSourceSelect('cloudwatch')}
-                >
-                  <div className={`h-5 w-5 rounded-full border flex items-center justify-center 
-                    ${importSource === 'cloudwatch' ? 'border-blue-500' : 'border-gray-400'}`}>
-                    {importSource === 'cloudwatch' && (
-                      <div className="h-3 w-3 rounded-full bg-blue-500"></div>
-                    )}
-                  </div>
-                  <div className="flex items-center">
-                    <Cloud className="h-5 w-5 text-gray-600 mr-2" />
-                    <span className="font-medium">AWS CloudWatch Logs</span>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
             
             {/* Render component based on selection */}
             <div className="mt-6">
-              {importSource === 'file' && (
-                <FileSelection onFileSelect={handleFileSelect} />
-              )}
-              
-              {importSource === 'cloudwatch' && (
-                <CloudWatchSelection
-                  ref={cloudWatchComponentRef}
-                  onBackToSourceSelection={handleBackToSourceSelection}
-                  onCloudWatchLogSelect={handleCloudWatchLogSelect}
-                />
+              {importSource && (
+                (() => {
+                  const selectedProvider = logSourceProviders.find(p => p.id === importSource);
+                  if (!selectedProvider) return null;
+                  
+                  const ProviderComponent = selectedProvider.component;
+                  
+                  // Special handling for each provider type
+                  if (importSource === 'file') {
+                    return (
+                      <ProviderComponent
+                        ref={logProviderRef}
+                        onFileSelect={handleFileInputSelect}
+                        onBackToSourceSelection={handleBackToSourceSelection}
+                      />
+                    );
+                  } else if (importSource === 'cloudwatch') {
+                    return (
+                      <ProviderComponent
+                        ref={logProviderRef as React.RefObject<CloudWatchSelectionRef>}
+                        onBackToSourceSelection={handleBackToSourceSelection}
+                        onCloudWatchLogSelect={handleCloudWatchLogSelect}
+                      />
+                    );
+                  }
+                  
+                  // Generic fallback for future providers
+                  return (
+                    <ProviderComponent
+                      ref={logProviderRef}
+                      onBackToSourceSelection={handleBackToSourceSelection}
+                    />
+                  );
+                })()
               )}
               
               {!importSource && (
@@ -460,7 +504,7 @@ const Import: FC  = () => {
         );
         
       case 2:
-        // Both file uploads and CloudWatch logs use the same pattern detection workflow
+        // All log sources use the same pattern detection workflow
         console.log("Rendering FileAnalyzing, filePreview:", filePreview?.lines?.length);
         return (
           <FileAnalyzing 
@@ -536,15 +580,14 @@ const Import: FC  = () => {
                 {currentStep === 1 ? 'Cancel' : 'Back'}
               </Button>
               
-              {/* Always show Next button regardless of source selection */}
+              {/* Next button logic */}
               <Button 
                 onClick={handleNext}
                 disabled={
                   isUploading || 
                   (currentStep === 1 && (
                     !importSource || 
-                    (importSource === 'file' && !selectedFile) ||
-                    (importSource === 'cloudwatch')
+                    (importSource === 'file' && !selectedFile)
                   ))
                 }
                 className="bg-blue-600 hover:bg-blue-700"
