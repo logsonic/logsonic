@@ -9,6 +9,7 @@ LogSonic is a Desktop-First Log Analysis Application designed to be minimal, sim
 - **Desktop-First**: Designed specifically for local log analysis
 - **Minimal**: Single binary installation for Windows, Mac, and Linux. Run inside Docker, if you wish to. 
 - **Simple**: Easy-to-use web UI running on your local browser
+- **Supports Cloud Logs import**: Pulls logs from cloudwatch to your desktop. More Ingestion options incoming. 
 - **Fast**: Optimized for searching through large log files
 - **Offline Analysis**: No internet dependency, all data stays on your machine, debug while you travel.
 - **Multiple Log Formats**: Automatic recognition and ingestion of logs from various formats (Syslog, Apache, Nginx) based on grok pattern. 
@@ -94,6 +95,9 @@ Download the log to you local computer and import using Import File menu.
 ## Configuration Options
 
 LogSonic can be configured using command line flags or environment variables:
+
+### Cloudwatch log ingestions
+awscli must be configured to use cloudwatch ingestion before running logsonic binary. 
 
 ### Command Line Flags
 - `-host`: Host address to bind to (default: localhost)
