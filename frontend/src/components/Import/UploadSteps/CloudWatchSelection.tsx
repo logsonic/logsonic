@@ -68,6 +68,18 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
 
   const { setMetadata } = useImportStore();
   
+  const [logPagination, setLogPagination] = useState<{
+    nextToken: string | null;
+    hasMore: boolean;
+    isLoading: boolean;
+  }>({
+    nextToken: null,
+    hasMore: false,
+    isLoading: false
+  });
+  
+  const [retrievedLogs, setRetrievedLogs] = useState<string[]>([]);
+  
   // Reset the store when the component is unmounted
   useEffect(() => {
     return () => {
@@ -240,15 +252,104 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
   };
 
   const handleImport = async () => {
-    // Verify selectedStream is not null first
     if (!selectedStream) {
       setError("Please select a log stream to import");
       return;
     }
+
+    setLoading(true);
+    setError(null);
+    
+    // Reset pagination state and logs
+    setLogPagination({
+      nextToken: null,
+      hasMore: false,
+      isLoading: false
+    });
+    setRetrievedLogs([]);
+    
+    try {
+      // Start fetching the first batch of logs
+      await fetchAllLogs(selectedStream.groupName, selectedStream.streamName);
+    } catch (err) {
+      setError(`Failed to fetch log events: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const fetchAllLogs = async (groupName: string, streamName: string) => {
+    let currentToken: string | null = null;
+    let hasMoreLogs = true;
+    let allLogMessages: string[] = [];
+    let batchCount = 0;
     
     setError(null);
-    setLoading(true);
     
+    while (hasMoreLogs) {
+      try {
+        const { logs, token, more } = await fetchLogBatchInternal(groupName, streamName, currentToken);
+        
+        // Add logs to our collection
+        allLogMessages = [...allLogMessages, ...logs];
+        batchCount++;
+        
+        // Update UI with progress
+        setRetrievedLogs(allLogMessages);
+        setLogPagination({
+          nextToken: token,
+          hasMore: more,
+          isLoading: more // Only show as loading if we have more to fetch
+        });
+        
+        if (!more) {
+          // We've reached the end
+          hasMoreLogs = false;
+          break;
+        }
+        
+        // Prepare for next iteration
+        currentToken = token;
+        
+        // Optional: Add a small delay to avoid overwhelming the API
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+      } catch (err) {
+        setError(`Failed to fetch log batch ${batchCount}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        console.error(err);
+        hasMoreLogs = false;
+        break;
+      }
+    }
+    
+    // All logs have been fetched, now process the import
+    if (allLogMessages.length > 0) {
+      const logData = allLogMessages.join('\n');
+      
+      // Set metadata
+      setMetadata({
+        _aws_region: region,
+        _aws_profile: profile,
+        _log_group_name: groupName,
+        _log_stream_name: streamName,
+        _src: 'cloudwatch',
+        _total_logs: allLogMessages.length
+      });
+      
+      // Sanitize group/stream names for use in filename
+      const sanitizedGroupName = groupName.replace(/[^a-zA-Z0-9]/g, '-');
+      const sanitizedStreamName = streamName.replace(/[^a-zA-Z0-9]/g, '-');
+      
+      const filename = `cw-${sanitizedGroupName}-${sanitizedStreamName}`;
+      onCloudWatchLogSelect(logData, filename);
+    } else {
+      setError("No logs were retrieved");
+    }
+  };
+  
+  // Helper function that fetches a single batch and returns the results
+  const fetchLogBatchInternal = async (groupName: string, streamName: string, nextToken: string | null): Promise<{ logs: string[], token: string | null, more: boolean }> => {
     try {
       // Get dates from the store
       const startTime = dateRangeStore.UTCTimeSince 
@@ -259,58 +360,69 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
         ? new Date(dateRangeStore.UTCTimeTo).getTime() 
         : undefined;
       
-      console.log(`Fetching log events for ${selectedStream.groupName}/${selectedStream.streamName} with time range: ${startTime} to ${endTime}`);
+      const tokenParam = nextToken || undefined;
       
-      // Prepare request data for fetching log events
+      console.log(`Fetching log batch for ${groupName}/${streamName} with token: ${tokenParam || 'initial'}`);
+      
       const authData = {
         region,
         profile,
-        log_group_name: selectedStream.groupName,
-        log_stream_name: selectedStream.streamName,
+        log_group_name: groupName,
+        log_stream_name: streamName,
         start_time: startTime,
-        end_time: endTime
+        end_time: endTime,
+        next_token: tokenParam,
+        limit: 10000 // Maximum logs per batch
       };
       
-      // Fetch log events from CloudWatch
       const response = await cloudwatchService.getLogEvents(authData);
       
-      if (!response.log_events || response.log_events.length === 0) {
-        setError("No log events found in the selected time range");
-        return; 
-      }
+      // Extract log messages
+      const logMessages: string[] = response.log_events.map(event => event.message);
       
-      // Format log data for import
-      const logData = response.log_events.map(event => {
-        const timestamp = new Date(event.timestamp).toISOString();
-        return `${timestamp} ${event.message}`; //Prepend timestamp to each line
-      }).join('\n');
-      
-      //set Metadata
-      setMetadata({
-        _aws_region: region,
-        _aws_profile: profile,
-        _log_group_name: selectedStream.groupName,
-        _log_stream_name: selectedStream.streamName,
-        _src: 'cloudwatch',
-      });
-
-
-      if (logData.trim().length === 0) {
-        setError("Log data is empty after processing. Please try a different log stream or time range.");
-        return;
-      }
-      
-      // Generate filename based on log group and stream
-      const sanitizedGroupName = selectedStream.groupName.replace(/[^a-z0-9]/gi, '-');
-      const sanitizedStreamName = selectedStream.streamName.replace(/[^a-z0-9]/gi, '-');
-      
-      const filename = `cw-${sanitizedGroupName}-${sanitizedStreamName}`;
-        onCloudWatchLogSelect(logData, filename);
+      return {
+        logs: logMessages,
+        token: response.next_token || null,
+        more: response.has_more
+      };
     } catch (err) {
-      setError(`Failed to fetch log events: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      console.error(`Failed to fetch log batch: ${err}`);
+      throw err;
+    }
+  };
+  
+  // Keep the original fetchLogBatch for the Load More button
+  const fetchLogBatch = async (groupName: string, streamName: string, nextToken?: string) => {
+    setLogPagination(prev => ({ ...prev, isLoading: true }));
+    
+    try {
+      const { logs, token, more } = await fetchLogBatchInternal(groupName, streamName, nextToken || null);
+      
+      // Append to existing logs
+      setRetrievedLogs(prev => [...prev, ...logs]);
+      
+      // Update pagination state
+      setLogPagination({
+        nextToken: token,
+        hasMore: more,
+        isLoading: false
+      });
+    } catch (err) {
+      setError(`Failed to fetch log batch: ${err instanceof Error ? err.message : 'Unknown error'}`);
       console.error(err);
     } finally {
-      setLoading(false);
+      setLogPagination(prev => ({ ...prev, isLoading: false }));
+    }
+  };
+  
+  const handleLoadMoreLogs = async () => {
+    if (!selectedStream || !logPagination.nextToken || !logPagination.hasMore) return;
+    
+    try {
+      await fetchLogBatch(selectedStream.groupName, selectedStream.streamName, logPagination.nextToken);
+    } catch (err) {
+      setError(`Failed to fetch more logs: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      console.error(err);
     }
   };
 
@@ -524,6 +636,36 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
             )}
           </CardContent>
         </Card>
+      )}
+      
+      {/* Show pagination UI if there are more logs available */}
+      {selectedStream && logPagination.hasMore && (
+        <div className="mt-4 flex justify-center">
+          <Button 
+            onClick={handleLoadMoreLogs}
+            disabled={logPagination.isLoading}
+            className="bg-blue-600 hover:bg-blue-700 h-10"
+          >
+            {logPagination.isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Loading more logs...
+              </>
+            ) : (
+              <>
+                Load More Logs ({retrievedLogs.length} loaded)
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+      
+      {/* Show log count if logs have been retrieved */}
+      {retrievedLogs.length > 0 && (
+        <div className="mt-4 text-center text-sm text-gray-500">
+          {retrievedLogs.length} logs retrieved
+          {logPagination.hasMore ? " (more available)" : " (complete)"}
+        </div>
       )}
     </div>
   );

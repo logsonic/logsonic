@@ -212,12 +212,16 @@ export interface GetLogEventsRequest extends CloudWatchAuth {
   log_stream_name: string;
   start_time?: number;
   end_time?: number;
+  next_token?: string;
+  limit?: number;
 }
 
 export interface GetLogEventsResponse {
   status: string;
   log_events: any[];
   region: string;
+  next_token?: string;
+  has_more: boolean;
 }
 
 export interface SelectedCloudWatchLog {

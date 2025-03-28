@@ -14,7 +14,7 @@ import (
 type ClientInterface interface {
 	ListLogGroups(ctx context.Context) ([]LogGroup, error)
 	ListLogStreams(ctx context.Context, logGroupName string, startTime, endTime *time.Time) ([]LogStream, error)
-	GetLogEvents(ctx context.Context, logGroupName, logStreamName string, startTime, endTime *time.Time) ([]LogEvent, error)
+	GetLogEvents(ctx context.Context, logGroupName, logStreamName string, startTime, endTime *time.Time, nextToken *string, limit int) ([]LogEvent, string, bool, error)
 }
 
 // Client implements CloudWatchClientInterface
@@ -203,13 +203,20 @@ func (c *Client) ListLogStreams(ctx context.Context, logGroupName string, startT
 }
 
 // GetLogEvents retrieves log events from a specific log stream in a time range
-func (c *Client) GetLogEvents(ctx context.Context, logGroupName, logStreamName string, startTime, endTime *time.Time) ([]LogEvent, error) {
+// with support for pagination to limit the number of logs retrieved in a single request
+func (c *Client) GetLogEvents(ctx context.Context, logGroupName, logStreamName string, startTime, endTime *time.Time, nextToken *string, limit int) ([]LogEvent, string, bool, error) {
 	var logEvents []LogEvent
-	var nextToken *string
+
+	// Default to 10000 if no limit is specified or limit is too large
+	if limit <= 0 || limit > 10000 {
+		limit = 10000
+	}
 
 	input := &cloudwatchlogs.GetLogEventsInput{
 		LogGroupName:  aws.String(logGroupName),
 		LogStreamName: aws.String(logStreamName),
+		StartFromHead: aws.Bool(true),          // Start from the oldest log events
+		Limit:         aws.Int32(int32(limit)), // Set the limit from parameter
 	}
 
 	if startTime != nil {
@@ -220,35 +227,44 @@ func (c *Client) GetLogEvents(ctx context.Context, logGroupName, logStreamName s
 		input.EndTime = aws.Int64(endTime.UnixMilli())
 	}
 
-	for {
+	// Use the provided pagination token if available
+	if nextToken != nil && *nextToken != "" {
 		input.NextToken = nextToken
-
-		resp, err := c.cwLogsClient.GetLogEvents(ctx, input)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get log events: %w", err)
-		}
-
-		for _, event := range resp.Events {
-			logEvents = append(logEvents, LogEvent{
-				Timestamp: time.UnixMilli(aws.ToInt64(event.Timestamp)),
-				Message:   aws.ToString(event.Message),
-				LogStream: logStreamName,
-				LogGroup:  logGroupName,
-			})
-		}
-
-		// If we received the same token we passed in, we've reached the end
-		if resp.NextForwardToken != nil && nextToken != nil && *resp.NextForwardToken == *nextToken {
-			break
-		}
-
-		nextToken = resp.NextForwardToken
-		if nextToken == nil {
-			break
-		}
 	}
 
-	return logEvents, nil
+	// We'll make just one request and return its results with pagination info
+	resp, err := c.cwLogsClient.GetLogEvents(ctx, input)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("failed to get log events: %w", err)
+	}
+
+	for _, event := range resp.Events {
+		logEvents = append(logEvents, LogEvent{
+			Timestamp: time.UnixMilli(aws.ToInt64(event.Timestamp)),
+			Message:   aws.ToString(event.Message),
+			LogStream: logStreamName,
+			LogGroup:  logGroupName,
+		})
+	}
+
+	// Determine if there are more results available
+	var returnToken string
+	if resp.NextForwardToken != nil {
+		returnToken = *resp.NextForwardToken
+	}
+
+	// Check if this is the last page
+	hasMore := true
+	if nextToken != nil && resp.NextForwardToken != nil && *nextToken == *resp.NextForwardToken {
+		hasMore = false
+	}
+
+	// If we got fewer events than the limit, it's likely the last page
+	if len(resp.Events) < limit {
+		hasMore = false
+	}
+
+	return logEvents, returnToken, hasMore, nil
 }
 
 // GetRegion returns the AWS region configured for this client

@@ -39,6 +39,8 @@ type GetLogEventsRequest struct {
 	Profile       string `json:"profile,omitempty"`
 	StartTime     int64  `json:"start_time,omitempty"`
 	EndTime       int64  `json:"end_time,omitempty"`
+	NextToken     string `json:"next_token,omitempty"`
+	Limit         int    `json:"limit,omitempty"`
 }
 
 // GetLogEventsResponse represents the response from getting log events
@@ -46,6 +48,8 @@ type GetLogEventsResponse struct {
 	Status    string                   `json:"status"`
 	LogEvents []map[string]interface{} `json:"log_events"`
 	Region    string                   `json:"region"`
+	NextToken string                   `json:"next_token,omitempty"`
+	HasMore   bool                     `json:"has_more"`
 }
 
 // ImportCloudWatchLogsRequest defines the request parameters for importing CloudWatch logs

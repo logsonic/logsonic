@@ -176,7 +176,7 @@ func (h *Services) HandleListCloudWatchLogStreams(w http.ResponseWriter, r *http
 }
 
 // @Summary Get CloudWatch log events
-// @Description Get log events from a specific CloudWatch log stream in a time range
+// @Description Get log events from a specific CloudWatch log stream in a time range with pagination
 // @Tags cloudwatch
 // @Accept json
 // @Produce json
@@ -252,8 +252,20 @@ func (h *Services) HandleGetCloudWatchLogEvents(w http.ResponseWriter, r *http.R
 		endTime = &et
 	}
 
-	// Get log events
-	logEvents, err := cwClient.GetLogEvents(ctx, req.LogGroupName, req.LogStreamName, startTime, endTime)
+	// Set default limit if not provided
+	limit := 10000
+	if req.Limit > 0 && req.Limit < 10000 {
+		limit = req.Limit
+	}
+
+	// Use token for pagination if provided
+	var nextToken *string
+	if req.NextToken != "" {
+		nextToken = &req.NextToken
+	}
+
+	// Get log events with pagination support
+	logEvents, token, hasMore, err := cwClient.GetLogEvents(ctx, req.LogGroupName, req.LogStreamName, startTime, endTime, nextToken, limit)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(types.ErrorResponse{
@@ -277,10 +289,12 @@ func (h *Services) HandleGetCloudWatchLogEvents(w http.ResponseWriter, r *http.R
 		eventMaps = append(eventMaps, eventMap)
 	}
 
-	// Return successful response
+	// Return successful response with pagination information
 	json.NewEncoder(w).Encode(cloudwatch.GetLogEventsResponse{
 		Status:    "success",
 		LogEvents: eventMaps,
 		Region:    cwClient.GetRegion(),
+		NextToken: token,
+		HasMore:   hasMore,
 	})
 }
