@@ -165,7 +165,7 @@ export interface CloudWatchAuth {
 export interface CloudWatchLogGroup {
   name: string;
   arn: string;
-  creationTime: string;
+  creationTime: string | Date;
   storedBytes: number;
   retentionDays: number;
   streams?: CloudWatchLogStream[];
@@ -173,15 +173,21 @@ export interface CloudWatchLogGroup {
 
 export interface CloudWatchLogStream {
   name: string;
-  log_group_name: string;
-  creation_time: string; 
-  first_event_time: string;
-  last_event_time: string;
-  stored_bytes: number;
+  logGroupName: string;
+  creationTime: string | Date;
+  firstEventTime: string | Date;
+  lastEventTime: string | Date;
+  storedBytes: number;
+  // Include snake_case versions for compatibility
+  log_group_name?: string;
+  creation_time?: string | Date; 
+  first_event_time?: string | Date;
+  last_event_time?: string | Date;
+  stored_bytes?: number;
 }
 
 export interface CloudWatchLogEvent {
-  timestamp: string;
+  timestamp: string | Date;
   message: string;
   logStream: string;
   logGroup: string;
@@ -191,7 +197,7 @@ export interface ListLogGroupsRequest extends CloudWatchAuth {}
 
 export interface ListLogGroupsResponse {
   status: string;
-  log_groups: string[];
+  log_groups: CloudWatchLogGroup[];
   region: string;
 }
 
@@ -203,7 +209,7 @@ export interface ListLogStreamsRequest extends CloudWatchAuth {
 
 export interface ListLogStreamsResponse {
   status: string;
-  log_streams: string[];
+  log_streams: CloudWatchLogStream[];
   region: string;
 }
 

@@ -67,16 +67,10 @@ func (h *Services) HandleListCloudWatchLogGroups(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Convert LogGroup objects to strings containing the group names
-	logGroupNames := make([]string, 0, len(logGroups))
-	for _, group := range logGroups {
-		logGroupNames = append(logGroupNames, group.Name)
-	}
-
-	// Return successful response
+	// Return successful response with full log group details
 	json.NewEncoder(w).Encode(cloudwatch.ListLogGroupsResponse{
 		Status:    "success",
-		LogGroups: logGroupNames,
+		LogGroups: logGroups,
 		Region:    cwClient.GetRegion(),
 	})
 }
@@ -161,16 +155,10 @@ func (h *Services) HandleListCloudWatchLogStreams(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Convert LogStream objects to strings containing the stream names
-	logStreamNames := make([]string, 0, len(logStreams))
-	for _, stream := range logStreams {
-		logStreamNames = append(logStreamNames, stream.Name)
-	}
-
-	// Return successful response
+	// Return successful response with full log stream details
 	json.NewEncoder(w).Encode(cloudwatch.ListLogStreamsResponse{
 		Status:     "success",
-		LogStreams: logStreamNames,
+		LogStreams: logStreams,
 		Region:     cwClient.GetRegion(),
 	})
 }

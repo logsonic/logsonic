@@ -10,9 +10,9 @@ type ListLogGroupsRequest struct {
 
 // ListLogGroupsResponse represents the response from listing log groups
 type ListLogGroupsResponse struct {
-	Status    string   `json:"status"`
-	LogGroups []string `json:"log_groups"`
-	Region    string   `json:"region"`
+	Status    string     `json:"status"`
+	LogGroups []LogGroup `json:"log_groups"`
+	Region    string     `json:"region"`
 }
 
 // ListLogStreamsRequest represents the request to list log streams
@@ -26,9 +26,9 @@ type ListLogStreamsRequest struct {
 
 // ListLogStreamsResponse represents the response from listing log streams
 type ListLogStreamsResponse struct {
-	Status     string   `json:"status"`
-	LogStreams []string `json:"log_streams"`
-	Region     string   `json:"region"`
+	Status     string      `json:"status"`
+	LogStreams []LogStream `json:"log_streams"`
+	Region     string      `json:"region"`
 }
 
 // GetLogEventsRequest represents the request to get log events

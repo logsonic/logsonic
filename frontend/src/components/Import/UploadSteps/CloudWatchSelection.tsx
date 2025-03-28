@@ -133,24 +133,16 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
 
       const response = await cloudwatchService.listLogGroups(authData);
       
-      // Create log group objects from the string array that comes from the backend
-      const groups = (response.log_groups || []).map(groupName => ({
-        name: groupName,
-        arn: "",
-        creationTime: "",
-        storedBytes: 0,
-        retentionDays: 0
-      }));
-      
-      setLogGroups(groups);
+      // Now we receive full LogGroup objects instead of just names
+      setLogGroups(response.log_groups || []);
       
       // If log groups were found, automatically fetch streams for all of them
-      if (groups.length > 0) {
-        console.log(`Fetching streams for ${groups.length} log groups`);
+      if (response.log_groups.length > 0) {
+        console.log(`Fetching streams for ${response.log_groups.length} log groups`);
         
         // Show loading state for all groups
         const loadingMap = {};
-        groups.forEach(group => {
+        response.log_groups.forEach(group => {
           loadingMap[group.name] = true;
           toggleGroupExpanded(group.name); // Auto-expand all groups
         });
@@ -161,7 +153,7 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
         });
         
         // Fetch streams for each group
-        const streamFetchPromises = groups.map(group => fetchLogStreamsForGroup(group.name));
+        const streamFetchPromises = response.log_groups.map(group => fetchLogStreamsForGroup(group.name));
         
         // Wait for all streams to be fetched
         await Promise.all(streamFetchPromises);
@@ -200,17 +192,8 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
       
       const response = await cloudwatchService.listLogStreams(authData);
       
-      // Convert string array to CloudWatchLogStream objects
-      const streams = (response.log_streams || []).map(streamName => ({
-        name: streamName,
-        log_group_name: logGroupName,
-        creation_time: "",
-        first_event_time: "",
-        last_event_time: "",
-        stored_bytes: 0
-      }));
-      
-      setStreamsForGroup(logGroupName, streams);
+      // Now we receive full LogStream objects instead of just names
+      setStreamsForGroup(logGroupName, response.log_streams || []);
       return response;
     } catch (err) {
       console.error(`Failed to fetch streams for ${logGroupName}:`, err);
@@ -426,18 +409,47 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
     }
   };
 
-  const filteredLogGroups = searchQuery 
-    ? logGroups
-        .map(group => ({
-          ...group,
-          matchesSearch: 
-            group.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-            (group.streams || []).some(stream => 
-              stream.name.toLowerCase().includes(searchQuery.toLowerCase())
-            )
-        }))
-        .filter(group => group.matchesSearch)
-    : logGroups;
+  useEffect(() => {
+    // When search query changes, auto-expand groups that have matching streams
+    if (searchQuery) {
+      // Find groups that have streams matching the search query
+      const groupsWithMatchingStreams = logGroups.filter(group => 
+        group.streams && group.streams.some(stream => 
+          stream.name.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      );
+      
+      // Auto-expand those groups
+      groupsWithMatchingStreams.forEach(group => {
+        if (!expandedGroups[group.name]) {
+          toggleGroupExpanded(group.name);
+        }
+      });
+    }
+  }, [searchQuery, logGroups, expandedGroups, toggleGroupExpanded]);
+
+  // Enhanced filtering to show groups with matching streams
+  const filteredLogGroups = logGroups.filter(group => {
+    if (!searchQuery) return true;
+    
+    const groupNameMatches = group.name.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // Check if any streams in this group match the search query
+    const hasMatchingStreams = group.streams && group.streams.some(stream => 
+      stream.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    
+    return groupNameMatches || hasMatchingStreams;
+  });
+
+  // For each group, filter its streams based on the search query if needed
+  const getFilteredStreams = (group) => {
+    if (!searchQuery || !group.streams) return group.streams || [];
+    
+    return group.streams.filter(stream => 
+      stream.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -531,62 +543,63 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
             
             <div className="max-h-96 overflow-y-auto border rounded-md">
               {/* Render log groups */}
-              {logGroups
-                .filter(group => !searchQuery || group.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                .map(group => (
-                  <div key={group.name} className="border-b last:border-b-0">
-                    <div 
-                      className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50"
-                      onClick={() => handleToggleGroupExpand(group.name)}
-                    >
-                      <div className="flex items-center">
-                        <div className="flex h-5 w-5 items-center justify-center mr-2">
-                          <Cloud className="h-4 w-4 text-blue-500" />
-                        </div>
-                        <span className="font-medium">{group.name}</span>
+              {filteredLogGroups.map(group => (
+                <div key={group.name} className="border-b last:border-b-0">
+                  <div 
+                    className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50"
+                    onClick={() => handleToggleGroupExpand(group.name)}
+                  >
+                    <div className="flex items-center">
+                      <div className="flex h-5 w-5 items-center justify-center mr-2">
+                        <Cloud className="h-4 w-4 text-blue-500" />
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs text-gray-500">
-                          {group.streams ? group.streams.length : 0} streams
-                        </span>
-                        <ChevronDown className={`h-4 w-4 transition-transform ${expandedGroups[group.name] ? 'rotate-180' : ''}`} />
-                      </div>
+                      <span className="font-medium">{group.name}</span>
+                      <span className="ml-3 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                        {(group.storedBytes / (1024 * 1024)).toFixed(2)} MB
+                      </span>
+                      <span className="ml-2 text-xs bg-gray-100 text-gray-800 px-2 py-0.5 rounded-full">
+                        {group.streams ? group.streams.length : 0} streams
+                      </span>
                     </div>
-                    
-                    {expandedGroups[group.name] && (
-                      <div className="border-t bg-gray-50">
-                        {loadingStreams[group.name] ? (
-                          <div className="flex items-center justify-center py-4">
-                            <Loader2 className="h-5 w-5 animate-spin text-blue-500 mr-2" />
-                            <span>Loading streams...</span>
-                          </div>
-                        ) : group.streams && group.streams.length > 0 ? (
-                          <div className="divide-y divide-gray-100">
-                            {group.streams.map(stream => (
-                              <div 
-                                key={stream.name}
-                                className={`p-3 cursor-pointer flex items-center ${
-                                  selectedStream && 
-                                  selectedStream.groupName === group.name && 
-                                  selectedStream.streamName === stream.name 
-                                    ? 'bg-blue-50' 
-                                    : 'hover:bg-gray-100'
-                                }`}
-                                onClick={() => handleStreamSelect(group.name, stream.name)}
-                              >
-                                <div className={`h-4 w-4 mr-3 rounded-full border flex items-center justify-center ${
-                                  selectedStream && 
-                                  selectedStream.groupName === group.name && 
-                                  selectedStream.streamName === stream.name 
-                                    ? 'border-blue-500' 
-                                    : 'border-gray-400'
-                                }`}>
-                                  {selectedStream && 
-                                   selectedStream.groupName === group.name && 
-                                   selectedStream.streamName === stream.name && (
-                                    <div className="h-2 w-2 rounded-full bg-blue-500"></div>
-                                  )}
-                                </div>
+                    <div className="flex items-center space-x-4">
+                      {group.retentionDays > 0 && (
+                        <span className="text-xs text-gray-500">
+                          Retention: {group.retentionDays} days
+                        </span>
+                      )}
+                      <ChevronDown className={`h-4 w-4 transition-transform ${expandedGroups[group.name] ? 'rotate-180' : ''}`} />
+                    </div>
+                  </div>
+                  
+                  {expandedGroups[group.name] && (
+                    <div className="border-t bg-gray-50">
+                      {loadingStreams[group.name] ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="h-5 w-5 animate-spin text-blue-500 mr-2" />
+                          <span>Loading streams...</span>
+                        </div>
+                      ) : group.streams && group.streams.length > 0 ? (
+                        <div className="divide-y divide-gray-100">
+                          {getFilteredStreams(group).map(stream => (
+                            <div 
+                              key={stream.name}
+                              className="flex items-center px-4 py-2 border-t cursor-pointer hover:bg-gray-50"
+                              onClick={() => handleStreamSelect(group.name, stream.name)}
+                            >
+                              <div className={`h-4 w-4 mr-3 rounded-full border flex items-center justify-center ${
+                                selectedStream && 
+                                selectedStream.groupName === group.name && 
+                                selectedStream.streamName === stream.name 
+                                  ? 'border-blue-500' 
+                                  : 'border-gray-400'
+                              }`}>
+                                {selectedStream && 
+                                 selectedStream.groupName === group.name && 
+                                 selectedStream.streamName === stream.name && (
+                                  <div className="h-2 w-2 rounded-full bg-blue-500"></div>
+                                )}
+                              </div>
+                              <div className="flex-1">
                                 <span className={`text-sm ${
                                   selectedStream && 
                                   selectedStream.groupName === group.name && 
@@ -594,23 +607,39 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
                                     ? 'text-blue-700 font-medium' 
                                     : ''
                                 }`}>{stream.name}</span>
+                                
+                                <div className="flex flex-wrap text-xs text-gray-500 mt-1">
+                                  {(stream.lastEventTime || stream.last_event_time) && (
+                                    <span className="mr-3">
+                                      Last event: {new Date(stream.lastEventTime || stream.last_event_time).toLocaleString()}
+                                    </span>
+                                  )}
+                                  {(stream.storedBytes > 0 || stream.stored_bytes > 0) && (
+                                    <span className="mr-3">
+                                      Size: {((stream.storedBytes || stream.stored_bytes) / 1024).toFixed(2)} KB
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="py-3 px-4 text-gray-500 text-sm">
-                            No log streams found
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="py-3 px-4 text-gray-500 text-sm">
+                          {searchQuery 
+                            ? "No matching log streams found" 
+                            : "No log streams found"}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+              
               {/* Show message when no groups match search */}
-              {logGroups.filter(group => !searchQuery || group.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+              {filteredLogGroups.length === 0 && (
                 <div className="p-4 text-center text-gray-500">
-                  No log groups found matching "{searchQuery}"
+                  No log groups or streams found matching "{searchQuery}"
                 </div>
               )}
             </div>
