@@ -700,10 +700,16 @@ const docTemplate = `{
                 "end_time": {
                     "type": "integer"
                 },
+                "limit": {
+                    "type": "integer"
+                },
                 "log_group_name": {
                     "type": "string"
                 },
                 "log_stream_name": {
+                    "type": "string"
+                },
+                "next_token": {
                     "type": "string"
                 },
                 "profile": {
@@ -720,12 +726,18 @@ const docTemplate = `{
         "cloudwatch.GetLogEventsResponse": {
             "type": "object",
             "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
                 "log_events": {
                     "type": "array",
                     "items": {
                         "type": "object",
                         "additionalProperties": true
                     }
+                },
+                "next_token": {
+                    "type": "string"
                 },
                 "region": {
                     "type": "string"

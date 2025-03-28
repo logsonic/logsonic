@@ -4,9 +4,13 @@ definitions:
     properties:
       end_time:
         type: integer
+      limit:
+        type: integer
       log_group_name:
         type: string
       log_stream_name:
+        type: string
+      next_token:
         type: string
       profile:
         type: string
@@ -17,11 +21,15 @@ definitions:
     type: object
   cloudwatch.GetLogEventsResponse:
     properties:
+      has_more:
+        type: boolean
       log_events:
         items:
           additionalProperties: true
           type: object
         type: array
+      next_token:
+        type: string
       region:
         type: string
       status:
