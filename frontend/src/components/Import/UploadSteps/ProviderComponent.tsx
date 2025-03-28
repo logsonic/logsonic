@@ -1,6 +1,6 @@
-import React from 'react';
 import { LogSourceProvider } from '@/components/Import/types';
 import { CloudWatchSelectionRef, LogSourceProviderRef } from '@/components/Import/UploadSteps';
+import { FC } from 'react';
 
 interface ProviderComponentProps {
   selectedProvider: LogSourceProvider;
@@ -11,7 +11,7 @@ interface ProviderComponentProps {
   handleBackToSourceSelection: () => void;
 }
 
-const ProviderComponent: React.FC<ProviderComponentProps> = ({
+const ProviderComponent: FC<ProviderComponentProps> = ({
   selectedProvider,
   providerRef,
   importSource,

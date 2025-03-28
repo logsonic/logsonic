@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
+import { useState, useEffect, useImperativeHandle, forwardRef, FC } from 'react';
 import { cloudwatchService } from '../utils/cloudwatchService';
 import { useSearchQueryParamsStore } from '@/stores/useSearchParams';
 import { useCloudWatchStore } from '@/stores/useCloudWatchStore';

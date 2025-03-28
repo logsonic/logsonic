@@ -1,12 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, FC } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
-import { format, isSameDay, startOfDay, setHours, setMinutes, setSeconds, isAfter, parseISO } from "date-fns";
+import { format, isSameDay, isAfter } from "date-fns";
 import { cn } from "@/lib/utils";
-import { DateRangeType } from "./types";
 import { useSearchQueryParamsStore } from "@/stores/useSearchParams";
 
-export const AbsoluteDateSelector: React.FC = () => {
+export const AbsoluteDateSelector: FC = () => {
   // Get the store directly using the hook
   const store = useSearchQueryParamsStore();
 

@@ -1,6 +1,6 @@
-import React from 'react';
 import { Card } from '@/components/ui/card';
 import { LogSourceProvider } from '@/components/Import/types';
+import { FC } from 'react';
 
 interface SourceSelectionProps {
   providers: LogSourceProvider[];
@@ -8,7 +8,7 @@ interface SourceSelectionProps {
   onSelectSource: (source: string) => void;
 }
 
-export const SourceSelection: React.FC<SourceSelectionProps> = ({ 
+export const SourceSelection: FC<SourceSelectionProps> = ({ 
   providers, 
   selectedSource, 
   onSelectSource 

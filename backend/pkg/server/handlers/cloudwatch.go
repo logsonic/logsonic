@@ -176,7 +176,7 @@ func (h *Services) HandleListCloudWatchLogStreams(w http.ResponseWriter, r *http
 }
 
 // @Summary Get CloudWatch log events
-// @Description Get log events from a specific CloudWatch log stream in a time range with pagination
+// @Description Get log events from a specific CloudWatch log stream in a time range
 // @Tags cloudwatch
 // @Accept json
 // @Produce json

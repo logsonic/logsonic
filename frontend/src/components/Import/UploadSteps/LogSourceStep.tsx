@@ -1,8 +1,8 @@
-import React from 'react';
 import { LogSourceProvider } from '@/components/Import/types';
 import { LogSourceProviderRef } from '@/components/Import/UploadSteps';
 import SourceSelection from './SourceSelection';
 import ProviderComponent from './ProviderComponent';
+import { FC } from 'react';
 
 interface LogSourceStepProps {
   providers: LogSourceProvider[];
@@ -14,7 +14,7 @@ interface LogSourceStepProps {
   handleBackToSourceSelection: () => void;
 }
 
-const LogSourceStep: React.FC<LogSourceStepProps> = ({
+const LogSourceStep: FC<LogSourceStepProps> = ({
   providers,
   importSource,
   providerRef,

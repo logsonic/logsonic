@@ -4,7 +4,7 @@ import { Button } from "../components/ui/button";
 import { ArrowLeft, ArrowRight, CheckCircle, Store, FileUp, Cloud } from "lucide-react";
 import { 
   FileSelection, 
-  FileAnalyzing, 
+  FileAnalyzing,      
   ImportConfirm,
   SuccessSummary,
   LogSourceStep,
