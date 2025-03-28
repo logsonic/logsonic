@@ -8,10 +8,10 @@ import {
   ImportConfirm,
   SuccessSummary,
   LogSourceStep,
-  LogSourceProviderRef
 } from '../components/Import/UploadSteps';
 import { useUpload } from '../components/Import/hooks';
 import type { Pattern, DetectionResult, LogSourceProvider } from '../components/Import/types';
+import { LogSourceProviderRef } from '../components/Import/types';
 import { useToast } from "../components/ui/use-toast";
 import { clearTokenizer, getGrokPatterns, getSystemInfo } from '../lib/api-client';
 import { extractFields } from '../components/Import/utils/patternUtils';
@@ -19,9 +19,8 @@ import { useImportStore, UploadStep, DEFAULT_PATTERN } from '../stores/useImport
 import { useNavigate } from 'react-router-dom';
 import { useSearchQueryParamsStore } from '../stores/useSearchParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
-import { CloudWatchSelection } from '@/components/Import/UploadSteps';
-import type { CloudWatchSelectionRef } from '@/components/Import/UploadSteps';
-import { useCloudWatchStore } from '@/stores/useCloudWatchStore';
+import { CloudWatchSelection, useCloudWatchStore } from '@/components/CloudWatch';
+import type { CloudWatchSelectionRef } from '@/components/CloudWatch';
 
 // Define the interface in types/index.ts, then re-export from UploadSteps/index.ts
 // We should eventually remove this from here

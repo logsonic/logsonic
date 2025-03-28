@@ -1,7 +1,7 @@
 import { useState, useEffect, useImperativeHandle, forwardRef, FC } from 'react';
-import { cloudwatchService } from '../utils/cloudwatchService';
+import { cloudwatchService } from './utils/cloudwatchService';
 import { useSearchQueryParamsStore } from '@/stores/useSearchParams';
-import { useCloudWatchStore } from '@/stores/useCloudWatchStore';
+import { useCloudWatchStore } from './stores/useCloudWatchStore';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -41,7 +41,7 @@ const DEFAULT_REGIONS = [
   'sa-east-1',
 ];
 
-interface CloudWatchSelectionProps {
+export interface CloudWatchSelectionProps {
   onBackToSourceSelection: () => void;
   onCloudWatchLogSelect: (logData: string, filename: string) => void;
 }
@@ -159,10 +159,28 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
         await Promise.all(streamFetchPromises);
         
         console.log("All log streams fetched successfully");
+      } else {
+        setError("No log groups found in this region. Please check if you have the correct region selected and appropriate permissions.");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch log groups');
-      console.error(err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('CloudWatch fetch error:', errorMessage);
+      
+      // Provide more helpful error messages
+      if (errorMessage.includes('credentials') || errorMessage.includes('auth') || 
+          errorMessage.includes('permission') || errorMessage.includes('access')) {
+        setError(
+          "AWS authentication failed. Please ensure your AWS credentials are configured correctly:\n\n" +
+          "1. Install AWS CLI and run 'aws configure' to set up your credentials\n" +
+          "2. Verify the profile name (leave empty for 'default')\n" +
+          "3. Ensure the configured user has CloudWatchLogsReadOnlyAccess permissions\n" +
+          "4. Check your ~/.aws/credentials and ~/.aws/config files"
+        );
+      } else if (errorMessage.includes('timeout') || errorMessage.includes('network')) {
+        setError("Network error when connecting to AWS. Please check your internet connection and try again.");
+      } else {
+        setError(`Failed to fetch log groups: ${errorMessage}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -516,8 +534,30 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
       
       {/* Error Message */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-md text-sm">
-          {error}
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md">
+          <div className="flex items-start">
+            <div className="flex-shrink-0 pt-0.5">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">AWS Connection Error</h3>
+              <div className="mt-1 text-sm text-red-700 whitespace-pre-line">
+                {error}
+              </div>
+              <div className="mt-2 text-xs text-red-600">
+                <a 
+                  href="https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="underline hover:text-red-800"
+                >
+                  Learn more about AWS CLI configuration
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
       )}
       

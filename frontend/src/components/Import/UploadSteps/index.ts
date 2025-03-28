@@ -1,8 +1,13 @@
-export { default as FileSelection } from '@/components/Import/UploadSteps/FileSelection';
-export { default as FileAnalyzing } from '@/components/Import/UploadSteps/FileAnalyzing';
-export { ImportConfirm, SuccessSummary } from '@/components/Import/UploadSteps/ImportConfirm';
-export { SourceSelection } from '@/components/Import/UploadSteps/SourceSelection';
-export { default as CloudWatchSelection } from '@/components/Import/UploadSteps/CloudWatchSelection';
-export type { CloudWatchSelectionRef } from '@/components/Import/UploadSteps/CloudWatchSelection';
-export { default as LogSourceStep } from '@/components/Import/UploadSteps/LogSourceStep';
-export type { LogSourceProviderRef } from '@/components/Import/types'; 
+// Export components from this directory
+export { default as FileSelection } from './FileSelection';
+export { default as FileAnalyzing } from './FileAnalyzing';
+export { default as ImportConfirm, SuccessSummary } from './ImportConfirm';
+export { default as LogSourceStep } from './LogSourceStep';
+export { default as SourceSelection } from './SourceSelection';
+
+// Export types
+export type { LogSourceProviderRef } from '../types';
+
+// Re-export CloudWatch components from their new location
+export { CloudWatchSelection } from '@/components/CloudWatch';
+export type { CloudWatchSelectionRef } from '@/components/CloudWatch'; 
