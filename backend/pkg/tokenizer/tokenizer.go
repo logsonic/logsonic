@@ -401,6 +401,7 @@ func (t *Tokenizer) ParseLogs(logLines []string, ingestSessionOptions types.Inge
 			failedLog := map[string]interface{}{
 				"error":     "No grok pattern matches given log line",
 				"_raw":      logLine,
+				"message":   logLine,
 				"timestamp": time.Now(),
 			}
 

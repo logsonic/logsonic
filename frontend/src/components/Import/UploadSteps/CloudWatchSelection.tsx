@@ -333,7 +333,7 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
         _aws_profile: profile,
         _log_group_name: groupName,
         _log_stream_name: streamName,
-        _src: 'cloudwatch',
+        _src: `cloudwatch.${groupName}.${streamName}`,
         _total_logs: allLogMessages.length
       });
       

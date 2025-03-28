@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useImperativeHandle, useRef, useState, FC } from 'react';
 import { Upload } from 'lucide-react';
 import type { FileSelectionProps as OriginalFileSelectionProps, LogSourceProviderRef } from '../types';
 import { useImportStore } from '../../../stores/useImportStore';
@@ -50,7 +50,7 @@ const FileSelection = forwardRef<LogSourceProviderRef, FileSelectionProps>(
     const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (file) {
-        setMetadata({ _src: 'file', _file_name: file.name });
+        setMetadata({ _src: `file.${file.name}` });
       }
       
       // Call the parent's onFileSelect function
