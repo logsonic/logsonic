@@ -16,6 +16,7 @@ import { Cloud, CloudOff, ChevronRight, ChevronDown, Search, Loader2, Info, Arro
 import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";
 import { useImportStore } from '@/stores/useImportStore';
 import { LogSourceProviderRef } from '@/components/Import/types';
+import { LogPaginationState } from './types';
 
 const DEFAULT_REGIONS = [
   'us-east-1',
@@ -68,11 +69,7 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
 
   const { setMetadata } = useImportStore();
   
-  const [logPagination, setLogPagination] = useState<{
-    nextToken: string | null;
-    hasMore: boolean;
-    isLoading: boolean;
-  }>({
+  const [logPagination, setLogPagination] = useState<LogPaginationState>({
     nextToken: null,
     hasMore: false,
     isLoading: false

@@ -342,7 +342,18 @@ export const useImportStore = create<ImportState>((set, get) => ({
   
   // Handle pattern operations
   handlePatternOperation: async (pattern, updateStore = true, onSuccess, onError) => {
-    const { selectedFile, filePreview } = get();
+    const { 
+      selectedFile, 
+      filePreview, 
+      sessionOptionsFileName,
+      sessionOptionsSmartDecoder,
+      sessionOptionsTimezone,
+      sessionOptionsYear,
+      sessionOptionsMonth,
+      sessionOptionsDay,
+      importSource,
+      metadata
+    } = get();
     
     if (!selectedFile || !filePreview) {
       const errorMsg = 'No file selected or file preview not available';
@@ -359,11 +370,27 @@ export const useImportStore = create<ImportState>((set, get) => ({
       }
       
       const previewLines = filePreview.lines.slice(0, 20); // Use first 20 lines for parsing test
+
+      // Build session options
+      const sessionOptions : IngestSessionOptions= {
+        name: pattern.name,
+        pattern: pattern.pattern,
+        priority: pattern.priority,
+        custom_patterns: pattern.custom_patterns,
+        source: importSource,
+        smart_decoder: sessionOptionsSmartDecoder,
+        force_timezone: sessionOptionsTimezone,
+        force_start_year: sessionOptionsYear,
+        force_start_month: sessionOptionsMonth,
+        force_start_day: sessionOptionsDay,
+        meta: metadata
+      };
       
       const parseResult = await parseLogs({
         logs: previewLines,
         grok_pattern: pattern.pattern,
         custom_patterns: pattern.custom_patterns || {},
+        session_options: sessionOptions
       });
       
       const parsedLogs = parseResult.logs || [];

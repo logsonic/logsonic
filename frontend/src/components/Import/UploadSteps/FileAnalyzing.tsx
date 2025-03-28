@@ -7,8 +7,7 @@ import { PatternTestResults } from './PatternTestResults';
 import { extractFields } from '../utils/patternUtils';
 import { DEFAULT_PATTERN, useImportStore } from '@/stores/useImportStore';
 import { CustomPatternSelector } from './CustomPatternSelector';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
+
 
 interface FileAnalyzingProps {
   onDetectionComplete: (result: DetectionResult) => void;

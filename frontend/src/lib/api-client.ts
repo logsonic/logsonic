@@ -11,13 +11,16 @@ import {
   SuggestResponse,
   SystemInfoResponse,
   IngestSessionOptions,
+} from './api-types';
+
+import {
   CloudWatchAuth,
   ListLogGroupsResponse,
   ListLogStreamsRequest,
   ListLogStreamsResponse,
   GetLogEventsRequest,
   GetLogEventsResponse
-} from './api-types';
+} from '@/components/CloudWatch';
 
 // API base configuration
 // For local development, use port 8080

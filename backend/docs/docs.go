@@ -764,7 +764,7 @@ const docTemplate = `{
                 "log_groups": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/cloudwatch.LogGroup"
                     }
                 },
                 "region": {
@@ -801,7 +801,7 @@ const docTemplate = `{
                 "log_streams": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/cloudwatch.LogStream"
                     }
                 },
                 "region": {
@@ -809,6 +809,49 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "cloudwatch.LogGroup": {
+            "type": "object",
+            "properties": {
+                "arn": {
+                    "type": "string"
+                },
+                "creationTime": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "retentionDays": {
+                    "type": "integer"
+                },
+                "storedBytes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "cloudwatch.LogStream": {
+            "type": "object",
+            "properties": {
+                "creationTime": {
+                    "type": "string"
+                },
+                "firstEventTime": {
+                    "type": "string"
+                },
+                "lastEventTime": {
+                    "type": "string"
+                },
+                "logGroupName": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "storedBytes": {
+                    "type": "integer"
                 }
             }
         },

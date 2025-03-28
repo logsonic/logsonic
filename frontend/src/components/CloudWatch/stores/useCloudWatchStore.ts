@@ -1,5 +1,9 @@
 import { create } from 'zustand';
-import { CloudWatchLogGroup, CloudWatchLogStream } from '@/lib/api-types';
+import { 
+  CloudWatchLogGroup, 
+  CloudWatchLogStream,
+  SelectedStream 
+} from '../types';
 
 interface CloudWatchState {
   // Authentication
@@ -12,7 +16,7 @@ interface CloudWatchState {
   expandedGroups: Record<string, boolean>;
   loadingStreams: Record<string, boolean>;
   searchQuery: string;
-  selectedStream: { groupName: string, streamName: string } | null;
+  selectedStream: SelectedStream | null;
   
   // Loading states
   isLoading: boolean;

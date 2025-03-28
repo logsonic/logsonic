@@ -6,7 +6,7 @@ import {
   ListLogGroupsResponse,
   ListLogStreamsRequest,
   ListLogStreamsResponse,
-} from '@/lib/api-types';
+} from '../types';
 
 import {
   listCloudWatchLogGroups,

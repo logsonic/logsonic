@@ -46,7 +46,7 @@ definitions:
     properties:
       log_groups:
         items:
-          type: string
+          $ref: '#/definitions/cloudwatch.LogGroup'
         type: array
       region:
         type: string
@@ -70,12 +70,40 @@ definitions:
     properties:
       log_streams:
         items:
-          type: string
+          $ref: '#/definitions/cloudwatch.LogStream'
         type: array
       region:
         type: string
       status:
         type: string
+    type: object
+  cloudwatch.LogGroup:
+    properties:
+      arn:
+        type: string
+      creationTime:
+        type: string
+      name:
+        type: string
+      retentionDays:
+        type: integer
+      storedBytes:
+        type: integer
+    type: object
+  cloudwatch.LogStream:
+    properties:
+      creationTime:
+        type: string
+      firstEventTime:
+        type: string
+      lastEventTime:
+        type: string
+      logGroupName:
+        type: string
+      name:
+        type: string
+      storedBytes:
+        type: integer
     type: object
   handlers.PingResponse:
     properties:
