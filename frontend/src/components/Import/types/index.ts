@@ -24,13 +24,6 @@ export interface DetectionResult {
   error?: string;
 }
 
-
-export interface FileSelectionProps {
-  onFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  onBackToSourceSelection?: () => void;
-}
-
-
 export interface UploadProgressHookProps {
   selectedFile: File | null;
   selectedPattern: Pattern | null;
@@ -88,10 +81,22 @@ export interface LogSourceProvider {
   name: string;
   icon: React.ComponentType<any>;
   component: React.ForwardRefExoticComponent<any>;
+  // callbacks for notifying file selection and preview
+
+  // Notify that a file has been selected from the user
+  onFileSelect: (filename: string) => Promise<void>;
+  // Notify that a file preview component has been loaded 
+  onFilePreview: (logData: string, filename: string) => Promise<void>;
+  // Notify that the user wants to go back to the source selection after file preview
+  onBackToSourceSelection: () => void;
+  // Notify that the wizard can proceed to file analysis
+  onFileReadyForAnalysis: () => Promise<void>;
 }
 
 // Interface for log provider components that implement ref functionality
 export interface LogSourceProviderRef {
+  // Start the actual import process 
   handleImport: () => Promise<void>;
-  validateCanProceed: () => Promise<{ canProceed: boolean; errorMessage?: string }>;
+  // Validate if the user can proceed to file analysis
+  
 } 

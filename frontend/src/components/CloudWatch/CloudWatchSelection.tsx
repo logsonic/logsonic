@@ -94,16 +94,24 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
       }
       return handleImport();
     },
-    validateCanProceed: async () => {
+    handleFileSelect: async (filename: string) => {
+      await onFileSelect(filename);
+    },
+    handleFilePreview: async (logData: string, filename: string) => {
+      await onFilePreview(logData, filename);
+    },
+    validateCanProceedToFileAnalysis: async () => {
       // For CloudWatch, check if a stream has been selected
       if (!selectedStream) {
         return {
-          canProceed: false,
-          errorMessage: "Please select a log stream before proceeding."
+          canProceedToFileAnalysis: false,
+          errorMessage: "Please select a cloudwatch log stream before proceeding."
         };
       }
       
-      return { canProceed: true };
+      return { 
+        canProceedToFileAnalysis: true 
+      };
     }
   }));
 

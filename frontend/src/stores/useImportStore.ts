@@ -106,7 +106,6 @@ interface ImportState {
   setIsTestingPattern: (isTestingPattern: boolean) => void;
   setMetadata: (metadata: Record<string, string | number | boolean>) => void;
   setReadyToSelectPattern: (ready: boolean) => void;
-  handleFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
   setFileFromBlob: (content: string, fileName: string) => Promise<void>;
   handlePatternOperation: (pattern: Pattern, updateStore?: boolean, onSuccess?: (parsedLogs: Record<string, string>[]) => void, onError?: (error: string) => void) => Promise<void>;
   testPattern: () => Promise<void>;
@@ -219,83 +218,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
   setIsTestingPattern: (isTestingPattern) => set({ isTestingPattern }),
   
   // Handle file selection and preview generation
-  handleFileSelect: async (event) => {
-    const file = event.target.files?.[0] || null;
-    if (!file) return;
-
-    // Advanced content check for binary data and log structure
-    const checkFileContent = (content: string): { isValid: boolean; errorMessage?: string } => {
-      // Check for binary content by looking for NULL bytes or a high percentage of non-printable characters
-      const controlChars = content.replace(/[\x20-\x7E\r\n\t]/g, '');
-      const controlCharRatio = controlChars.length / content.length;
-      
-      // If more than 10% of characters are control characters, likely a binary file
-      if (controlCharRatio > 0.1 || content.includes('\0')) {
-        return { isValid: false, errorMessage: 'This appears to be a binary file and cannot be processed.' };
-      }
-      
-      // Check if file has valid line structure (at least some non-empty lines)
-      const lines = content.split('\n').filter(line => line.trim() !== '');
-      if (lines.length === 0) {
-        return { isValid: false, errorMessage: 'File is empty or contains no valid log lines.' };
-      }
-      
-      return { isValid: true };
-    };
-
-    // Read the first portion of the file to check content
-    const reader = new FileReader();
-    const CONTENT_CHECK_SIZE = 8 * 1024; // 8KB is enough to detect binary content
-    const contentBlob = file.slice(0, CONTENT_CHECK_SIZE);
-    
-    reader.onload = (e) => {
-      const content = e.target?.result as string || '';
-      const contentCheck = checkFileContent(content);
-      
-      if (!contentCheck.isValid) {
-        set({ error: contentCheck.errorMessage || 'Invalid file content' });
-        return;
-      }
-      
-      // File passed validation, proceed with normal flow
-      set({ selectedFile: file, error: null });
-
-      // Read for preview with another reader
-      const previewReader = new FileReader();
-      const MAX_PREVIEW_SIZE = 10 * 1024; // 10KB
-      const previewBlob = file.slice(0, MAX_PREVIEW_SIZE);
-      
-      previewReader.onload = (e) => {
-        const previewContent = e.target?.result as string || '';
-        const previewLines = previewContent.split('\n');
-        
-        // Calculate an approximation of total lines based on the average line size in the preview
-        const avgLineSize = previewContent.length / (previewLines.length || 1);
-        const approxLines = Math.ceil(file.size / avgLineSize);
-        
-        set({ 
-          filePreview: {
-            lines: previewLines.slice(0, 100), // Limit display lines to 100
-            totalLines: previewLines.length,
-            fileSize: file.size,
-          },
-          approxLines,
-        });
-        
-        // Go to the next step automatically if on step 1
-        if (get().currentStep === 1) {
-          set({ 
-            currentStep: 2,
-            importSource: 'file'
-          });
-        }
-      };
-      
-      previewReader.readAsText(previewBlob);
-    };
-    
-    reader.readAsText(contentBlob);
-  },
+  
 
   // Create a file from blob content (used for CloudWatch logs)
   setFileFromBlob: async (content, fileName) => {

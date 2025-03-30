@@ -1,17 +1,17 @@
 import { forwardRef, useImperativeHandle, useRef, useState, FC } from 'react';
 import { Upload } from 'lucide-react';
-import type { FileSelectionProps as OriginalFileSelectionProps, LogSourceProviderRef } from '../types';
+import type { LogSourceProvider, LogSourceProviderRef } from '../types';
 import { useImportStore } from '../../../stores/useImportStore';
 
-// Extend the original props to include the ref
-interface FileSelectionProps extends OriginalFileSelectionProps {
-  onFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
-}
 
 // Forward ref to implement LogSourceProviderRef interface
-const FileSelection = forwardRef<LogSourceProviderRef, FileSelectionProps>(
-  ({ onFileSelect, onBackToSourceSelection }, ref) => {
-    const fileInputRef = useRef<HTMLInputElement>(null);
+const FileSelection = forwardRef<LogSourceProviderRef, LogSourceProvider>(({   
+  onFileSelect, 
+  onFilePreview,
+  onBackToSourceSelection,
+  onFileReadyForAnalysis
+}, ref) => {
+    const fileInputRef = useRef<HTMLInputElement>(null);  
     const { error, setMetadata } = useImportStore();
     const [pendingResolve, setPendingResolve] = useState<(() => void) | null>(null);
 
@@ -31,19 +31,6 @@ const FileSelection = forwardRef<LogSourceProviderRef, FileSelectionProps>(
             reject(new Error("File input reference is not available"));
           }
         });
-      },
-      validateCanProceed: async () => {
-        // For file selection, check if a file has been selected
-        const { readyToSelectPattern } = useImportStore.getState();
-        
-        if (!readyToSelectPattern) {
-          return {
-            canProceed: false,
-            errorMessage: "Please select a log file before proceeding."
-          };
-        }
-        
-        return { canProceed: true };
       }
     }));
 
@@ -54,7 +41,9 @@ const FileSelection = forwardRef<LogSourceProviderRef, FileSelectionProps>(
       }
       
       // Call the parent's onFileSelect function
-      await onFileSelect(event);
+      if (file) {
+        await onFileSelect(file.name);
+      }
       
       // If there's a pending promise resolve, call it
       if (pendingResolve) {

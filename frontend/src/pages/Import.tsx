@@ -66,10 +66,9 @@ const Import: FC  = () => {
   const {
     selectedFile,
     filePreview,
-    readyToSelectPattern,
     selectedPattern,
     importSource,
-    handleFileSelect,
+    
     setFileFromBlob,
     setImportSource,
     setSelectedPattern,
@@ -85,10 +84,11 @@ const Import: FC  = () => {
   const logProviderRef = useRef<LogSourceProviderRef>(null);
 
   // Type-specific handler for file selection events
-  const handleSourcePreview = async (logData: string, filename: string) => {
+  const handleFilePreview = async (logData: string, filename: string) => {
     setFileFromBlob(logData, filename);
   };
   
+  const [readyToSelectPattern, setReadyToSelectPattern] = useState(false);
   // Reset the import store when the component mounts
   useEffect(() => {
     // Reset the store to default values on first load
@@ -163,6 +163,10 @@ const Import: FC  = () => {
     setImportSource(source);
   };
 
+  const handleFileSelect = (filename: string) => {
+   console.log(`File selected: ${filename}`);
+  };
+
   // Handle back button for any provider
   const handleBackToSourceSelection = () => {
     setImportSource(null);
@@ -184,41 +188,14 @@ const Import: FC  = () => {
           }
           
           // Provider-agnostic validation - ask the provider if we can proceed
-          if (logProviderRef.current) {
-            const { canProceed, errorMessage } = await logProviderRef.current.validateCanProceed();
-            
-            if (!canProceed) {
-              toast({
-                title: "Validation Failed",
-                description: errorMessage || "Cannot proceed. Please check your selection.",
-                variant: "destructive",
-              });
-              return;
-            }
-            
-            // For non-file providers that need their own import handling
-            if (importSource !== 'file') {
-              console.log(`Importing logs from ${importSource}`);
-              
-              try {
-                await logProviderRef.current.handleImport();
-                // The provider will update importStore state as needed
-                return; // Exit early since the component handles next step
-              } catch (importErr) {
-                console.error(`Failed to import logs from ${importSource}:`, importErr);
-                toast({
-                  title: "Import Failed",
-                  description: `Failed to import logs from ${importSource}. Please try again.`,
-                  variant: "destructive",
-                });
-                return;
-              }
-            }
+          if (logProviderRef.current && readyToSelectPattern) {
+            // Else simply move to the next step
+            // Set current step to 2 (pattern detection)
+            console.log(`Advancing to step 2 with import source: ${importSource}`);
+            setCurrentStep(2);            
           }
-          
-          // Set current step to 2 (pattern detection)
-          console.log(`Advancing to step 2 with import source: ${importSource}`);
-          setCurrentStep(2);
+
+
           break;
         case 2:
           // Check if there's a custom pattern that needs to be saved
@@ -345,6 +322,13 @@ const Import: FC  = () => {
     }
   };
 
+  const handleFileReadyForAnalysis = (ready: boolean) => {
+    console.log("File ready for analysis");
+    
+      setReadyToSelectPattern(ready);
+
+  };
+
   const handleDetectionComplete = (result: DetectionResult) => {
     console.log("Detection completed with result:", {
       hasError: !!result.error,
@@ -358,7 +342,6 @@ const Import: FC  = () => {
     
     // We're disabling auto-advancing behavior - let user manually navigate with Next button
     if (!result.error && result.isOngoing === false && result.suggestedPattern) {
-      console.log("Pattern detection successful, but NOT auto-advancing - user should use Next button");
       
       // Still set the suggested pattern if available
       if (result.suggestedPattern) {
@@ -376,9 +359,11 @@ const Import: FC  = () => {
         return (
           <LogSourceSelectionStep
             providerRef={logProviderRef}
-            handleSourceSelect={handleSourceSelect} 
-            handleSourcePreview={handleSourcePreview}
-            handleBackToSourceSelection={handleBackToSourceSelection}
+            onSourceSelect={handleSourceSelect} 
+            onFileSelect={handleFileSelect}
+            onFilePreview={handleFilePreview}
+            onBackToSourceSelection={handleBackToSourceSelection}
+            onFileReadyForAnalysis={handleFileReadyForAnalysis} 
           />
         );
       case 2:
@@ -456,7 +441,7 @@ const Import: FC  = () => {
               <Button 
                 variant="outline" 
                 onClick={handleBack}
-                disabled={isUploading}
+                disabled={isUploading }
               >
                 {currentStep === 1 ? 'Cancel' : 'Back'}
               </Button>
@@ -465,11 +450,9 @@ const Import: FC  = () => {
               <Button 
                 onClick={handleNext}
                 disabled={
+                  !readyToSelectPattern ||
                   isUploading || 
-                  (currentStep === 1 && (
-                    !importSource || 
-                    (importSource === 'file' && !selectedFile)
-                  ))
+                  (currentStep === 1 && !importSource)
                 }
                 className="bg-blue-600 hover:bg-blue-700"
               >
