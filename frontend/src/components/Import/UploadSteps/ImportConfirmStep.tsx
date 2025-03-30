@@ -1,5 +1,5 @@
 import { FC, useEffect } from 'react';
-import { Progress } from '../../../components/ui/progress';
+import { Progress } from '../../ui/progress';
 import { Loader2, FileText, Code, CheckCircle, File, Cloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as ProgressPrimitive from "@radix-ui/react-progress";
@@ -80,7 +80,7 @@ const GreenProgress: FC<{ value: number; className?: string }> = ({
   </ProgressPrimitive.Root>
 );
 
-export const ImportConfirm: FC = ({
+export const ImportConfirmStep: FC = ({
 
 }) => {
   const { 
@@ -259,4 +259,4 @@ export const ImportConfirm: FC = ({
   );
 };
 
-export default ImportConfirm; 
+export default ImportConfirmStep; 

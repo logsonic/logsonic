@@ -1,29 +1,26 @@
 import { FC, Fragment, useEffect, useRef, useState } from 'react';  
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { ArrowLeft, ArrowRight, CheckCircle, Store, FileUp, Cloud } from "lucide-react";
+import { ArrowLeft,FileUp, Cloud } from "lucide-react";
 import { 
   FileSelection, 
-  FileAnalyzing,      
+
   ImportConfirm,
   SuccessSummary,
-  LogSourceStep,
+  LogSourceSelectionStep,
 } from '../components/Import/UploadSteps';
+import { FileAnalyzingStep } from '../components/Import/UploadSteps/FileAnalyzingStep';
 import { useUpload } from '../components/Import/hooks';
-import type { Pattern, DetectionResult, LogSourceProvider } from '../components/Import/types';
+import type { DetectionResult, LogSourceProvider } from '../components/Import/types';
 import { LogSourceProviderRef } from '../components/Import/types';
 import { useToast } from "../components/ui/use-toast";
-import { clearTokenizer, getGrokPatterns, getSystemInfo } from '../lib/api-client';
+import { getGrokPatterns, getSystemInfo } from '../lib/api-client';
 import { extractFields } from '../components/Import/utils/patternUtils';
 import { useImportStore, UploadStep, DEFAULT_PATTERN } from '../stores/useImportStore';
 import { useNavigate } from 'react-router-dom';
 import { useSearchQueryParamsStore } from '../stores/useSearchParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
-import { CloudWatchSelection, useCloudWatchStore } from '@/components/CloudWatch';
-import type { CloudWatchSelectionRef } from '@/components/CloudWatch';
 
-// Define the interface in types/index.ts, then re-export from UploadSteps/index.ts
-// We should eventually remove this from here
 
 const Import: FC  = () => {
   const { toast } = useToast(); 
@@ -45,7 +42,8 @@ const Import: FC  = () => {
   const steps = [
     { number: 1, label: "Choose Log Source" },
     { number: 2, label: "Define Log Pattern" },
-    { number: 3, label: "Confirm Import" }
+    { number: 3, label: "Confirm Import" },
+    { number: 4, label: "Summary" }
   ];
 
   // Step indicator component
@@ -86,40 +84,11 @@ const Import: FC  = () => {
   // Generic reference for the current log provider component
   const logProviderRef = useRef<LogSourceProviderRef>(null);
 
-  // Internal common handler function
-  const processLogData = (logData: string, filename: string) => {
-    setFileFromBlob(logData, filename);
-    console.log(`Logs selected from ${importSource}, advancing to step 2`);
-  };
-
   // Type-specific handler for file selection events
-  const handleFileInputSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    // Call the original handleFileSelect for file selection logic
-    await handleFileSelect(event);
+  const handleSourcePreview = async (logData: string, filename: string) => {
+    setFileFromBlob(logData, filename);
   };
   
-  // Type-specific handler for CloudWatch log selection
-  const handleCloudWatchLogSelect = (logData: string, filename: string) => {
-    processLogData(logData, filename);
-  };
-
-  // Define available log source providers
-  const logSourceProviders: LogSourceProvider[] = [
-    {
-      id: 'file',
-      name: 'Upload Log File',
-      icon: FileUp,
-      component: FileSelection
-    },
-    {
-      id: 'cloudwatch',
-      name: 'AWS CloudWatch Logs',
-      icon: Cloud,
-      component: CloudWatchSelection
-    },
-    // Add new providers here in the future (S3, Azure, etc.)
-  ];
-
   // Reset the import store when the component mounts
   useEffect(() => {
     // Reset the store to default values on first load
@@ -401,43 +370,36 @@ const Import: FC  = () => {
     }
   };
 
-  const renderStep = () => {
-    // Debug logging
-    console.log("Rendering step", currentStep, "importSource:", importSource);
-    
+  const renderCurrentStep = () => {
     switch (currentStep) {
       case 1:
         return (
-          <LogSourceStep
-            providers={logSourceProviders}
-            importSource={importSource}
+          <LogSourceSelectionStep
             providerRef={logProviderRef}
-            handleSourceSelect={handleSourceSelect}
-            handleFileInputSelect={handleFileInputSelect}
-            handleCloudWatchLogSelect={handleCloudWatchLogSelect}
+            handleSourceSelect={handleSourceSelect} 
+            handleSourcePreview={handleSourcePreview}
             handleBackToSourceSelection={handleBackToSourceSelection}
           />
         );
-        
       case 2:
-        // All log sources use the same pattern detection workflow
-        console.log("Rendering FileAnalyzing, filePreview:", filePreview?.lines?.length);
         return (
-          <FileAnalyzing 
-           onDetectionComplete={handleDetectionComplete}
-           showSaveDialog={showSavePatternDialog}
-           onSaveDialogClose={handleSavePatternDialogClose}
+          <FileAnalyzingStep
+            onDetectionComplete={handleDetectionComplete}
+            showSaveDialog={showSavePatternDialog}
+            onSaveDialogClose={handleSavePatternDialogClose}
           />
         );
       case 3:
-        // If we have upload summary, show that instead of the import form
-        if (uploadSummary?.showSummary) {
-          return <SuccessSummary uploadSummary={uploadSummary} />;
-        }
-        
         return (
           <ImportConfirm />
         );
+      case 4:
+        return (
+          <SuccessSummary uploadSummary={uploadSummary} />
+        );
+  
+      default:
+        return null;
     }
   };
 
@@ -447,6 +409,7 @@ const Import: FC  = () => {
         {/* Page Header */}
         <div className="flex justify-between items-center mb-8 px-2">
           <div className="flex items-center">
+            {/* Import Log Wizard Icon */}
             <FileUp className="h-8 text-blue-600 mr-3" />
             <h1 className="text-xl font-bold text-gray-800">Import Log Wizard</h1>
           </div>
@@ -462,7 +425,7 @@ const Import: FC  = () => {
 
         <Card className="p-10 shadow-md">
           <div className="space-y-6 pb-10">
-            {/* Step Indicator */}
+            {/* Step Indicator bar on top of the card*/}
             <div className="flex items-center justify-between">
               {steps.map((step, index) => (
                 <Fragment key={step.number}>
@@ -478,15 +441,17 @@ const Import: FC  = () => {
               ))}
             </div>
             
-            {renderStep()}
+            {/* Render the current step */}
+            {renderCurrentStep()}
 
+            {/* Error message */}
             {error && (
               <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">
                 {error}
               </div>
             )}
             
-            {/* Navigation Buttons */}
+            {/* Navigation Buttons at the bottom of the card*/}
             <div className="flex justify-between pt-4">
               <Button 
                 variant="outline" 

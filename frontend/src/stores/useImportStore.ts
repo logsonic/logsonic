@@ -22,7 +22,7 @@ export const DEFAULT_PATTERN: Pattern = {
 };
 
 
-export type UploadStep = 1 | 2 | 3;
+export type UploadStep = 1 | 2 | 3 | 4;
 export type ImportSource = string | null;
 
 interface ImportState {

@@ -6,17 +6,17 @@ interface ProviderComponentProps {
   selectedProvider: LogSourceProvider;
   providerRef: React.RefObject<LogSourceProviderRef>;
   importSource: string;
-  handleFileInputSelect: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
-  handleCloudWatchLogSelect: (logData: string, filename: string) => void;
+  handleSourcePreview: (logData: string, filename: string) => void;
   handleBackToSourceSelection: () => void;
 }
 
+// ProviderComponent is a component that renders a provider component based on the import source
+// This should abstract away any specific provider logic and just expose the source preview and back to source selection
 const ProviderComponent: FC<ProviderComponentProps> = ({
   selectedProvider,
   providerRef,
   importSource,
-  handleFileInputSelect,
-  handleCloudWatchLogSelect,
+  handleSourcePreview,
   handleBackToSourceSelection
 }) => {
   if (!selectedProvider) return null;
@@ -28,7 +28,7 @@ const ProviderComponent: FC<ProviderComponentProps> = ({
     return (
       <Component
         ref={providerRef}
-        onFileSelect={handleFileInputSelect}
+        onSourcePreview={handleSourcePreview}
         onBackToSourceSelection={handleBackToSourceSelection}
       />
     );
@@ -37,7 +37,7 @@ const ProviderComponent: FC<ProviderComponentProps> = ({
       <Component
         ref={providerRef as React.RefObject<CloudWatchSelectionRef>}
         onBackToSourceSelection={handleBackToSourceSelection}
-        onCloudWatchLogSelect={handleCloudWatchLogSelect}
+        onSourcePreview={handleSourcePreview}
       />
     );
   }

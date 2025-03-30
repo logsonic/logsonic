@@ -9,13 +9,13 @@ import { DEFAULT_PATTERN, useImportStore } from '@/stores/useImportStore';
 import { CustomPatternSelector } from './CustomPatternSelector';
 
 
-interface FileAnalyzingProps {
+interface FileAnalyzingStepProps {
   onDetectionComplete: (result: DetectionResult) => void;
   showSaveDialog?: boolean;
   onSaveDialogClose?: () => void;
 }
 
-export const FileAnalyzing: FC<FileAnalyzingProps> = ({
+export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
   onDetectionComplete,
   showSaveDialog = false,
   onSaveDialogClose
@@ -280,4 +280,4 @@ export const FileAnalyzing: FC<FileAnalyzingProps> = ({
   );
 };
 
-export default FileAnalyzing; 
+export default FileAnalyzingStep; 

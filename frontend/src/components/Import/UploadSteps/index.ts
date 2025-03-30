@@ -1,8 +1,7 @@
 // Export components from this directory
 export { default as FileSelection } from './FileSelection';
-export { default as FileAnalyzing } from './FileAnalyzing';
-export { default as ImportConfirm, SuccessSummary } from './ImportConfirm';
-export { default as LogSourceStep } from './LogSourceStep';
+export { default as ImportConfirm, SuccessSummary } from './ImportConfirmStep';
+export { default as LogSourceSelectionStep } from './LogSourceSelectionStep';
 export { default as SourceSelection } from './SourceSelection';
 
 // Export types
