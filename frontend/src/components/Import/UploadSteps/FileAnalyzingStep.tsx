@@ -27,10 +27,12 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
   const {
     setSelectedPattern, 
     selectedPattern, 
-    setSelectedFile, 
-    selectedFile, 
-    setFilePreview, 
-    filePreview, 
+    setSelectedFileName, 
+    selectedFileName, 
+    setSelectedFileHandle, 
+    selectedFileHandle, 
+    setFilePreviewBuffer, 
+    filePreviewBuffer, 
     setCurrentStep, 
     currentStep, 
     isCreateNewPatternSelected,
@@ -48,19 +50,19 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
     const analyzeFile = async () => {
       // Enhanced debugging info
       console.log("FileAnalyzing useEffect triggered", { 
-        hasFilePreview: !!filePreview, 
-        previewLines: filePreview?.lines?.length,
-        hasSelectedFile: !!selectedFile,
+        hasFilePreview: !!filePreviewBuffer, 
+        previewLines: filePreviewBuffer?.lines?.length,
+        hasSelectedFile: !!selectedFileName,
         importSource,
         currentStep
       });
       
-      if (!filePreview?.lines?.length || !selectedFile) {
+      if (!filePreviewBuffer?.lines?.length || !selectedFileName) {
         console.error("Missing file preview or selected file, aborting analysis");
         return;
       }
 
-      console.log("Analyzing file in FileAnalyzing component", importSource, filePreview.lines.length, "lines");
+      console.log("Analyzing file in FileAnalyzing component", importSource, filePreviewBuffer.lines.length, "lines");
       
       try {
         setIsAnalyzing(true);
@@ -70,7 +72,7 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
         // Try to auto-detect the pattern
         console.log("Starting pattern suggestion...");
         const suggestResponse = await suggestPatterns({
-          logs: filePreview.lines
+          logs: filePreviewBuffer.lines
         });
         console.log("Pattern suggestion complete", suggestResponse.results?.length || 0, "patterns found");
 
@@ -81,7 +83,7 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
           
           // Test the suggested pattern
           const parseResponse = await parseLogs({
-            logs: filePreview.lines,
+            logs: filePreviewBuffer.lines,
             grok_pattern: bestMatch.pattern,
             custom_patterns: bestMatch.custom_patterns || {}
           });
@@ -211,7 +213,7 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
     } else {
       return {
         icon: <File className="h-5 w-5 text-blue-500 mr-2" />,
-        text: `Analyzing file: ${selectedFile?.name || 'Unknown'}`
+        text: `Analyzing file: ${selectedFileName || 'Unknown'}`
       };
     }
   };
@@ -250,7 +252,7 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
             <LogPatternSelection
               initialPattern={selectedPattern}
               onPatternChange={handlePatternChange}
-              previewLines={filePreview?.lines || []}
+              previewLines={filePreviewBuffer?.lines || []}
             />
           </div>
           
@@ -259,7 +261,7 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
           {isCreateNewPatternSelected && (
             <div>
               <CustomPatternSelector 
-                previewLines={filePreview?.lines || []}
+                previewLines={filePreviewBuffer?.lines || []}
                 onPatternTest={handlePatternTest}
                 showSaveDialog={showSaveDialog}
                 onSaveDialogClose={onSaveDialogClose}
@@ -271,7 +273,7 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
             <PatternTestResults
               pattern={selectedPattern?.pattern || ''}
               customPatterns={selectedPattern?.custom_patterns || {}}
-              logs={filePreview?.lines || []}
+              logs={filePreviewBuffer?.lines || []}
             />
           </div>
         </div>

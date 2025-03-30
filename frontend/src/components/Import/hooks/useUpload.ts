@@ -7,10 +7,11 @@ import { useImportStore } from '@/stores/useImportStore';
 import { useIngestEnd, useIngestFile, useIngestLogs, useIngestStart, useTokenizerOperations } from '@/hooks/useApi';
 import { IngestSessionOptions } from '@/lib/api-types';
 import { useCloudWatchStore } from '@/stores/useCloudWatchStore';
-
+import { LogSourceProviderService } from '../types';
 export const useUpload = (): UploadProgressHookResult => {
   const {
-    selectedFile,
+    selectedFileName,
+    selectedFileHandle,
     selectedPattern,
     sessionID,
     metadata,
@@ -40,14 +41,12 @@ export const useUpload = (): UploadProgressHookResult => {
   const ingestLogsApi = useIngestLogs();
   const ingestEndApi = useIngestEnd();    
   
-  const handleUpload = useCallback(async () => {
-    if (!selectedFile || !selectedPattern) {
+  const handleUpload = useCallback(async (provider: LogSourceProviderService) => {
+    if (!selectedFileName || !selectedFileHandle || !selectedPattern) {
       throw new Error('No file or pattern selected');
     }
 
-
-    console.log("Starting upload");
-
+    console.log("Starting upload with provider");
 
     
     try {
@@ -61,7 +60,7 @@ export const useUpload = (): UploadProgressHookResult => {
         name: selectedPattern.name,
         custom_patterns: selectedPattern.custom_patterns,
         priority: selectedPattern.priority,
-        source: selectedFile.name,
+        source: selectedFileName,
         smart_decoder: sessionOptionsSmartDecoder,
         force_timezone: sessionOptionsTimezone,
         force_start_year: sessionOptionsYear,
@@ -79,48 +78,31 @@ export const useUpload = (): UploadProgressHookResult => {
       const currentSessionID = startResponse.session_id;
       setSessionID(currentSessionID);
       
-      // Update progress to 10%
-      progressRef.current = 10;
-      setUploadProgress(10);
+      // Update progress to 0%
+      progressRef.current = 0;
+      setUploadProgress(0);
       
-      // Step 2: Read the file and prepare for ingestion
-      const fileContent = await selectedFile.text();
-      const lines = fileContent.split('\n').filter(line => line.trim() !== '');
-      
-      // Update approxLines if we now have a more accurate count
-      setApproxLines(lines.length);
-      
-      // Update progress to 20%
-      progressRef.current = 20;
-      setUploadProgress(20);
-      
-      // Step 3: Ingest the logs in chunks
-      const chunkSize = 1000; // Send 1000 lines at a time
-      const chunks = [];
-      for (let i = 0; i < lines.length; i += chunkSize) {
-        chunks.push(lines.slice(i, i + chunkSize));
-      }
-  
-      // Process each chunk
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
+      let handledLines = 0;
+      let i = 0;
+      await provider.handleFileImport(selectedFileName, selectedFileHandle, 1000, async(lines, totalLines, next) =>{
+        console.log(lines)
+        console.log("Ingesting chunk", i + 1, "of", totalLines);
+        setApproxLines(totalLines);
         const requestBody = {
-          logs: chunk,
+          logs: lines,
           session_id: currentSessionID
         };
-    
+        i++;
         const response = await ingestLogsApi.execute(requestBody);
-    
+       
         if (response.status !== 'success') {
           throw new Error(`Failed to ingest chunk ${i + 1}`);
         }
-    
-        // Calculate progress between 20% and 90%
-        const chunkProgress = 20 + ((i + 1) / chunks.length) * 70;
-        progressRef.current = chunkProgress;
-        setUploadProgress(chunkProgress);
-      }
-
+        handledLines += lines.length;
+        setUploadProgress(Math.ceil(handledLines / totalLines * 100));
+        next();
+      })
+   
       // Step 4: End the ingestion session
       await ingestEndApi.execute(currentSessionID);
 
@@ -141,7 +123,8 @@ export const useUpload = (): UploadProgressHookResult => {
       setIsUploading(false);
     }
   }, [
-    selectedFile, 
+    selectedFileName,     
+    selectedFileHandle,
     selectedPattern, 
     sessionID,
     setSessionID,
@@ -162,7 +145,7 @@ export const useUpload = (): UploadProgressHookResult => {
     isUploading,
     uploadProgress,
     approxLines,
-    handleUpload
+    handleUpload: (provider: LogSourceProviderService) => handleUpload(provider)
   };
 };
 

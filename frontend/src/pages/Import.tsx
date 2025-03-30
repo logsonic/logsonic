@@ -8,11 +8,11 @@ import {
   ImportConfirm,
   SuccessSummary,
   LogSourceSelectionStep,
+  CloudWatchSelection,
 } from '../components/Import/UploadSteps';
 import { FileAnalyzingStep } from '../components/Import/UploadSteps/FileAnalyzingStep';
 import { useUpload } from '../components/Import/hooks';
-import type { DetectionResult, LogSourceProvider } from '../components/Import/types';
-import { LogSourceProviderRef } from '../components/Import/types';
+import type { DetectionResult, LogSourceProvider, LogSourceProviderService } from '../components/Import/types';
 import { useToast } from "../components/ui/use-toast";
 import { getGrokPatterns, getSystemInfo } from '../lib/api-client';
 import { extractFields } from '../components/Import/utils/patternUtils';
@@ -20,7 +20,8 @@ import { useImportStore, UploadStep, DEFAULT_PATTERN } from '../stores/useImport
 import { useNavigate } from 'react-router-dom';
 import { useSearchQueryParamsStore } from '../stores/useSearchParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
-
+import { FileSelectionService } from '@/components/Import/UploadSteps/FileSelection';
+import { CloudWatchSelectionService } from '@/components/CloudWatch/CloudWatchSelection';
 
 const Import: FC  = () => {
   const { toast } = useToast(); 
@@ -64,15 +65,16 @@ const Import: FC  = () => {
 
   const importStore = useImportStore();
   const {
-    selectedFile,
-    filePreview,
+    selectedFileName,
+    selectedFileHandle,
+    filePreviewBuffer,
     selectedPattern,
     importSource,
     
     setFileFromBlob,
     setImportSource,
     setSelectedPattern,
-    setFilePreview,
+    setFilePreviewBuffer,
     currentStep,
     setCurrentStep,
     detectionResult,
@@ -81,7 +83,7 @@ const Import: FC  = () => {
   } = importStore;
 
   // Generic reference for the current log provider component
-  const logProviderRef = useRef<LogSourceProviderRef>(null);
+  const logProviderRef = useRef<LogSourceProviderService>(null);
 
   // Type-specific handler for file selection events
   const handleFilePreview = async (logData: string, filename: string) => {
@@ -138,18 +140,6 @@ const Import: FC  = () => {
     fetchPatterns();
   }, []);
 
-  // Set default date range values in useEffect to avoid state updates during render
-  useEffect(() => {
-    // Only set date range if CloudWatch source is selected and store exists
-    if (importSource === 'cloudwatch') {
-      setTimeout(() => {
-        const store = useSearchQueryParamsStore.getState();
-        store.isRelative = true;
-        store.relativeValue = '24h';
-        console.log(`Default date range set to last 24 hours for CloudWatch`);
-      }, 0);
-    }
-  }, [importSource]);
 
   // Function to handle pattern save dialog close
   const handleSavePatternDialogClose = () => {
@@ -160,7 +150,7 @@ const Import: FC  = () => {
 
   // Handle source selection
   const handleSourceSelect = (source: string) => {
-    setImportSource(source);
+    console.log(`Source selected: ${source}`);
   };
 
   const handleFileSelect = (filename: string) => {
@@ -170,6 +160,7 @@ const Import: FC  = () => {
   // Handle back button for any provider
   const handleBackToSourceSelection = () => {
     setImportSource(null);
+    console.log(`Back to source selection`);
   };
 
   // Handle Next button press
@@ -219,13 +210,15 @@ const Import: FC  = () => {
             });
           }
           break;
+        case 4:
+            // If we're already showing the summary, navigate to home
+            if (uploadSummary?.showSummary) {
+              navigate('/');
+              return;
+            }
         case 3:
-          // If we're already showing the summary, navigate to home
-          if (uploadSummary?.showSummary) {
-            navigate('/');
-            return;
-          }
-          
+
+        
           // Perform upload
           setError(null);
           toast({
@@ -234,9 +227,13 @@ const Import: FC  = () => {
           });
           
           try {
-
+            console.log("Uploading logs using provider handler", importSource);
             
-            const result = await handleUpload();
+            // Use the provider handler from the store instead of the ref directly
+            // use provider based on selected source
+            const provider = importSource === 'cloudwatch' ? CloudWatchSelectionService : FileSelectionService;
+            console.log("IMporting with provider:", provider);
+            const result = await handleUpload(provider);
             toast({ 
               title: "Upload successful",
               description: "Your log file has been processed successfully.",
@@ -358,7 +355,7 @@ const Import: FC  = () => {
       case 1:
         return (
           <LogSourceSelectionStep
-            providerRef={logProviderRef}
+           
             onSourceSelect={handleSourceSelect} 
             onFileSelect={handleFileSelect}
             onFilePreview={handleFilePreview}

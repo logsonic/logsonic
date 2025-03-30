@@ -15,7 +15,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Cloud, CloudOff, ChevronRight, ChevronDown, Search, Loader2, Info, ArrowLeft } from "lucide-react";
 import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";
 import { useImportStore } from '@/stores/useImportStore';
-import { LogSourceProviderRef } from '@/components/Import/types';
+import { LogSourceProvider, LogSourceProviderService } from '@/components/Import/types';
+
 import { LogPaginationState } from './types';
 
 const DEFAULT_REGIONS = [
@@ -42,18 +43,22 @@ const DEFAULT_REGIONS = [
   'sa-east-1',
 ];
 
-export interface CloudWatchSelectionProps {
-  onBackToSourceSelection: () => void;
-  onCloudWatchLogSelect: (logData: string, filename: string) => void;
-}
+export const CloudWatchSelectionService: LogSourceProviderService = {
+  name: "CloudWatch",
+  handleFileImport: async () => {
+    return;
+  },
+  handleFilePreview: async () => {
+    return;
+  }
+};
 
-// Export the interface for the ref
-export interface CloudWatchSelectionRef extends LogSourceProviderRef {}
-
-export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatchSelectionProps>(({ 
+export const CloudWatchSelection = forwardRef<{}, LogSourceProvider>(({ 
   onBackToSourceSelection,
-  onCloudWatchLogSelect
-}, ref) => {
+  onFileSelect,
+  onFilePreview,
+  onFileReadyForAnalysis
+  }, ref) => {
   const dateRangeStore = useSearchQueryParamsStore();
   
   // Use the CloudWatch store
@@ -77,15 +82,6 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
   
   const [retrievedLogs, setRetrievedLogs] = useState<string[]>([]);
   
-  // Reset the store when the component is unmounted
-  useEffect(() => {
-    return () => {
-      console.log("CloudWatchSelection component cleanup - NOT resetting store to preserve selection");
-      // Don't reset here - we want to preserve the selection
-      // reset();
-    };
-  }, [reset]);
-
   // Expose the handleImport method to the parent component via ref
   useImperativeHandle(ref, () => ({
     handleImport: async () => {
@@ -348,7 +344,9 @@ export const CloudWatchSelection = forwardRef<CloudWatchSelectionRef, CloudWatch
       const sanitizedStreamName = streamName.replace(/[^a-zA-Z0-9]/g, '-');
       
       const filename = `cw-${sanitizedGroupName}-${sanitizedStreamName}`;
-      onCloudWatchLogSelect(logData, filename);
+      onFileSelect(filename);
+      onFilePreview(logData, filename);
+      onFileReadyForAnalysis(true);
     } else {
       setError("No logs were retrieved");
     }

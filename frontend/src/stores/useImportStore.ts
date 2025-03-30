@@ -5,7 +5,6 @@ import {
   GrokPatternRequest 
 } from '@/lib/api-types';
 import { Pattern, FilePreview, DetectionResult } from '@/components/Import/types';
-import { extractFields } from '../components/Import/utils/patternUtils';
 import { parseLogs } from '@/lib/api-client';
 
 // Default pattern to use if no pattern is detected
@@ -22,6 +21,9 @@ export const DEFAULT_PATTERN: Pattern = {
 };
 
 
+// Add a type for the provider upload handler
+export type ProviderUploadHandler = (handleImport: (chunkSize: number, callback: (lines: string[], totalLines: number, next: () => void) => Promise<void>) => Promise<void>) => Promise<void>;
+
 export type UploadStep = 1 | 2 | 3 | 4;
 export type ImportSource = string | null;
 
@@ -29,12 +31,18 @@ interface ImportState {
   // Upload step tracking
   currentStep: UploadStep;
   
-  // Import source
+  // Import source name
   importSource: ImportSource;
+
+
   readyToSelectPattern: boolean;
-  // File data
-  selectedFile: File | null;
-  filePreview: FilePreview | null;
+  
+  // File data to import. Since every Import Provider could have a different file format, we leave it generic
+
+  // Used for display to the user
+  selectedFileName: string | null
+  selectedFileHandle: any | null 
+  filePreviewBuffer: FilePreview | null;
 
   // Pattern data
   availablePatterns: GrokPatternRequest[];
@@ -75,12 +83,13 @@ interface ImportState {
   
   // Metadata
   metadata: Record<string, string | number | boolean>;
-  
+  providerUploadHandler: ProviderUploadHandler | null;
   // Actions
   setCurrentStep: (step: UploadStep) => void;
   setImportSource: (source: ImportSource) => void;
-  setSelectedFile: (file: File | null) => void;
-  setFilePreview: (preview: FilePreview | null) => void;
+  setSelectedFileName: (filename:  string | null) => void;
+  setSelectedFileHandle: (fileHandle: any | null) => void;
+  setFilePreviewBuffer: (preview: FilePreview | null) => void;
   setAvailablePatterns: (patterns: GrokPatternRequest[]) => void;
   setSelectedPattern: (pattern: Pattern | null) => void;
   setCreateNewPattern: (pattern: Pattern) => void;
@@ -110,6 +119,8 @@ interface ImportState {
   handlePatternOperation: (pattern: Pattern, updateStore?: boolean, onSuccess?: (parsedLogs: Record<string, string>[]) => void, onError?: (error: string) => void) => Promise<void>;
   testPattern: () => Promise<void>;
   reset: () => void;
+  
+  setProviderUploadHandler: (handler: ProviderUploadHandler | null) => void;
 }
 
 /**
@@ -120,8 +131,9 @@ export const useImportStore = create<ImportState>((set, get) => ({
 
   currentStep: 1,
   importSource: null,
-  selectedFile: null,
-  filePreview: null,
+  selectedFileName: null,
+  selectedFileHandle: null,
+  filePreviewBuffer: null,
   readyToSelectPattern: false,
 
   availablePatterns: [DEFAULT_PATTERN as unknown as GrokPatternRequest],
@@ -149,15 +161,17 @@ export const useImportStore = create<ImportState>((set, get) => ({
   sessionOptionsDay: '',
   error: null,
   metadata: {},
+  providerUploadHandler: null,
   
   // Actions
   setCurrentStep: (currentStep) => set({ currentStep }),
   
   setImportSource: (importSource) => set({ importSource }),
   
-  setSelectedFile: (selectedFile) => set({ selectedFile }),
+  setSelectedFileName: (selectedFileName) => set({ selectedFileName }),
+  setSelectedFileHandle: (selectedFileHandle) => set({ selectedFileHandle }),
+  setFilePreviewBuffer: (filePreviewBuffer) => set({ filePreviewBuffer }),
   setReadyToSelectPattern: (readyToSelectPattern) => set({ readyToSelectPattern }),
-  setFilePreview: (filePreview) => set({ filePreview }),
   
   setAvailablePatterns: (availablePatterns) => {
     // Always include the Custom Pattern option
@@ -227,12 +241,6 @@ export const useImportStore = create<ImportState>((set, get) => ({
     // Create a File object
     const file = new File([content], fileName, { type: 'text/plain' });
     
-    // Set selected file
-    set({ 
-      selectedFile: file, 
-      error: null,
-      importSource: 'cloudwatch'
-    });
     
     // Validate file content
     if (!content || content.length === 0) {
@@ -250,7 +258,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
     
     // Set preview data and move to step 2
     set({ 
-      filePreview: {
+      filePreviewBuffer: {
         lines: previewLines.slice(0, 100), // Limit display lines to 100
         totalLines: previewLines.length,
         fileSize: content.length,
@@ -266,8 +274,9 @@ export const useImportStore = create<ImportState>((set, get) => ({
   // Handle pattern operations
   handlePatternOperation: async (pattern, updateStore = true, onSuccess, onError) => {
     const { 
-      selectedFile, 
-      filePreview, 
+      selectedFileName, 
+      selectedFileHandle, 
+      filePreviewBuffer, 
       sessionOptionsFileName,
       sessionOptionsSmartDecoder,
       sessionOptionsTimezone,
@@ -278,7 +287,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
       metadata
     } = get();
     
-    if (!selectedFile || !filePreview) {
+    if (!selectedFileName || !filePreviewBuffer) {
       const errorMsg = 'No file selected or file preview not available';
       set({ error: errorMsg });
       if (onError) onError(errorMsg);
@@ -288,11 +297,11 @@ export const useImportStore = create<ImportState>((set, get) => ({
     set({ isTestingPattern: true });
     
     try {
-      if (!filePreview.lines || filePreview.lines.length === 0) {
+      if (!filePreviewBuffer.lines || filePreviewBuffer.lines.length === 0) {
         throw new Error('No preview lines available to parse');
       }
       
-      const previewLines = filePreview.lines.slice(0, 20); // Use first 20 lines for parsing test
+      const previewLines = filePreviewBuffer.lines.slice(0, 20); // Use first 20 lines for parsing test
 
       // Build session options
       const sessionOptions : IngestSessionOptions= {
@@ -355,8 +364,9 @@ export const useImportStore = create<ImportState>((set, get) => ({
     set({
       currentStep: 1,
       importSource: null,
-      selectedFile: null,
-      filePreview: null,
+      selectedFileName: null,
+      selectedFileHandle: null,
+      filePreviewBuffer: null,
       selectedPattern: DEFAULT_PATTERN,
       isCreateNewPatternSelected: false,
       createNewPattern: DEFAULT_PATTERN,
@@ -380,6 +390,15 @@ export const useImportStore = create<ImportState>((set, get) => ({
       sessionOptionsMonth: '',
       sessionOptionsDay: '',
       error: null,
+      providerUploadHandler: null,
     });
+  },
+  setProviderUploadHandler: (handler: ProviderUploadHandler | null) => {
+    if (handler) {
+      set({ providerUploadHandler: handler });
+    }
+    else {
+      set({ providerUploadHandler: null });
+    }
   },
 })) 

@@ -36,7 +36,7 @@ export interface UploadProgressHookResult {
   isUploading: boolean;
   uploadProgress: number;
   approxLines: number;
-  handleUpload: () => Promise<void>;
+  handleUpload: (provider: LogSourceProviderService) => Promise<void>;
 }
 
 export interface FileParserHookResult {
@@ -90,13 +90,13 @@ export interface LogSourceProvider {
   // Notify that the user wants to go back to the source selection after file preview
   onBackToSourceSelection: () => void;
   // Notify that the wizard can proceed to file analysis
-  onFileReadyForAnalysis: () => Promise<void>;
+  onFileReadyForAnalysis: (ready: boolean) => void;
 }
 
 // Interface for log provider components that implement ref functionality
-export interface LogSourceProviderRef {
+export interface LogSourceProviderService {
+  name: string;
   // Start the actual import process 
-  handleImport: () => Promise<void>;
-  // Validate if the user can proceed to file analysis
-  
+  handleFileImport: (filename: string, filehandle: File, chunkSize: number, callback: (lines: string[], totalLines: number, next: () => void) => Promise<void>) => Promise<void>;
+  handleFilePreview: (file: File, onPreviewReadyCallback: (lines: string[]) => void) => Promise<void>;
 } 

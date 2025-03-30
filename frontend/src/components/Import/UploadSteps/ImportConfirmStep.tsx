@@ -14,7 +14,7 @@ export const SuccessSummary: FC<{
     redirectCountdown: number;
   };
 }> = ({ uploadSummary }) => {
-  const { selectedFile, importSource, sessionOptionsFileName } = useImportStore();
+  const { selectedFileName, importSource, sessionOptionsFileName, selectedPattern } = useImportStore();
 
   // Set the icon and filename label based on the import source
   const sourceIcon = importSource === 'cloudwatch' 
@@ -22,7 +22,7 @@ export const SuccessSummary: FC<{
     : <File className="h-6 w-6 text-blue-500 mr-2" />;
   
   const fileLabel = importSource === 'cloudwatch' ? 'CloudWatch Log:' : 'File Name:';
-  const fileName = importSource === 'cloudwatch' ? sessionOptionsFileName : selectedFile?.name;
+  const fileName = importSource === 'cloudwatch' ? sessionOptionsFileName : selectedFileName;
 
   return (
     <div className="space-y-6 py-4">
@@ -84,11 +84,12 @@ export const ImportConfirmStep: FC = ({
 
 }) => {
   const { 
-    selectedFile, 
-    selectedPattern, 
-    filePreview,
+    selectedFileName, 
+    selectedFileHandle, 
+    selectedPattern,
+    filePreviewBuffer,
     approxLines, 
-    isUploading, 
+    isUploading,    
     uploadProgress,
     sessionOptionsSmartDecoder,
     sessionOptionsTimezone,
@@ -114,9 +115,9 @@ export const ImportConfirmStep: FC = ({
     // First priority: use approxLines if it's already set
     approxLines > 0 ? approxLines :
     // Second priority: use filePreview.totalLines if available
-    (filePreview?.totalLines || 0) > 0 ? filePreview.totalLines :
+    (filePreviewBuffer?.totalLines || 0) > 0 ? filePreviewBuffer.totalLines :
     // Fallback: estimate based on file size
-    Math.round((selectedFile?.size || 0) / avgBytesPerLine);
+    Math.round((selectedFileHandle?.size || 0) / avgBytesPerLine);
 
   // If we calculated a new estimate and approxLines was 0, update the store
   useEffect(() => {
@@ -135,7 +136,7 @@ export const ImportConfirmStep: FC = ({
     : 'File Information';
   
   const fileLabel = importSource === 'cloudwatch' ? 'Source Log:' : 'File Name:';
-  const fileName = importSource === 'cloudwatch' ? sessionOptionsFileName : selectedFile?.name;
+  const fileName = importSource === 'cloudwatch' ? sessionOptionsFileName : selectedFileName;
 
   return (
     <div className="space-y-6">
@@ -154,7 +155,7 @@ export const ImportConfirmStep: FC = ({
               </tr>
               <tr>
                 <td className="py-1 text-gray-800 font-bold">File Size:</td>
-                <td className="py-1 text-gray-800">{formatFileSize(selectedFile?.size || 0)}</td>
+                <td className="py-1 text-gray-800">{formatFileSize(selectedFileHandle?.size || 0)}</td>
               </tr>
               <tr>
                 <td className="py-1 text-gray-800 font-bold">Estimated Lines:</td>
@@ -199,7 +200,7 @@ export const ImportConfirmStep: FC = ({
             <tbody>
               <tr>
                 <td className="py-1 text-gray-800 font-bold  w-[150px]">Pattern Name:</td>
-                <td className="py-1 text-gray-800">{selectedPattern.name}</td>
+                <td className="py-1 text-gray-800">{selectedPattern?.name}</td>
               </tr>
               <tr>
                 <td className="py-1 text-gray-800 font-bold">Description:</td>

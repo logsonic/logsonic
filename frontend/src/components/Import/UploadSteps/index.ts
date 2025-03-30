@@ -4,8 +4,6 @@ export { default as ImportConfirm, SuccessSummary } from './ImportConfirmStep';
 export { default as LogSourceSelectionStep } from './LogSourceSelectionStep';
 export { default as SourceSelection } from './SourceSelection';
 
-// Export types
-export type { LogSourceProviderRef } from '../types';
 
 // Re-export CloudWatch components from their new location
 export { CloudWatchSelection } from '@/components/CloudWatch';

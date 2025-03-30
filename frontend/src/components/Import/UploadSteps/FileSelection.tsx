@@ -1,36 +1,79 @@
 import { forwardRef, useImperativeHandle, useRef, useState, FC } from 'react';
 import { Upload } from 'lucide-react';
-import type { LogSourceProvider, LogSourceProviderRef } from '../types';
+import type { LogSourceProvider, LogSourceProviderService } from '../types';
 import { useImportStore } from '../../../stores/useImportStore';
 
 
-// Forward ref to implement LogSourceProviderRef interface
-const FileSelection = forwardRef<LogSourceProviderRef, LogSourceProvider>(({   
+export const FileSelectionService : LogSourceProviderService = {
+  name: "File",
+
+  handleFilePreview: async (file, onPreviewReadyCallback) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const text = e.target?.result as string;
+      const lines = text.split('\n').slice(0, 100);
+
+      // TBD check if the file is binary or has no valid delimiter
+      onPreviewReadyCallback(lines);
+      reader.abort();
+    };
+    reader.readAsText(file);
+  },
+  handleFileImport: (filename, filehandle, chunkSize, callback) => {  
+    // process data
+
+    let currentIndex = 0;
+    return new Promise((resolve, reject) => {
+      console.log("Importing file:", filename, "with handle:", filehandle);
+      if (filename && filehandle) {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          const text = e.target?.result as string;
+          const lines = text.split('\n');
+          let totalLines = lines.length;
+
+          const processChunk = async () => {
+            const chunk = lines.slice(currentIndex, currentIndex + chunkSize);
+            await callback(chunk, totalLines, () => {
+              currentIndex += chunkSize;
+              if (currentIndex < totalLines) {
+                processChunk();
+              } else {
+                resolve();
+              }
+            });
+          };  
+          processChunk();
+        };
+        reader.onerror = (e) => {
+          reject(new Error("Error reading file"));
+        };
+        reader.readAsText(filehandle);
+      } else {
+        reject(new Error("No filename or filehandle provided"));
+      }
+    });
+  },
+};
+// Forward ref 
+const FileSelection = forwardRef<{}, LogSourceProvider>(({   
   onFileSelect, 
   onFilePreview,
   onBackToSourceSelection,
   onFileReadyForAnalysis
 }, ref) => {
     const fileInputRef = useRef<HTMLInputElement>(null);  
-    const { error, setMetadata } = useImportStore();
+    const { error, setMetadata, setSelectedFileName, setSelectedFileHandle } = useImportStore();
     const [pendingResolve, setPendingResolve] = useState<(() => void) | null>(null);
 
     // Implement the LogSourceProviderRef interface
     useImperativeHandle(ref, () => ({
-      handleImport: async () => {
-        // Return a promise that will be resolved when a file is selected
-        return new Promise<void>((resolve, reject) => {
-          // Store the resolve function to call it after file selection
-          setPendingResolve(() => resolve);
-          
-          // Programmatically click the file input
-          if (fileInputRef.current) {
-            fileInputRef.current.click();
-          } else {
-            setPendingResolve(null);
-            reject(new Error("File input reference is not available"));
-          }
-        });
+      handleImport: async (chunkSize, callback) => {
+        // Implementation
+      },
+      getName: () => {
+        // Return the filename of the selected file
+        return fileInputRef.current?.files?.[0]?.name || 'Unknown file';
       }
     }));
 
@@ -38,18 +81,20 @@ const FileSelection = forwardRef<LogSourceProviderRef, LogSourceProvider>(({
       const file = event.target.files?.[0];
       if (file) {
         setMetadata({ _src: `file.${file.name}` });
-      }
-      
-      // Call the parent's onFileSelect function
-      if (file) {
+        setSelectedFileName(file.name);
+        setSelectedFileHandle(file);
         await onFileSelect(file.name);
+
+        // Immediately read the first 100 lines of the file
+        await FileSelectionService.handleFilePreview(file, (lines) => {
+          
+          if (lines.length > 0) {
+            onFilePreview(lines.join('\n'), file.name);
+            onFileReadyForAnalysis(true);
+          }
+        });
       }
-      
-      // If there's a pending promise resolve, call it
-      if (pendingResolve) {
-        pendingResolve();
-        setPendingResolve(null);
-      }
+
     };
 
     return (

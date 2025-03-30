@@ -1,13 +1,11 @@
-import { CloudWatchSelection, FileSelection, LogSourceProviderRef } from '@/components/Import/UploadSteps';
+import { CloudWatchSelection, FileSelection } from '@/components/Import/UploadSteps';
 import SourceSelection from './SourceSelection';
-import { FC } from 'react';
+import { FC, useEffect } from 'react';
 import { FileUp, Cloud } from 'lucide-react';
 import { useImportStore } from '@/stores/useImportStore';
-import { LogSourceProvider } from '../types';
-
-
+import { ProviderUploadHandler } from '@/stores/useImportStore';
+import type { LogSourceProvider } from '@/components/Import/types';
 interface LogSourceSelectionStepProps {
-  providerRef: React.RefObject<LogSourceProviderRef>;
   onSourceSelect: (source: string) => void;
   onFileSelect: (filename: string ) => void;
   onFilePreview: (logData: string, filename: string) => void;
@@ -16,7 +14,6 @@ interface LogSourceSelectionStepProps {
 }
 
 const LogSourceSelectionStep: FC<LogSourceSelectionStepProps> = ({
-  providerRef,
   onSourceSelect,
   onFileSelect,
   onFilePreview,
@@ -24,9 +21,11 @@ const LogSourceSelectionStep: FC<LogSourceSelectionStepProps> = ({
   onFileReadyForAnalysis
 }) => {
 
-  const { importSource, setImportSource } = useImportStore();
+  const importStore = useImportStore();
+  const { importSource } = importStore;
 
-  
+  // When the provider ref is set and ready for analysis, save it to the store
+   
     const logSourceProviders: any[] = [ 
       {
         id: 'file',
@@ -59,7 +58,6 @@ const LogSourceSelectionStep: FC<LogSourceSelectionStepProps> = ({
       {selectedProvider && selectedProvider.component && (
         <div className="mt-6">
           <selectedProvider.component
-              ref={providerRef}
               onFileSelect={onFileSelect}
               onFilePreview={onFilePreview}
               onBackToSourceSelection={onBackToSourceSelection}
