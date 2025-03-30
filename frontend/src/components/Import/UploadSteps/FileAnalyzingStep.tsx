@@ -7,23 +7,21 @@ import { PatternTestResults } from './PatternTestResults';
 import { extractFields } from '../utils/patternUtils';
 import { DEFAULT_PATTERN, useImportStore } from '@/stores/useImportStore';
 import { CustomPatternSelector } from './CustomPatternSelector';
-
+import { SavePatternDialog } from './SavePatternDialog';
 
 interface FileAnalyzingStepProps {
   onDetectionComplete: (result: DetectionResult) => void;
-  showSaveDialog?: boolean;
-  onSaveDialogClose?: () => void;
 }
 
 export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
   onDetectionComplete,
-  showSaveDialog = false,
-  onSaveDialogClose
 }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-   
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [onSaveDialogClose, setOnSaveDialogClose] = useState<() => void>(() => {});
+  
   const {
     setSelectedPattern, 
     selectedPattern, 
@@ -49,19 +47,6 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
   useEffect(() => {
     const analyzeFile = async () => {
       // Enhanced debugging info
-      console.log("FileAnalyzing useEffect triggered", { 
-        hasFilePreview: !!filePreviewBuffer, 
-        previewLines: filePreviewBuffer?.lines?.length,
-        hasSelectedFile: !!selectedFileName,
-        importSource,
-        currentStep
-      });
-      
-      if (!filePreviewBuffer?.lines?.length || !selectedFileName) {
-        console.error("Missing file preview or selected file, aborting analysis");
-        return;
-      }
-
       console.log("Analyzing file in FileAnalyzing component", importSource, filePreviewBuffer.lines.length, "lines");
       
       try {

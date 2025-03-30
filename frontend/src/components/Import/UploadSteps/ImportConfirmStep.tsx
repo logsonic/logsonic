@@ -7,15 +7,15 @@ import * as ProgressPrimitive from "@radix-ui/react-progress";
 import { useImportStore } from '@/stores/useImportStore';
 
 // Success Summary component for showing import completion
-export const SuccessSummary: FC<{
-  uploadSummary: {
-    totalLines: number;
-    patternName: string;
-    redirectCountdown: number;
-  };
-}> = ({ uploadSummary }) => {
+export const SuccessSummary: FC = () => {
   const { selectedFileName, importSource, sessionOptionsFileName, selectedPattern } = useImportStore();
 
+  const uploadSummary = {
+    totalLines: 100,
+    patternName: selectedPattern?.name || '',
+    redirectCountdown: 5,
+    showSummary: true
+  };
   // Set the icon and filename label based on the import source
   const sourceIcon = importSource === 'cloudwatch' 
     ? <Cloud className="h-6 w-6 text-blue-500 mr-2" />

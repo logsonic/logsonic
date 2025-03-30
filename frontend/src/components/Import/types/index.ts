@@ -13,8 +13,7 @@ export interface Pattern {
 
 export interface FilePreview {
   lines: string[];
-  totalLines: number;
-  fileSize: number;
+  filename: string;
 }
 
 export interface DetectionResult {
@@ -86,7 +85,7 @@ export interface LogSourceProvider {
   // Notify that a file has been selected from the user
   onFileSelect: (filename: string) => Promise<void>;
   // Notify that a file preview component has been loaded 
-  onFilePreview: (logData: string, filename: string) => Promise<void>;
+  onFilePreview: (lines: string[], filename: string) => Promise<void>;
   // Notify that the user wants to go back to the source selection after file preview
   onBackToSourceSelection: () => void;
   // Notify that the wizard can proceed to file analysis

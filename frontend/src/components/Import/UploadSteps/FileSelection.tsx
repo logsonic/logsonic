@@ -8,12 +8,12 @@ export const FileSelectionService : LogSourceProviderService = {
   name: "File",
 
   handleFilePreview: async (file, onPreviewReadyCallback) => {
+
     const reader = new FileReader();
     reader.onload = async (e) => {
       const text = e.target?.result as string;
       const lines = text.split('\n').slice(0, 100);
-
-      // TBD check if the file is binary or has no valid delimiter
+     // TBD check if the file is binary or has no valid delimiter
       onPreviewReadyCallback(lines);
       reader.abort();
     };
@@ -55,15 +55,18 @@ export const FileSelectionService : LogSourceProviderService = {
     });
   },
 };
+
+
+
+
 // Forward ref 
 const FileSelection = forwardRef<{}, LogSourceProvider>(({   
   onFileSelect, 
   onFilePreview,
   onBackToSourceSelection,
-  onFileReadyForAnalysis
 }, ref) => {
     const fileInputRef = useRef<HTMLInputElement>(null);  
-    const { error, setMetadata, setSelectedFileName, setSelectedFileHandle } = useImportStore();
+    const { error, setMetadata, setSelectedFileName, setSelectedFileHandle, setFilePreviewBuffer } = useImportStore();
     const [pendingResolve, setPendingResolve] = useState<(() => void) | null>(null);
 
     // Implement the LogSourceProviderRef interface
@@ -89,8 +92,9 @@ const FileSelection = forwardRef<{}, LogSourceProvider>(({
         await FileSelectionService.handleFilePreview(file, (lines) => {
           
           if (lines.length > 0) {
-            onFilePreview(lines.join('\n'), file.name);
-            onFileReadyForAnalysis(true);
+            setFilePreviewBuffer({lines, filename: file.name});
+            onFilePreview(lines, file.name);
+           
           }
         });
       }

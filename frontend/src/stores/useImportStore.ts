@@ -36,7 +36,7 @@ interface ImportState {
 
 
   readyToSelectPattern: boolean;
-  
+  readyToImportLogs: boolean;
   // File data to import. Since every Import Provider could have a different file format, we leave it generic
 
   // Used for display to the user
@@ -92,6 +92,7 @@ interface ImportState {
   setFilePreviewBuffer: (preview: FilePreview | null) => void;
   setAvailablePatterns: (patterns: GrokPatternRequest[]) => void;
   setSelectedPattern: (pattern: Pattern | null) => void;
+  setReadyToImportLogs: (ready: boolean) => void;
   setCreateNewPattern: (pattern: Pattern) => void;
   setCreateNewPatternTokens: (tokens: Record<string, string>) => void;
   setCreateNewPatternName: (name: string) => void;
@@ -135,7 +136,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
   selectedFileHandle: null,
   filePreviewBuffer: null,
   readyToSelectPattern: false,
-
+  readyToImportLogs: false,
   availablePatterns: [DEFAULT_PATTERN as unknown as GrokPatternRequest],
   selectedPattern: DEFAULT_PATTERN,
   createNewPattern: DEFAULT_PATTERN,
@@ -172,7 +173,8 @@ export const useImportStore = create<ImportState>((set, get) => ({
   setSelectedFileHandle: (selectedFileHandle) => set({ selectedFileHandle }),
   setFilePreviewBuffer: (filePreviewBuffer) => set({ filePreviewBuffer }),
   setReadyToSelectPattern: (readyToSelectPattern) => set({ readyToSelectPattern }),
-  
+  setReadyToImportLogs: (readyToImportLogs) => set({ readyToImportLogs }),
+
   setAvailablePatterns: (availablePatterns) => {
     // Always include the Custom Pattern option
     const patternsWithCustom = [
@@ -260,8 +262,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
     set({ 
       filePreviewBuffer: {
         lines: previewLines.slice(0, 100), // Limit display lines to 100
-        totalLines: previewLines.length,
-        fileSize: content.length,
+        filename: fileName,
       },
       approxLines,
       sessionOptionsFileName: fileName, // Set the filename for the session

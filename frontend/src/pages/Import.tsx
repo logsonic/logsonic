@@ -3,41 +3,67 @@ import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { ArrowLeft,FileUp, Cloud } from "lucide-react";
 import { 
-  FileSelection, 
-
   ImportConfirm,
   SuccessSummary,
   LogSourceSelectionStep,
-  CloudWatchSelection,
 } from '../components/Import/UploadSteps';
 import { FileAnalyzingStep } from '../components/Import/UploadSteps/FileAnalyzingStep';
-import { useUpload } from '../components/Import/hooks';
-import type { DetectionResult, LogSourceProvider, LogSourceProviderService } from '../components/Import/types';
+import type { DetectionResult } from '../components/Import/types';
 import { useToast } from "../components/ui/use-toast";
 import { getGrokPatterns, getSystemInfo } from '../lib/api-client';
 import { extractFields } from '../components/Import/utils/patternUtils';
-import { useImportStore, UploadStep, DEFAULT_PATTERN } from '../stores/useImportStore';
+import { UploadStep, useImportStore } from '../stores/useImportStore';
 import { useNavigate } from 'react-router-dom';
-import { useSearchQueryParamsStore } from '../stores/useSearchParams';
-import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
-import { FileSelectionService } from '@/components/Import/UploadSteps/FileSelection';
+import HandleNavigation from '@/components/Import/HandleNavigation';
 import { CloudWatchSelectionService } from '@/components/CloudWatch/CloudWatchSelection';
+import { FileSelectionService } from '@/components/Import/UploadSteps/FileSelection';
+import useUpload from '@/components/Import/hooks/useUpload';
+import { useSearchQueryParamsStore } from '@/stores/useSearchParams';
+import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
+import { ErrorBoundary } from '@/lib/error-boundary';
+
 
 const Import: FC  = () => {
   const { toast } = useToast(); 
   const navigate = useNavigate();
-  const searchQueryParamsStore = useSearchQueryParamsStore();
-
-  const [error, setError] = useState<string | null>(null);
-  const [uploadSummary, setUploadSummary] = useState<{
+  type UploadSummary = {
     totalLines: number;
     patternName: string;
     redirectCountdown: number;
     showSummary: boolean;
-  } | null>(null);
+  };
+  const [error, setError] = useState<string | null>(null);
+
   const [redirectTimer, setRedirectTimer] = useState<NodeJS.Timeout | null>(null);
+  const {
+    selectedPattern,
+    importSource,
+    reset,
+    currentStep,
+    readyToImportLogs,
+    readyToSelectPattern,
+    setReadyToSelectPattern,
+    setFileFromBlob,
+    setImportSource,
+    setSelectedPattern,
+    isCreateNewPatternSelected,
+    setCurrentStep,
+    detectionResult,
+    setDetectionResult,
+    setAvailablePatterns,
+  } = useImportStore();
+
+  const searchQueryParamsStore = useSearchQueryParamsStore();
   const { setSystemInfo } = useSystemInfoStore();
-  const [showSavePatternDialog, setShowSavePatternDialog] = useState(false);
+  const {
+    isUploading,
+    uploadProgress,
+    approxLines,
+    handleUpload,
+  } = useUpload();
+
+
+  const [uploadSummary, setUploadSummary] = useState<UploadSummary | null>(null);
 
   // Define steps data
   const steps = [
@@ -49,7 +75,7 @@ const Import: FC  = () => {
 
   // Step indicator component
   const StepIndicator = ({ number, label, isActive }: { number: number, label: string, isActive: boolean }) => {
-    const isCurrentStep = number === importStore.currentStep;
+    const isCurrentStep = number === currentStep;
     
     return (
       <div className={`flex items-center p-4 rounded-lg `}>
@@ -63,53 +89,7 @@ const Import: FC  = () => {
     );
   };
 
-  const importStore = useImportStore();
-  const {
-    selectedFileName,
-    selectedFileHandle,
-    filePreviewBuffer,
-    selectedPattern,
-    importSource,
-    
-    setFileFromBlob,
-    setImportSource,
-    setSelectedPattern,
-    setFilePreviewBuffer,
-    currentStep,
-    setCurrentStep,
-    detectionResult,
-    setDetectionResult,
-    createNewPattern
-  } = importStore;
 
-  // Generic reference for the current log provider component
-  const logProviderRef = useRef<LogSourceProviderService>(null);
-
-  // Type-specific handler for file selection events
-  const handleFilePreview = async (logData: string, filename: string) => {
-    setFileFromBlob(logData, filename);
-  };
-  
-  const [readyToSelectPattern, setReadyToSelectPattern] = useState(false);
-  // Reset the import store when the component mounts
-  useEffect(() => {
-    // Reset the store to default values on first load
-    importStore.reset();
-    
-    // Clear any existing redirect timer when component unmounts
-    return () => {
-      if (redirectTimer) {
-        clearInterval(redirectTimer);
-      }
-    };
-  }, []);
-
-  const {
-    isUploading,
-    uploadProgress,
-    approxLines,
-    handleUpload,
-  } = useUpload();
 
   // Fetch available patterns from the server on component mount
   useEffect(() => {
@@ -125,7 +105,7 @@ const Import: FC  = () => {
             fields: extractFields(p.pattern || ''),
             priority: p.priority || 0
           }));
-          importStore.setAvailablePatterns(patterns);
+          setAvailablePatterns(patterns);
         }
       } catch (err) {
         console.error('Failed to fetch patterns:', err);
@@ -141,12 +121,7 @@ const Import: FC  = () => {
   }, []);
 
 
-  // Function to handle pattern save dialog close
-  const handleSavePatternDialogClose = () => {
-    setShowSavePatternDialog(false);
-    // Now proceed to step 3
-    setCurrentStep(3);
-  };
+
 
   // Handle source selection
   const handleSourceSelect = (source: string) => {
@@ -157,173 +132,15 @@ const Import: FC  = () => {
    console.log(`File selected: ${filename}`);
   };
 
+  const handleFilePreview = (lines: string[], filename: string) => {
+    console.log("File ready for preview");
+    setReadyToSelectPattern(true);
+    setCurrentStep(2);
+  };
   // Handle back button for any provider
   const handleBackToSourceSelection = () => {
     setImportSource(null);
     console.log(`Back to source selection`);
-  };
-
-  // Handle Next button press
-  const handleNext = async () => {
-    try {
-      switch (currentStep) {
-        case 1:
-          // If source is not selected yet, don't proceed
-          if (!importSource) {
-            toast({
-              title: "Source Required",
-              description: "Please select an import source before proceeding.",
-              variant: "destructive",
-            });
-            return;
-          }
-          
-          // Provider-agnostic validation - ask the provider if we can proceed
-          if (logProviderRef.current && readyToSelectPattern) {
-            // Else simply move to the next step
-            // Set current step to 2 (pattern detection)
-            console.log(`Advancing to step 2 with import source: ${importSource}`);
-            setCurrentStep(2);            
-          }
-
-
-          break;
-        case 2:
-          // Check if there's a custom pattern that needs to be saved
-          if (detectionResult?.isOngoing === false) {
-            console.log("Step 2 Next button clicked - manually advancing to step 3");
-            // If user created a custom pattern, show save dialog first
-            if (importStore.isCreateNewPatternSelected) {
-              console.log("Custom pattern selected, showing save dialog before step 3");
-              setShowSavePatternDialog(true);
-            } else {
-              // Otherwise proceed directly to step 3 
-              console.log("Standard pattern selected, manually advancing to step 3");
-              setCurrentStep(3);
-            }
-          } else {
-            console.log("Cannot proceed - pattern detection is still ongoing");
-            toast({
-              title: "Pattern Detection In Progress",
-              description: "Please wait for pattern detection to complete.",
-              variant: "destructive",
-            });
-          }
-          break;
-        case 4:
-            // If we're already showing the summary, navigate to home
-            if (uploadSummary?.showSummary) {
-              navigate('/');
-              return;
-            }
-        case 3:
-
-        
-          // Perform upload
-          setError(null);
-          toast({
-            title: "Starting upload process",
-            description: "Registering log pattern with the server...",
-          });
-          
-          try {
-            console.log("Uploading logs using provider handler", importSource);
-            
-            // Use the provider handler from the store instead of the ref directly
-            // use provider based on selected source
-            const provider = importSource === 'cloudwatch' ? CloudWatchSelectionService : FileSelectionService;
-            console.log("IMporting with provider:", provider);
-            const result = await handleUpload(provider);
-            toast({ 
-              title: "Upload successful",
-              description: "Your log file has been processed successfully.",
-              variant: "default",
-            });
-            
-            // Set upload summary data
-            setUploadSummary({
-              totalLines: approxLines || 0,
-              patternName: selectedPattern?.name || 'Custom Pattern',
-              redirectCountdown: 3,
-              showSummary: true
-            });
-
-            searchQueryParamsStore.resetStore();
-
-            //invalidate cache
-            const data = await getSystemInfo(true);
-            setSystemInfo(data);
-
-            //
-            // Start countdown for redirect
-            const timer = setInterval(() => {
-              setUploadSummary(prev => {
-                if (!prev) return null;
-                
-
-                const newCountdown = prev.redirectCountdown - 1;
-                if (newCountdown <= 0) {
-                  clearInterval(timer);
-                  navigate('/');
-                 
-                  return prev;
-                }
-                
-                return {
-                  ...prev,
-                  redirectCountdown: newCountdown
-                };
-              });
-            }, 1000);
-            
-            setRedirectTimer(timer);
-            
-          } catch (uploadErr) {
-            // Ensure token patterns are cleared even if there's an error
-           
-            toast({
-              title: "Upload failed",
-              description: uploadErr instanceof Error ? uploadErr.message : "Failed to upload file",
-              variant: "destructive",
-            });
-            throw uploadErr;
-          }
-          break;
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
-    }
-  };
-
-  const handleBack = () => {  
-    if (uploadSummary?.showSummary) {
-      // If showing summary, reset it to show the import form again
-      setUploadSummary(null);
-      if (redirectTimer) {
-        clearInterval(redirectTimer);
-        setRedirectTimer(null);
-      }
-      return;
-    }
-    
-    if (currentStep > 1) {
-      if (currentStep === 2 && importSource !== 'file') {
-        // For non-file providers, go back to source selection
-        setImportSource(null);
-        setCurrentStep(1 as UploadStep);
-      } else {
-        setCurrentStep((currentStep - 1) as UploadStep);
-      }
-    } else {
-      navigate('/');
-    }
-  };
-
-  const handleFileReadyForAnalysis = (ready: boolean) => {
-    console.log("File ready for analysis");
-    
-      setReadyToSelectPattern(ready);
-
   };
 
   const handleDetectionComplete = (result: DetectionResult) => {
@@ -350,6 +167,8 @@ const Import: FC  = () => {
     }
   };
 
+
+
   const renderCurrentStep = () => {
     switch (currentStep) {
       case 1:
@@ -360,15 +179,14 @@ const Import: FC  = () => {
             onFileSelect={handleFileSelect}
             onFilePreview={handleFilePreview}
             onBackToSourceSelection={handleBackToSourceSelection}
-            onFileReadyForAnalysis={handleFileReadyForAnalysis} 
+           
           />
         );
       case 2:
         return (
           <FileAnalyzingStep
             onDetectionComplete={handleDetectionComplete}
-            showSaveDialog={showSavePatternDialog}
-            onSaveDialogClose={handleSavePatternDialogClose}
+            
           />
         );
       case 3:
@@ -377,7 +195,7 @@ const Import: FC  = () => {
         );
       case 4:
         return (
-          <SuccessSummary uploadSummary={uploadSummary} />
+          <SuccessSummary />
         );
   
       default:
@@ -385,7 +203,142 @@ const Import: FC  = () => {
     }
   };
 
+
+
+  // Handle Next button press
+  const handleNext = async () => {
+    try {
+      switch (currentStep) {
+        case 1:
+          // If source is not selected yet, don't proceed
+          if (!importSource) {
+            toast({
+              title: "Source Required",
+              description: "Please select an import source before proceeding.",
+              variant: "destructive",
+            });
+            return;
+          }
+          
+          // Provider-agnostic validation - ask the provider if we can proceed
+          if (readyToSelectPattern) {
+            // Else simply move to the next step
+            // Set current step to 2 (pattern detection)
+            console.log(`Advancing to step 2 with import source: ${importSource}`);
+            setCurrentStep(2);            
+          }
+
+
+          break;
+        case 2:
+          // Check if there is a pattern ready to move to import
+          if (readyToImportLogs) {
+              setCurrentStep(3);
+          }
+          break;
+
+        case 3:
+
+          // Perform upload
+          setError(null);
+          toast({
+            title: "Starting upload process",
+            description: "Registering log pattern with the server...",
+          });
+          
+          try {
+            console.log("Uploading logs using provider handler", importSource);
+
+            const provider = importSource === 'cloudwatch' ? CloudWatchSelectionService : FileSelectionService;
+            console.log("Importing with Log Source provider service:", provider);
+
+
+            const result = await handleUpload(provider);
+            toast({ 
+              title: "Upload successful",
+              description: "Your log file has been processed successfully.",
+              variant: "default",
+            });
+            
+            // Set upload summary data
+            setUploadSummary({
+              totalLines: approxLines || 0,
+              patternName: selectedPattern?.name || 'Custom Pattern',
+              redirectCountdown: 3,
+              showSummary: true
+            });
+
+            searchQueryParamsStore.resetStore();
+
+            //invalidate cache
+            const data = await getSystemInfo(true);
+            setSystemInfo(data);
+            setCurrentStep(4);
+          } catch (uploadErr) {
+            // Ensure token patterns are cleared even if there's an error
+           
+            toast({
+              title: "Upload failed",
+              description: uploadErr instanceof Error ? uploadErr.message : "Failed to upload file",
+              variant: "destructive",
+            });
+            throw uploadErr;
+          }
+          break;
+          
+        case 4:
+            // If we're already showing the summary, navigate to home
+            if (uploadSummary) {
+              
+              // Start a redirect timer
+              const timer = setInterval(() => {
+                setUploadSummary(null);
+                navigate('/');
+              }, 3000);
+              setRedirectTimer(timer);
+              return;
+            }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
+    }
+  };
+
+  // When user clicks the back button 
+
+  const handleBack = () => {  
+   
+    switch (currentStep) {
+      case 1:
+        // We are already on the source selection step, so we can just navigate to the home page
+        navigate('/');
+        break;
+      case 2:
+        // We are in the log pattern detection step, so we need to go back to the source selection step
+        // Reset the store to default values
+        reset();
+        setCurrentStep(1 as UploadStep);
+        break;
+      case 3:
+        // We are in the Import Confirm step, so we need to go back to the log pattern detection step
+        setCurrentStep(2 as UploadStep);
+        break;
+      case 4:
+        // We are in the summary step, 
+        // Reset the store to default values
+        reset();
+        setCurrentStep(1 as UploadStep);
+        break;
+    }
+
+
+  };
+
+
+
+
   return (
+    <ErrorBoundary fallback={<div>Error loading import wizard</div>}>
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="w-full mx-auto px-10 py-10">
         {/* Page Header */}
@@ -404,6 +357,8 @@ const Import: FC  = () => {
             Back to Home
           </Button>
         </div>
+
+
 
         <Card className="p-10 shadow-md">
           <div className="space-y-6 pb-10">
@@ -424,7 +379,8 @@ const Import: FC  = () => {
             </div>
             
             {/* Render the current step */}
-            {renderCurrentStep()}
+
+              {renderCurrentStep()}
 
             {/* Error message */}
             {error && (
@@ -434,37 +390,16 @@ const Import: FC  = () => {
             )}
             
             {/* Navigation Buttons at the bottom of the card*/}
-            <div className="flex justify-between pt-4">
-              <Button 
-                variant="outline" 
-                onClick={handleBack}
-                disabled={isUploading }
-              >
-                {currentStep === 1 ? 'Cancel' : 'Back'}
-              </Button>
-              
-              {/* Next button logic */}
-              <Button 
-                onClick={handleNext}
-                disabled={
-                  !readyToSelectPattern ||
-                  isUploading || 
-                  (currentStep === 1 && !importSource)
-                }
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                {currentStep === 3 ? (
-                  uploadSummary?.showSummary ? 'Go to Home' : 'Import'
-                ) : (
-                  'Next'
-                )}
-              </Button>
-            </div>
+            <HandleNavigation onNext={handleNext} onBack={handleBack} />
           </div>
         </Card>
       </div>
     </div>
+    </ErrorBoundary>
   );
-};
+};  
 
-export default Import; 
+export default Import;
+
+
+

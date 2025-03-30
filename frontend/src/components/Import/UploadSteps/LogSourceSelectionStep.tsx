@@ -8,9 +8,8 @@ import type { LogSourceProvider } from '@/components/Import/types';
 interface LogSourceSelectionStepProps {
   onSourceSelect: (source: string) => void;
   onFileSelect: (filename: string ) => void;
-  onFilePreview: (logData: string, filename: string) => void;
+  onFilePreview: (lines: string[], filename: string) => void;
   onBackToSourceSelection: () => void;
-  onFileReadyForAnalysis: (ready: boolean) => void;
 }
 
 const LogSourceSelectionStep: FC<LogSourceSelectionStepProps> = ({
@@ -18,7 +17,7 @@ const LogSourceSelectionStep: FC<LogSourceSelectionStepProps> = ({
   onFileSelect,
   onFilePreview,
   onBackToSourceSelection,
-  onFileReadyForAnalysis
+
 }) => {
 
   const importStore = useImportStore();
@@ -61,7 +60,7 @@ const LogSourceSelectionStep: FC<LogSourceSelectionStepProps> = ({
               onFileSelect={onFileSelect}
               onFilePreview={onFilePreview}
               onBackToSourceSelection={onBackToSourceSelection}
-              onFileReadyForAnalysis={onFileReadyForAnalysis}
+             
           />
         </div>
       )}
