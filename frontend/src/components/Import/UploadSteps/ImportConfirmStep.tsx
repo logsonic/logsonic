@@ -155,10 +155,6 @@ export const ImportConfirmStep: FC = ({
                 <td className="py-1 text-gray-800">{fileName}</td>
               </tr>
               <tr>
-                <td className="py-1 text-gray-800 font-bold">File Size:</td>
-                <td className="py-1 text-gray-800">{formatFileSize(file.size || 0)}</td>
-              </tr>
-              <tr>
                 <td className="py-1 text-gray-800 font-bold">Estimated Lines:</td>
                 <td className="py-1 text-gray-800">{estimatedLines.toLocaleString()} approximate lines</td>
               </tr>

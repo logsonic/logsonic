@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import type { LogSourceProviderService } from "../types";
 import { useImportStore } from "@/stores/useImportStore";
 
@@ -10,7 +9,7 @@ export const useFileSelectionService = () : LogSourceProviderService => {
   const handleFilePreview = async (filehandle: object, onPreviewReadyCallback: (lines: string[]) => void) => {
 
     const file = filehandle as File;
-   importStore.setSelectedFileHandle(file);
+    importStore.setSelectedFileHandle(file);
     const reader = new FileReader();
     reader.onload = async (e) => {
       const text = e.target?.result as string;

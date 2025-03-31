@@ -97,12 +97,16 @@ export const CloudWatchLogProvider: FC<LogSourceProvider> = ({
     console.log("handleStreamSelect", groupName, streamName);
     setSelectedStream(groupName, streamName);
     // Fetch the logs for the selected stream for preview
-    cloudWatchLogService.handleFilePreview({name: `${groupName}-${streamName}.log`}, (logs) => {
+    cloudWatchLogService.handleFilePreview({groupName, streamName}, (logs) => {
+
       setFilePreviewBuffer({
         lines: logs,
         filename: `${groupName}-${streamName}.log`
       });
+     
       onFilePreview(logs, `${groupName}-${streamName}.log`);
+    
+
     });
   };
 

@@ -4,7 +4,7 @@ import type { LogSourceProvider, LogSourceProviderService } from '../types';
 import { useImportStore } from '../../../stores/useImportStore';
 import { useFileSelectionService } from './FileSelectionService';
 
-// Forward ref 
+
 const FileSelection: FC<LogSourceProvider> = ({   
   onFileSelect, 
   onFilePreview,

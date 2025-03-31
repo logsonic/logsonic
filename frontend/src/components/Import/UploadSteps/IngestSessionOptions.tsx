@@ -23,7 +23,7 @@ export const IngestSessionOptions: FC = () => {
     sessionOptionsYear,      
     sessionOptionsMonth,
     sessionOptionsDay,
-    selectedFile,
+    selectedFileName,
     selectedPattern,
     setSessionOptionFileName,
     setSessionOptionSmartDecoder,

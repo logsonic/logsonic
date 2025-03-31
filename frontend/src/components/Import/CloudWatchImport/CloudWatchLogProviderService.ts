@@ -154,10 +154,18 @@ export const useCloudWatchLogProviderService = () : LogSourceProviderService => 
         selectedStream.streamName
       );
       
-      // If there are logs, process them through the callback
-      if (logs.length > 0) {
-        await callback(logs, logs.length, () => {});
+      // Implement chunking of logs and process them through the callback
+      const chunkSize = 10000;
+      const chunks = [];
+      for (let i = 0; i < logs.length; i += chunkSize) {
+        chunks.push(logs.slice(i, i + chunkSize));
       }
+
+      // Process each chunk through the callback
+      for (const chunk of chunks) {
+        await callback(chunk, chunk.length, () => {});
+      }
+
     } catch (err) {
       setError(`Failed to fetch log events: ${err instanceof Error ? err.message : 'Unknown error'}`);
       console.error(err);
@@ -166,16 +174,15 @@ export const useCloudWatchLogProviderService = () : LogSourceProviderService => 
     }
   };
 
-  const handleFilePreview = async (
-    filehandle: object, 
+  const handleFilePreview = async ( {groupName, streamName}: {groupName: string, streamName: string},
     onPreviewReadyCallback: (lines: string[]) => void
   ) => {
     // Fetch 100 lines of logs for the selected stream
-    if (!selectedStream) return;
+    
 
     const { logs} = await fetchLogBatchInternal(
-      selectedStream.groupName, 
-      selectedStream.streamName, 
+      groupName, 
+      streamName, 
       null, 
       searchQueryParamsStore.UTCTimeSince, 
       searchQueryParamsStore.UTCTimeTo,
