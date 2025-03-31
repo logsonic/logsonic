@@ -115,7 +115,7 @@ export const ImportConfirmStep: FC = ({
     // First priority: use approxLines if it's already set
     approxLines > 0 ? approxLines :
     // Second priority: use filePreview.totalLines if available
-    (filePreviewBuffer?.totalLines || 0) > 0 ? filePreviewBuffer.totalLines :
+    (filePreviewBuffer?.lines.length || 0) > 0 ? filePreviewBuffer.lines.length :
     // Fallback: estimate based on file size
     Math.round((selectedFileHandle?.size || 0) / avgBytesPerLine);
 

@@ -41,7 +41,8 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
     setParsedLogs,
     setError: setStoreError,
     importSource,
-    sessionOptionsFileName
+    sessionOptionsFileName,
+    setReadyToImportLogs
   } = useImportStore();
 
   useEffect(() => {
@@ -61,7 +62,8 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
         });
         console.log("Pattern suggestion complete", suggestResponse.results?.length || 0, "patterns found");
 
-      
+       setReadyToImportLogs(true);
+
         if (suggestResponse.results && suggestResponse.results.length > 0) {
           const bestMatch = suggestResponse.results[0];
           console.log("Testing best match pattern:", bestMatch.pattern);

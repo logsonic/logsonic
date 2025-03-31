@@ -15,8 +15,8 @@ import { extractFields } from '../components/Import/utils/patternUtils';
 import { UploadStep, useImportStore } from '../stores/useImportStore';
 import { useNavigate } from 'react-router-dom';
 import HandleNavigation from '@/components/Import/HandleNavigation';
-import { CloudWatchSelectionService } from '@/components/CloudWatch/CloudWatchSelection';
-import { FileSelectionService } from '@/components/Import/UploadSteps/FileSelection';
+import { CloudWatchSelectionService } from '@/components/Import/CloudWatchImport/CloudWatchSelection';
+import { FileSelectionService } from '@/components/Import/LocalFileImport/FileSelectionService';
 import useUpload from '@/components/Import/hooks/useUpload';
 import { useSearchQueryParamsStore } from '@/stores/useSearchParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
@@ -253,7 +253,7 @@ const Import: FC  = () => {
             console.log("Importing with Log Source provider service:", provider);
 
 
-            const result = await handleUpload(provider);
+            await handleUpload(provider);
             toast({ 
               title: "Upload successful",
               description: "Your log file has been processed successfully.",
@@ -289,9 +289,8 @@ const Import: FC  = () => {
         case 4:
             // If we're already showing the summary, navigate to home
             if (uploadSummary) {
-              
               // Start a redirect timer
-              const timer = setInterval(() => {
+              const timer = setTimeout(() => {
                 setUploadSummary(null);
                 navigate('/');
               }, 3000);

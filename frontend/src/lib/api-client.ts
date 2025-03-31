@@ -20,7 +20,7 @@ import {
   ListLogStreamsResponse,
   GetLogEventsRequest,
   GetLogEventsResponse
-} from '@/components/CloudWatch';
+} from '@/components/Import/CloudWatchImport';
 
 // API base configuration
 // For local development, use port 8080

@@ -83,9 +83,9 @@ export interface LogSourceProvider {
   // callbacks for notifying file selection and preview
 
   // Notify that a file has been selected from the user
-  onFileSelect: (filename: string) => Promise<void>;
+  onFileSelect: (filename: string) => void;
   // Notify that a file preview component has been loaded 
-  onFilePreview: (lines: string[], filename: string) => Promise<void>;
+  onFilePreview: (lines: string[], filename: string) => void;
   // Notify that the user wants to go back to the source selection after file preview
   onBackToSourceSelection: () => void;
   // Notify that the wizard can proceed to file analysis

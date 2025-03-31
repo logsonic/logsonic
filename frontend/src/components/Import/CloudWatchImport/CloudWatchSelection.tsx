@@ -19,6 +19,7 @@ import { LogSourceProvider, LogSourceProviderService } from '@/components/Import
 
 import { LogPaginationState } from './types';
 
+
 const DEFAULT_REGIONS = [
   'us-east-1',
   'us-east-2',
@@ -45,13 +46,15 @@ const DEFAULT_REGIONS = [
 
 export const CloudWatchSelectionService: LogSourceProviderService = {
   name: "CloudWatch",
-  handleFileImport: async () => {
+  handleFileImport: async (filename: string, filehandle: File, chunkSize: number, callback: (lines: string[], totalLines: number, next: () => void) => Promise<void>) => {
     return;
   },
-  handleFilePreview: async () => {
+  handleFilePreview: async (file: File, onPreviewReadyCallback: (lines: string[]) => void) => {
     return;
   }
-};
+} 
+
+
 
 export const CloudWatchSelection = forwardRef<{}, LogSourceProvider>(({ 
   onBackToSourceSelection,
@@ -72,7 +75,7 @@ export const CloudWatchSelection = forwardRef<{}, LogSourceProvider>(({
     setLoading, setError, reset
   } = useCloudWatchStore();
 
-  const { setMetadata } = useImportStore();
+  const { setMetadata, setReadyToImportLogs, setReadyToSelectPattern } = useImportStore();
   
   const [logPagination, setLogPagination] = useState<LogPaginationState>({
     nextToken: null,
@@ -82,35 +85,6 @@ export const CloudWatchSelection = forwardRef<{}, LogSourceProvider>(({
   
   const [retrievedLogs, setRetrievedLogs] = useState<string[]>([]);
   
-  // Expose the handleImport method to the parent component via ref
-  useImperativeHandle(ref, () => ({
-    handleImport: async () => {
-      if (!selectedStream) {
-        throw new Error("Please select a log stream to import");
-      }
-      return handleImport();
-    },
-    handleFileSelect: async (filename: string) => {
-      await onFileSelect(filename);
-    },
-    handleFilePreview: async (logData: string, filename: string) => {
-      await onFilePreview(logData, filename);
-    },
-    validateCanProceedToFileAnalysis: async () => {
-      // For CloudWatch, check if a stream has been selected
-      if (!selectedStream) {
-        return {
-          canProceedToFileAnalysis: false,
-          errorMessage: "Please select a cloudwatch log stream before proceeding."
-        };
-      }
-      
-      return { 
-        canProceedToFileAnalysis: true 
-      };
-    }
-  }));
-
   const handleAuthChange = (field: 'region' | 'profile', value: string) => {
     switch (field) {
       case 'region':
@@ -251,6 +225,7 @@ export const CloudWatchSelection = forwardRef<{}, LogSourceProvider>(({
 
   const handleStreamSelect = (groupName: string, streamName: string) => {
     setSelectedStream(groupName, streamName);
+    setReadyToSelectPattern(true);
   };
 
   const handleImport = async () => {
@@ -327,8 +302,6 @@ export const CloudWatchSelection = forwardRef<{}, LogSourceProvider>(({
     
     // All logs have been fetched, now process the import
     if (allLogMessages.length > 0) {
-      const logData = allLogMessages.join('\n');
-      
       // Set metadata
       setMetadata({
         _aws_region: region,
@@ -344,8 +317,8 @@ export const CloudWatchSelection = forwardRef<{}, LogSourceProvider>(({
       const sanitizedStreamName = streamName.replace(/[^a-zA-Z0-9]/g, '-');
       
       const filename = `cw-${sanitizedGroupName}-${sanitizedStreamName}`;
-      onFileSelect(filename);
-      onFilePreview(logData, filename);
+
+      onFilePreview(allLogMessages, filename);
       onFileReadyForAnalysis(true);
     } else {
       setError("No logs were retrieved");
@@ -419,16 +392,6 @@ export const CloudWatchSelection = forwardRef<{}, LogSourceProvider>(({
     }
   };
   
-  const handleLoadMoreLogs = async () => {
-    if (!selectedStream || !logPagination.nextToken || !logPagination.hasMore) return;
-    
-    try {
-      await fetchLogBatch(selectedStream.groupName, selectedStream.streamName, logPagination.nextToken);
-    } catch (err) {
-      setError(`Failed to fetch more logs: ${err instanceof Error ? err.message : 'Unknown error'}`);
-      console.error(err);
-    }
-  };
 
   useEffect(() => {
     // When search query changes, auto-expand groups that have matching streams
@@ -710,35 +673,7 @@ export const CloudWatchSelection = forwardRef<{}, LogSourceProvider>(({
         </Card>
       )}
       
-      {/* Show pagination UI if there are more logs available */}
-      {selectedStream && logPagination.hasMore && (
-        <div className="mt-4 flex justify-center">
-          <Button 
-            onClick={handleLoadMoreLogs}
-            disabled={logPagination.isLoading}
-            className="bg-blue-600 hover:bg-blue-700 h-10"
-          >
-            {logPagination.isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Loading more logs...
-              </>
-            ) : (
-              <>
-                Load More Logs ({retrievedLogs.length} loaded)
-              </>
-            )}
-          </Button>
-        </div>
-      )}
-      
-      {/* Show log count if logs have been retrieved */}
-      {retrievedLogs.length > 0 && (
-        <div className="mt-4 text-center text-sm text-gray-500">
-          {retrievedLogs.length} logs retrieved
-          {logPagination.hasMore ? " (more available)" : " (complete)"}
-        </div>
-      )}
+
     </div>
   );
 });
