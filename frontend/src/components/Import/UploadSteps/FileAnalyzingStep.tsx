@@ -28,14 +28,9 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
   const {
     setSelectedPattern, 
     selectedPattern, 
-    setSelectedFileName, 
-    selectedFileName, 
-    setSelectedFileHandle, 
-    selectedFileHandle, 
     setFilePreviewBuffer, 
     filePreviewBuffer, 
-    setCurrentStep, 
-    currentStep, 
+
     isCreateNewPatternSelected,
     availablePatterns,
     createNewPattern,
@@ -203,7 +198,7 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
     } else {
       return {
         icon: <File className="h-5 w-5 text-blue-500 mr-2" />,
-        text: `Analyzing file: ${selectedFileName || 'Unknown'}`
+        text: `Analyzing file: ${filePreviewBuffer.filename || 'Unknown'}`
       };
     }
   };

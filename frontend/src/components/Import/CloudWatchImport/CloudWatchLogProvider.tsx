@@ -44,14 +44,7 @@ const DEFAULT_REGIONS = [
   'sa-east-1',
 ];
 
-export interface CloudWatchLogProviderProps {
-  onBackToSourceSelection?: () => void;
-  onFileSelect?: (file: File) => void;
-  onFilePreview?: (content: string) => void;
-  onFileReadyForAnalysis?: (metadata: any) => void;
-}
-
-export const CloudWatchLogProvider: FC<CloudWatchLogProviderProps> = ({ 
+export const CloudWatchLogProvider: FC<LogSourceProvider> = ({ 
   onBackToSourceSelection,
   onFileSelect,
   onFilePreview,
@@ -72,9 +65,7 @@ export const CloudWatchLogProvider: FC<CloudWatchLogProviderProps> = ({
     setLoading, setError, reset
   } = useCloudWatchStore();
 
-  const { setMetadata, setReadyToImportLogs, setReadyToSelectPattern } = useImportStore();
-  
-  const [retrievedLogs, setRetrievedLogs] = useState<string[]>([]);
+  const { setReadyToSelectPattern, setFilePreviewBuffer } = useImportStore();
   
   const handleAuthChange = (field: 'region' | 'profile', value: string) => {
     switch (field) {
@@ -101,9 +92,18 @@ export const CloudWatchLogProvider: FC<CloudWatchLogProviderProps> = ({
     }
   };
 
-  const handleStreamSelect = (groupName: string, streamName: string) => {
+  // This function triggers the preview of the selected stream
+  const handleStreamSelect = async (groupName: string, streamName: string) => {
+    console.log("handleStreamSelect", groupName, streamName);
     setSelectedStream(groupName, streamName);
-    setReadyToSelectPattern(true);
+    // Fetch the logs for the selected stream for preview
+    cloudWatchLogService.handleFilePreview({name: `${groupName}-${streamName}.log`}, (logs) => {
+      setFilePreviewBuffer({
+        lines: logs,
+        filename: `${groupName}-${streamName}.log`
+      });
+      onFilePreview(logs, `${groupName}-${streamName}.log`);
+    });
   };
 
   // Enhanced filtering to show groups with matching streams

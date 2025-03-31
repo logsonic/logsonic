@@ -96,6 +96,6 @@ export interface LogSourceProvider {
 export interface LogSourceProviderService {
   name: string;
   // Start the actual import process 
-  handleFileImport: (filename: string, filehandle: File, chunkSize: number, callback: (lines: string[], totalLines: number, next: () => void) => Promise<void>) => Promise<void>;
-  handleFilePreview: (file: File, onPreviewReadyCallback: (lines: string[]) => void) => Promise<void>;
+  handleFileImport: (filehandle: object, chunkSize: number, callback: (lines: string[], totalLines: number, next: () => void) => Promise<void>) => Promise<void>;
+  handleFilePreview: (filehandle: object, onPreviewReadyCallback: (lines: string[]) => void) => Promise<void>;
 } 

@@ -1,27 +1,39 @@
+import { useRef } from "react";
 import type { LogSourceProviderService } from "../types";
 import { useImportStore } from "@/stores/useImportStore";
 
-export const useFileSelectionService = () => {
-  const importStore = useImportStore();
 
-  const handleFilePreview = async (file: File, onPreviewReadyCallback: (lines: string[]) => void) => {
+
+export const useFileSelectionService = () : LogSourceProviderService => {
+  const importStore = useImportStore();    
+
+  const handleFilePreview = async (filehandle: object, onPreviewReadyCallback: (lines: string[]) => void) => {
+
+    const file = filehandle as File;
+   importStore.setSelectedFileHandle(file);
     const reader = new FileReader();
     reader.onload = async (e) => {
       const text = e.target?.result as string;
-      const lines = text.split('\n').slice(0, 100);
+
+      // Set approx lines
+      const lines = text.split('\n');
+      importStore.setApproxLines(lines.length);
+      const preViewLines = lines.slice(0, 100);
       // TBD check if the file is binary or has no valid delimiter
-      onPreviewReadyCallback(lines);
+      onPreviewReadyCallback(preViewLines);
       reader.abort();
     };
+   
     reader.readAsText(file);
   };
 
-  const handleFileImport = (filename: string, filehandle: File, chunkSize: number, callback: (lines: string[], totalLines: number, next: () => void) => Promise<void>) => {  
+  const handleFileImport = (filehandle: object, chunkSize: number, callback: (lines: string[], totalLines: number, next: () => void) => Promise<void>) => {  
     // process data
+    const file = filehandle as File;
     let currentIndex = 0;
     return new Promise<void>((resolve, reject) => {
-      console.log("Importing file:", filename, "with handle:", filehandle);
-      if (filename && filehandle) {
+      console.log("Importing file:", file.name, "with handle:", filehandle);
+      if (file) {
         const reader = new FileReader();
         reader.onload = async (e) => {
           const text = e.target?.result as string;
@@ -44,7 +56,7 @@ export const useFileSelectionService = () => {
         reader.onerror = (e) => {
           reject(new Error("Error reading file"));
         };
-        reader.readAsText(filehandle);
+        reader.readAsText(file);
       } else {
         reject(new Error("No filename or filehandle provided"));
       }

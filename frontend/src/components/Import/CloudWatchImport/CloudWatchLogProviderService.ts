@@ -6,8 +6,8 @@ import { useImportStore } from "@/stores/useImportStore";
 import { cloudwatchService } from "./api/cloudwatchService";
 import { useSearchQueryParamsStore } from "@/stores/useSearchParams";
 
-export const useCloudWatchLogProviderService = () => {
-  const cloudWatchStore = useCloudWatchStore();
+export const useCloudWatchLogProviderService = () : LogSourceProviderService => {
+  const { region, profile, selectedStream, setError, setRetrievedLogs, setLogPagination, setLoading } = useCloudWatchStore();
   const importStore = useImportStore();
   const searchQueryParamsStore = useSearchQueryParamsStore();
   
@@ -16,21 +16,22 @@ export const useCloudWatchLogProviderService = () => {
     streamName: string, 
     nextToken: string | null, 
     startTime: Date, 
-    endTime: Date
+    endTime: Date,
+    batchSize: number = 10000
   ): Promise<{ logs: string[], token: string | null, more: boolean }> => {
     try {
       const tokenParam = nextToken || undefined;
       console.log(`Fetching log batch for ${groupName}/${streamName} with token: ${tokenParam || 'initial'}`);
       
       const authData: GetLogEventsRequest = {
-        region: cloudWatchStore.region,
-        profile: cloudWatchStore.profile,
+        region: region,
+        profile: profile,
         log_group_name: groupName,
         log_stream_name: streamName,
         start_time: startTime.getTime(),
         end_time: endTime.getTime(),
         next_token: tokenParam,
-        limit: 10000 // Maximum logs per batch
+        limit: batchSize // Maximum logs per batch
       };
       
       const response = await cloudwatchService.getLogEvents(authData);
@@ -55,7 +56,7 @@ export const useCloudWatchLogProviderService = () => {
     let allLogMessages: string[] = [];
     let batchCount = 0;
     
-    cloudWatchStore.setError(null);
+    setError(null);
 
     while (hasMoreLogs) {
       try {
@@ -72,8 +73,8 @@ export const useCloudWatchLogProviderService = () => {
         batchCount++;
         
         // Update UI with progress
-        cloudWatchStore.setRetrievedLogs(allLogMessages);   
-        cloudWatchStore.setLogPagination({
+        setRetrievedLogs(allLogMessages);   
+        setLogPagination({
           nextToken: token,
           hasMore: more,
           isLoading: more // Only show as loading if we have more to fetch
@@ -92,7 +93,7 @@ export const useCloudWatchLogProviderService = () => {
         await new Promise(resolve => setTimeout(resolve, 100));
         
       } catch (err) {
-        cloudWatchStore.setError(`Failed to fetch log batch ${batchCount}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        setError(`Failed to fetch log batch ${batchCount}: ${err instanceof Error ? err.message : 'Unknown error'}`);
         console.error(err);
         hasMoreLogs = false;
         break;
@@ -103,8 +104,8 @@ export const useCloudWatchLogProviderService = () => {
     if (allLogMessages.length > 0) {
       // Set metadata
       importStore.setMetadata({
-        _aws_region: cloudWatchStore.region,
-        _aws_profile: cloudWatchStore.profile,
+        _aws_region: region,
+        _aws_profile: profile,
         _log_group_name: groupName,
         _log_stream_name: streamName,
         _src: `cloudwatch.${groupName}.${streamName}`,
@@ -120,38 +121,37 @@ export const useCloudWatchLogProviderService = () => {
       // Return the logs and filename
       return { logs: allLogMessages, filename };
     } else {
-      cloudWatchStore.setError("No logs were retrieved");
+      setError("No logs were retrieved");
       return { logs: [], filename: "" };
     }
   };
 
   const handleFileImport = async (
-    filename: string, 
-    filehandle: File, 
+    filehandle: object, 
     chunkSize: number, 
     callback: (lines: string[], totalLines: number, next: () => void) => Promise<void>
   ) => {
-    if (!cloudWatchStore.selectedStream) {
-      cloudWatchStore.setError("Please select a log stream to import");
+    if (!selectedStream) {
+      setError("Please select a log stream to import");
       return;
     }
   
-    cloudWatchStore.setLoading(true);
-    cloudWatchStore.setError(null);
+    setLoading(true);
+    setError(null);
     
     // Reset pagination state and logs
-    cloudWatchStore.setLogPagination({
+    setLogPagination({
       nextToken: null,
       hasMore: false,
       isLoading: false
     });
-    cloudWatchStore.setRetrievedLogs([]);
+    setRetrievedLogs([]);
     
     try {
       // Start fetching the logs
       const { logs, filename } = await fetchAllLogs(
-        cloudWatchStore.selectedStream.groupName, 
-        cloudWatchStore.selectedStream.streamName
+        selectedStream.groupName, 
+        selectedStream.streamName
       );
       
       // If there are logs, process them through the callback
@@ -159,26 +159,36 @@ export const useCloudWatchLogProviderService = () => {
         await callback(logs, logs.length, () => {});
       }
     } catch (err) {
-      cloudWatchStore.setError(`Failed to fetch log events: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setError(`Failed to fetch log events: ${err instanceof Error ? err.message : 'Unknown error'}`);
       console.error(err);
     } finally {
-      cloudWatchStore.setLoading(false);
+      setLoading(false);
     }
   };
 
   const handleFilePreview = async (
-    file: File, 
+    filehandle: object, 
     onPreviewReadyCallback: (lines: string[]) => void
   ) => {
-    // CloudWatch doesn't need a preview step as it's not file-based
-    return;
+    // Fetch 100 lines of logs for the selected stream
+    if (!selectedStream) return;
+
+    const { logs} = await fetchLogBatchInternal(
+      selectedStream.groupName, 
+      selectedStream.streamName, 
+      null, 
+      searchQueryParamsStore.UTCTimeSince, 
+      searchQueryParamsStore.UTCTimeTo,
+      100
+    );
+
+
+    onPreviewReadyCallback(logs.slice(0, 100));
   };
 
   return {
     name: "CloudWatch",
     handleFileImport,
     handleFilePreview,
-    fetchAllLogs,
-    fetchLogBatchInternal
   };
 };

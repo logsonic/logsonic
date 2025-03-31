@@ -1,4 +1,3 @@
-import { Card } from '@/components/ui/card';
 import { LogSourceProvider } from '@/components/Import/types';
 import { FC } from 'react';
 import { useImportStore } from '@/stores/useImportStore';
@@ -13,12 +12,12 @@ export const SourceSelection: FC<SourceSelectionProps> = ({
   selectedSource, 
   onSelectSource 
 }) => {
-  const { setImportSource, importSource } = useImportStore();
+  const { setImportSource } = useImportStore();
 
   const handleSelectSource = (source: string) => {
     setImportSource(source);
     onSelectSource(source);
-    console.log(`Source selected: ${importSource}`);
+    console.log(`Source selected: ${source}`);
   }
 
   return (

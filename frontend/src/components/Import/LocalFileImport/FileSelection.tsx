@@ -5,14 +5,13 @@ import { useImportStore } from '../../../stores/useImportStore';
 import { useFileSelectionService } from './FileSelectionService';
 
 // Forward ref 
-const FileSelection = forwardRef<{}, LogSourceProvider>(({   
+const FileSelection: FC<LogSourceProvider> = ({   
   onFileSelect, 
   onFilePreview,
   onBackToSourceSelection,
-}, ref) => {
+}) => {
     const fileInputRef = useRef<HTMLInputElement>(null);  
     const { error, setMetadata, setSelectedFileName, setSelectedFileHandle, setFilePreviewBuffer } = useImportStore();
-    const [pendingResolve, setPendingResolve] = useState<(() => void) | null>(null);
     const fileService = useFileSelectionService();
 
     const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -20,7 +19,9 @@ const FileSelection = forwardRef<{}, LogSourceProvider>(({
       if (file) {
         setMetadata({ _src: `file.${file.name}` });
         setSelectedFileName(file.name);
+        console.log("Setting selected file handle", file);
         setSelectedFileHandle(file);
+        
         await onFileSelect(file.name);
 
         // Immediately read the first 100 lines of the file
@@ -76,8 +77,5 @@ const FileSelection = forwardRef<{}, LogSourceProvider>(({
       </div>
     );
   }
-);
-
-FileSelection.displayName = 'FileSelection';
 
 export default FileSelection; 

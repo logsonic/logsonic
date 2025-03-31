@@ -8,7 +8,7 @@ import { useImportStore } from '@/stores/useImportStore';
 
 // Success Summary component for showing import completion
 export const SuccessSummary: FC = () => {
-  const { selectedFileName, importSource, sessionOptionsFileName, selectedPattern } = useImportStore();
+  const { selectedFileName, importSource, sessionOptionsFileName, selectedPattern, totalLines } = useImportStore();
 
   const uploadSummary = {
     totalLines: 100,
@@ -47,7 +47,7 @@ export const SuccessSummary: FC = () => {
           </div>
           <div className="flex justify-center">
             <span className="text-gray-600 mr-2">Total Lines Processed:</span>
-            <span className="font-medium">{uploadSummary.totalLines.toLocaleString()}</span>
+            <span className="font-medium">{totalLines.toLocaleString()}</span>
           </div>
         </div>
       </div>
@@ -102,6 +102,7 @@ export const ImportConfirmStep: FC = ({
     metadata
   } = useImportStore();
 
+  const file = selectedFileHandle as File;
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} bytes`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
@@ -117,7 +118,7 @@ export const ImportConfirmStep: FC = ({
     // Second priority: use filePreview.totalLines if available
     (filePreviewBuffer?.lines.length || 0) > 0 ? filePreviewBuffer.lines.length :
     // Fallback: estimate based on file size
-    Math.round((selectedFileHandle?.size || 0) / avgBytesPerLine);
+    Math.round((file.size || 0) / avgBytesPerLine);
 
   // If we calculated a new estimate and approxLines was 0, update the store
   useEffect(() => {
@@ -155,7 +156,7 @@ export const ImportConfirmStep: FC = ({
               </tr>
               <tr>
                 <td className="py-1 text-gray-800 font-bold">File Size:</td>
-                <td className="py-1 text-gray-800">{formatFileSize(selectedFileHandle?.size || 0)}</td>
+                <td className="py-1 text-gray-800">{formatFileSize(file.size || 0)}</td>
               </tr>
               <tr>
                 <td className="py-1 text-gray-800 font-bold">Estimated Lines:</td>

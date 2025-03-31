@@ -22,6 +22,7 @@ export const useUpload = (): UploadProgressHookResult => {
     setIsUploading,
     setUploadProgress,
     setApproxLines,
+    setTotalLines,
     sessionOptionsSmartDecoder,
     sessionOptionsTimezone,
     sessionOptionsYear,
@@ -42,9 +43,6 @@ export const useUpload = (): UploadProgressHookResult => {
   const ingestEndApi = useIngestEnd();    
   
   const handleUpload = useCallback(async (provider: LogSourceProviderService) => {
-    if (!selectedFileName || !selectedFileHandle || !selectedPattern) {
-      throw new Error('No file or pattern selected');
-    }
 
     console.log("Starting upload with provider");
 
@@ -84,8 +82,8 @@ export const useUpload = (): UploadProgressHookResult => {
       
       let handledLines = 0;
       let i = 0;
-      await provider.handleFileImport(selectedFileName, selectedFileHandle, 1000, async(lines, totalLines, next) =>{
-        console.log(lines)
+      await provider.handleFileImport(selectedFileHandle, 1000, async(lines, totalLines, next) =>{
+    
         console.log("Ingesting chunk", i + 1, "of", totalLines);
         setApproxLines(totalLines);
         const requestBody = {
@@ -105,7 +103,8 @@ export const useUpload = (): UploadProgressHookResult => {
    
       // Step 4: End the ingestion session
       await ingestEndApi.execute(currentSessionID);
-
+      setTotalLines(handledLines);
+      
       progressRef.current = 100;  
       setUploadProgress(100);
     } catch (error) {
@@ -122,24 +121,7 @@ export const useUpload = (): UploadProgressHookResult => {
     } finally {
       setIsUploading(false);
     }
-  }, [
-    selectedFileName,     
-    selectedFileHandle,
-    selectedPattern, 
-    sessionID,
-    setSessionID,
-    setIsUploading, 
-    setUploadProgress, 
-    setApproxLines, 
-    ingestStartApi, 
-    ingestLogsApi, 
-    ingestEndApi,
-    sessionOptionsSmartDecoder,
-    sessionOptionsTimezone,
-    sessionOptionsYear,
-    sessionOptionsMonth,
-    sessionOptionsDay
-  ]);
+  }, [isUploading, selectedFileHandle, selectedFileName, selectedPattern, sessionOptionsSmartDecoder, sessionOptionsTimezone, sessionOptionsYear, sessionOptionsMonth, sessionOptionsDay, metadata]);
 
   return {
     isUploading,

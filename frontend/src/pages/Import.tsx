@@ -270,11 +270,9 @@ const Import: FC  = () => {
               showSummary: true
             });
 
-            searchQueryParamsStore.resetStore();
 
-            //invalidate cache
-            const data = await getSystemInfo(true);
-            setSystemInfo(data);
+
+
             setCurrentStep(4);
           } catch (uploadErr) {
             // Ensure token patterns are cleared even if there's an error
@@ -289,16 +287,19 @@ const Import: FC  = () => {
           break;
           
         case 4:
+           
+            // Start a redirect timer
+            const timer = setTimeout(() => {
+              setUploadSummary(null);
+              navigate('/');
+            }, 5000);
+            setRedirectTimer(timer);
+            //invalidate cache
+            const data = await getSystemInfo(true);
+            setSystemInfo(data);
+            searchQueryParamsStore.resetStore();
             // If we're already showing the summary, navigate to home
-            if (uploadSummary) {
-              // Start a redirect timer
-              const timer = setTimeout(() => {
-                setUploadSummary(null);
-                navigate('/');
-              }, 3000);
-              setRedirectTimer(timer);
-              return;
-            }
+
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred');

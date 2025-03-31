@@ -41,7 +41,7 @@ interface ImportState {
 
   // Used for display to the user
   selectedFileName: string | null
-  selectedFileHandle: any | null 
+  selectedFileHandle: object | null 
   filePreviewBuffer: FilePreview | null;
 
   // Pattern data
@@ -65,6 +65,7 @@ interface ImportState {
   isUploading: boolean;
   uploadProgress: number;
   approxLines: number;
+  totalLines: number;
   
   // Source selection
   selectedSources: string[];
@@ -120,7 +121,7 @@ interface ImportState {
   handlePatternOperation: (pattern: Pattern, updateStore?: boolean, onSuccess?: (parsedLogs: Record<string, string>[]) => void, onError?: (error: string) => void) => Promise<void>;
   testPattern: () => Promise<void>;
   reset: () => void;
-  
+  setTotalLines: (totalLines: number) => void;
   setProviderUploadHandler: (handler: ProviderUploadHandler | null) => void;
 }
 
@@ -152,6 +153,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
   isUploading: false,
   uploadProgress: 0,
   approxLines: 0,
+  totalLines: 0,
   selectedSources: [],
   sessionID: null,
   sessionOptionsFileName: '',
@@ -215,7 +217,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
   setUploadProgress: (uploadProgress) => set({ uploadProgress }),
   
   setApproxLines: (approxLines) => set({ approxLines }),
-  
+  setTotalLines: (totalLines) => set({ totalLines }),
   setSelectedSources: (selectedSources) => set({ selectedSources }),
   
   setSessionID: (sessionID) => set({ sessionID }),
@@ -362,6 +364,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
 
   // Reset the store to default values
   reset: () => {
+    console.log("Resetting import store");
     set({
       currentStep: 1,
       importSource: null,
