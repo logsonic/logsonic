@@ -2,7 +2,7 @@ import { forwardRef, useImperativeHandle, useRef, useState, FC } from 'react';
 import { Upload } from 'lucide-react';
 import type { LogSourceProvider, LogSourceProviderService } from '../types';
 import { useImportStore } from '../../../stores/useImportStore';
-import { FileSelectionService } from './FileSelectionService';
+import { useFileSelectionService } from './FileSelectionService';
 
 // Forward ref 
 const FileSelection = forwardRef<{}, LogSourceProvider>(({   
@@ -13,6 +13,7 @@ const FileSelection = forwardRef<{}, LogSourceProvider>(({
     const fileInputRef = useRef<HTMLInputElement>(null);  
     const { error, setMetadata, setSelectedFileName, setSelectedFileHandle, setFilePreviewBuffer } = useImportStore();
     const [pendingResolve, setPendingResolve] = useState<(() => void) | null>(null);
+    const fileService = useFileSelectionService();
 
     const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -23,7 +24,7 @@ const FileSelection = forwardRef<{}, LogSourceProvider>(({
         await onFileSelect(file.name);
 
         // Immediately read the first 100 lines of the file
-        await FileSelectionService.handleFilePreview(file, (lines) => {
+        await fileService.handleFilePreview(file, (lines) => {
           
           if (lines.length > 0) {
             setFilePreviewBuffer({lines, filename: file.name});

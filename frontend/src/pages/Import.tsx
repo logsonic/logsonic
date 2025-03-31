@@ -14,13 +14,13 @@ import { getGrokPatterns, getSystemInfo } from '../lib/api-client';
 import { extractFields } from '../components/Import/utils/patternUtils';
 import { UploadStep, useImportStore } from '../stores/useImportStore';
 import { useNavigate } from 'react-router-dom';
-import HandleNavigation from '@/components/Import/HandleNavigation';
-import { CloudWatchSelectionService } from '@/components/Import/CloudWatchImport/CloudWatchSelection';
-import { FileSelectionService } from '@/components/Import/LocalFileImport/FileSelectionService';
+import HandleNavigation from '@/components/Import/UploadSteps/HandleNavigation';
+import { useFileSelectionService } from '@/components/Import/LocalFileImport/FileSelectionService';
 import useUpload from '@/components/Import/hooks/useUpload';
 import { useSearchQueryParamsStore } from '@/stores/useSearchParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import { ErrorBoundary } from '@/lib/error-boundary';
+import { useCloudWatchLogProviderService } from '@/components/Import/CloudWatchImport/CloudWatchLogProviderService';
 
 
 const Import: FC  = () => {
@@ -62,6 +62,8 @@ const Import: FC  = () => {
     handleUpload,
   } = useUpload();
 
+  const fileService = useFileSelectionService();
+  const cloudWatchService = useCloudWatchLogProviderService();
 
   const [uploadSummary, setUploadSummary] = useState<UploadSummary | null>(null);
 
@@ -249,7 +251,7 @@ const Import: FC  = () => {
           try {
             console.log("Uploading logs using provider handler", importSource);
 
-            const provider = importSource === 'cloudwatch' ? CloudWatchSelectionService : FileSelectionService;
+            const provider = importSource === 'cloudwatch' ? cloudWatchService : fileService;
             console.log("Importing with Log Source provider service:", provider);
 
 

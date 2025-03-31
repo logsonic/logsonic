@@ -1,4 +1,4 @@
-import { CloudWatchSelection, FileSelection } from '@/components/Import/UploadSteps';
+import { CloudWatchLogProvider, FileSelection } from '@/components/Import/UploadSteps';
 import SourceSelection from './SourceSelection';
 import { FC, useEffect } from 'react';
 import { FileUp, Cloud } from 'lucide-react';
@@ -36,7 +36,7 @@ const LogSourceSelectionStep: FC<LogSourceSelectionStepProps> = ({
         id: 'cloudwatch',
         name: 'AWS CloudWatch Logs',  
         icon: Cloud,
-        component: CloudWatchSelection,
+        component: CloudWatchLogProvider,
       }
     ];
 

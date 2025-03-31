@@ -2,21 +2,24 @@ import { create } from 'zustand';
 import { 
   CloudWatchLogGroup, 
   CloudWatchLogStream,
+  LogPaginationState,
   SelectedStream 
 } from '../types';
+import { useState } from 'node_modules/react-resizable-panels/dist/declarations/src/vendor/react';
 
 interface CloudWatchState {
   // Authentication
   authMethod: 'profile' | 'keys';
   region: string;
   profile: string;
-  
+  retrievedLogs: string[];
   // Log Groups & Streams data
   logGroups: CloudWatchLogGroup[];
   expandedGroups: Record<string, boolean>;
   loadingStreams: Record<string, boolean>;
   searchQuery: string;
   selectedStream: SelectedStream | null;
+  logPagination: LogPaginationState;
   
   // Loading states
   isLoading: boolean;
@@ -26,6 +29,8 @@ interface CloudWatchState {
   setAuthMethod: (method: 'profile' | 'keys') => void;
   setRegion: (region: string) => void;
   setProfile: (profile: string) => void;
+  setLogPagination: (pagination: LogPaginationState) => void;
+  setRetrievedLogs: (logs: string[]) => void;
   setLogGroups: (groups: CloudWatchLogGroup[]) => void;
   setStreamsForGroup: (groupName: string, streams: CloudWatchLogStream[]) => void;
   toggleGroupExpanded: (groupName: string) => void;
@@ -45,7 +50,12 @@ const initialState = {
   authMethod: 'profile' as const,
   region: 'us-east-1',
   profile: 'default',
-  
+  logPagination: {
+    nextToken: null,
+    hasMore: false,
+    isLoading: false
+  }, 
+  retrievedLogs: [],
   // Log Groups & Streams data
   logGroups: [],
   expandedGroups: {},
@@ -75,6 +85,8 @@ export const useCloudWatchStore = create<CloudWatchState>((set) => ({
     // selectedStream: null,
   }),
   
+  setLogPagination: (pagination) => set({ logPagination: pagination }),
+  setRetrievedLogs: (logs) => set({ retrievedLogs: logs }),
   setStreamsForGroup: (groupName, streams) => set((state) => {
     // Find the log group and update its streams
     const updatedLogGroups = state.logGroups.map(group => 

@@ -1,12 +1,11 @@
 // Export CloudWatch components and types
-export { default as CloudWatchSelection } from './CloudWatchSelection';
-export type { CloudWatchSelectionRef, CloudWatchSelectionProps } from './CloudWatchSelection';
+export { default as CloudWatchLogProvider } from './CloudWatchLogProvider';
 
 // Re-export store
 export { useCloudWatchStore } from './stores/useCloudWatchStore';
 
 // Export CloudWatch service
-export { cloudwatchService } from './utils/cloudwatchService';
+export { cloudwatchService } from './api/cloudwatchService';
 
 // Export CloudWatch types
 export type {

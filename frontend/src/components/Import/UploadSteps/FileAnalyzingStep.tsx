@@ -13,6 +13,9 @@ interface FileAnalyzingStepProps {
   onDetectionComplete: (result: DetectionResult) => void;
 }
 
+// This component is responsible for analyzing the file and suggesting a pattern
+// A log preview must be provided by the LogSourceProvider component into the filePreviewBuffer import store
+
 export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
   onDetectionComplete,
 }) => {
