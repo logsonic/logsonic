@@ -62,7 +62,8 @@ export const CloudWatchLogProvider: FC<LogSourceProvider> = ({
     setAuthMethod, setRegion, setProfile,
     setLogGroups, setStreamsForGroup, toggleGroupExpanded,
     setLoadingStreams, setSelectedStream, setSearchQuery,
-    setLoading, setError, reset
+    setLoading, setError, reset,
+    estimatedLogCount, setEstimatedLogCount
   } = useCloudWatchStore();
 
   const { setReadyToSelectPattern, setFilePreviewBuffer } = useImportStore();
@@ -93,11 +94,21 @@ export const CloudWatchLogProvider: FC<LogSourceProvider> = ({
   };
 
   // This function triggers the preview of the selected stream
-  const handleStreamSelect = async (groupName: string, streamName: string) => {
-    console.log("handleStreamSelect", groupName, streamName);
-    setSelectedStream(groupName, streamName);
+  const handleStreamSelect = async (groupName: string, streamName: string, streamSize: number) => {
+    console.log("handleStreamSelect", groupName, streamName, streamSize);
+    setSelectedStream(groupName, streamName, streamSize);
+
+
     // Fetch the logs for the selected stream for preview
     cloudWatchLogService.handleFilePreview({groupName, streamName}, (logs) => {
+
+      // Calculate the estimated log size in bytes
+      const estimatedLogSize = logs.reduce((acc, log) => acc + log.length, 0);
+      const sizePerLog = estimatedLogSize / logs.length;
+      const estimatedSize = Math.ceil(streamSize / sizePerLog);
+      setEstimatedLogCount(estimatedSize);
+
+      console.log("estimatedLogCount", estimatedLogCount, estimatedSize);
 
       setFilePreviewBuffer({
         lines: logs,
@@ -307,7 +318,7 @@ export const CloudWatchLogProvider: FC<LogSourceProvider> = ({
                             <div 
                               key={stream.name}
                               className="flex items-center px-4 py-2 border-t cursor-pointer hover:bg-gray-50"
-                              onClick={() => handleStreamSelect(group.name, stream.name)}
+                              onClick={() => handleStreamSelect(group.name, stream.name, stream.storedBytes)}
                             >
                               <div className={`h-4 w-4 mr-3 rounded-full border flex items-center justify-center ${
                                 selectedStream && 

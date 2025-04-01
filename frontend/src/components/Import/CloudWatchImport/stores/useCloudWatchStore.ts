@@ -13,12 +13,14 @@ interface CloudWatchState {
   region: string;
   profile: string;
   retrievedLogs: string[];
+  estimatedLogCount: number;
   // Log Groups & Streams data
   logGroups: CloudWatchLogGroup[];
   expandedGroups: Record<string, boolean>;
   loadingStreams: Record<string, boolean>;
   searchQuery: string;
   selectedStream: SelectedStream | null;
+  streamSize: number | null;
   logPagination: LogPaginationState;
   
   // Loading states
@@ -31,11 +33,12 @@ interface CloudWatchState {
   setProfile: (profile: string) => void;
   setLogPagination: (pagination: LogPaginationState) => void;
   setRetrievedLogs: (logs: string[]) => void;
+  setEstimatedLogCount: (count: number) => void;
   setLogGroups: (groups: CloudWatchLogGroup[]) => void;
   setStreamsForGroup: (groupName: string, streams: CloudWatchLogStream[]) => void;
   toggleGroupExpanded: (groupName: string) => void;
   setLoadingStreams: (groupName: string, isLoading: boolean) => void;
-  setSelectedStream: (groupName: string | null, streamName: string | null) => void;
+  setSelectedStream: (groupName: string | null, streamName: string | null, streamSize: number | null) => void;
   setSearchQuery: (query: string) => void;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
@@ -55,6 +58,7 @@ const initialState = {
     hasMore: false,
     isLoading: false
   }, 
+  estimatedLogCount: 0,
   retrievedLogs: [],
   // Log Groups & Streams data
   logGroups: [],
@@ -62,7 +66,7 @@ const initialState = {
   loadingStreams: {},
   searchQuery: '',
   selectedStream: null,
-
+  streamSize: null, 
 
   // Loading states
   isLoading: false,
@@ -87,6 +91,7 @@ export const useCloudWatchStore = create<CloudWatchState>((set) => ({
   
   setLogPagination: (pagination) => set({ logPagination: pagination }),
   setRetrievedLogs: (logs) => set({ retrievedLogs: logs }),
+  setEstimatedLogCount: (count) => set({ estimatedLogCount: count }),
   setStreamsForGroup: (groupName, streams) => set((state) => {
     // Find the log group and update its streams
     const updatedLogGroups = state.logGroups.map(group => 
@@ -110,8 +115,9 @@ export const useCloudWatchStore = create<CloudWatchState>((set) => ({
     }
   })),
   
-  setSelectedStream: (groupName, streamName) => set({
+  setSelectedStream: (groupName, streamName, streamSize) => set({
     selectedStream: groupName && streamName ? { groupName, streamName } : null,
+    streamSize: streamSize || null,
   }),
   
   setSearchQuery: (query) => set({ searchQuery: query }),

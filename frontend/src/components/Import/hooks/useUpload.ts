@@ -84,7 +84,7 @@ export const useUpload = (): UploadProgressHookResult => {
       let i = 0;
 
       // This is where we call the provider's handleFileImport method
-      await provider.handleFileImport(selectedFileHandle, 1000, async(lines, totalLines, next) =>{
+      await provider.handleFileImport(selectedFileHandle, 10000, async(lines, totalLines, next) =>{
         
         // Provider will call back with a chunk of lines
         console.log("Ingesting chunk", i + 1, "of", totalLines);

@@ -4,9 +4,9 @@ import { Button } from "../components/ui/button";
 import { ArrowLeft,FileUp, Cloud } from "lucide-react";
 import { 
   ImportConfirm,
-  SuccessSummary,
   LogSourceSelectionStep,
 } from '../components/Import/UploadSteps';
+import { SuccessSummary } from '../components/Import/UploadSteps/SuccessSummaryStep';
 import { FileAnalyzingStep } from '../components/Import/UploadSteps/FileAnalyzingStep';
 import type { DetectionResult } from '../components/Import/types';
 import { useToast } from "../components/ui/use-toast";
@@ -65,7 +65,6 @@ const Import: FC  = () => {
   const fileService = useFileSelectionService();
   const cloudWatchService = useCloudWatchLogProviderService();
 
-  const [uploadSummary, setUploadSummary] = useState<UploadSummary | null>(null);
 
   // Define steps data
   const steps = [
@@ -196,6 +195,7 @@ const Import: FC  = () => {
           <ImportConfirm />
         );
       case 4:
+
         return (
           <SuccessSummary />
         );
@@ -262,17 +262,6 @@ const Import: FC  = () => {
               variant: "default",
             });
             
-            // Set upload summary data
-            setUploadSummary({
-              totalLines: approxLines || 0,
-              patternName: selectedPattern?.name || 'Custom Pattern',
-              redirectCountdown: 3,
-              showSummary: true
-            });
-
-
-
-
             setCurrentStep(4);
           } catch (uploadErr) {
             // Ensure token patterns are cleared even if there's an error
@@ -287,17 +276,9 @@ const Import: FC  = () => {
           break;
           
         case 4:
-           
-            // Start a redirect timer
-            const timer = setTimeout(() => {
-              setUploadSummary(null);
-              navigate('/');
-            }, 5000);
-            setRedirectTimer(timer);
             //invalidate cache
-            const data = await getSystemInfo(true);
-            setSystemInfo(data);
-            searchQueryParamsStore.resetStore();
+            navigate('/');
+          
             // If we're already showing the summary, navigate to home
 
       }

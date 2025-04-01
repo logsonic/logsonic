@@ -39,9 +39,9 @@ return (
     >
     {currentStep === 3 ? (
         uploadSummary?.showSummary ? 'Go to Home' : 'Import'
-    ) : (
-        'Next'
-    )}
+    ) : 
+    (currentStep === 4 ? 'Home' : 'Next')
+    }
     </Button>
     </div>
     )

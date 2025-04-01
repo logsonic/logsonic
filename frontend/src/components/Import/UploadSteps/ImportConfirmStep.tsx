@@ -1,66 +1,11 @@
-import { FC, useEffect } from 'react';
+import { FC, useEffect, useState } from 'react';
 import { Progress } from '../../ui/progress';
 import { Loader2, FileText, Code, CheckCircle, File, Cloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as ProgressPrimitive from "@radix-ui/react-progress";
-
+import { useNavigate } from 'react-router-dom';
 import { useImportStore } from '@/stores/useImportStore';
 
-// Success Summary component for showing import completion
-export const SuccessSummary: FC = () => {
-  const { selectedFileName, importSource, sessionOptionsFileName, selectedPattern, totalLines } = useImportStore();
-
-  const uploadSummary = {
-    totalLines: 100,
-    patternName: selectedPattern?.name || '',
-    redirectCountdown: 5,
-    showSummary: true
-  };
-  // Set the icon and filename label based on the import source
-  const sourceIcon = importSource === 'cloudwatch' 
-    ? <Cloud className="h-6 w-6 text-blue-500 mr-2" />
-    : <File className="h-6 w-6 text-blue-500 mr-2" />;
-  
-  const fileLabel = importSource === 'cloudwatch' ? 'CloudWatch Log:' : 'File Name:';
-  const fileName = importSource === 'cloudwatch' ? sessionOptionsFileName : selectedFileName;
-
-  return (
-    <div className="space-y-6 py-4">
-      <div className="flex flex-col items-center text-center">
-        <div className="flex items-center mb-3">
-          <CheckCircle className="h-8 w-8 text-green-500 mr-2" />
-          <h2 className="text-2xl font-bold text-gray-800">Import Successful!</h2>
-        </div>
-        <p className="text-gray-600 mt-2">
-          Your logs have been successfully imported and processed. Redirecting to home page in {uploadSummary.redirectCountdown} seconds...
-        </p>
-        <div className="rounded-lg p-6">
-        <div className="space-y-2">
-          <div className="flex justify-center items-center">
-            {sourceIcon}
-            <span className="text-gray-600 mr-2">{fileLabel}</span>
-            <span className="font-medium">{fileName}</span>
-          </div>
-          <div className="flex justify-center">
-            <span className="text-gray-600 mr-2">Pattern Used: </span>
-            <span className="font-medium">{uploadSummary.patternName}</span>
-          </div>
-          <div className="flex justify-center">
-            <span className="text-gray-600 mr-2">Total Lines Processed:</span>
-            <span className="font-medium">{totalLines.toLocaleString()}</span>
-          </div>
-        </div>
-      </div>
-      </div>
-      
-
-      
-      <div className="text-center text-gray-500 mt-4">
-       
-      </div>
-    </div>
-  );
-};
 
 // Custom progress component with green indicator
 const GreenProgress: FC<{ value: number; className?: string }> = ({ 
