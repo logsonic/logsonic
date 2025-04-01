@@ -122,15 +122,12 @@ const DraggableToken: React.FC<{
 interface CustomPatternSelectorProps {
   previewLines: string[];
   onPatternTest?: (pattern: Pattern) => void;
-  showSaveDialog?: boolean;
-  onSaveDialogClose?: () => void;
 }
 
 export const CustomPatternSelector: FC<CustomPatternSelectorProps> = ({
   previewLines,
   onPatternTest,
-  showSaveDialog = false,
-  onSaveDialogClose
+
 }) => {
   const { 
     selectedPattern, 
@@ -297,11 +294,6 @@ export const CustomPatternSelector: FC<CustomPatternSelectorProps> = ({
     }, 500);
   };
 
-  const handleSaveDialogClose = () => {
-    if (onSaveDialogClose) {
-      onSaveDialogClose();
-    }
-  };
 
   const handlePatternNameChange = (name: string) => {
     setPatternName(name);
@@ -515,18 +507,7 @@ export const CustomPatternSelector: FC<CustomPatternSelectorProps> = ({
         </div>
         </div>
 
-      {/* Save Pattern Dialog */}
-      <SavePatternDialog
-        open={showSaveDialog}
-        onClose={handleSaveDialogClose}
-        patternName={patternName}
-        patternDescription={patternDescription}
-        patternContent={localPattern}
-        customPatterns={createNewPatternTokens || {}}
-        onPatternNameChange={handlePatternNameChange}
-        onPatternDescriptionChange={handlePatternDescriptionChange}
-      />
-      
+
    
     </div>
   );

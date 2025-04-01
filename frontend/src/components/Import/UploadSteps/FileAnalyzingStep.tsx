@@ -22,7 +22,7 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
   const [isAnalyzing, setIsAnalyzing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(true);
   const [onSaveDialogClose, setOnSaveDialogClose] = useState<() => void>(() => {});
   
   const {
@@ -248,15 +248,14 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
               <CustomPatternSelector 
                 previewLines={filePreviewBuffer?.lines || []}
                 onPatternTest={handlePatternTest}
-                showSaveDialog={showSaveDialog}
-                onSaveDialogClose={onSaveDialogClose}
+                
+               
               />
             </div>
           )}
-          
-          <div className="mt-6">
-            <PatternTestResults
-              pattern={selectedPattern?.pattern || ''}
+            <div className="mt-6">
+              <PatternTestResults
+                pattern={selectedPattern?.pattern || ''}
               customPatterns={selectedPattern?.custom_patterns || {}}
               logs={filePreviewBuffer?.lines || []}
             />

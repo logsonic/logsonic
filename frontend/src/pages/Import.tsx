@@ -19,6 +19,7 @@ import { useSearchQueryParamsStore } from '@/stores/useSearchParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import { ErrorBoundary } from '@/lib/error-boundary';
 import { useCloudWatchLogProviderService } from '@/components/Import/CloudWatchImport/CloudWatchLogProviderService';
+import { SavePatternDialog } from '@/components/Import/UploadSteps/SavePatternDialog';
 
 
 const Import: FC  = () => {
@@ -31,8 +32,7 @@ const Import: FC  = () => {
     showSummary: boolean;
   };
   const [error, setError] = useState<string | null>(null);
-
-  const [redirectTimer, setRedirectTimer] = useState<NodeJS.Timeout | null>(null);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
   const {
     selectedPattern,
     importSource,
@@ -44,7 +44,8 @@ const Import: FC  = () => {
     setFileFromBlob,
     setImportSource,
     setSelectedPattern,
-    isCreateNewPatternSelected,
+    isCreateNewPatternSelected, 
+
     setCurrentStep,
     detectionResult,
     setDetectionResult,
@@ -62,7 +63,7 @@ const Import: FC  = () => {
 
   const fileService = useFileSelectionService();
   const cloudWatchService = useCloudWatchLogProviderService();
-
+  const [showSaveDialogShown, setShowSaveDialogShown] = useState(false);
 
   // Define steps data
   const steps = [
@@ -232,6 +233,11 @@ const Import: FC  = () => {
           break;
         case 2:
           // Check if there is a pattern ready to move to import
+          // Check if custom pattern needs to be saved
+          if (isCreateNewPatternSelected && !showSaveDialogShown) {
+            setShowSaveDialog(true);  
+            setShowSaveDialogShown(true);
+          }
           if (readyToImportLogs) {
               setCurrentStep(3);
           }
@@ -359,6 +365,12 @@ const Import: FC  = () => {
               ))}
             </div>
             
+            { showSaveDialog && (
+              <SavePatternDialog
+                open={showSaveDialog}
+                onClose={() => setShowSaveDialog(false)}
+              />
+            )}
             {/* Render the current step */}
 
               {renderCurrentStep()}
