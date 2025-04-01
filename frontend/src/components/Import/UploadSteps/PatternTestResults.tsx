@@ -1,5 +1,5 @@
 import { useState, useMemo, FC } from 'react';
-import { Loader2, ChevronDown, ChevronRight, ChevronLeft, ArrowRight } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronRight, ChevronLeft, ArrowRight, ArrowLeft } from 'lucide-react';
 import type { PatternTestResultsProps } from '../types';
 import { getFieldColors, highlightLogLine } from '../utils/patternUtils';
 import StatusBanner from './StatusBanner';
@@ -173,8 +173,8 @@ export const PatternTestResults: FC<Omit<PatternTestResultsProps, 'parsedLogs' |
                 currentPage === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'
               }`}
             >
-              <ChevronLeft className="h-4 w-4 mr-1" />
-              <span>Previous</span>
+             <ArrowLeft className="h-4 w-4 mr-1" />
+             
             </button>
             
             <div className="text-sm text-gray-600">
@@ -188,7 +188,7 @@ export const PatternTestResults: FC<Omit<PatternTestResultsProps, 'parsedLogs' |
                 currentPage >= totalPages - 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'
               }`}
             >
-              <span>Next</span>
+              
               <ArrowRight className="h-4 w-4 ml-1" />
             </button>
           </div>

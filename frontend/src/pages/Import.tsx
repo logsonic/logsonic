@@ -2,10 +2,8 @@ import { FC, Fragment, useEffect, useRef, useState } from 'react';
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { ArrowLeft,FileUp, Cloud } from "lucide-react";
-import { 
-  ImportConfirm,
-  LogSourceSelectionStep,
-} from '../components/Import/UploadSteps';
+import { ImportConfirmStep } from '../components/Import/UploadSteps/ImportConfirmStep';
+import { LogSourceSelectionStep } from '../components/Import/UploadSteps/LogSourceSelectionStep';
 import { SuccessSummary } from '../components/Import/UploadSteps/SuccessSummaryStep';
 import { FileAnalyzingStep } from '../components/Import/UploadSteps/FileAnalyzingStep';
 import type { DetectionResult } from '../components/Import/types';
@@ -192,7 +190,7 @@ const Import: FC  = () => {
         );
       case 3:
         return (
-          <ImportConfirm />
+          <ImportConfirmStep />
         );
       case 4:
 

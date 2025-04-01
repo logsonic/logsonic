@@ -98,7 +98,7 @@ export const CloudWatchLogProvider: FC<LogSourceProvider> = ({
     console.log("handleStreamSelect", groupName, streamName, streamSize);
     setSelectedStream(groupName, streamName, streamSize);
 
-    setMetadata({ _src: `cloudwatch.${groupName}.${streamName}` });
+    setMetadata({ _src: `cloudwatch.${groupName}.${streamName}`, _log_group: groupName, _log_stream: streamName });
     setSelectedFileName(`${groupName}-${streamName}.log`);
     // Fetch the logs for the selected stream for preview
     cloudWatchLogService.handleFilePreview({groupName, streamName}, (logs) => {

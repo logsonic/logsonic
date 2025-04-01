@@ -1,10 +1,13 @@
-import { CloudWatchLogProvider, FileSelection } from '@/components/Import/UploadSteps';
+
 import SourceSelection from './SourceSelection';
 import { FC, useEffect } from 'react';
 import { FileUp, Cloud } from 'lucide-react';
 import { useImportStore } from '@/stores/useImportStore';
 import { ProviderUploadHandler } from '@/stores/useImportStore';
 import type { LogSourceProvider } from '@/components/Import/types';
+import { CloudWatchLogProvider } from '@/components/Import/CloudWatchImport/CloudWatchLogProvider';
+import { FileSelection } from '@/components/Import/LocalFileImport/FileSelection';
+
 interface LogSourceSelectionStepProps {
   onSourceSelect: (source: string) => void;
   onFileSelect: (filename: string ) => void;
@@ -12,7 +15,7 @@ interface LogSourceSelectionStepProps {
   onBackToSourceSelection: () => void;
 }
 
-const LogSourceSelectionStep: FC<LogSourceSelectionStepProps> = ({
+export const LogSourceSelectionStep: FC<LogSourceSelectionStepProps> = ({
   onSourceSelect,
   onFileSelect,
   onFilePreview,

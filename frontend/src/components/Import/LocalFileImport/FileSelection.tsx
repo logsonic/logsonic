@@ -5,7 +5,7 @@ import { useImportStore } from '../../../stores/useImportStore';
 import { useFileSelectionService } from './FileSelectionService';
 
 
-const FileSelection: FC<LogSourceProvider> = ({   
+export const FileSelection: FC<LogSourceProvider> = ({   
   onFileSelect, 
   onFilePreview,
   onBackToSourceSelection,

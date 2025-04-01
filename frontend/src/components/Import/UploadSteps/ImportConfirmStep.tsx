@@ -14,12 +14,12 @@ const GreenProgress: FC<{ value: number; className?: string }> = ({
 }) => (
   <ProgressPrimitive.Root
     className={cn(
-      "relative h-2 w-full overflow-hidden rounded-full bg-green-100",
+      "relative h-2 w-full overflow-hidden rounded-full bg-blue-100",
       className
     )}
   >
     <ProgressPrimitive.Indicator
-      className="h-full w-full flex-1 bg-green-500 transition-all"
+      className="h-full w-full flex-1 bg-blue-500 transition-all"
       style={{ transform: `translateX(-${100 - (value || 0)}%)` }}
     />
   </ProgressPrimitive.Root>
@@ -113,7 +113,46 @@ export const ImportConfirmStep: FC = ({
   const showIndeterminateProgress = importSource === 'cloudwatch' && isUploading;
   // Determine if we should show the regular progress bar (for file uploads)
   const showProgressBar = importSource !== 'cloudwatch' && isUploading;
+  const { profile, region, selectedStream } = useCloudWatchStore();
 
+  const showCloudwatchSummary = () => {
+    return (
+      <>
+        <tr>
+          <td className="py-1 text-gray-800 font-bold">CloudWatch Region:</td>
+          <td className="py-1 text-gray-800">{region}</td>
+        </tr>
+        <tr>
+          <td className="py-1 text-gray-800 font-bold">CloudWatch Profile:</td>
+          <td className="py-1 text-gray-800">{profile}</td>
+        </tr>
+        <tr>
+          <td className="py-1 text-gray-800 font-bold">CloudWatch Stream name:</td>
+          <td className="py-1 text-gray-800">{selectedFileName}</td>
+        </tr>
+
+      </>
+    )
+  }
+  const showFileSummary = () => {
+    return (
+      <>
+        <tr>
+          <td className="py-1 text-gray-800 font-bold">File Name:</td>
+          <td className="py-1 text-gray-800">{selectedFileName}</td>
+        </tr>
+      <tr>  
+        <td className="py-1 text-gray-800 font-bold">File Size:</td>
+        <td className="py-1 text-gray-800">{formatFileSize(file.size)}</td>
+      </tr>
+      <tr>
+        <td className="py-1 text-gray-800 font-bold">Total Lines:</td>
+        <td className="py-1 text-gray-800">{approxLines.toLocaleString()} lines estimated</td>
+
+      </tr>
+      </>
+    )
+  }
   return (
     <div className="space-y-6">
       
@@ -123,16 +162,17 @@ export const ImportConfirmStep: FC = ({
             {sourceIcon}
             <h3 className="text-lg font-medium text-blue-700">{sourceTitle}</h3>
           </div>
-          <table className="w-full text-lg">
+          <table className="text-lg">
+            <thead>
+              <tr>
+                <th className="w-[250px] text-gray-800 font-bold text-left">Key</th>
+                <th className="text-gray-800 font-bold text-left">Value</th>
+              </tr>
+            </thead>
             <tbody>
-              <tr>
-                <td className="py-1 text-gray-800 font-bold w-[150px]">{fileLabel}</td>
-                <td className="py-1 text-gray-800">{fileName}</td>
-              </tr>
-              <tr>
-                <td className="py-1 text-gray-800 font-bold">Estimated Lines:</td>
-                <td className="py-1 text-gray-800">{estimatedLines.toLocaleString()} approximate lines</td>
-              </tr>
+
+              { importSource == 'cloudwatch' && showCloudwatchSummary() }
+              { importSource == 'file' && showFileSummary() }
               <tr>
                 <td className="py-1 text-gray-800 font-bold">Smart Decoder:</td>
                 <td className="py-1 text-gray-800">{sessionOptionsSmartDecoder ? 'Yes' : 'No'}</td>
@@ -168,7 +208,13 @@ export const ImportConfirmStep: FC = ({
             <Code className="h-5 w-5 text-indigo-500 mr-2" />
             <h3 className="text-lg font-medium text-indigo-700">Pattern Information</h3>
           </div>
-          <table className="w-full text-lg">
+          <table className="w-1/5 text-lg">
+          <thead>
+              <tr>
+                <th className="w-[250px] text-gray-800 font-bold text-left">Key</th>
+                <th className="text-gray-800 font-bold text-left">Value</th>
+              </tr>
+            </thead>
             <tbody>
               <tr>
                 <td className="py-1 text-gray-800 font-bold  w-[150px]">Pattern Name:</td>
