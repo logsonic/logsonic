@@ -66,7 +66,7 @@ export const CloudWatchLogProvider: FC<LogSourceProvider> = ({
     estimatedLogCount, setEstimatedLogCount
   } = useCloudWatchStore();
 
-  const { setReadyToSelectPattern, setFilePreviewBuffer } = useImportStore();
+  const { setReadyToSelectPattern, setFilePreviewBuffer, setMetadata, setSelectedFileName } = useImportStore();
   
   const handleAuthChange = (field: 'region' | 'profile', value: string) => {
     switch (field) {
@@ -98,17 +98,15 @@ export const CloudWatchLogProvider: FC<LogSourceProvider> = ({
     console.log("handleStreamSelect", groupName, streamName, streamSize);
     setSelectedStream(groupName, streamName, streamSize);
 
-
+    setMetadata({ _src: `cloudwatch.${groupName}.${streamName}` });
+    setSelectedFileName(`${groupName}-${streamName}.log`);
     // Fetch the logs for the selected stream for preview
     cloudWatchLogService.handleFilePreview({groupName, streamName}, (logs) => {
 
-      // Calculate the estimated log size in bytes
-      const estimatedLogSize = logs.reduce((acc, log) => acc + log.length, 0);
-      const sizePerLog = estimatedLogSize / logs.length;
-      const estimatedSize = Math.ceil(streamSize / sizePerLog);
-      setEstimatedLogCount(estimatedSize);
+    
+      setEstimatedLogCount(0);
 
-      console.log("estimatedLogCount", estimatedLogCount, estimatedSize);
+      console.log("estimatedLogCount", estimatedLogCount, 0);
 
       setFilePreviewBuffer({
         lines: logs,

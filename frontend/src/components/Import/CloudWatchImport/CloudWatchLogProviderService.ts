@@ -194,6 +194,7 @@ export const useCloudWatchLogProviderService = () : LogSourceProviderService => 
       setLoading(true);
       setError(null);
       
+      
       const { logs } = await fetchLogBatchInternal(
         groupName, 
         streamName, 

@@ -104,3 +104,12 @@
 .transition-width {
   transition-property: width;
 }
+
+@keyframes oscillate {
+  0% {
+    left: -33.33%;
+  }
+  100% {
+    left: 100%;
+  }
+}
