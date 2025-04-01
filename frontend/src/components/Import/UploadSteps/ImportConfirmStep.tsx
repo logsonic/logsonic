@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { useImportStore } from '@/stores/useImportStore';
 import * as ProgressPrimitive from "@radix-ui/react-progress";
 import { Cloud, Code, FileText, Loader2 } from 'lucide-react';
-import { FC, useEffect, useState } from 'react';
+import { FC, useEffect } from 'react';
 
 // Custom progress component with green indicator
 const GreenProgress: FC<{ value: number; className?: string }> = ({ 
@@ -46,7 +46,8 @@ export const ImportConfirmStep: FC = ({
     selectedPattern,
     filePreviewBuffer,
     approxLines, 
-    isUploading,    
+    isUploading,   
+    totalLines,
     uploadProgress,
     sessionOptionsSmartDecoder,
     sessionOptionsTimezone,
@@ -58,16 +59,7 @@ export const ImportConfirmStep: FC = ({
     metadata
   } = useImportStore();
 
-  // Set up a state to track ingested lines that's updated from metadata
-  const [ingestedLines, setIngestedLines] = useState(0);
   
-  // Update ingested lines based on metadata._total_logs if available
-  useEffect(() => {
-    if (metadata && typeof metadata._total_logs === 'number') {
-      setIngestedLines(metadata._total_logs);
-    }
-  }, [metadata]);
-
   const file = selectedFileHandle as File;
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} bytes`;
@@ -273,7 +265,7 @@ export const ImportConfirmStep: FC = ({
         <div className="space-y-2 mx-auto w-full rounded-lg shadow-sm border p-6">
           <div className="flex items-center justify-between text-sm">
             <span className="font-medium">Retrieving CloudWatch logs...</span>
-            <span className="font-medium">{ingestedLines.toLocaleString()} lines ingested</span>
+            <span className="font-medium">{totalLines.toLocaleString()} lines ingested</span>
           </div>
           <IndeterminateProgress />
           <div className="flex items-center justify-center text-sm mt-2">

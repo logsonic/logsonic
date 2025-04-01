@@ -99,6 +99,7 @@ export const useUpload = (): UploadProgressHookResult => {
         }
         handledLines += lines.length;
         setUploadProgress(Math.ceil(handledLines / totalLines * 100));
+        setTotalLines(handledLines);
         next();
       })
    
