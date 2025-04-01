@@ -1,5 +1,5 @@
 import { Input } from "../ui/input";
-import { useSearchQueryParamsStore } from "@/stores/useSearchParams";
+import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
 import { Button } from "../ui/button";
 import { useCallback, useState } from "react";
 import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";

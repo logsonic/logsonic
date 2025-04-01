@@ -17,21 +17,16 @@ import { TimezoneSelectorCommon } from '@/components/common/TimezoneSelectorComm
 
 export const IngestSessionOptions: FC = () => {
   const { 
-    sessionOptionsFileName,
     sessionOptionsSmartDecoder,
     sessionOptionsTimezone,
     sessionOptionsYear,      
     sessionOptionsMonth,
     sessionOptionsDay,
-    selectedFile,
-    selectedPattern,
-    setSessionOptionFileName,
     setSessionOptionSmartDecoder,
     setSessionOptionTimezone,
     setSessionOptionYear,
     setSessionOptionMonth,
     setSessionOptionDay,
-    handlePatternOperation
   } = useImportStore();
 
   const [isUpdating, setIsUpdating] = useState(false);

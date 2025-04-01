@@ -7,32 +7,30 @@ import { PatternTestResults } from './PatternTestResults';
 import { extractFields } from '../utils/patternUtils';
 import { DEFAULT_PATTERN, useImportStore } from '@/stores/useImportStore';
 import { CustomPatternSelector } from './CustomPatternSelector';
+import { SavePatternDialog } from './SavePatternDialog';
 
-
-interface FileAnalyzingProps {
+interface FileAnalyzingStepProps {
   onDetectionComplete: (result: DetectionResult) => void;
-  showSaveDialog?: boolean;
-  onSaveDialogClose?: () => void;
 }
 
-export const FileAnalyzing: FC<FileAnalyzingProps> = ({
+// This component is responsible for analyzing the file and suggesting a pattern
+// A log preview must be provided by the LogSourceProvider component into the filePreviewBuffer import store
+
+export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
   onDetectionComplete,
-  showSaveDialog = false,
-  onSaveDialogClose
 }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-   
+  const [showSaveDialog, setShowSaveDialog] = useState(true);
+  const [onSaveDialogClose, setOnSaveDialogClose] = useState<() => void>(() => {});
+  
   const {
     setSelectedPattern, 
     selectedPattern, 
-    setSelectedFile, 
-    selectedFile, 
-    setFilePreview, 
-    filePreview, 
-    setCurrentStep, 
-    currentStep, 
+    setFilePreviewBuffer, 
+    filePreviewBuffer, 
+
     isCreateNewPatternSelected,
     availablePatterns,
     createNewPattern,
@@ -41,26 +39,14 @@ export const FileAnalyzing: FC<FileAnalyzingProps> = ({
     setParsedLogs,
     setError: setStoreError,
     importSource,
-    sessionOptionsFileName
+    sessionOptionsFileName,
+    setReadyToImportLogs
   } = useImportStore();
 
   useEffect(() => {
     const analyzeFile = async () => {
       // Enhanced debugging info
-      console.log("FileAnalyzing useEffect triggered", { 
-        hasFilePreview: !!filePreview, 
-        previewLines: filePreview?.lines?.length,
-        hasSelectedFile: !!selectedFile,
-        importSource,
-        currentStep
-      });
-      
-      if (!filePreview?.lines?.length || !selectedFile) {
-        console.error("Missing file preview or selected file, aborting analysis");
-        return;
-      }
-
-      console.log("Analyzing file in FileAnalyzing component", importSource, filePreview.lines.length, "lines");
+      console.log("Analyzing file in FileAnalyzing component", importSource, filePreviewBuffer.lines.length, "lines");
       
       try {
         setIsAnalyzing(true);
@@ -70,18 +56,19 @@ export const FileAnalyzing: FC<FileAnalyzingProps> = ({
         // Try to auto-detect the pattern
         console.log("Starting pattern suggestion...");
         const suggestResponse = await suggestPatterns({
-          logs: filePreview.lines
+          logs: filePreviewBuffer.lines
         });
         console.log("Pattern suggestion complete", suggestResponse.results?.length || 0, "patterns found");
 
-      
+       setReadyToImportLogs(true);
+
         if (suggestResponse.results && suggestResponse.results.length > 0) {
           const bestMatch = suggestResponse.results[0];
           console.log("Testing best match pattern:", bestMatch.pattern);
           
           // Test the suggested pattern
           const parseResponse = await parseLogs({
-            logs: filePreview.lines,
+            logs: filePreviewBuffer.lines,
             grok_pattern: bestMatch.pattern,
             custom_patterns: bestMatch.custom_patterns || {}
           });
@@ -211,7 +198,7 @@ export const FileAnalyzing: FC<FileAnalyzingProps> = ({
     } else {
       return {
         icon: <File className="h-5 w-5 text-blue-500 mr-2" />,
-        text: `Analyzing file: ${selectedFile?.name || 'Unknown'}`
+        text: `Analyzing file: ${filePreviewBuffer.filename || 'Unknown'}`
       };
     }
   };
@@ -250,7 +237,7 @@ export const FileAnalyzing: FC<FileAnalyzingProps> = ({
             <LogPatternSelection
               initialPattern={selectedPattern}
               onPatternChange={handlePatternChange}
-              previewLines={filePreview?.lines || []}
+              previewLines={filePreviewBuffer?.lines || []}
             />
           </div>
           
@@ -259,19 +246,18 @@ export const FileAnalyzing: FC<FileAnalyzingProps> = ({
           {isCreateNewPatternSelected && (
             <div>
               <CustomPatternSelector 
-                previewLines={filePreview?.lines || []}
+                previewLines={filePreviewBuffer?.lines || []}
                 onPatternTest={handlePatternTest}
-                showSaveDialog={showSaveDialog}
-                onSaveDialogClose={onSaveDialogClose}
+                
+               
               />
             </div>
           )}
-          
-          <div className="mt-6">
-            <PatternTestResults
-              pattern={selectedPattern?.pattern || ''}
+            <div className="mt-6">
+              <PatternTestResults
+                pattern={selectedPattern?.pattern || ''}
               customPatterns={selectedPattern?.custom_patterns || {}}
-              logs={filePreview?.lines || []}
+              logs={filePreviewBuffer?.lines || []}
             />
           </div>
         </div>
@@ -280,4 +266,4 @@ export const FileAnalyzing: FC<FileAnalyzingProps> = ({
   );
 };
 
-export default FileAnalyzing; 
+export default FileAnalyzingStep; 

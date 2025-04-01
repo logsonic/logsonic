@@ -1,7 +1,6 @@
-import { Card } from '@/components/ui/card';
 import { LogSourceProvider } from '@/components/Import/types';
 import { FC } from 'react';
-
+import { useImportStore } from '@/stores/useImportStore';
 interface SourceSelectionProps {
   providers: LogSourceProvider[];
   selectedSource: string | null;
@@ -13,6 +12,14 @@ export const SourceSelection: FC<SourceSelectionProps> = ({
   selectedSource, 
   onSelectSource 
 }) => {
+  const { setImportSource } = useImportStore();
+
+  const handleSelectSource = (source: string) => {
+    setImportSource(source);
+    onSelectSource(source);
+    console.log(`Source selected: ${source}`);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col space-y-4">
@@ -27,7 +34,7 @@ export const SourceSelection: FC<SourceSelectionProps> = ({
                 ${selectedSource === provider.id 
                   ? 'border-blue-500 bg-blue-50' 
                   : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
-              onClick={() => onSelectSource(provider.id)}
+              onClick={() => handleSelectSource(provider.id)}
             >
               <div className={`h-5 w-5 rounded-full border flex items-center justify-center 
                 ${selectedSource === provider.id ? 'border-blue-500' : 'border-gray-400'}`}>

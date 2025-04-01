@@ -1,66 +1,11 @@
-import { FC, useEffect } from 'react';
-import { Progress } from '../../../components/ui/progress';
+import { FC, useEffect, useState } from 'react';
+import { Progress } from '../../ui/progress';
 import { Loader2, FileText, Code, CheckCircle, File, Cloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as ProgressPrimitive from "@radix-ui/react-progress";
-
+import { useNavigate } from 'react-router-dom';
 import { useImportStore } from '@/stores/useImportStore';
-
-// Success Summary component for showing import completion
-export const SuccessSummary: FC<{
-  uploadSummary: {
-    totalLines: number;
-    patternName: string;
-    redirectCountdown: number;
-  };
-}> = ({ uploadSummary }) => {
-  const { selectedFile, importSource, sessionOptionsFileName } = useImportStore();
-
-  // Set the icon and filename label based on the import source
-  const sourceIcon = importSource === 'cloudwatch' 
-    ? <Cloud className="h-6 w-6 text-blue-500 mr-2" />
-    : <File className="h-6 w-6 text-blue-500 mr-2" />;
-  
-  const fileLabel = importSource === 'cloudwatch' ? 'CloudWatch Log:' : 'File Name:';
-  const fileName = importSource === 'cloudwatch' ? sessionOptionsFileName : selectedFile?.name;
-
-  return (
-    <div className="space-y-6 py-4">
-      <div className="flex flex-col items-center text-center">
-        <div className="flex items-center mb-3">
-          <CheckCircle className="h-8 w-8 text-green-500 mr-2" />
-          <h2 className="text-2xl font-bold text-gray-800">Import Successful!</h2>
-        </div>
-        <p className="text-gray-600 mt-2">
-          Your logs have been successfully imported and processed. Redirecting to home page in {uploadSummary.redirectCountdown} seconds...
-        </p>
-        <div className="rounded-lg p-6">
-        <div className="space-y-2">
-          <div className="flex justify-center items-center">
-            {sourceIcon}
-            <span className="text-gray-600 mr-2">{fileLabel}</span>
-            <span className="font-medium">{fileName}</span>
-          </div>
-          <div className="flex justify-center">
-            <span className="text-gray-600 mr-2">Pattern Used: </span>
-            <span className="font-medium">{uploadSummary.patternName}</span>
-          </div>
-          <div className="flex justify-center">
-            <span className="text-gray-600 mr-2">Total Lines Processed:</span>
-            <span className="font-medium">{uploadSummary.totalLines.toLocaleString()}</span>
-          </div>
-        </div>
-      </div>
-      </div>
-      
-
-      
-      <div className="text-center text-gray-500 mt-4">
-       
-      </div>
-    </div>
-  );
-};
+import { useCloudWatchStore } from '@/stores/useCloudWatchStore';
 
 // Custom progress component with green indicator
 const GreenProgress: FC<{ value: number; className?: string }> = ({ 
@@ -69,26 +14,41 @@ const GreenProgress: FC<{ value: number; className?: string }> = ({
 }) => (
   <ProgressPrimitive.Root
     className={cn(
-      "relative h-2 w-full overflow-hidden rounded-full bg-green-100",
+      "relative h-2 w-full overflow-hidden rounded-full bg-blue-100",
       className
     )}
   >
     <ProgressPrimitive.Indicator
-      className="h-full w-full flex-1 bg-green-500 transition-all"
+      className="h-full w-full flex-1 bg-blue-500 transition-all"
       style={{ transform: `translateX(-${100 - (value || 0)}%)` }}
     />
   </ProgressPrimitive.Root>
 );
 
-export const ImportConfirm: FC = ({
+// Indeterminate oscillator progress for CloudWatch imports
+const IndeterminateProgress: FC<{ className?: string }> = ({ className }) => (
+  <ProgressPrimitive.Root
+    className={cn(
+      "relative h-2 w-full overflow-hidden rounded-full bg-blue-100",
+      className
+    )}
+  >
+    <div 
+      className="absolute w-1/3 h-full bg-blue-500 animate-[oscillate_1.5s_ease-in-out_infinite_alternate]"
+    />
+  </ProgressPrimitive.Root>
+);
+
+export const ImportConfirmStep: FC = ({
 
 }) => {
   const { 
-    selectedFile, 
-    selectedPattern, 
-    filePreview,
+    selectedFileName, 
+    selectedFileHandle, 
+    selectedPattern,
+    filePreviewBuffer,
     approxLines, 
-    isUploading, 
+    isUploading,    
     uploadProgress,
     sessionOptionsSmartDecoder,
     sessionOptionsTimezone,
@@ -98,9 +58,21 @@ export const ImportConfirm: FC = ({
     importSource,
     sessionOptionsFileName,
     setApproxLines,
+    totalLines,
     metadata
   } = useImportStore();
 
+  // Set up a state to track ingested lines that's updated from metadata
+  const [ingestedLines, setIngestedLines] = useState(0);
+  
+  // Update ingested lines based on metadata._total_logs if available
+  useEffect(() => {
+    if (metadata && typeof metadata._total_logs === 'number') {
+      setIngestedLines(metadata._total_logs);
+    }
+  }, [metadata]);
+
+  const file = selectedFileHandle as File;
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} bytes`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
@@ -114,9 +86,9 @@ export const ImportConfirm: FC = ({
     // First priority: use approxLines if it's already set
     approxLines > 0 ? approxLines :
     // Second priority: use filePreview.totalLines if available
-    (filePreview?.totalLines || 0) > 0 ? filePreview.totalLines :
+    (filePreviewBuffer?.lines.length || 0) > 0 ? filePreviewBuffer.lines.length :
     // Fallback: estimate based on file size
-    Math.round((selectedFile?.size || 0) / avgBytesPerLine);
+    Math.round((file.size || 0) / avgBytesPerLine);
 
   // If we calculated a new estimate and approxLines was 0, update the store
   useEffect(() => {
@@ -135,8 +107,52 @@ export const ImportConfirm: FC = ({
     : 'File Information';
   
   const fileLabel = importSource === 'cloudwatch' ? 'Source Log:' : 'File Name:';
-  const fileName = importSource === 'cloudwatch' ? sessionOptionsFileName : selectedFile?.name;
+  const fileName = importSource === 'cloudwatch' ? sessionOptionsFileName : selectedFileName;
 
+  // Determine if we should show the indeterminate progress (for CloudWatch)
+  const showIndeterminateProgress = importSource === 'cloudwatch' && isUploading;
+  // Determine if we should show the regular progress bar (for file uploads)
+  const showProgressBar = importSource !== 'cloudwatch' && isUploading;
+  const { profile, region, selectedStream } = useCloudWatchStore();
+
+  const showCloudwatchSummary = () => {
+    return (
+      <>
+        <tr>
+          <td className="py-1 text-gray-800 font-bold">CloudWatch Region:</td>
+          <td className="py-1 text-gray-800">{region}</td>
+        </tr>
+        <tr>
+          <td className="py-1 text-gray-800 font-bold">CloudWatch Profile:</td>
+          <td className="py-1 text-gray-800">{profile}</td>
+        </tr>
+        <tr>
+          <td className="py-1 text-gray-800 font-bold">CloudWatch Stream name:</td>
+          <td className="py-1 text-gray-800">{selectedFileName}</td>
+        </tr>
+
+      </>
+    )
+  }
+  const showFileSummary = () => {
+    return (
+      <>
+        <tr>
+          <td className="py-1 text-gray-800 font-bold">File Name:</td>
+          <td className="py-1 text-gray-800">{selectedFileName}</td>
+        </tr>
+      <tr>  
+        <td className="py-1 text-gray-800 font-bold">File Size:</td>
+        <td className="py-1 text-gray-800">{formatFileSize(file.size)}</td>
+      </tr>
+      <tr>
+        <td className="py-1 text-gray-800 font-bold">Total Lines:</td>
+        <td className="py-1 text-gray-800">{approxLines.toLocaleString()} lines estimated</td>
+
+      </tr>
+      </>
+    )
+  }
   return (
     <div className="space-y-6">
       
@@ -146,20 +162,17 @@ export const ImportConfirm: FC = ({
             {sourceIcon}
             <h3 className="text-lg font-medium text-blue-700">{sourceTitle}</h3>
           </div>
-          <table className="w-full text-lg">
+          <table className="text-lg">
+            <thead>
+              <tr>
+                <th className="w-[250px] text-gray-800 font-bold text-left">Key</th>
+                <th className="text-gray-800 font-bold text-left">Value</th>
+              </tr>
+            </thead>
             <tbody>
-              <tr>
-                <td className="py-1 text-gray-800 font-bold w-[150px]">{fileLabel}</td>
-                <td className="py-1 text-gray-800">{fileName}</td>
-              </tr>
-              <tr>
-                <td className="py-1 text-gray-800 font-bold">File Size:</td>
-                <td className="py-1 text-gray-800">{formatFileSize(selectedFile?.size || 0)}</td>
-              </tr>
-              <tr>
-                <td className="py-1 text-gray-800 font-bold">Estimated Lines:</td>
-                <td className="py-1 text-gray-800">{estimatedLines.toLocaleString()} approximate lines</td>
-              </tr>
+
+              { importSource == 'cloudwatch' && showCloudwatchSummary() }
+              { importSource == 'file' && showFileSummary() }
               <tr>
                 <td className="py-1 text-gray-800 font-bold">Smart Decoder:</td>
                 <td className="py-1 text-gray-800">{sessionOptionsSmartDecoder ? 'Yes' : 'No'}</td>
@@ -195,11 +208,17 @@ export const ImportConfirm: FC = ({
             <Code className="h-5 w-5 text-indigo-500 mr-2" />
             <h3 className="text-lg font-medium text-indigo-700">Pattern Information</h3>
           </div>
-          <table className="w-full text-lg">
+          <table className="w-1/5 text-lg">
+          <thead>
+              <tr>
+                <th className="w-[250px] text-gray-800 font-bold text-left">Key</th>
+                <th className="text-gray-800 font-bold text-left">Value</th>
+              </tr>
+            </thead>
             <tbody>
               <tr>
                 <td className="py-1 text-gray-800 font-bold  w-[150px]">Pattern Name:</td>
-                <td className="py-1 text-gray-800">{selectedPattern.name}</td>
+                <td className="py-1 text-gray-800">{selectedPattern?.name}</td>
               </tr>
               <tr>
                 <td className="py-1 text-gray-800 font-bold">Description:</td>
@@ -242,11 +261,11 @@ export const ImportConfirm: FC = ({
         </div>
       </div>
       
-      {isUploading && (
+      {showProgressBar && (
         <div className="space-y-2 mx-auto w-full rounded-lg shadow-sm border p-6">
           <div className="flex items-center justify-between text-sm">
             <span className="font-medium">Uploading...</span>
-            <span className="font-medium ">{Math.round(uploadProgress)}%</span>
+            <span className="font-medium">{Math.round(uploadProgress)}%</span>
           </div>
           <GreenProgress value={uploadProgress} />
           <div className="flex items-center justify-center text-sm mt-2">
@@ -255,8 +274,22 @@ export const ImportConfirm: FC = ({
           </div>
         </div>
       )}
+
+      {showIndeterminateProgress && (
+        <div className="space-y-2 mx-auto w-full rounded-lg shadow-sm border p-6">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium">Retrieving CloudWatch logs...</span>
+            <span className="font-medium">{ingestedLines.toLocaleString()} lines ingested</span>
+          </div>
+          <IndeterminateProgress />
+          <div className="flex items-center justify-center text-sm mt-2">
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            <span>Processing logs, please wait...</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default ImportConfirm; 
+export default ImportConfirmStep; 

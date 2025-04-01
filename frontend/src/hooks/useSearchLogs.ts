@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useGetLogs, ApiPerformanceMetrics } from './useApi';
 import { LogResponse, LogQueryParams } from '@/lib/api-types';
-import { useSearchQueryParamsStore } from '@/stores/useSearchParams';
+import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { calculateRelativeDateRange } from '@/lib/date-utils';
 

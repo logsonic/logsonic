@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSearchQueryParamsStore } from '@/stores/useSearchParams';
+import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useMemo } from 'react';
 import { useSearchParser } from '@/hooks/useSearchParser.tsx';
 

@@ -13,8 +13,7 @@ export interface Pattern {
 
 export interface FilePreview {
   lines: string[];
-  totalLines: number;
-  fileSize: number;
+  filename: string;
 }
 
 export interface DetectionResult {
@@ -23,13 +22,6 @@ export interface DetectionResult {
   parsedLogs?: Record<string, any>[];
   error?: string;
 }
-
-
-export interface FileSelectionProps {
-  onFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  onBackToSourceSelection?: () => void;
-}
-
 
 export interface UploadProgressHookProps {
   selectedFile: File | null;
@@ -43,7 +35,7 @@ export interface UploadProgressHookResult {
   isUploading: boolean;
   uploadProgress: number;
   approxLines: number;
-  handleUpload: () => Promise<void>;
+  handleUpload: (provider: LogSourceProviderService) => Promise<void>;
 }
 
 export interface FileParserHookResult {
@@ -88,10 +80,22 @@ export interface LogSourceProvider {
   name: string;
   icon: React.ComponentType<any>;
   component: React.ForwardRefExoticComponent<any>;
+  // callbacks for notifying file selection and preview
+
+  // Notify that a file has been selected from the user
+  onFileSelect: (filename: string) => void;
+  // Notify that a file preview component has been loaded 
+  onFilePreview: (lines: string[], filename: string) => void;
+  // Notify that the user wants to go back to the source selection after file preview
+  onBackToSourceSelection: () => void;
+  // Notify that the wizard can proceed to file analysis
+  onFileReadyForAnalysis: (ready: boolean) => void;
 }
 
 // Interface for log provider components that implement ref functionality
-export interface LogSourceProviderRef {
-  handleImport: () => Promise<void>;
-  validateCanProceed: () => Promise<{ canProceed: boolean; errorMessage?: string }>;
+export interface LogSourceProviderService {
+  name: string;
+  // Start the actual import process 
+  handleFileImport: (filehandle: object, chunkSize: number, callback: (lines: string[], totalLines: number, next: () => void) => Promise<void>) => Promise<void>;
+  handleFilePreview: (filehandle: object, onPreviewReadyCallback: (lines: string[]) => void) => Promise<void>;
 } 

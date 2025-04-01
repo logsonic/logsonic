@@ -26,11 +26,6 @@ builds:
       - -s -w
     flags:
       - -trimpath
-    hooks:
-      post:
-        - cmd: bash -c 'if [[ "{{ .Os }}" == "linux" ]]; then upx --best {{ .Path }}; fi'
-          env:
-            - GOARCH=amd64
 
 changelog:
   sort: asc
