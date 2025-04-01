@@ -564,7 +564,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
       columns: [...columns], // Create a new array to force update
     }));
     
-  }, [store.columnWidths, columns, table]);
+  }, [store.selectedColumns, store.columnWidths, columns, table]);
 
 
 
