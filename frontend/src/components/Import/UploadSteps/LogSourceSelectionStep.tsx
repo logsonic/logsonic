@@ -1,9 +1,9 @@
-import SourceSelection from './SourceSelection';
-import { FC } from 'react';
-import { FileUp, Cloud } from 'lucide-react';
-import { useImportStore } from '@/stores/useImportStore';
 import { CloudWatchLogProvider } from '@/components/Import/CloudWatchImport/CloudWatchLogProvider';
 import { FileSelection } from '@/components/Import/LocalFileImport/FileSelection';
+import { useImportStore } from '@/stores/useImportStore';
+import { Cloud, FileUp } from 'lucide-react';
+import { FC } from 'react';
+import SourceSelection from './SourceSelection';
 
 interface LogSourceSelectionStepProps {
   onSourceSelect: (source: string) => void;

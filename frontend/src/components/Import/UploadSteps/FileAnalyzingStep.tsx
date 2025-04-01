@@ -1,13 +1,12 @@
+import { DEFAULT_PATTERN, useImportStore } from '@/stores/useImportStore';
+import { Cloud, File, Loader2 } from 'lucide-react';
 import { FC, useEffect, useState } from 'react';
-import { Loader2, ChevronDown, File, Cloud } from 'lucide-react';
-import { suggestPatterns, parseLogs, getGrokPatterns } from '../../../lib/api-client';
+import { parseLogs, suggestPatterns } from '../../../lib/api-client';
 import type { DetectionResult, Pattern } from '../types';
+import { extractFields } from '../utils/patternUtils';
+import { CustomPatternSelector } from './CustomPatternSelector';
 import { LogPatternSelection } from './LogPatternSelection';
 import { PatternTestResults } from './PatternTestResults';
-import { extractFields } from '../utils/patternUtils';
-import { DEFAULT_PATTERN, useImportStore } from '@/stores/useImportStore';
-import { CustomPatternSelector } from './CustomPatternSelector';
-import { SavePatternDialog } from './SavePatternDialog';
 
 interface FileAnalyzingStepProps {
   onDetectionComplete: (result: DetectionResult) => void;
@@ -20,17 +19,12 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
   onDetectionComplete,
 }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const [showSaveDialog, setShowSaveDialog] = useState(true);
-  const [onSaveDialogClose, setOnSaveDialogClose] = useState<() => void>(() => {});
   
+
   const {
     setSelectedPattern, 
     selectedPattern, 
-    setFilePreviewBuffer, 
     filePreviewBuffer, 
-
     isCreateNewPatternSelected,
     availablePatterns,
     createNewPattern,
@@ -50,7 +44,6 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
       
       try {
         setIsAnalyzing(true);
-        setError(null);
         setStoreError(null);
 
         // Try to auto-detect the pattern
@@ -128,7 +121,7 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
         // Any error in the process, switch to custom pattern
         const errorMessage = err instanceof Error ? err.message : 'Failed to analyze log file';
         console.error("Error during pattern detection:", errorMessage);
-        setError(errorMessage);
+       
         setStoreError(errorMessage);
 
         setCreateNewPattern(DEFAULT_PATTERN);
@@ -164,7 +157,7 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
         setIsAnalyzing(false);
       },
       (errorMsg) => {
-        setError(errorMsg);
+      
         setStoreError(errorMsg);
         setIsAnalyzing(false);
       }
@@ -181,7 +174,7 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
         setIsAnalyzing(false);
       },
       (errorMsg) => {
-        setError(errorMsg);
+     
         setStoreError(errorMsg);
         setIsAnalyzing(false);
       }

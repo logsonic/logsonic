@@ -1,4 +1,3 @@
-import { Pattern } from '../types';
 import React from 'react';
 
 /**

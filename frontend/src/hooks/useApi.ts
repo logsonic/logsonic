@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
 import * as api from '@/lib/api-client';
-import { IngestSessionOptions } from '@/lib/api-types';
+import { useCallback, useState } from 'react';
+
 
 // Interface for performance metrics
 export interface ApiPerformanceMetrics {

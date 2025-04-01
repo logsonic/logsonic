@@ -1,6 +1,6 @@
-import { create } from 'zustand';
-import { SystemInfoResponse } from '@/lib/api-types';
 import { getSystemInfo } from '@/lib/api-client';
+import { SystemInfoResponse } from '@/lib/api-types';
+import { create } from 'zustand';
 
 interface SystemInfoState {
   // Data

@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
-import { findTimeZone, getZonedTime, listTimeZones } from "timezone-support";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Check, ChevronsUpDown, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Check, ChevronsUpDown, Globe } from "lucide-react";
+import { useEffect, useState } from "react";
+import { findTimeZone, getZonedTime, listTimeZones } from "timezone-support";
 
 // Function to get the GMT offset for a timezone
 export const getGMTOffset = (timeZoneId: string): { offsetString: string; offsetMinutes: number } => {

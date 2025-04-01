@@ -1,5 +1,8 @@
-import React, { useState, useEffect } from 'react';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
+import React, { useEffect, useState } from 'react';
+
+// Fixed columns that should not be included in width calculations
+const fixedColumns = ['select', 'expander'];
 
 interface ResizerProps {
   columnId: string;
@@ -43,6 +46,33 @@ export const Resizer: React.FC<ResizerProps> = ({ columnId }) => {
       // Update column width in the store
       const newWidths = { ...store.columnWidths };
       newWidths[columnId] = newWidth;
+
+      // Get all visible columns from the table
+      const table = document.querySelector('table');
+      if (!table) return;
+
+      const headerCells = table.querySelectorAll('th');
+      const visibleColumns = Array.from(headerCells)
+        .map(cell => cell.getAttribute('data-column-id'))
+        .filter((id): id is string => id !== null && !fixedColumns.includes(id));
+
+      // Calculate total width of all columns except the last one
+      let totalWidth = 0;
+      visibleColumns.forEach((colId, index) => {
+        if (index < visibleColumns.length - 1) {
+          totalWidth += newWidths[colId] || 150; // Use default width if not set
+        }
+      });
+
+      // Get table width
+      const tableWidth = table.getBoundingClientRect().width;
+      
+      // Set the last column width to fill remaining space
+      const lastColumnId = visibleColumns[visibleColumns.length - 1];
+      if (lastColumnId) {
+        newWidths[lastColumnId] = Math.max(100, tableWidth - totalWidth);
+      }
+
       store.setColumnWidths(newWidths);
     };
 
@@ -73,7 +103,7 @@ export const Resizer: React.FC<ResizerProps> = ({ columnId }) => {
           viewBox="0 0 15 15" 
           fill="none" 
           xmlns="http://www.w3.org/2000/svg"
-          className={`opacity-0 group-hover/header:opacity-100 group-hover/resizer:opacity-100 transition-opacity duration-200 ${isResizing ? 'opacity-100' : ''}`}
+          className={`opacity-30 group-hover/header:opacity-100 group-hover/resizer:opacity-100 transition-opacity duration-200 ${isResizing ? 'opacity-100' : ''}`}
         >
           <path
             fillRule="evenodd"

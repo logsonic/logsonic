@@ -1,9 +1,9 @@
-import { useCallback } from 'react';
-import { useGetLogs, ApiPerformanceMetrics } from './useApi';
-import { LogResponse, LogQueryParams } from '@/lib/api-types';
-import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
-import { useLogResultStore } from '@/stores/useLogResultStore';
+import { LogQueryParams, LogResponse } from '@/lib/api-types';
 import { calculateRelativeDateRange } from '@/lib/date-utils';
+import { useLogResultStore } from '@/stores/useLogResultStore';
+import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
+import { useCallback } from 'react';
+import { useGetLogs } from './useApi';
 
 /**
  * Hook for searching logs that uses the LogResultStore for state management

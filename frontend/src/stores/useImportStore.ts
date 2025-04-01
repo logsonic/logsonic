@@ -1,11 +1,11 @@
-import { create } from 'zustand';
-import { 
-  IngestSessionOptions, 
-  SuggestResponse, 
-  GrokPatternRequest 
-} from '@/lib/api-types';
-import { Pattern, FilePreview, DetectionResult } from '@/components/Import/types';
+import { DetectionResult, FilePreview, Pattern } from '@/components/Import/types';
 import { parseLogs } from '@/lib/api-client';
+import {
+  GrokPatternRequest,
+  IngestSessionOptions,
+  SuggestResponse
+} from '@/lib/api-types';
+import { create } from 'zustand';
 
 // Default pattern to use if no pattern is detected
 

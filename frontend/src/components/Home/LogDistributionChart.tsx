@@ -1,24 +1,22 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
-import { useLogResultStore } from '@/stores/useLogResultStore';
-import { LogResponse } from '@/lib/api-types';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  Tooltip, 
-  Legend, 
-  ResponsiveContainer, 
-  ReferenceArea
-} from 'recharts';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, X, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { LogResponse } from '@/lib/api-types';
+import { cn } from '@/lib/utils';
+import { useLogResultStore } from '@/stores/useLogResultStore';
+import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { parseISO } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
-import { cn } from '@/lib/utils';
-import { useRef as useRefReact } from 'react';
+import { ChevronDown, ChevronUp, Loader2, RefreshCw, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Bar,
+  BarChart,
+  Legend,
+  ReferenceArea,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis
+} from 'recharts';
 
 // Define a color palette for sources
 const SOURCE_COLORS = [

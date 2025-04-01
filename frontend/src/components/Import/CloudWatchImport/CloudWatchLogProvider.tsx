@@ -1,7 +1,8 @@
-import { useState, useEffect, FC } from 'react';
-import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
-import { useCloudWatchStore } from './stores/useCloudWatchStore';
+import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";
+import { useCloudWatchStore } from '@/components/Import/CloudWatchImport/stores/useCloudWatchStore';
+import { LogSourceProvider } from '@/components/Import/types';
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -10,16 +11,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent } from "@/components/ui/card";
-import { Cloud, CloudOff, ChevronRight, ChevronDown, Search, Loader2, Info, ArrowLeft } from "lucide-react";
-import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";
 import { useImportStore } from '@/stores/useImportStore';
-import { LogSourceProvider } from '@/components/Import/types';
+import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
+import { ChevronDown, Cloud, Loader2, Search } from "lucide-react";
+import { FC, useEffect } from 'react';
 import { useCloudWatchHooks } from './CloudWatchHooks';
 import { useCloudWatchLogProviderService } from './CloudWatchLogProviderService';
-import { LogPaginationState } from './types';
-import { userInfo } from 'os';
-
 
 const DEFAULT_REGIONS = [
   'us-east-1',
@@ -44,30 +41,26 @@ const DEFAULT_REGIONS = [
   'me-south-1',
   'sa-east-1',
 ];
-
 export const CloudWatchLogProvider: FC<LogSourceProvider> = ({ 
-  onBackToSourceSelection,
-  onFileSelect,
   onFilePreview,
-  onFileReadyForAnalysis
 }) => {
-  const { UTCTimeSince, UTCTimeTo, setUTCTimeSince, setUTCTimeTo } = useSearchQueryParamsStore();
+  const { UTCTimeSince, UTCTimeTo} = useSearchQueryParamsStore();
   const { fetchLogGroups, fetchLogStreams } = useCloudWatchHooks();
   const cloudWatchLogService = useCloudWatchLogProviderService();
   
   // Use the CloudWatch store
   const {
-    authMethod, region, profile,
+    region, profile,
     logGroups, expandedGroups, loadingStreams, searchQuery, selectedStream,
     isLoading, error,
-    setAuthMethod, setRegion, setProfile,
-    setLogGroups, setStreamsForGroup, toggleGroupExpanded,
-    setLoadingStreams, setSelectedStream, setSearchQuery,
-    setLoading, setError, reset,
+    setRegion, setProfile,
+    toggleGroupExpanded,
+     setSelectedStream, setSearchQuery,
+    
     estimatedLogCount, setEstimatedLogCount
   } = useCloudWatchStore();
 
-  const { setReadyToSelectPattern, setFilePreviewBuffer, setMetadata, setSelectedFileName } = useImportStore();
+  const { setFilePreviewBuffer, setMetadata, setSelectedFileName } = useImportStore();
   
   const handleAuthChange = (field: 'region' | 'profile', value: string) => {
     switch (field) {

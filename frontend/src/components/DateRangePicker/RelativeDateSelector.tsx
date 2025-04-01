@@ -1,4 +1,3 @@
-import { useEffect, useState, FC } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -8,11 +7,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { calculateRelativeDate, RELATIVE_DATE_OPTIONS_WITH_ICONS, TIME_UNITS } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
-import { ChevronRight } from "lucide-react";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
-import { calculateRelativeDate } from "@/lib/date-utils";
-import { RELATIVE_DATE_OPTIONS_WITH_ICONS, TIME_UNITS } from "@/lib/date-utils";
+import { ChevronRight } from "lucide-react";
+import { FC, useState } from "react";
 
 type DateOption = {
   value: string;

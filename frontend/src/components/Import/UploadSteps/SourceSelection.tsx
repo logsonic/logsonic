@@ -1,6 +1,6 @@
 import { LogSourceProvider } from '@/components/Import/types';
-import { FC } from 'react';
 import { useImportStore } from '@/stores/useImportStore';
+import { FC } from 'react';
 interface SourceSelectionProps {
   providers: LogSourceProvider[];
   selectedSource: string | null;

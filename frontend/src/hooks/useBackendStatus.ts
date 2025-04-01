@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
 import { pingServer } from '@/lib/api-client';
+import { useEffect, useState } from 'react';
 
 /**
  * Hook to periodically check backend connectivity

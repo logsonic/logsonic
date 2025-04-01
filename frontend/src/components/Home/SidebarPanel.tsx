@@ -1,16 +1,13 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { useSystemInfoStore } from "@/stores/useSystemInfoStore";
-import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
-import { useImportStore } from "@/stores/useImportStore";
-import { Loader2, FilterX, Palette, Home } from "lucide-react";
-import { ColorRulesPanel } from "./Sidebar/ColorRulesPanel";
-import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
+import { useSystemInfoStore } from "@/stores/useSystemInfoStore";
+import { FilterX, Loader2, Palette } from "lucide-react";
+import { useEffect } from "react";
 import { VerticalTab } from "./Sidebar/CollapsiblePanel";
+import { ColorRulesPanel } from "./Sidebar/ColorRulesPanel";
 
 export const SidebarPanel = () => {
   const { systemInfo, refreshSystemInfo, isLoading, error } = useSystemInfoStore();

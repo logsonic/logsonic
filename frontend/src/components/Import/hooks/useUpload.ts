@@ -1,12 +1,11 @@
-import { useCallback, useRef, useMemo } from 'react';
+import { useCallback, useRef } from 'react';
 
-import type { 
-  UploadProgressHookResult 
-} from '../types';
-import { useImportStore } from '@/stores/useImportStore';
-import { useIngestEnd, useIngestFile, useIngestLogs, useIngestStart, useTokenizerOperations } from '@/hooks/useApi';
+import { useIngestEnd, useIngestLogs, useIngestStart } from '@/hooks/useApi';
 import { IngestSessionOptions } from '@/lib/api-types';
-import { useCloudWatchStore } from '@/stores/useCloudWatchStore';
+import { useImportStore } from '@/stores/useImportStore';
+import type {
+  UploadProgressHookResult
+} from '../types';
 import { LogSourceProviderService } from '../types';
 export const useUpload = (): UploadProgressHookResult => {
   const {
@@ -28,7 +27,6 @@ export const useUpload = (): UploadProgressHookResult => {
     sessionOptionsYear,
     sessionOptionsMonth,
     sessionOptionsDay,
-    sessionOptionsFileName
 
   } = useImportStore();
   
@@ -101,6 +99,7 @@ export const useUpload = (): UploadProgressHookResult => {
         }
         handledLines += lines.length;
         setUploadProgress(Math.ceil(handledLines / totalLines * 100));
+        setTotalLines(handledLines);
         next();
       })
    

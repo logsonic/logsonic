@@ -1,7 +1,7 @@
-import { forwardRef, useImperativeHandle, useRef, useState, FC } from 'react';
 import { Upload } from 'lucide-react';
-import type { LogSourceProvider, LogSourceProviderService } from '../types';
+import { FC, useRef } from 'react';
 import { useImportStore } from '../../../stores/useImportStore';
+import type { LogSourceProvider } from '../types';
 import { useFileSelectionService } from './FileSelectionService';
 
 

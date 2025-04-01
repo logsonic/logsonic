@@ -1,38 +1,34 @@
-import { Link } from 'react-router-dom';
-import { Info, Trash2, Upload, Regex, BarChart, Settings, Database, PieChart, HardDrive, Sparkles, Bell, Cloud } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { 
-  AlertDialog, 
-  AlertDialogAction, 
-  AlertDialogCancel, 
-  AlertDialogContent, 
-  AlertDialogDescription, 
-  AlertDialogFooter, 
-  AlertDialogHeader, 
-  AlertDialogTitle, 
-  AlertDialogTrigger 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   NavigationMenu,
-  NavigationMenuContent,
   NavigationMenuItem,
   NavigationMenuLink,
   NavigationMenuList,
-  NavigationMenuTrigger,
-  navigationMenuTriggerStyle,
+  navigationMenuTriggerStyle
 } from "@/components/ui/navigation-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Input } from '@/components/ui/input';
-import { cn } from "@/lib/utils";
-import { useClearLogs } from '@/hooks/useApi';
 import { useToast } from '@/hooks/use-toast';
-import { useState, useEffect } from 'react';
-import SystemInfoModal from './SystemInfoModal';
-import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
-import { formatBytes } from '@/lib/utils';
-import { Pie } from 'recharts';
+import { useClearLogs } from '@/hooks/useApi';
 import { useBackendStatus } from '@/hooks/useBackendStatus';
 import { getSystemInfo } from '@/lib/api-client';
+import { cn, formatBytes } from "@/lib/utils";
+import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
+import { Bell, HardDrive, Trash2, Upload } from 'lucide-react';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import SystemInfoModal from './SystemInfoModal';
 
 // Custom navigation menu trigger style with blue hover effect
 const blueNavigationMenuTriggerStyle = cn(

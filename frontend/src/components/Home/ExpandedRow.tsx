@@ -1,23 +1,12 @@
-import { useState } from 'react';
-import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
-import { useMemo } from 'react';
 import { useSearchParser } from '@/hooks/useSearchParser.tsx';
+import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
+import { useMemo, useState } from 'react';
 
 interface Log {
   _raw?: string;
   id?: string;
   [key: string]: any;
 }
-
-// Utility types for Bleve search query parsing
-interface SearchToken {
-  type: 'term' | 'phrase' | 'regex';
-  value: string;
-  field?: string;
-  required?: boolean;
-  excluded?: boolean;
-}
-
 // Simple copy button component
 const CopyButton = ({ content }: { content: string }) => {
   const [copied, setCopied] = useState(false);

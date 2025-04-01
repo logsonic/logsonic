@@ -1,5 +1,4 @@
-import { useCallback } from 'react';
-import React, { type ReactNode } from 'react';
+import { useCallback, type ReactNode } from 'react';
 
 // Utility types for Bleve search query parsing
 export interface SearchToken {

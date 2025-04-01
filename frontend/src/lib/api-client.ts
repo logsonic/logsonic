@@ -1,26 +1,26 @@
 import {
   GrokPatternRequest,
   GrokPatternResponse,
-  IngestRequest,
   IngestFileRequest,
+  IngestRequest,
   IngestResponse,
-  LogResponse,
+  IngestSessionOptions,
   LogQueryParams,
+  LogResponse,
   ParseRequest,
   ParseResponse,
   SuggestResponse,
   SystemInfoResponse,
-  IngestSessionOptions,
 } from './api-types';
 
 import {
   CloudWatchAuth,
+  GetLogEventsRequest,
+  GetLogEventsResponse,
   ListLogGroupsResponse,
   ListLogStreamsRequest,
-  ListLogStreamsResponse,
-  GetLogEventsRequest,
-  GetLogEventsResponse
-} from '@/components/Import/CloudWatchImport';
+  ListLogStreamsResponse
+} from '@/components/Import/CloudWatchImport/types';
 
 // API base configuration
 // For local development, use port 8080

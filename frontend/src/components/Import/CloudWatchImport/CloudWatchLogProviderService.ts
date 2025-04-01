@@ -1,10 +1,9 @@
+import { useCloudWatchStore } from '@/components/Import/CloudWatchImport/stores/useCloudWatchStore';
 import { LogSourceProviderService } from "@/components/Import/types";
-import { useCloudWatchStore } from "./stores/useCloudWatchStore";
-import { GetLogEventsRequest, LogPaginationState } from "./types";
-import { useState } from "react";
 import { useImportStore } from "@/stores/useImportStore";
-import { cloudwatchService } from "./api/cloudwatchService";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
+import { cloudwatchService } from "./api/cloudwatchService";
+import { GetLogEventsRequest } from "./types";
 
 export const useCloudWatchLogProviderService = () : LogSourceProviderService => {
   const { region, profile, selectedStream, setError, setRetrievedLogs, setLogPagination, setLoading } = useCloudWatchStore();
@@ -51,7 +50,7 @@ export const useCloudWatchLogProviderService = () : LogSourceProviderService => 
   };
 
   const handleFileImport = async (
-    filehandle: object, 
+    _: object, 
     chunkSize: number, 
     callback: (lines: string[], totalLines: number, next: () => void) => Promise<void>
   ) => {
@@ -75,7 +74,7 @@ export const useCloudWatchLogProviderService = () : LogSourceProviderService => 
       // Sanitize group/stream names for use in filename
       const sanitizedGroupName = selectedStream.groupName.replace(/[^a-zA-Z0-9]/g, '-');
       const sanitizedStreamName = selectedStream.streamName.replace(/[^a-zA-Z0-9]/g, '-');
-      const filename = `cw-${sanitizedGroupName}-${sanitizedStreamName}`;
+     
       
       // Setup tracking variables
       let currentToken: string | null = null;
@@ -88,9 +87,9 @@ export const useCloudWatchLogProviderService = () : LogSourceProviderService => 
       importStore.setMetadata({
         _aws_region: region,
         _aws_profile: profile,
-        _log_group_name: selectedStream.groupName,
-        _log_stream_name: selectedStream.streamName,
-        _src: `cloudwatch.${selectedStream.groupName}.${selectedStream.streamName}`,
+        _log_group_name: sanitizedGroupName,
+        _log_stream_name: sanitizedStreamName,
+        _src: `cloudwatch.${sanitizedGroupName}.${sanitizedStreamName}`,
         _total_logs: 0 // Will be updated as we process
       });
 
@@ -125,15 +124,6 @@ export const useCloudWatchLogProviderService = () : LogSourceProviderService => 
             isLoading: more
           });
           
-          // Update metadata with latest count
-          importStore.setMetadata({
-            _aws_region: region,
-            _aws_profile: profile,
-            _log_group_name: selectedStream.groupName,
-            _log_stream_name: selectedStream.streamName,
-            _src: `cloudwatch.${selectedStream.groupName}.${selectedStream.streamName}`,
-            _total_logs: processedLogsCount
-          });
           
           // Process this batch through the callback immediately
           // Break into smaller chunks if needed for processing
