@@ -1,10 +1,7 @@
-
 import SourceSelection from './SourceSelection';
-import { FC, useEffect } from 'react';
+import { FC } from 'react';
 import { FileUp, Cloud } from 'lucide-react';
 import { useImportStore } from '@/stores/useImportStore';
-import { ProviderUploadHandler } from '@/stores/useImportStore';
-import type { LogSourceProvider } from '@/components/Import/types';
 import { CloudWatchLogProvider } from '@/components/Import/CloudWatchImport/CloudWatchLogProvider';
 import { FileSelection } from '@/components/Import/LocalFileImport/FileSelection';
 

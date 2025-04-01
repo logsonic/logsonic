@@ -15,7 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import HandleNavigation from '@/components/Import/UploadSteps/HandleNavigation';
 import { useFileSelectionService } from '@/components/Import/LocalFileImport/FileSelectionService';
 import useUpload from '@/components/Import/hooks/useUpload';
-import { useSearchQueryParamsStore } from '@/stores/useSearchParams';
+import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import { ErrorBoundary } from '@/lib/error-boundary';
 import { useCloudWatchLogProviderService } from '@/components/Import/CloudWatchImport/CloudWatchLogProviderService';
@@ -281,6 +281,8 @@ const Import: FC  = () => {
           
         case 4:
             //invalidate cache
+            reset();
+
             navigate('/');
           
             // If we're already showing the summary, navigate to home

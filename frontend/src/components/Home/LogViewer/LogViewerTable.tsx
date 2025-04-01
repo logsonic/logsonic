@@ -19,7 +19,7 @@ import { LogViewerSkeleton } from '@/components/Home/LogViewer/LogViewerSkeleton
 import { ExpandedRow } from '@/components/Home/ExpandedRow';
 import './LogViewerTableTanStackStyles.css';
 import React from 'react';
-import { useSearchQueryParamsStore } from '@/stores/useSearchParams';
+import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { Resizer } from '@/components/Home/Resizer';
 import { useColorRuleStore, ColorRule } from '@/stores/useColorRuleStore';
 import { useSearchParser } from '@/hooks/useSearchParser.tsx';

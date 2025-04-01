@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useSearchQueryParamsStore } from '@/stores/useSearchParams';
+import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { LogResponse } from '@/lib/api-types';
 import { 

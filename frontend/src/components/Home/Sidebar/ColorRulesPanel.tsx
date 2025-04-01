@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ColorRule, useColorRuleStore } from "@/stores/useColorRuleStore";
-import { useSearchQueryParamsStore } from "@/stores/useSearchParams";
+import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
 import { useLogResultStore } from "@/stores/useLogResultStore";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";

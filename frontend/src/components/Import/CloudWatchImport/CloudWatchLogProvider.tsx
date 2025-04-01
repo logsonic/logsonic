@@ -1,5 +1,5 @@
 import { useState, useEffect, FC } from 'react';
-import { useSearchQueryParamsStore } from '@/stores/useSearchParams';
+import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useCloudWatchStore } from './stores/useCloudWatchStore';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import { LogSourceProvider } from '@/components/Import/types';
 import { useCloudWatchHooks } from './CloudWatchHooks';
 import { useCloudWatchLogProviderService } from './CloudWatchLogProviderService';
 import { LogPaginationState } from './types';
+import { userInfo } from 'os';
 
 
 const DEFAULT_REGIONS = [
@@ -50,7 +51,7 @@ export const CloudWatchLogProvider: FC<LogSourceProvider> = ({
   onFilePreview,
   onFileReadyForAnalysis
 }) => {
-  const dateRangeStore = useSearchQueryParamsStore();
+  const { UTCTimeSince, UTCTimeTo, setUTCTimeSince, setUTCTimeTo } = useSearchQueryParamsStore();
   const { fetchLogGroups, fetchLogStreams } = useCloudWatchHooks();
   const cloudWatchLogService = useCloudWatchLogProviderService();
   
@@ -88,7 +89,7 @@ export const CloudWatchLogProvider: FC<LogSourceProvider> = ({
       const groupData = logGroups.find(group => group.name === logGroupName);
       
       if (groupData && (!groupData.streams || groupData.streams.length === 0)) {
-        await fetchLogStreams(logGroupName, dateRangeStore.UTCTimeSince, dateRangeStore.UTCTimeTo);
+        await fetchLogStreams(logGroupName, UTCTimeSince, UTCTimeTo);
       }
     }
   };
@@ -161,6 +162,8 @@ export const CloudWatchLogProvider: FC<LogSourceProvider> = ({
     }
   }, [searchQuery, logGroups, expandedGroups, toggleGroupExpanded]);
   
+
+
   return (
     <div className="space-y-4">
       <Card>
@@ -203,7 +206,7 @@ export const CloudWatchLogProvider: FC<LogSourceProvider> = ({
               </div>
               
               <Button 
-                onClick={() => fetchLogGroups(dateRangeStore.UTCTimeSince, dateRangeStore.UTCTimeTo)}
+                onClick={() => fetchLogGroups(UTCTimeSince, UTCTimeTo)}
                 disabled={isLoading}
                 className="bg-blue-600 hover:bg-blue-700 h-10"
               >

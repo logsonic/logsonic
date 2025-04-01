@@ -5,7 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import DateRangePicker from "./DateRangePicker";
-import { useSearchQueryParamsStore } from "@/stores/useSearchParams";
+import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
 import { RELATIVE_DATE_PRESETS } from "@/lib/date-utils";
 
 export const DateTimeRangeButton: FC = () => {

@@ -9,7 +9,7 @@ import { AbsoluteDateSelector } from "@/components/DateRangePicker/AbsoluteDateS
 import { TimezoneSelector } from "@/components/DateRangePicker/TimezoneSelector";
 import { DateRangeType } from "./types";
 import { Check, X } from "lucide-react";
-import { useSearchQueryParamsStore } from "@/stores/useSearchParams";
+import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
 
 export interface DateRangePickerProps {
   onApply: () => void;

@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
-import { useSearchQueryParamsStore } from "@/stores/useSearchParams";
+import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
 import { calculateRelativeDate } from "@/lib/date-utils";
 import { RELATIVE_DATE_OPTIONS_WITH_ICONS, TIME_UNITS } from "@/lib/date-utils";
 

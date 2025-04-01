@@ -4,7 +4,7 @@ import { GetLogEventsRequest, LogPaginationState } from "./types";
 import { useState } from "react";
 import { useImportStore } from "@/stores/useImportStore";
 import { cloudwatchService } from "./api/cloudwatchService";
-import { useSearchQueryParamsStore } from "@/stores/useSearchParams";
+import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
 
 export const useCloudWatchLogProviderService = () : LogSourceProviderService => {
   const { region, profile, selectedStream, setError, setRetrievedLogs, setLogPagination, setLoading } = useCloudWatchStore();

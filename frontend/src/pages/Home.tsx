@@ -5,7 +5,7 @@ import { LogSearch } from '@/components/Home/LogSearch';
 import { LogViewer } from '@/components/Home/LogViewer/LogViewer';
 import { SidebarPanel } from '@/components/Home/SidebarPanel';
 import LogDistributionChart from '@/components/Home/LogDistributionChart';
-import useSearchQueryParamsStore from '@/stores/useSearchParams';
+import useSearchQueryParamsStore from '@/stores/useSearchQueryParams';
 import { useEffect } from 'react';
 
 /**

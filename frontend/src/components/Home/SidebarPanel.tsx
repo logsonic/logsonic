@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useSystemInfoStore } from "@/stores/useSystemInfoStore";
-import { useSearchQueryParamsStore } from "@/stores/useSearchParams";
+import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
 import { useImportStore } from "@/stores/useImportStore";
 import { Loader2, FilterX, Palette, Home } from "lucide-react";
 import { ColorRulesPanel } from "./Sidebar/ColorRulesPanel";

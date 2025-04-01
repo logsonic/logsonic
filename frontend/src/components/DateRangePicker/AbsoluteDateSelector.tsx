@@ -3,7 +3,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { format, isSameDay, isAfter } from "date-fns";
 import { cn } from "@/lib/utils";
-import { useSearchQueryParamsStore } from "@/stores/useSearchParams";
+import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
 
 export const AbsoluteDateSelector: FC = () => {
   // Get the store directly using the hook

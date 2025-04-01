@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useSearchQueryParamsStore } from '@/stores/useSearchParams';
+import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { Card } from '@/components/ui/card';
 import { PaginationControls } from '../PaginationControls';
 import { LogViewerHeader } from './LogViewerHeader';

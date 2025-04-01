@@ -4,13 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import { useImportStore } from '@/stores/useImportStore';
 import { getSystemInfo } from '@/lib/api-client';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
+import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 // Success Summary component for showing import completion
 export const SuccessSummary: FC = () => {
     const { selectedFileName, importSource, sessionOptionsFileName, selectedPattern, totalLines, reset } = useImportStore();
     const navigate = useNavigate();
     const { setSystemInfo } = useSystemInfoStore();
     const [redirectCounter, setRedirectCounter] = useState(5);
-
+    const searchQueryParamsStore = useSearchQueryParamsStore();
     // Set the icon and filename label based on the import source
     const sourceIcon = importSource === 'cloudwatch' 
       ? <Cloud className="h-6 w-6 text-blue-500 mr-2" />
@@ -27,6 +28,8 @@ export const SuccessSummary: FC = () => {
             console.log("info", info);
         }
         invalidateInfo();
+        searchQueryParamsStore.resetStore();
+
 
         // Set up countdown timer
         const timer = setInterval(() => {
