@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, FilterX, Palette, Home } from 'lucide-react';
-import { ReactNode, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { ChevronLeft, ChevronRight, FilterX, Palette } from 'lucide-react';
+import { ReactNode, useEffect, useState } from 'react';
 
 // Sidebar width constants - adjust these values to change all sidebar dimensions
 export const SIDEBAR_WIDTHS = {

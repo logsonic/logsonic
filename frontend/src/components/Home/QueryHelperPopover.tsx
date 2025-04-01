@@ -1,12 +1,12 @@
-import React, { useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
-import { X, Copy, Check } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Check, Copy, X } from "lucide-react";
+import React, { useState } from "react";
 
 // Helper component for code examples with copy button
 function CodeExample({ content }: { content: string }) {

@@ -1,8 +1,4 @@
-import { useState, useEffect, FC } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Save } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -11,12 +7,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { saveGrokPattern, getGrokPatterns } from '@/lib/api-client';
-import { GrokPatternRequest } from '@/lib/api-types';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { toast } from '@/components/ui/use-toast';
-import { Pattern } from '../types';
-import StatusBanner from './StatusBanner';
+import { getGrokPatterns, saveGrokPattern } from '@/lib/api-client';
+import { GrokPatternRequest } from '@/lib/api-types';
 import { useImportStore } from '@/stores/useImportStore';
+import { Save } from 'lucide-react';
+import { FC, useEffect, useState } from 'react';
+import StatusBanner from './StatusBanner';
 interface SavePatternDialogProps {
   open: boolean;
   onClose: () => void;
@@ -30,8 +29,6 @@ export const SavePatternDialog: FC<SavePatternDialogProps> = ({
   const { 
     selectedPattern,
     setSelectedPattern,
-    setCreateNewPattern,
-    setAvailablePatterns,
     
   } = useImportStore();
   const [isLoading, setIsLoading] = useState(false);

@@ -1,10 +1,10 @@
-import { FC, useEffect, useState } from 'react';
-import { Cloud, File, CheckCircle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { useImportStore } from '@/stores/useImportStore';
 import { getSystemInfo } from '@/lib/api-client';
-import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
+import { useImportStore } from '@/stores/useImportStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
+import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
+import { CheckCircle, Cloud, File } from 'lucide-react';
+import { FC, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 // Success Summary component for showing import completion
 export const SuccessSummary: FC = () => {
     const { selectedFileName, importSource, sessionOptionsFileName, selectedPattern, totalLines, reset } = useImportStore();

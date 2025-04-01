@@ -1,19 +1,19 @@
-import { FC, useState } from 'react';
-import { useImportStore } from '@/stores/useImportStore';
-import { Label } from '@/components/ui/label';
+import { TimezoneSelectorCommon } from '@/components/common/TimezoneSelectorCommon';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
-import { Settings2 } from 'lucide-react';
-import { 
+import { Label } from '@/components/ui/label';
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { TimezoneSelectorCommon } from '@/components/common/TimezoneSelectorCommon';
+import { Switch } from '@/components/ui/switch';
+import { useImportStore } from '@/stores/useImportStore';
+import { Settings2 } from 'lucide-react';
+import { FC } from 'react';
 
 export const IngestSessionOptions: FC = () => {
   const { 
@@ -29,7 +29,7 @@ export const IngestSessionOptions: FC = () => {
     setSessionOptionDay,
   } = useImportStore();
 
-  const [isUpdating, setIsUpdating] = useState(false);
+ 
 
   return (
     <Card className="mt-4">
@@ -132,13 +132,7 @@ export const IngestSessionOptions: FC = () => {
                 </div>
               </div>
               
-              {isUpdating && (
-                <div className="mt-2 text-xs text-muted-foreground flex items-center">
-                  <div className="w-3 h-3 mr-1 rounded-full bg-blue-500 animate-pulse"></div>
-                  Updating preview...
-                </div>
-              )}
-
+        
             </CardContent>
           </AccordionContent>
         </AccordionItem>

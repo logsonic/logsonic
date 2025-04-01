@@ -1,36 +1,28 @@
-import { FC, Fragment, useEffect, useRef, useState } from 'react';  
-import { Card } from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { ArrowLeft,FileUp, Cloud } from "lucide-react";
+import { useCloudWatchLogProviderService } from '@/components/Import/CloudWatchImport/CloudWatchLogProviderService';
+import { useFileSelectionService } from '@/components/Import/LocalFileImport/FileSelectionService';
+import HandleNavigation from '@/components/Import/UploadSteps/HandleNavigation';
+import { SavePatternDialog } from '@/components/Import/UploadSteps/SavePatternDialog';
+import useUpload from '@/components/Import/hooks/useUpload';
+import { ErrorBoundary } from '@/lib/error-boundary';
+import { ArrowLeft, FileUp } from "lucide-react";
+import { FC, Fragment, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { FileAnalyzingStep } from '../components/Import/UploadSteps/FileAnalyzingStep';
 import { ImportConfirmStep } from '../components/Import/UploadSteps/ImportConfirmStep';
 import { LogSourceSelectionStep } from '../components/Import/UploadSteps/LogSourceSelectionStep';
 import { SuccessSummary } from '../components/Import/UploadSteps/SuccessSummaryStep';
-import { FileAnalyzingStep } from '../components/Import/UploadSteps/FileAnalyzingStep';
 import type { DetectionResult } from '../components/Import/types';
-import { useToast } from "../components/ui/use-toast";
-import { getGrokPatterns, getSystemInfo } from '../lib/api-client';
 import { extractFields } from '../components/Import/utils/patternUtils';
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { useToast } from "../components/ui/use-toast";
+import { getGrokPatterns } from '../lib/api-client';
 import { UploadStep, useImportStore } from '../stores/useImportStore';
-import { useNavigate } from 'react-router-dom';
-import HandleNavigation from '@/components/Import/UploadSteps/HandleNavigation';
-import { useFileSelectionService } from '@/components/Import/LocalFileImport/FileSelectionService';
-import useUpload from '@/components/Import/hooks/useUpload';
-import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
-import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
-import { ErrorBoundary } from '@/lib/error-boundary';
-import { useCloudWatchLogProviderService } from '@/components/Import/CloudWatchImport/CloudWatchLogProviderService';
-import { SavePatternDialog } from '@/components/Import/UploadSteps/SavePatternDialog';
 
 
 const Import: FC  = () => {
   const { toast } = useToast(); 
   const navigate = useNavigate();
-  type UploadSummary = {
-    totalLines: number;
-    patternName: string;
-    redirectCountdown: number;
-    showSummary: boolean;
-  };
   const [error, setError] = useState<string | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const {
@@ -41,23 +33,20 @@ const Import: FC  = () => {
     readyToImportLogs,
     readyToSelectPattern,
     setReadyToSelectPattern,
-    setFileFromBlob,
+
     setImportSource,
     setSelectedPattern,
     isCreateNewPatternSelected, 
 
     setCurrentStep,
-    detectionResult,
+ 
     setDetectionResult,
     setAvailablePatterns,
   } = useImportStore();
 
-  const searchQueryParamsStore = useSearchQueryParamsStore();
-  const { setSystemInfo } = useSystemInfoStore();
+
+ 
   const {
-    isUploading,
-    uploadProgress,
-    approxLines,
     handleUpload,
   } = useUpload();
 
@@ -133,7 +122,6 @@ const Import: FC  = () => {
   };
 
   const handleFilePreview = (lines: string[], filename: string) => {
-    console.log("File ready for preview");
     setReadyToSelectPattern(true);
     setCurrentStep(2);
   };

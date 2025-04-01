@@ -1,10 +1,10 @@
-import { LeftPanelContent, SIDEBAR_WIDTHS } from '@/components/Home/Sidebar/CollapsiblePanel';
 import { Header } from '@/components/Home/Header';
-import { useCollapsiblePanel } from '@/hooks/useCollapsiblePanel';
+import LogDistributionChart from '@/components/Home/LogDistributionChart';
 import { LogSearch } from '@/components/Home/LogSearch';
 import { LogViewer } from '@/components/Home/LogViewer/LogViewer';
+import { LeftPanelContent, SIDEBAR_WIDTHS } from '@/components/Home/Sidebar/CollapsiblePanel';
 import { SidebarPanel } from '@/components/Home/SidebarPanel';
-import LogDistributionChart from '@/components/Home/LogDistributionChart';
+import { useCollapsiblePanel } from '@/hooks/useCollapsiblePanel';
 import useSearchQueryParamsStore from '@/stores/useSearchQueryParams';
 import { useEffect } from 'react';
 

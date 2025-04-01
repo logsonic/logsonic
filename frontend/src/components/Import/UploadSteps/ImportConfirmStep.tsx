@@ -1,11 +1,9 @@
-import { FC, useEffect, useState } from 'react';
-import { Progress } from '../../ui/progress';
-import { Loader2, FileText, Code, CheckCircle, File, Cloud } from 'lucide-react';
+import { useCloudWatchStore } from '@/components/Import/CloudWatchImport/stores/useCloudWatchStore';
 import { cn } from '@/lib/utils';
-import * as ProgressPrimitive from "@radix-ui/react-progress";
-import { useNavigate } from 'react-router-dom';
 import { useImportStore } from '@/stores/useImportStore';
-import { useCloudWatchStore } from '@/stores/useCloudWatchStore';
+import * as ProgressPrimitive from "@radix-ui/react-progress";
+import { Cloud, Code, FileText, Loader2 } from 'lucide-react';
+import { FC, useEffect, useState } from 'react';
 
 // Custom progress component with green indicator
 const GreenProgress: FC<{ value: number; className?: string }> = ({ 
@@ -56,9 +54,7 @@ export const ImportConfirmStep: FC = ({
     sessionOptionsMonth,
     sessionOptionsDay,
     importSource,
-    sessionOptionsFileName,
     setApproxLines,
-    totalLines,
     metadata
   } = useImportStore();
 
@@ -105,15 +101,13 @@ export const ImportConfirmStep: FC = ({
   const sourceTitle = importSource === 'cloudwatch' 
     ? 'CloudWatch Logs Information' 
     : 'File Information';
-  
-  const fileLabel = importSource === 'cloudwatch' ? 'Source Log:' : 'File Name:';
-  const fileName = importSource === 'cloudwatch' ? sessionOptionsFileName : selectedFileName;
+
 
   // Determine if we should show the indeterminate progress (for CloudWatch)
   const showIndeterminateProgress = importSource === 'cloudwatch' && isUploading;
   // Determine if we should show the regular progress bar (for file uploads)
   const showProgressBar = importSource !== 'cloudwatch' && isUploading;
-  const { profile, region, selectedStream } = useCloudWatchStore();
+  const { profile, region } = useCloudWatchStore();
 
   const showCloudwatchSummary = () => {
     return (
@@ -160,9 +154,9 @@ export const ImportConfirmStep: FC = ({
         <div className="p-5 rounded-lg shadow-sm border border-blue-100">
           <div className="flex items-center mb-3">
             {sourceIcon}
-            <h3 className="text-lg font-medium text-blue-700">{sourceTitle}</h3>
+            <h3 className="text-md font-medium text-blue-700">{sourceTitle}</h3>
           </div>
-          <table className="text-lg">
+          <table className="text-md w-full">
             <thead>
               <tr>
                 <th className="w-[250px] text-gray-800 font-bold text-left">Key</th>
@@ -206,9 +200,9 @@ export const ImportConfirmStep: FC = ({
         <div className=" p-5 rounded-lg shadow-sm border border-indigo-100">
           <div className="flex items-center mb-3">
             <Code className="h-5 w-5 text-indigo-500 mr-2" />
-            <h3 className="text-lg font-medium text-indigo-700">Pattern Information</h3>
+            <h3 className="text-md font-medium text-indigo-700">Pattern Information</h3>
           </div>
-          <table className="w-1/5 text-lg">
+          <table className="w-full text-md">
           <thead>
               <tr>
                 <th className="w-[250px] text-gray-800 font-bold text-left">Key</th>

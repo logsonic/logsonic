@@ -2,14 +2,10 @@ import { Timer } from "lucide-react";
 
 interface PerformanceMetricsProps {
   apiExecutionTime: number | null;
-  backendLatency: number | null;
-  indexQueryTime: number | null;
 }
 
 export const PerformanceMetricsPopover = ({
   apiExecutionTime,
-  backendLatency,
-  indexQueryTime,
 }: PerformanceMetricsProps) => {
   if (apiExecutionTime === null) return null;
 

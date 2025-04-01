@@ -1,14 +1,12 @@
-import { Input } from "../ui/input";
-import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
-import { Button } from "../ui/button";
-import { useCallback, useState } from "react";
 import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";
-import { Search, X, ArrowRight } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { format } from "date-fns";
-import { formatInTimeZone } from "date-fns-tz";
 import { useSearchLogs } from "@/hooks/useSearchLogs";
+import { cn } from "@/lib/utils";
 import { useLogResultStore } from "@/stores/useLogResultStore";
+import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
+import { ArrowRight, Search, X } from "lucide-react";
+import { useCallback, useState } from "react";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 import { PerformanceMetricsPopover } from "./PerformanceMetricsPopover";
 import { QueryHelperPopover } from "./QueryHelperPopover";
 
@@ -59,8 +57,6 @@ export const LogSearch = ({
 
   // Get performance metrics from the store
   const apiExecutionTime = store.apiExecutionTime;
-  const backendLatency = store.backendLatency;
-  const indexQueryTime = store.indexQueryTime;
 
   return (
     <div className="flex flex-col space-y-4">
@@ -157,8 +153,6 @@ export const LogSearch = ({
           {/* Performance metrics popover */}
           <PerformanceMetricsPopover 
             apiExecutionTime={apiExecutionTime} 
-            backendLatency={backendLatency} 
-            indexQueryTime={indexQueryTime} 
           />
         </div>
       </div>

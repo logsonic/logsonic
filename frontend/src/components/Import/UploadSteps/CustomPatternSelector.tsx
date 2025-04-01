@@ -1,14 +1,23 @@
-import { useState, useRef, useEffect, FC } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { extractFields } from '../utils/patternUtils';
-import { Pattern } from '../types';
-import { Loader2, X, Plus, AlertTriangle } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { useImportStore } from '@/stores/useImportStore';
-import { SavePatternDialog } from './SavePatternDialog';
+import { AlertTriangle, Loader2, Plus, X } from 'lucide-react';
+import { FC, useRef, useState } from 'react';
+import { Pattern } from '../types';
+import { extractFields } from '../utils/patternUtils';
 
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from "@/components/ui/dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -16,22 +25,10 @@ import {
   TooltipTrigger
 } from "@/components/ui/tooltip";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogClose
-} from "@/components/ui/dialog";
-import {
-  DndContext,
-  useSensor,
-  useSensors,
-  PointerSensor,
   KeyboardSensor,
-  DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors
 } from '@dnd-kit/core';
 
   
@@ -147,7 +144,7 @@ export const CustomPatternSelector: FC<CustomPatternSelectorProps> = ({
   const [newTokenName, setNewTokenName] = useState('');
   const [newTokenPattern, setNewTokenPattern] = useState('');
   const patternInputRef = useRef<HTMLTextAreaElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [_, setIsDragging] = useState(false);
   const [showAddToken, setShowAddToken] = useState(false);
   const [selectedToken, setSelectedToken] = useState<string | null>(null);
 
@@ -156,7 +153,7 @@ export const CustomPatternSelector: FC<CustomPatternSelectorProps> = ({
   const [patternDescription, setPatternDescription] = useState(createNewPatternDescription || 'Create your own custom pattern for parsing logs');
 
   // Set up DnD sensors
-  const sensors = useSensors(
+  useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
         distance: 8, // 8px movement before drag starts

@@ -2,16 +2,15 @@ import {
   CloudWatchAuth,
   GetLogEventsRequest,
   GetLogEventsResponse,
-  ListLogGroupsRequest,
   ListLogGroupsResponse,
   ListLogStreamsRequest,
-  ListLogStreamsResponse,
+  ListLogStreamsResponse
 } from '../types';
 
 import {
+  getCloudWatchLogEvents,
   listCloudWatchLogGroups,
-  listCloudWatchLogStreams,
-  getCloudWatchLogEvents
+  listCloudWatchLogStreams
 } from '@/lib/api-client';
 
 export const cloudwatchService = {

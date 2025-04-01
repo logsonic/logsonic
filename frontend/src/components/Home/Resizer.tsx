@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
+import React, { useEffect, useState } from 'react';
 
 interface ResizerProps {
   columnId: string;

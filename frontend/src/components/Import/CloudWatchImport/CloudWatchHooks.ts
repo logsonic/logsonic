@@ -1,5 +1,5 @@
-import { useCloudWatchStore } from './stores/useCloudWatchStore';
-import { cloudwatchService } from './api/cloudwatchService';
+import { cloudwatchService } from '@/components/Import/CloudWatchImport/api/cloudwatchService';
+import { useCloudWatchStore } from '@/components/Import/CloudWatchImport/stores/useCloudWatchStore';
 
 export const useCloudWatchHooks = () => {
   const store = useCloudWatchStore();

@@ -1,50 +1,47 @@
-import { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import {
-  useReactTable,
+  ColumnResizeMode,
+  Header,
+  RowSelectionState,
+  SortingState,
+  createColumnHelper,
+  flexRender,
   getCoreRowModel,
   getSortedRowModel,
-  flexRender,
-  ColumnDef,
-  SortingState,
-  ColumnResizeMode,
-  RowSelectionState,
-  createColumnHelper,
-  Column,
-  Header,
+  useReactTable
 } from '@tanstack/react-table';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FileUp, GripVertical, Link, Upload } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FileUp, GripVertical, Upload } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { LogViewerSkeleton } from '@/components/Home/LogViewer/LogViewerSkeleton';
 import { ExpandedRow } from '@/components/Home/ExpandedRow';
-import './LogViewerTableTanStackStyles.css';
-import React from 'react';
-import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
+import { LogViewerSkeleton } from '@/components/Home/LogViewer/LogViewerSkeleton';
 import { Resizer } from '@/components/Home/Resizer';
-import { useColorRuleStore, ColorRule } from '@/stores/useColorRuleStore';
 import { useSearchParser } from '@/hooks/useSearchParser.tsx';
+import { ColorRule, useColorRuleStore } from '@/stores/useColorRuleStore';
+import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
+import React from 'react';
+import './LogViewerTableTanStackStyles.css';
 
 // Import DnD Kit
-import {
-  DndContext,
-  useSensor,
-  useSensors,
-  PointerSensor,
-  KeyboardSensor,
-  closestCenter,
-  DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  horizontalListSortingStrategy,
-  useSortable,
-  arrayMove,
-} from '@dnd-kit/sortable';
-import { restrictToHorizontalAxis } from '@dnd-kit/modifiers';
-import { useSearchLogs } from '@/hooks/useSearchLogs';
+import { Button } from '@/components/ui/button';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
-import { Button } from '@/components/ui/button';
+import {
+  DndContext,
+  DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import { restrictToHorizontalAxis } from '@dnd-kit/modifiers';
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
 
 // Define the type for log data
 type LogData = Record<string, any>;
@@ -129,7 +126,7 @@ const SortableHeader: React.FC<SortableHeaderProps> = ({ header, isLocked, handl
 export const LogViewerTable = React.forwardRef((props, ref) => {
 
   const store = useSearchQueryParamsStore();
-  const { logData, error, isLoading } = useLogResultStore();
+  const { logData, isLoading } = useLogResultStore();
   const { colorRules } = useColorRuleStore();
   const logs = logData?.logs || [];
   const { parseSearchQuery, createHighlighter } = useSearchParser();
