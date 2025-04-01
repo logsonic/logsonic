@@ -2,12 +2,14 @@ import { FC, useEffect, useState } from 'react';
 import { Cloud, File, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useImportStore } from '@/stores/useImportStore';
-
+import { getSystemInfo } from '@/lib/api-client';
+import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 // Success Summary component for showing import completion
 export const SuccessSummary: FC = () => {
     const { selectedFileName, importSource, sessionOptionsFileName, selectedPattern, totalLines } = useImportStore();
     const navigate = useNavigate();
      const [redirectTimer, setRedirectTimer] = useState<NodeJS.Timeout | null>(null);
+    const { setSystemInfo } = useSystemInfoStore();
     // Set the icon and filename label based on the import source
     const sourceIcon = importSource === 'cloudwatch' 
       ? <Cloud className="h-6 w-6 text-blue-500 mr-2" />
@@ -16,8 +18,18 @@ export const SuccessSummary: FC = () => {
     const fileLabel = importSource === 'cloudwatch' ? 'CloudWatch Log:' : 'File Name:';
     const fileName = importSource === 'cloudwatch' ? sessionOptionsFileName : selectedFileName;
   
-     useEffect(() => {
-      // Start a redirect timer
+     useEffect(() => { 
+
+    //Invalidate the info endpoint
+    const invalidateInfo = async () => {
+        const info = await getSystemInfo(true) ;
+        setSystemInfo(info);
+        console.log("info", info);
+    }
+    invalidateInfo();
+
+
+        // Start a redirect timer
       if (!redirectTimer) {
       const timer = setTimeout(() => {
         
