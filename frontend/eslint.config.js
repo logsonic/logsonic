@@ -13,6 +13,11 @@ export default tseslint.config(
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
+      parserOptions: {
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
     },
     plugins: {
       "react-hooks": reactHooks,
@@ -25,7 +30,11 @@ export default tseslint.config(
         "warn",
         { allowConstantExport: true },
       ],
-      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": ["warn", { 
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "ignoreRestSiblings": true
+      }],
       
       // Import rules for better tree shaking
       "import/no-duplicates": "warn",
@@ -34,6 +43,24 @@ export default tseslint.config(
       "import/first": "warn", // Ensure imports are at the top of the file
       "import/newline-after-import": "warn", // Ensure there's a newline after imports
       "import/no-unresolved": "off", // TypeScript handles this
+      "import/no-unused-modules": "warn", // Warn about unused imports
+      "import/order": ["warn", {
+        "groups": [
+          "builtin",
+          "external",
+          "internal",
+          "parent",
+          "sibling",
+          "index",
+          "object",
+          "type"
+        ],
+        "newlines-between": "always",
+        "alphabetize": {
+          "order": "asc",
+          "caseInsensitive": true
+        }
+      }]
     },
   }
 );
