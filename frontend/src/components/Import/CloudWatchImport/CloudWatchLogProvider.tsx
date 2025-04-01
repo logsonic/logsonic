@@ -198,16 +198,24 @@ export const CloudWatchLogProvider: FC<LogSourceProvider> = ({
                 />
               </div>
               
-              <div className="w-2/5 flex-grow">
+              <div className="w-1/5 flex-grow">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Time Range</label>
                 <div className="flex h-10 w-full ">
                   <DateTimeRangeButton />
                 </div>
               </div>
               
-              <Button 
-                onClick={() => fetchLogGroups(UTCTimeSince, UTCTimeTo)}
-                disabled={isLoading}
+              <div className="w-1/5">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Time Range</label>
+                <div className="text-sm text-gray-700 mb-1">
+                  {UTCTimeSince.toISOString()} - {UTCTimeTo.toISOString()}
+                </div>
+              </div>
+
+
+                <Button 
+                  onClick={() => fetchLogGroups(UTCTimeSince, UTCTimeTo)}
+                  disabled={isLoading}
                 className="bg-blue-600 hover:bg-blue-700 h-10"
               >
                 {isLoading ? (

@@ -16,6 +16,28 @@ export const useCloudWatchHooks = () => {
       
       const response = await cloudwatchService.listLogGroups(authData);
       store.setLogGroups(response.log_groups || []);
+
+      // Fetch streams for all log groups in parallel
+      const streamPromises = (response.log_groups || []).map(async (group) => {
+        try {
+          const request = {
+            region: store.region,
+            profile: store.profile,
+            log_group_name: group.name,
+            start_time: startTime.getTime(),
+            end_time: endTime.getTime()
+          };
+          
+          const streamResponse = await cloudwatchService.listLogStreams(request);
+          store.setStreamsForGroup(group.name, streamResponse.log_streams || []);
+        } catch (error) {
+          console.error(`Error fetching streams for group ${group.name}:`, error);
+          // Don't throw here, we want to continue with other groups even if one fails
+        }
+      });
+
+      // Wait for all stream fetches to complete
+      await Promise.all(streamPromises);
     } catch (error) {
       console.error('Error fetching log groups:', error);
       store.setError(error.message || 'Failed to fetch log groups');
