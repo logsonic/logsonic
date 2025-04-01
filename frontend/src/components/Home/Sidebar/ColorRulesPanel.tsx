@@ -1,20 +1,19 @@
-import { useState } from "react";
-import { Plus, Trash2, X, Pencil, Check, AlertCircle, Palette } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ColorRule, useColorRuleStore } from "@/stores/useColorRuleStore";
-import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
-import { useLogResultStore } from "@/stores/useLogResultStore";
-import { cn } from "@/lib/utils";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
+import { ColorRule, useColorRuleStore } from "@/stores/useColorRuleStore";
+import { useLogResultStore } from "@/stores/useLogResultStore";
+import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
+import { AlertCircle, Check, Palette, Pencil, Plus, Trash2, X } from "lucide-react";
+import { useState } from "react";
 
 // Enhanced colors with better distinction and proper names
 const ENHANCED_COLORS = [

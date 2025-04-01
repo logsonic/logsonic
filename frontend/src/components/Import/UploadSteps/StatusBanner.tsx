@@ -1,4 +1,4 @@
-import { CheckCircle, AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle, X } from 'lucide-react';
 import { FC } from 'react';
 interface StatusBannerProps {
   type: 'success' | 'error' | 'warning';

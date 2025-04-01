@@ -1,5 +1,5 @@
-import { create } from 'zustand';
 import { LogResponse } from '@/lib/api-types';
+import { create } from 'zustand';
 
 interface LogResultState {
   // Data

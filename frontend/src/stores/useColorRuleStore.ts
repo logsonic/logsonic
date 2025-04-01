@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 // Define a color rule
 export interface ColorRule {
@@ -45,6 +45,16 @@ export const LIGHT_COLORS = [
   { name: 'Violet', value: 'bg-violet-50' },
   { name: 'Fuchsia', value: 'bg-fuchsia-50' },
   { name: 'Rose', value: 'bg-rose-50' },
+];
+
+// Default color rules for common log analysis scenarios
+const DEFAULT_COLOR_RULES: Omit<ColorRule, 'id'>[] = [
+ 
+  // Common error patterns in message field
+  { field: 'message', operator: 'contains', value: 'error', color: 'bg-red-100', enabled: true },
+  { field: 'message', operator: 'contains', value: 'warning', color: 'bg-yellow-100', enabled: true },
+  { field: 'error', operator: 'exists', value: '', color: 'bg-red-100', enabled: true },
+  
 ];
 
 // Create the store with persistence
@@ -101,7 +111,13 @@ export const useColorRuleStore = create<ColorRuleStoreState>()(
       onRehydrateStorage: () => {
         return (state) => {
           if (state) {
-            // State has been rehydrated
+            // If no rules exist, initialize with default rules
+            if (state.colorRules.length === 0) {
+              state.colorRules = DEFAULT_COLOR_RULES.map(rule => ({
+                ...rule,
+                id: crypto.randomUUID()
+              }));
+            }
           }
         };
       }

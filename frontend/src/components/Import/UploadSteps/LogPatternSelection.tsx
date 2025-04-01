@@ -1,13 +1,12 @@
-import type { LogPatternSelectionProps, Pattern } from '../types';
-import { Label } from '../../../components/ui/label';
-import { Loader2, Copy, PlayCircle, ChevronsUpDown, Check, Search } from 'lucide-react';
-import { useImportStore } from '@/stores/useImportStore';
-import { IngestSessionOptions } from './IngestSessionOptions';
-import { Button } from '../../../components/ui/button';
-import { useEffect, useState, FC, useRef } from 'react';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
+import { useImportStore } from '@/stores/useImportStore';
+import { Check, ChevronsUpDown, Copy, Loader2, PlayCircle } from 'lucide-react';
+import { FC, useEffect, useRef, useState } from 'react';
+import { Button } from '../../../components/ui/button';
+import { Label } from '../../../components/ui/label';
+import type { LogPatternSelectionProps } from '../types';
+import { IngestSessionOptions } from './IngestSessionOptions';
 
 export const LogPatternSelection: FC<LogPatternSelectionProps> = ({
   onPatternChange,
@@ -54,10 +53,6 @@ export const LogPatternSelection: FC<LogPatternSelectionProps> = ({
     }
   };
 
-  // Handlers for search input focus/blur
-  const handleSearchFocus = () => {
-    setOpen(true);
-  };
 
   const handleSearchInputChange = (value: string) => {
     setSearchQuery(value);

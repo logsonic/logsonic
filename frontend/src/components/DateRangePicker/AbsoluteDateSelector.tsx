@@ -1,9 +1,9 @@
-import { useState, useEffect, FC } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
-import { format, isSameDay, isAfter } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
+import { format, isAfter, isSameDay } from "date-fns";
+import { FC, useEffect, useState } from "react";
 
 export const AbsoluteDateSelector: FC = () => {
   // Get the store directly using the hook
@@ -28,7 +28,7 @@ export const AbsoluteDateSelector: FC = () => {
   // We need to ensure that end date doesnt exceeds start date. 
   // If the user selects a start date after end date, we update the end date to the start date.
   // If the user selects a start date on the same day as the end date, we ensure that the end time is after the start time.
-  const handleStartDateTimeChange = useEffect(() => {
+  useEffect(() => {
     // Parse the start date and time
     const startTimeParts = parseTime(startTime);
     
@@ -51,7 +51,7 @@ export const AbsoluteDateSelector: FC = () => {
   
   }, [startTime,startDate]);
 
-  const handleEndDateTimeChange = useEffect(() => {
+  useEffect(() => {
     // Parse the start date and time
     const endTimeParts = parseTime(endTime);
     const startTimeParts = parseTime(startTime);

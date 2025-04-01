@@ -1,23 +1,21 @@
-import { useState, useCallback, useRef } from 'react';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
-import { 
-  Columns, 
-  Lock, 
-  Unlock, 
-  Maximize2, 
-  X,
-  Loader2,
+import {
+  Columns,
+  Lock,
+  Maximize2,
   Search,
+  Unlock,
+  X,
   XCircle
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
+import { useCallback, useState } from 'react';
 
-import { useLogResultStore } from '@/stores/useLogResultStore';
 
 /**
  * LogViewer Header component with controls
@@ -27,14 +25,13 @@ export const LogViewerHeader = (
 
 ) => {
   const store = useSearchQueryParamsStore();
-  const { logData, error } = useLogResultStore();
-  
+
   // Toggle lock state
   const toggleLock = useCallback(() => {
     store.setColumnLocked(!store.isColumnLocked); 
   }, [store.isColumnLocked]);
 
-  const { systemInfo, isLoading: isSystemInfoLoading } = useSystemInfoStore();
+  const { systemInfo } = useSystemInfoStore();
 
   const [isColumnPopoverOpen, setIsColumnPopoverOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');

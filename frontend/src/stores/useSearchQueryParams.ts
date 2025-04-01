@@ -1,6 +1,6 @@
+import { calculatePresetRelativeDate, calculateRelativeDate, calculateRelativeDateRange, RELATIVE_DATE_PRESETS } from '@/lib/date-utils';
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import { calculateRelativeDate, calculatePresetRelativeDate, calculateRelativeDateRange, RELATIVE_DATE_PRESETS} from '@/lib/date-utils';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 
 // Define the search store state

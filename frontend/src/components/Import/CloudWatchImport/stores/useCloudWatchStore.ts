@@ -1,11 +1,10 @@
 import { create } from 'zustand';
-import { 
-  CloudWatchLogGroup, 
+import {
+  CloudWatchLogGroup,
   CloudWatchLogStream,
   LogPaginationState,
-  SelectedStream 
+  SelectedStream
 } from '../types';
-import { useState } from 'node_modules/react-resizable-panels/dist/declarations/src/vendor/react';
 
 interface CloudWatchState {
   // Authentication
