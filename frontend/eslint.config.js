@@ -70,7 +70,15 @@ export default [
           },
         },
       ],
-      "prettier/prettier": "error",
+      "prettier/prettier": ["error", {
+        "semi": true,
+        "tabWidth": 2,
+        "printWidth": 100,
+        "singleQuote": true,
+        "trailingComma": "es5",
+        "arrowParens": "always",
+        "endOfLine": "lf"
+      }],
       "no-unused-vars": "off", // Turn off the base rule as it can report incorrect errors
       "@typescript-eslint/no-unused-vars": [
         "error",
