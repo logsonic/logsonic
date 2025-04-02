@@ -119,7 +119,6 @@ export function AIQueryDialog({ open, onOpenChange }: AIQueryDialogProps) {
         store.resetPagination();
         // Apply the trimmed query
       store.setSearchQuery(translatedQuery.trim());
-      store.updateUrlParams();
       // Close the dialog
       onOpenChange(false);
     }

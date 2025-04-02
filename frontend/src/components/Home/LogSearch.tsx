@@ -46,12 +46,10 @@ export const LogSearch = ({
       setIsAIAvailable(hasLogsonicModel);
     };
     
+    // Check AI status once on component mount
     checkAI();
     
-    // Check AI status every 30 seconds
-    const intervalId = setInterval(checkAI, 30000);
-    
-    return () => clearInterval(intervalId);
+    // No interval checking - only check when component loads
   }, []);
 
   useEffect(() => { 
@@ -65,9 +63,8 @@ export const LogSearch = ({
 
   const handleSearch = useCallback((force: boolean = false) => {
     store.resetPagination();
-
     store.setSearchQuery(localSearchQuery);
-    store.updateUrlParams();
+
     if (force) {
       searchLogs();
     }
@@ -76,7 +73,7 @@ export const LogSearch = ({
   const handleClearSearch = useCallback(() => {
     setLocalSearchQuery('');
     store.clearSearchQuery();
-    store.updateUrlParams();
+
     store.resetPagination();
   }, [store]);
 
@@ -107,9 +104,9 @@ export const LogSearch = ({
                 >
                   <Sparkles 
                     size={18} 
-                    className="text-yellow-500 hover:text-yellow-600 cursor-pointer"
+                    className="text-blue-500 hover:text-blue-600 cursor-pointer"
                     style={{
-                      filter: 'drop-shadow(0 0 4px rgba(250, 204, 21, 0.5))',
+                      filter: 'drop-shadow(0 0 4px rgba(139, 92, 246, 0.5))',
                       animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
                     }}
                   />
