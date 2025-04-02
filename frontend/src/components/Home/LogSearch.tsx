@@ -31,14 +31,6 @@ export const LogSearch = ({
   const [isAIDialogOpen, setIsAIDialogOpen] = useState(false);
   const [isAIAvailable, setIsAIAvailable] = useState(false);
 
-  // Callback for when AI query is applied
-  const handleQueryApplied = useCallback((query: string) => {
-    setLocalSearchQuery(query);
-    // Trigger a search automatically when an AI query is applied
-    setTimeout(() => {
-      searchLogs();
-    }, 100);
-  }, [searchLogs]);
 
   // Check if AI/Ollama is running
   useEffect(() => {
@@ -62,6 +54,10 @@ export const LogSearch = ({
     return () => clearInterval(intervalId);
   }, []);
 
+  useEffect(() => { 
+    setLocalSearchQuery(store.searchQuery);
+  }, [store.searchQuery]);
+
   // Handle input change without immediately updating the store
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setLocalSearchQuery(e.target.value);
@@ -69,8 +65,9 @@ export const LogSearch = ({
 
   const handleSearch = useCallback((force: boolean = false) => {
     store.resetPagination();
-    store.updateUrlParams();
+
     store.setSearchQuery(localSearchQuery);
+    store.updateUrlParams();
     if (force) {
       searchLogs();
     }
@@ -210,7 +207,7 @@ export const LogSearch = ({
       <AIQueryDialog 
         open={isAIDialogOpen}
         onOpenChange={setIsAIDialogOpen}
-        onQueryApplied={handleQueryApplied}
+
       />
     </div>
   );

@@ -5,7 +5,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { translateQuery } from "@/services/aiService";
-import { useLogResultStore } from "@/stores/useLogResultStore";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
 import { AlertCircle, Check, Copy, Sparkles } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -57,10 +56,9 @@ function CodeExample({ content, confidence }: { content: string; confidence?: nu
 interface AIQueryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onQueryApplied?: (query: string) => void;
 }
 
-export function AIQueryDialog({ open, onOpenChange, onQueryApplied }: AIQueryDialogProps) {
+export function AIQueryDialog({ open, onOpenChange }: AIQueryDialogProps) {
   const [inputQuery, setInputQuery] = useState("");
   const [translatedQuery, setTranslatedQuery] = useState("");
   const [confidence, setConfidence] = useState(0);
@@ -68,7 +66,6 @@ export function AIQueryDialog({ open, onOpenChange, onQueryApplied }: AIQueryDia
   const [errorMessage, setErrorMessage] = useState("");
 
   const store = useSearchQueryParamsStore();
-  const logResultStore = useLogResultStore();
 
   const handleExampleClick = useCallback((example: string) => {
     setInputQuery(example);
@@ -119,21 +116,14 @@ export function AIQueryDialog({ open, onOpenChange, onQueryApplied }: AIQueryDia
 
   const handleApplyQuery = useCallback(() => {
     if (translatedQuery) {
-      // Trim the query to remove any leading/trailing whitespace
-      const trimmedQuery = translatedQuery.trim();
-      
-      // Apply the trimmed query
-      store.setSearchQuery(trimmedQuery);
-      
-      // Call the callback to update the search field in the parent component
-      if (onQueryApplied) {
-        onQueryApplied(trimmedQuery);
-      }
-      
+        store.resetPagination();
+        // Apply the trimmed query
+      store.setSearchQuery(translatedQuery.trim());
+      store.updateUrlParams();
       // Close the dialog
       onOpenChange(false);
     }
-  }, [translatedQuery, store, onOpenChange, onQueryApplied]);
+  }, [translatedQuery, store, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

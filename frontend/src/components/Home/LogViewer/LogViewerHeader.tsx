@@ -14,7 +14,7 @@ import {
   X,
   XCircle
 } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 
 /**
@@ -34,14 +34,20 @@ export const LogViewerHeader = (
   const { systemInfo } = useSystemInfoStore();
 
   const [isColumnPopoverOpen, setIsColumnPopoverOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
+
+  // Update search query when it changes asynchronously
+  useEffect(() => {
+    setLocalSearchQuery(store.searchQuery);
+  }, [store.searchQuery]);
+
   
   // Filter out _raw and _src fields
   const availableColumns = store.availableColumns.filter(column => column !== '_raw' && column !== '_src');
 
   // Filter columns based on search query
-  const filteredColumns = searchQuery 
-    ? availableColumns.filter(column => column.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredColumns = localSearchQuery 
+    ? availableColumns.filter(column => column.toLowerCase().includes(localSearchQuery.toLowerCase()))
     : availableColumns;
 
   // Handle column selection change
@@ -104,14 +110,14 @@ export const LogViewerHeader = (
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
                   <Input
                     placeholder="Search columns..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    value={localSearchQuery}
+                    onChange={(e) => setLocalSearchQuery(e.target.value)}
                     className="pl-8"
                   />
-                  {searchQuery && (
+                  {localSearchQuery && (
                     <button 
                       className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                      onClick={() => setSearchQuery('')}
+                      onClick={() => setLocalSearchQuery('')}
                       aria-label="Clear search"
                     >
                       <XCircle className="h-4 w-4" />
