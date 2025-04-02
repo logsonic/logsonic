@@ -235,6 +235,12 @@ func NewServer(cfg Config) (*Server, error) {
 			r.Post("/log-events", h.HandleGetCloudWatchLogEvents)
 		})
 
+		// Add AI endpoints
+		r.Route("/ai", func(r chi.Router) {
+			r.Get("/status", h.HandleCheckAIStatus)
+			r.Post("/translate-query", h.HandleQueryTranslation)
+		})
+
 	})
 
 	return &Server{

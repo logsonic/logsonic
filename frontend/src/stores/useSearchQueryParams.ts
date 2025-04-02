@@ -192,6 +192,7 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
           const currentState = get();
           if (currentState.searchQuery !== searchQuery) {
             set({ searchQuery });
+            currentState.updateUrlParams();
           }
         },
         setSources: (sources) => {
