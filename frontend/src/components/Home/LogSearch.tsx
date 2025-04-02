@@ -1,10 +1,12 @@
 import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";
+import { AIQueryDialog } from "@/components/Home/AIQueryDialog";
 import { useSearchLogs } from "@/hooks/useSearchLogs";
 import { cn } from "@/lib/utils";
+import { checkAIStatus } from "@/services/aiService";
 import { useLogResultStore } from "@/stores/useLogResultStore";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
-import { ArrowRight, Search, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { ArrowRight, Search, Sparkles, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { PerformanceMetricsPopover } from "./PerformanceMetricsPopover";
@@ -24,29 +26,61 @@ export const LogSearch = ({
   const { searchLogs } = useSearchLogs(onSearchComplete);
   const { isLoading } = useLogResultStore();
   const [localSearchQuery, setLocalSearchQuery] = useState(store.searchQuery);
+  
+  // AI query related state
+  const [isAIDialogOpen, setIsAIDialogOpen] = useState(false);
+  const [isAIAvailable, setIsAIAvailable] = useState(false);
+
+  // Callback for when AI query is applied
+  const handleQueryApplied = useCallback((query: string) => {
+    setLocalSearchQuery(query);
+    // Trigger a search automatically when an AI query is applied
+    setTimeout(() => {
+      searchLogs();
+    }, 100);
+  }, [searchLogs]);
+
+  // Check if AI/Ollama is running
+  useEffect(() => {
+    const checkAI = async () => {
+      const status = await checkAIStatus();
+      // Check if Ollama is running and any logsonic-related model is available
+      // This will match "logsonic", "logsonic:latest", "logsonic-search", etc.
+      const hasLogsonicModel = status.ollama_running && 
+        status.models_available.some(model => 
+          model.toLowerCase().includes('logsonic')
+        );
+      
+      setIsAIAvailable(hasLogsonicModel);
+    };
+    
+    checkAI();
+    
+    // Check AI status every 30 seconds
+    const intervalId = setInterval(checkAI, 30000);
+    
+    return () => clearInterval(intervalId);
+  }, []);
 
   // Handle input change without immediately updating the store
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setLocalSearchQuery(e.target.value);
   }, []);
 
-
-
- const handleSearch = useCallback((force: boolean = false) => {
-  store.resetPagination();
-  store.updateUrlParams();
-  store.setSearchQuery(localSearchQuery);
-  if (force) {
-    searchLogs();
-  }
- }, [localSearchQuery, searchLogs, store]);
+  const handleSearch = useCallback((force: boolean = false) => {
+    store.resetPagination();
+    store.updateUrlParams();
+    store.setSearchQuery(localSearchQuery);
+    if (force) {
+      searchLogs();
+    }
+  }, [localSearchQuery, searchLogs, store]);
 
   const handleClearSearch = useCallback(() => {
     setLocalSearchQuery('');
     store.clearSearchQuery();
     store.updateUrlParams();
     store.resetPagination();
-
   }, [store]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -65,8 +99,27 @@ export const LogSearch = ({
         <div className="flex items-center w-full gap-2">
           {/* Search input with clear button */}
           <div className="relative flex-grow">
-            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
-              <Search size={18} />
+            <div className="absolute inset-y-0 left-0 flex items-center pl-3">
+              {isAIAvailable ? (
+                <button
+                  type="button"
+                  onClick={() => setIsAIDialogOpen(true)}
+                  className="focus:outline-none"
+                  aria-label="Use AI to build query"
+                  title="Use AI to build query"
+                >
+                  <Sparkles 
+                    size={18} 
+                    className="text-yellow-500 hover:text-yellow-600 cursor-pointer"
+                    style={{
+                      filter: 'drop-shadow(0 0 4px rgba(250, 204, 21, 0.5))',
+                      animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+                    }}
+                  />
+                </button>
+              ) : (
+                <Search size={18} className="text-gray-400 pointer-events-none" />
+              )}
             </div>
             
             <Input 
@@ -81,7 +134,7 @@ export const LogSearch = ({
               onKeyDown={handleKeyDown}
             />
             
-          
+            {/* Remove AI Query Button and keep only the clear search button */}
             {localSearchQuery && (
               <button
                 type="button"
@@ -114,48 +167,51 @@ export const LogSearch = ({
           </div>
         </div>
         
-
-
         {/* Search metadata display */}
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground px-1">
           <QueryHelperPopover trigger={<Button variant="link" className="text-blue-500 hover:text-blue-600">Search Help</Button>} />
 
-        {store.sources.length > 0 && (
-            <>
-      
-              <span className="font-medium text-gray-700">Sources:</span>
-              <span className="bg-gray-100 px-2 py-0.5 rounded-md text-gray-800">
-                {store.sources.join(", ")} 
-               
-              </span>
-              <span className="mx-1 text-gray-400">|</span>
-            </>
-          )}
-          {store.searchQuery && (
-            <>
-              <span className="font-medium text-gray-700"> Query:</span> 
-              <span className="bg-gray-100 px-2 py-0.5 rounded-md text-gray-800">
-                {store.searchQuery}
-              </span>
-              <span className="mx-1 text-gray-400">|</span>
-            </>
-          )}
+          {store.sources.length > 0 && (
+              <>
+                <span className="font-medium text-gray-700">Sources:</span>
+                <span className="bg-gray-100 px-2 py-0.5 rounded-md text-gray-800">
+                  {store.sources.join(", ")} 
+                </span>
+                <span className="mx-1 text-gray-400">|</span>
+              </>
+            )}
+            {store.searchQuery && (
+              <>
+                <span className="font-medium text-gray-700"> Query:</span> 
+                <span className="bg-gray-100 px-2 py-0.5 rounded-md text-gray-800">
+                  {store.searchQuery}
+                </span>
+                <span className="mx-1 text-gray-400">|</span>
+              </>
+            )}
 
-          {store.lastSearchStart && store.lastSearchEnd && (
-            <>
-              <span className="font-medium text-gray-700">Search Time Range:</span>
-              <span className="bg-gray-100 px-2 py-0.5 rounded-md text-gray-800">
-                {`${store.lastSearchStart.toLocaleString()} - ${store.lastSearchEnd.toLocaleString()} (${store.timeZone})`}
-              </span>
-            </>
-          )}
+            {store.lastSearchStart && store.lastSearchEnd && (
+              <>
+                <span className="font-medium text-gray-700">Search Time Range:</span>
+                <span className="bg-gray-100 px-2 py-0.5 rounded-md text-gray-800">
+                  {`${store.lastSearchStart.toLocaleString()} - ${store.lastSearchEnd.toLocaleString()} (${store.timeZone})`}
+                </span>
+              </>
+            )}
 
-          {/* Performance metrics popover */}
-          <PerformanceMetricsPopover 
-            apiExecutionTime={apiExecutionTime} 
-          />
+            {/* Performance metrics popover */}
+            <PerformanceMetricsPopover 
+              apiExecutionTime={apiExecutionTime} 
+            />
         </div>
       </div>
+
+      {/* AI Query Dialog */}
+      <AIQueryDialog 
+        open={isAIDialogOpen}
+        onOpenChange={setIsAIDialogOpen}
+        onQueryApplied={handleQueryApplied}
+      />
     </div>
   );
 };
