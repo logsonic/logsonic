@@ -13,24 +13,38 @@ import (
 
 // AIQueryRequest defines the structure sent to the Ollama API
 type AIQueryRequest struct {
-	Columns []string `json:"columns"`
-	Query   string   `json:"query"`
+	Logs   map[string]interface{} `json:"logs"`
+	Query  string                 `json:"query"`
 }
 
 // AIQueryResponse defines the expected response structure from Ollama 
 type AIQueryResponse struct {
-	Query      string  `json:"query"`
+	BleveQuery string  `json:"bleve_query"`
 	Confidence float64 `json:"confidence"`
 }
 
 // AIQueryAPIResponse defines the API response we send back to the client
 type AIQueryAPIResponse struct {
-	Query           string   `json:"query"`
+	BleveQuery      string   `json:"bleve_query"`
 	Confidence      float64  `json:"confidence"`
 	AvailableModels []string `json:"available_models"`
 	ModelUsed       string   `json:"model_used"`
 	Success         bool     `json:"success"`
 	Error           string   `json:"error,omitempty"`
+}
+
+// OllamaRequest is the structure for requests to Ollama API
+type OllamaRequest struct {
+	Model  string `json:"model"`
+	Prompt string `json:"prompt"`
+	Stream bool   `json:"stream"`
+}
+
+// OllamaResponse is the structure for responses from Ollama API
+type OllamaResponse struct {
+	Model     string `json:"model"`
+	Response  string `json:"response"`
+	CreatedAt string `json:"created_at"`
 }
 
 // HandleQueryTranslation handles translation from natural language to Logsonic query syntax
@@ -39,7 +53,7 @@ type AIQueryAPIResponse struct {
 // @ID translate-query
 // @Accept json
 // @Produce json
-// @Param request body handlers.AIQueryRequest true "Natural language query and column information"
+// @Param request body handlers.AIQueryRequest true "Natural language query and sample logs"
 // @Success 200 {object} handlers.AIQueryAPIResponse "Translated query with confidence score"
 // @Failure 400 {object} types.ErrorResponse "Bad request due to invalid parameters"
 // @Failure 500 {object} types.ErrorResponse "Internal server error"
@@ -49,6 +63,7 @@ func (h *Services) HandleQueryTranslation(w http.ResponseWriter, r *http.Request
 
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(types.ErrorResponse{
 			Status: "error",
 			Error:  "Method not allowed",
@@ -62,6 +77,7 @@ func (h *Services) HandleQueryTranslation(w http.ResponseWriter, r *http.Request
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(types.ErrorResponse{
 			Status:  "error",
 			Error:   "Invalid request body",
@@ -75,6 +91,7 @@ func (h *Services) HandleQueryTranslation(w http.ResponseWriter, r *http.Request
 	// Validate request
 	if request.Query == "" {
 		w.WriteHeader(http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(types.ErrorResponse{
 			Status:  "error",
 			Error:   "Empty query",
@@ -84,10 +101,17 @@ func (h *Services) HandleQueryTranslation(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Try to get available columns from storage if none provided
-	if len(request.Columns) == 0 {
-		// Use default columns - we don't have a direct API to get all columns
-		request.Columns = []string{"timestamp", "message"}
+	// If no logs are provided, try to get sample logs from storage
+	if len(request.Logs) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(types.ErrorResponse{
+			Status:  "error",
+			Error:   "Empty logs",
+			Code:    "INVALID_PARAMETER",
+			Details: "Logs cannot be empty",
+		})
+		return
 	}
 
 	// Set ollama endpoint - default to localhost
@@ -96,7 +120,7 @@ func (h *Services) HandleQueryTranslation(w http.ResponseWriter, r *http.Request
 	
 	// Get available models to find the right Logsonic model
 	availableModels := []string{}
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get("http://localhost:11434/api/tags")
 	if err == nil {
 		defer resp.Body.Close()
@@ -118,14 +142,13 @@ func (h *Services) HandleQueryTranslation(w http.ResponseWriter, r *http.Request
 	modelName := findLogsonicModel(availableModels)
 	
 	// Call the Ollama API with the selected model
-	response, err := callOllamaAPI(ollamaEndpoint, modelName, request)
+	bleveQueryString, err := callOllamaAPI(ollamaEndpoint, modelName, request)
 	
-	// If Ollama fails and OpenAI is configured, we could fall back to it here
-	// For now, just return the error
-	
+	// Validate the response from Ollama
 	if err != nil {
 		fmt.Printf("[AI Query] Error translating query: %s\n", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(types.ErrorResponse{
 			Status:  "error",
 			Error:   "AI model error",
@@ -134,41 +157,43 @@ func (h *Services) HandleQueryTranslation(w http.ResponseWriter, r *http.Request
 		})
 		return
 	}
+	
+	// Check if we got a valid query string
+	if bleveQueryString == "" {
+		fmt.Printf("[AI Query] Empty query string from Ollama\n")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(types.ErrorResponse{
+			Status:  "error",
+			Error:   "AI model returned empty query",
+			Code:    "AI_MODEL_ERROR",
+			Details: "The AI model did not return a valid query string",
+		})
+		return
+	}
+	
+	// Trim any extra whitespace or newlines
+	bleveQueryString = strings.TrimSpace(bleveQueryString)
 
 	// Return the response
 	apiResponse := AIQueryAPIResponse{
-		Query:           response.Query,
-		Confidence:      response.Confidence,
+		BleveQuery:      bleveQueryString,
+		Confidence:      1.0,
 		AvailableModels: availableModels,
 		ModelUsed:       modelName,
 		Success:         true,
 	}
 
-
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(apiResponse)
 }
 
-// OllamaRequest is the structure for requests to Ollama API
-type OllamaRequest struct {
-	Model  string `json:"model"`
-	Prompt string `json:"prompt"`
-	Stream bool   `json:"stream"`
-}
-
-// OllamaResponse is the structure for responses from Ollama API
-type OllamaResponse struct {
-	Model     string `json:"model"`
-	Response  string `json:"response"`
-	CreatedAt string `json:"created_at"`
-}
-
 // Function to call the Ollama API
-func callOllamaAPI(endpoint string, model string, request AIQueryRequest) (AIQueryResponse, error) {
+func callOllamaAPI(endpoint string, model string, request AIQueryRequest) (string, error) {
 	// Create JSON string for the prompt
 	promptData, err := json.Marshal(request)
 	if err != nil {
-		return AIQueryResponse{}, fmt.Errorf("failed to marshal request: %w", err)
+		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	// Create Ollama request
@@ -180,56 +205,68 @@ func callOllamaAPI(endpoint string, model string, request AIQueryRequest) (AIQue
 
 	requestBody, err := json.Marshal(ollamaRequest)
 	if err != nil {
-		return AIQueryResponse{}, fmt.Errorf("failed to marshal Ollama request: %w", err)
+		return "", fmt.Errorf("failed to marshal Ollama request: %w", err)
 	}
-
 
 	// Create HTTP request
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: 60 * time.Second,
 	}
 	
 	resp, err := client.Post(endpoint, "application/json", bytes.NewBuffer(requestBody))
 	if err != nil {
-		return AIQueryResponse{}, fmt.Errorf("failed to call Ollama API: %w", err)
+		return "", fmt.Errorf("failed to call Ollama API: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Read response body
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return AIQueryResponse{}, fmt.Errorf("failed to read Ollama response: %w", err)
+		return "", fmt.Errorf("failed to read Ollama response: %w", err)
 	}
-
 
 	// Parse Ollama response
 	var ollamaResp OllamaResponse
 	err = json.Unmarshal(respBody, &ollamaResp)
 	if err != nil {
-		return AIQueryResponse{}, fmt.Errorf("failed to parse Ollama response: %w", err)
+		return "", fmt.Errorf("failed to parse Ollama response: %w", err)
 	}
 
-	// Extract JSON from the text response
-	jsonStr := ollamaResp.Response
-	// Clean up JSON - sometimes Ollama adds extra text before/after the JSON
-	jsonStr = strings.TrimSpace(jsonStr)
+	// Get the raw response and clean it up
+	bleveQuery := strings.TrimSpace(ollamaResp.Response)
 	
-	// Try to find JSON content between braces
-	startIndex := strings.Index(jsonStr, "{")
-	endIndex := strings.LastIndex(jsonStr, "}")
+	// Log the raw response for debugging
+	fmt.Printf("[AI Query] Raw Ollama response: %s\n", bleveQuery)
 	
-	if startIndex >= 0 && endIndex > startIndex {
-		jsonStr = jsonStr[startIndex : endIndex+1]
-	}
-	
-	// Parse the JSON response
-	var aiResponse AIQueryResponse
-	err = json.Unmarshal([]byte(jsonStr), &aiResponse)
-	if err != nil {
-		return AIQueryResponse{}, fmt.Errorf("failed to parse AI response: %w", err)
-	}
+	return bleveQuery, nil
+}
 
-	return aiResponse, nil
+// Set appropriate Ollama model name based on available models
+func findLogsonicModel(availableModels []string) string {
+	// Priority order: "logsonic", "logsonic:latest", "logsonic-search", any model with "logsonic" in the name
+	if len(availableModels) == 0 {
+		return "logsonic" // Default if no models available
+	}
+	
+	// First try exact matches in order of preference
+	preferredModels := []string{"logsonic", "logsonic:latest"}
+	for _, preferred := range preferredModels {
+		for _, available := range availableModels {
+			if available == preferred {
+				return available
+			}
+		}
+	}
+	
+	// Then try partial matches
+	for _, available := range availableModels {
+		if strings.Contains(strings.ToLower(available), "logsonic") {
+			return available
+		}
+	}
+	
+	// Fallback to default
+	return "logsonic"
 }
 
 // Function to check if the Ollama service is running
@@ -321,31 +358,3 @@ func (h *Services) HandleCheckAIStatus(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
-
-// Set appropriate Ollama model name based on available models
-func findLogsonicModel(availableModels []string) string {
-	// Priority order: "logsonic", "logsonic:latest", "logsonic-search", any model with "logsonic" in the name
-	if len(availableModels) == 0 {
-		return "logsonic" // Default if no models available
-	}
-	
-	// First try exact matches in order of preference
-	preferredModels := []string{"logsonic", "logsonic:latest"}
-	for _, preferred := range preferredModels {
-		for _, available := range availableModels {
-			if available == preferred {
-				return available
-			}
-		}
-	}
-	
-	// Then try partial matches
-	for _, available := range availableModels {
-		if strings.Contains(strings.ToLower(available), "logsonic") {
-			return available
-		}
-	}
-	
-	// Fallback to default
-	return "logsonic"
-} 

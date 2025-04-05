@@ -1,25 +1,25 @@
 import {
-    GrokPatternRequest,
-    GrokPatternResponse,
-    IngestFileRequest,
-    IngestRequest,
-    IngestResponse,
-    IngestSessionOptions,
-    LogQueryParams,
-    LogResponse,
-    ParseRequest,
-    ParseResponse,
-    SuggestResponse,
-    SystemInfoResponse,
+  GrokPatternRequest,
+  GrokPatternResponse,
+  IngestFileRequest,
+  IngestRequest,
+  IngestResponse,
+  IngestSessionOptions,
+  LogQueryParams,
+  LogResponse,
+  ParseRequest,
+  ParseResponse,
+  SuggestResponse,
+  SystemInfoResponse,
 } from './api-types';
 
 import {
-    CloudWatchAuth,
-    GetLogEventsRequest,
-    GetLogEventsResponse,
-    ListLogGroupsResponse,
-    ListLogStreamsRequest,
-    ListLogStreamsResponse
+  CloudWatchAuth,
+  GetLogEventsRequest,
+  GetLogEventsResponse,
+  ListLogGroupsResponse,
+  ListLogStreamsRequest,
+  ListLogStreamsResponse
 } from '@/components/Import/CloudWatchImport/types';
 
 // API base configuration
@@ -177,12 +177,12 @@ export interface AIStatusResponse {
 }
 
 export interface AIQueryRequest {
-  columns: string[];
+  logs: Record<string, any>;
   query: string;
 }
 
 export interface AIQueryResponse {
-  query: string;
+  bleve_query: string;
   confidence: number;
   available_models: string[];
   model_used: string;
