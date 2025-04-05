@@ -52,7 +52,7 @@ Download the log to you local computer and import using Import File menu.
 ### Enabling AI Assistance
 
 <img src="ollama/assistant.png" alt="LogSonic AI Assitant" width="400" />
-Since bleve query syntax may be confusing for beginners, Logsonic has a feature which converts simple english queries to bleve search syntax. This is available in the release 0.5 onwards. Logsonic will automatically detect and enable AI assistance features if a local Ollama instance is running with the predefined logsonic image. Follow the instructions [here](ollama/README.md) to build your local [Modelfile](ollama/Modelfile). 
+Since bleve query syntax may be confusing for beginners, Logsonic has a feature which converts simple english queries to bleve search syntax. This is available in the release 0.5 onwards. Logsonic will automatically detect and enable AI assistance features if a local Ollama instance is running with the predefined logsonic image. Follow the instructions [here](#ollama/README.md) to build your local [Modelfile](#ollama/Modelfile). 
 
 ### Build from Source
 
