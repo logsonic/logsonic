@@ -1,10 +1,11 @@
 import { Button } from "@/components/ui/button";
 import {
-    Dialog,
-    DialogContent
+  Dialog,
+  DialogContent
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { translateQuery } from "@/services/aiService";
+import { useLogResultStore } from "@/stores/useLogResultStore";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
 import { AlertCircle, Check, Copy, Sparkles } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -66,6 +67,7 @@ export function AIQueryDialog({ open, onOpenChange }: AIQueryDialogProps) {
   const [errorMessage, setErrorMessage] = useState("");
 
   const store = useSearchQueryParamsStore();
+  const logResultStore = useLogResultStore();
 
   const handleExampleClick = useCallback((example: string) => {
     setInputQuery(example);
@@ -87,24 +89,30 @@ export function AIQueryDialog({ open, onOpenChange }: AIQueryDialogProps) {
     setErrorMessage("");
     
     try {
-      // Get the available columns from the store or use defaults
-      const columns = store.availableColumns.length > 0 
-        ? store.availableColumns 
-        : ["timestamp", "message", "level", "service", "host"];
+      // Extract column keys and sample values from log result store
+      const sampleLog = logResultStore.logData?.logs && logResultStore.logData.logs.length > 0 
+        ? logResultStore.logData.logs[0]  // Just take the first log for structure
+        : { 
+            timestamp: new Date().toISOString(), 
+            level: "info", 
+            message: "Sample log message",  
+            service: "api",
+            host: "server-1"
+          };
 
       const response = await translateQuery({
-        columns,
+        logs: sampleLog,
         query: inputQuery,
       });
 
-      setTranslatedQuery(response.query);
+      setTranslatedQuery(response.bleve_query);
       setConfidence(response.confidence);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to translate query");
     } finally {
       setIsLoading(false);
     }
-  }, [inputQuery, store.availableColumns]);
+  }, [inputQuery, logResultStore.logData]);
 
   // Handle Enter key press in the input field
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {

@@ -105,6 +105,31 @@ definitions:
       storedBytes:
         type: integer
     type: object
+  handlers.AIQueryAPIResponse:
+    properties:
+      available_models:
+        items:
+          type: string
+        type: array
+      bleve_query:
+        type: string
+      confidence:
+        type: number
+      error:
+        type: string
+      model_used:
+        type: string
+      success:
+        type: boolean
+    type: object
+  handlers.AIQueryRequest:
+    properties:
+      logs:
+        additionalProperties: true
+        type: object
+      query:
+        type: string
+    type: object
   handlers.PingResponse:
     properties:
       status:
@@ -407,6 +432,50 @@ info:
   title: LogSonic API
   version: "1.0"
 paths:
+  /api/v1/ai/status:
+    get:
+      description: Checks if the Ollama service is running and the required models
+        are available
+      operationId: check-ai-status
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: AI service status information
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Check AI service status
+  /api/v1/ai/translate-query:
+    post:
+      consumes:
+      - application/json
+      description: Converts natural language description into Logsonic query syntax
+        using AI
+      operationId: translate-query
+      parameters:
+      - description: Natural language query and sample logs
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.AIQueryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Translated query with confidence score
+          schema:
+            $ref: '#/definitions/handlers.AIQueryAPIResponse'
+        "400":
+          description: Bad request due to invalid parameters
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Translate natural language to Logsonic query
   /api/v1/grok:
     delete:
       consumes:

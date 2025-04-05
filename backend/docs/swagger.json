@@ -9,6 +9,69 @@
     "host": "localhost:8080",
     "basePath": "/api/v1",
     "paths": {
+        "/api/v1/ai/status": {
+            "get": {
+                "description": "Checks if the Ollama service is running and the required models are available",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Check AI service status",
+                "operationId": "check-ai-status",
+                "responses": {
+                    "200": {
+                        "description": "AI service status information",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ai/translate-query": {
+            "post": {
+                "description": "Converts natural language description into Logsonic query syntax using AI",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Translate natural language to Logsonic query",
+                "operationId": "translate-query",
+                "parameters": [
+                    {
+                        "description": "Natural language query and sample logs",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.AIQueryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Translated query with confidence score",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.AIQueryAPIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request due to invalid parameters",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/grok": {
             "get": {
                 "description": "Create, read, update, and delete Grok patterns for log parsing",
@@ -846,6 +909,44 @@
                 },
                 "storedBytes": {
                     "type": "integer"
+                }
+            }
+        },
+        "handlers.AIQueryAPIResponse": {
+            "type": "object",
+            "properties": {
+                "available_models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "bleve_query": {
+                    "type": "string"
+                },
+                "confidence": {
+                    "type": "number"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "model_used": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "handlers.AIQueryRequest": {
+            "type": "object",
+            "properties": {
+                "logs": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "query": {
+                    "type": "string"
                 }
             }
         },
