@@ -109,6 +109,6 @@
     "terser": "^5.39.0",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
-    "vite": "^6.2.4"
+    "vite": "^6.2.5"
   }
 }
