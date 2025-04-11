@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/shirou/gopsutil/host"
+	"github.com/shirou/gopsutil/v3/host"
 )
 
 // @Summary Get system and storage information
