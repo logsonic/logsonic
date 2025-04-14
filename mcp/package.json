@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "fastmcp": "^1.21.0",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "tsx": "^4.19.1"
+  }
+}
