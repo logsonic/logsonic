@@ -5,9 +5,10 @@ such as Claud Desktop, Cursor, Windsurf. etc.
 
 In order to install the server, clone the git repository and 
 
-
+```
 cd logsonic/mcp
 npm i 
+```
 
 Afterwards, add the following MCP configuration to your favorite tool. **Remember** to replace the path with your actual git folder location. 
 Change the env variables for LOGSONIC_HOST and LOGSONIC_PORT if you are using non standard values to run your logsonic server. 
