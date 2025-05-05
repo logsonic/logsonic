@@ -217,6 +217,7 @@ func NewServer(cfg Config) (*Server, error) {
 		r.Route("/logs", func(r chi.Router) {
 			r.Get("/", h.HandleReadAll)
 			r.Delete("/", h.HandleClear)
+			r.Delete("/ids", h.HandleDeleteByIds)
 		})
 		r.Get("/info", h.HandleInfo)
 

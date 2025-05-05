@@ -396,6 +396,83 @@ func (h *Services) HandleClear(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// DeleteLogsByIdsRequest represents a request to delete logs by their document IDs
+type DeleteLogsByIdsRequest struct {
+	Ids []string `json:"ids"`
+}
+
+// @Summary Delete logs by IDs
+// @Description Delete specific logs from the system identified by their document IDs
+// @Tags logs
+// @Accept json
+// @Produce json
+// @Param request body DeleteLogsByIdsRequest true "IDs of logs to delete"
+// @Success 200 {object} map[string]interface{} "Success message with deletion statistics"
+// @Failure 400 {object} types.ErrorResponse "Bad request due to invalid parameters"
+// @Failure 500 {object} types.ErrorResponse "Internal server error"
+// @Router /logs/delete [post]
+func (h *Services) HandleDeleteByIds(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != http.MethodDelete {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(types.ErrorResponse{
+			Status: "error",
+			Error:  "Method not allowed",
+			Code:   "METHOD_NOT_ALLOWED",
+		})
+		return
+	}
+
+	// Parse the request body
+	var request DeleteLogsByIdsRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(types.ErrorResponse{
+			Status:  "error",
+			Error:   "Failed to parse request body",
+			Code:    "INVALID_REQUEST",
+			Details: err.Error(),
+		})
+		return
+	}
+
+	// Validate IDs
+	if len(request.Ids) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(types.ErrorResponse{
+			Status:  "error",
+			Error:   "No IDs provided",
+			Code:    "INVALID_REQUEST",
+			Details: "At least one document ID must be provided",
+		})
+		return
+	}
+
+	// Call the storage method to delete logs
+	deletedCount, err := h.storage.DeleteByIds(request.Ids)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(types.ErrorResponse{
+			Status:  "error",
+			Error:   "Failed to delete logs",
+			Code:    "DELETION_ERROR",
+			Details: err.Error(),
+		})
+		return
+	}
+
+	// Invalidate the system info cache since log data has changed
+	h.InvalidateInfoCache()
+
+	// Return success response
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":        "success",
+		"message":       "Logs deleted successfully",
+		"deleted_count": deletedCount,
+	})
+}
+
 // sortLogs optimizes sorting for large log datasets and extracts available columns
 func sortLogs(logs []map[string]interface{}, sortBy, sortOrder string) []string {
 	// Create a slice of indices to sort

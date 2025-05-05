@@ -103,7 +103,7 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.storage.Store(jsonOutput); err != nil {
+	if err := h.storage.Store(jsonOutput, sessionOptions.Source); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(types.ErrorResponse{
 			Status:  "error",
