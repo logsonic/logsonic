@@ -9,7 +9,7 @@ import {
   getSortedRowModel,
   useReactTable
 } from '@tanstack/react-table';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FileUp, GripVertical, Upload } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FileUp, GripVertical, Trash2, Upload } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -23,7 +23,21 @@ import React from 'react';
 import './LogViewerTableTanStackStyles.css';
 
 // Import DnD Kit
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/use-toast';
+import { useSearchLogs } from '@/hooks/useSearchLogs';
+import { deleteLogsById, getSystemInfo } from '@/lib/api-client';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import {
@@ -120,6 +134,17 @@ const SortableHeader: React.FC<SortableHeaderProps> = ({ header, isLocked, handl
   );
 };
 
+// Function to delete selected logs
+async function deleteSelectedLogs(logs: LogData[]): Promise<void> {
+  // Get document IDs from selected logs
+  const docIds = logs
+    .map(log => log._id || '')
+    .filter(id => id !== ''); // Filter out any empty IDs
+
+  // Call the API to delete logs by their IDs
+  return deleteLogsById(docIds);
+}
+
 /**
  * LogViewer Table component using TanStack Table
  */
@@ -131,6 +156,9 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
   const logs = logData?.logs || [];
   const { parseSearchQuery, createHighlighter } = useSearchParser();
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const { setSystemInfo } = useSystemInfoStore();
+  const { searchLogs } = useSearchLogs();
 
   const tableRef = useRef<HTMLTableElement>(null);
   const [tableHeight, setTableHeight] = useState('calc(100vh - 240px)');
@@ -566,9 +594,61 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     
   }, [store.selectedColumns, store.columnWidths, columns, table]);
 
+  // State for delete confirmation dialog
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
+  // Get selected logs
+  const selectedLogs = useMemo(() => {
+    return Object.keys(rowSelection)
+      .map(id => logs[parseInt(id)])
+      .filter(Boolean);
+  }, [logs, rowSelection]);
 
-  
+  // Handle delete confirmation and execution
+  const handleDeleteLogs = async () => {
+    if (selectedLogs.length === 0) return;
+    
+    setIsDeleting(true);
+    try {
+      await deleteSelectedLogs(selectedLogs);
+      
+      // Show success toast
+      toast({
+        title: "Logs deleted",
+        description: `${selectedLogs.length} log(s) have been successfully deleted.`,
+        variant: "default",
+      });
+      
+      // Refresh system info
+      const data = await getSystemInfo(true);
+      setSystemInfo(data);
+      
+      // Clear selection and refresh logs
+      setRowSelection({});
+      await searchLogs();
+      
+      // Close dialog
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: `Failed to delete logs: ${error.message}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Reset delete confirmation when dialog closes
+  const handleAlertOpenChange = (open: boolean) => {
+    if (!open) {
+      setDeleteDialogOpen(false);
+    } else {
+      setDeleteDialogOpen(true);
+    }
+  };
 
   // Calculate selected rows count
   const selectedRowsCount = Object.keys(rowSelection).length;
@@ -657,7 +737,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     
     // Create base result object with selection class if needed
     let result = { 
-      className: isSelected ? 'selected-row' : '',
+      className: isSelected ? 'selected-row bg-blue-50' : '',
       colorClass: '',
       title: '',
     };
@@ -691,7 +771,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
           : `Rule: ${rule.field} ${operatorSymbol} "${rule.value}"`;
         
         // Update the result with the color class and tooltip
-        result.colorClass = rule.color;
+        result.colorClass = isSelected ? `${rule.color} selected-rule` : rule.color;
         result.title = tooltip;
         
         // Cache and return the result
@@ -823,8 +903,46 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
       </div>
       
       {selectedRowsCount > 0 && (
-        <div className="fixed bottom-4 right-4 bg-white shadow-lg rounded-md p-3 z-10">
-          <div className="text-sm font-medium">{selectedRowsCount} row(s) selected</div>
+        <div className="fixed bottom-4 right-4 bg-white shadow-lg rounded-md p-4 z-10 flex items-center space-x-4">
+          <div className="text-sm font-medium flex items-center">
+            <span className="flex items-center justify-center bg-blue-100 text-blue-700 rounded-full h-6 w-6 mr-2">
+              {selectedRowsCount}
+            </span>
+            <span>row{selectedRowsCount > 1 ? 's' : ''} selected</span>
+          </div>
+          
+          <AlertDialog open={deleteDialogOpen} onOpenChange={handleAlertOpenChange}>
+            <AlertDialogTrigger asChild>
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                className="text-white bg-red-600 hover:bg-red-700 flex items-center space-x-1 px-3"
+                aria-label="Delete selected logs"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                <span>Delete</span>
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Selected Logs</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action will permanently delete {selectedRowsCount} selected log{selectedRowsCount > 1 ? 's' : ''} from storage. 
+                  This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="border-slate-200 text-slate-700">Cancel</AlertDialogCancel>
+                <AlertDialogAction 
+                  className="bg-red-600 hover:bg-red-700 text-white" 
+                  onClick={handleDeleteLogs}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? "Deleting..." : "Delete Logs"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
     </div>

@@ -20,13 +20,14 @@ type Storage struct {
 
 // StorageInterface defines the methods implemented by *Storage.
 type StorageInterface interface {
-	Store(logs []map[string]interface{}) error
+	Store(logs []map[string]interface{}, source string) error
 	Search(query string, startDate, endDate *time.Time, sources []string) ([]map[string]interface{}, time.Duration, error)
 	List() ([]string, error)
 	GetSourceNames() ([]string, error)
 	Clear() error
 	BaseDir() string
 	GetDocCount(date string) (uint64, error)
+	DeleteByIds(ids []string) (int, error)
 }
 
 // NewStorage initializes a new Storage instance
@@ -139,7 +140,7 @@ func (s *Storage) getOrCreateIndex(date string) (bleve.Index, error) {
 }
 
 // Store saves the parsed log data to appropriate daily indices
-func (s *Storage) Store(logs []map[string]interface{}) error {
+func (s *Storage) Store(logs []map[string]interface{}, source string) error {
 
 	// Group logs by date
 	logsByDate := make(map[string][]map[string]interface{})
@@ -186,8 +187,8 @@ func (s *Storage) Store(logs []map[string]interface{}) error {
 					logCopy[k] = floatVal
 				}
 			}
-
-			docID := fmt.Sprintf("%s-%d", log["timestamp"].(time.Time), i)
+			// Generate a unique ID for the log entry with Unix timestamp, source and index number
+			docID := fmt.Sprintf("%d-%s-%d", log["timestamp"].(time.Time).UnixNano(), source, i)
 			if err := batch.Index(docID, logCopy); err != nil {
 				return fmt.Errorf("failed to index log entry: %w", err)
 			}
@@ -265,4 +266,50 @@ func (s *Storage) GetDocCount(date string) (uint64, error) {
 	}
 
 	return index.DocCount()
+}
+
+// DeleteByIds removes logs with matching document IDs from storage
+func (s *Storage) DeleteByIds(ids []string) (int, error) {
+	// Track how many logs were deleted
+	deletedCount := 0
+	
+	// Convert ids array to a map for faster lookups
+	idMap := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		idMap[id] = true
+	}
+	
+	// Get all available dates
+	dates, err := s.List()
+	if err != nil {
+		return 0, fmt.Errorf("failed to list available dates: %w", err)
+	}
+	
+	// For each date index, check for matching document IDs
+	for _, date := range dates {
+		index, err := s.getOrCreateIndex(date)
+		if err != nil {
+			return deletedCount, fmt.Errorf("failed to get index for date %s: %w", date, err)
+		}
+		
+		// Create a batch for deletions
+		batch := index.NewBatch()
+		
+		// Process each ID
+		for id := range idMap {
+			batch.Delete(id)
+		}
+		
+		// Only execute the batch if there are operations to perform
+		if batch.Size() > 0 {
+			if err := index.Batch(batch); err != nil {
+				return deletedCount, fmt.Errorf("error deleting documents from index %s: %w", date, err)
+			}
+			// Since we don't know exactly how many documents were deleted from each index,
+			// we'll update the deletedCount based on the batch size
+			deletedCount += batch.Size()
+		}
+	}
+	
+	return deletedCount, nil
 }

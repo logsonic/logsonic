@@ -170,6 +170,11 @@ export async function getCloudWatchLogEvents(request: GetLogEventsRequest): Prom
   return apiRequest<GetLogEventsResponse>('/cloudwatch/log-events', 'POST', request);
 }
 
+// Delete logs by document IDs
+export async function deleteLogsById(ids: string[]): Promise<any> {
+  return apiRequest<any>('/logs/ids', 'DELETE', { ids });
+}
+
 // AI API
 export interface AIStatusResponse {
   ollama_running: boolean;

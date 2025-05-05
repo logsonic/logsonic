@@ -306,6 +306,9 @@ func (t *Tokenizer) ParseLogs(logLines []string, ingestSessionOptions types.Inge
 	parsedLogs := []map[string]interface{}{}
 	successCount := 0
 	failedCount := 0
+	lastTimestamp := time.Now()
+	lastTimeDelta := 0
+
 
 	// If no patterns are available, mark all logs as failed
 	if len(t.patterns) == 0 {
@@ -354,9 +357,10 @@ func (t *Tokenizer) ParseLogs(logLines []string, ingestSessionOptions types.Inge
 
 	for _, logLine := range logLines {
 		var matched bool = false
-		for _, _ = range t.preparedPatterns {
+		for range t.preparedPatterns {
 			parsed, err := t.preparedTokenizer.ParseString(logLine)
 			if err == nil && len(parsed) > 0 {
+
 				// Convert map[string]string to map[string]interface{}
 				parsedInterface := make(map[string]interface{})
 				for k, v := range parsed {
@@ -377,6 +381,8 @@ func (t *Tokenizer) ParseLogs(logLines []string, ingestSessionOptions types.Inge
 				if tsStr, ok := parsed["timestamp"]; ok {
 					ts := updateTimestamp(tsStr, ingestSessionOptions)
 					parsedInterface["timestamp"] = ts
+					lastTimeDelta = int(ts.Sub(lastTimestamp).Milliseconds())
+					lastTimestamp = ts
 				} else {
 					parsedInterface["timestamp"] = time.Now()
 				}
@@ -402,9 +408,10 @@ func (t *Tokenizer) ParseLogs(logLines []string, ingestSessionOptions types.Inge
 				"error":     "No grok pattern matches given log line",
 				"_raw":      logLine,
 				"message":   logLine,
-				"timestamp": time.Now(),
+				// We can't decode the timestamp so assign an approximate timestamp based on the last timestamp and the time delta
+				"timestamp": lastTimestamp.Add(time.Duration(lastTimeDelta) * time.Millisecond),
 			}
-
+			lastTimestamp = lastTimestamp.Add(time.Duration(lastTimeDelta) * time.Millisecond)
 			// Add metadata fields to failed logs too
 			if ingestSessionOptions.Meta != nil {
 				for key, value := range ingestSessionOptions.Meta {

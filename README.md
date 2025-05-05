@@ -1,22 +1,22 @@
 # LogSonic
 
-LogSonic is a Desktop-First Log Analysis Application designed to be minimal, simple and fast. While there are plenty of cloud-based log analysis tools, most of them are not designed specifically for distribution and ease of use and on local computer. LogSonic takes the local use-first approach seriously, with a single binary installation of less than 10MB that serves a feature-rich UI in your local browser. The log ingestion wizard automatically recognizes well known log patterns and search experience is blazing fast, delightful and intuitive.
+LogSonic is a Desktop-First Log Analytics application which runs on Windows, Mac and Linux. It runs fully offline with no external dependencies. Installable as a single binary of approximately 10 MB,  it serves a feature-rich User interface in your local browser. The log ingestion wizard of logsonic supports ingesting local log file as well as fetching AWS cloudwatch logs and automatically recognizes well known log patterns to properly tokenize the log contents. The log search experience is blazing fast, delightful and intuitive. 
 
-<img src="docs/screenshot.png" alt="LogSonic Screenshot" width="800" />
+It also has an MCP server extension so that you could analyze logs with machine intelligence. 
+
+<img src="docs/screenshot.png" alt="LogSonic Screenshot" width="1200" />
 
 ## Features
 - **New! MCP Server**: Logsonic [MCP server](/mcp/README.md) can now connect with your favorite MCP client such as Claude Desktop/Cursor/Windsurf. 
 - **Assisted server query**:Logsonic now allows user to run a [local Ollama model](/#enabling-ai-assistance) which helps in writing bleve search query. 
 - **Desktop-First**: Designed specifically for local log analysis
 - **Minimal**: Single binary installation for Windows, Mac, and Linux. Run inside Docker, if you wish to. 
-- **Simple**: Easy-to-use web UI running on your local browser
-- **Supports Cloud Logs import**: Pulls logs from cloudwatch to your desktop. More Inßgestion options incoming. 
-- **Fast**: Optimized for searching through large log files
-- **Offline Analysis**: No internet dependency, all data stays on your machine, debug while you travel.
+- **Supports Cloud Logs import**: Pulls logs from cloudwatch to your desktop. More Ingestion options incoming. 
+- **Offline**: No internet dependency, all data stays on your machine, debug while you travel.
 - **Multiple Log Formats**: Automatic recognition and ingestion of logs from various formats (Syslog, Apache, Nginx) based on grok pattern. 
 - **Customizable**: Ability to filter and color log lines based on cotents, choose fields to display. 
-- **Advanced Search**: Comprehensive search capabilities through the web UI. Search highlighting, Complex queries with AND OR NOT logical operationsetc. 
-- **Visualization**: Built-in tools for visualizing log data patterns
+- **Advanced Search**: Comprehensive search capabilities through the web UI. Search highlighting, Complex queries with AND OR NOT logical operations etc. 
+- **Visualization**: Built-in visualization for log distribution patterns
 - **Extensible**: Well documented [OpenAPI interface](#api-documentation) to ingest logs from your own scripts or tools. 
 
 ## Installation
@@ -52,8 +52,12 @@ Download the log to you local computer and import using Import File menu.
 
 ### Enabling AI Assistance
 
-To install MCP server, use the instructions in  [MCP server](/mcp/README.md)
+Logsonic supports Model Context Protocol. To install Logsonic MCP server, use the instructions in  [MCP server](/mcp/README.md)
+
+### Bleve Search Query assistance
+
 <img src="ollama/assistant.png" alt="LogSonic AI Assitant" width="400" />
+
 Since bleve query syntax may be confusing for beginners, Logsonic has a feature which converts simple english queries to bleve search syntax. This is available in the release 0.5 onwards. Logsonic will automatically detect and enable AI assistance features if a local Ollama instance is running with the predefined logsonic image. Follow the [instructions](https://github.com/logsonic/logsonic/blob/main/ollama/README.md) to build your local [Modelfile](https://github.com/logsonic/logsonic/blob/main/ollama/Modelfile)
 
 ### Build from Source

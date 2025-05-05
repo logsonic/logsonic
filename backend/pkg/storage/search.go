@@ -160,6 +160,7 @@ func (s *Storage) Search(queryStr string, startDate, endDate *time.Time, sources
 				logs := make([]map[string]interface{}, 0, len(searchResult.Hits))
 				for _, hit := range searchResult.Hits {
 					logEntry := make(map[string]interface{})
+					logEntry["_id"] = hit.ID
 					var logTimestamp time.Time
 
 					for field, value := range hit.Fields {
