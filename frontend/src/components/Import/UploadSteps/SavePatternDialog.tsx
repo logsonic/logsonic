@@ -26,10 +26,16 @@ export const SavePatternDialog: FC<SavePatternDialogProps> = ({
   onClose,
 }) => {
 
-  const { 
+  const {
     selectedPattern,
     setSelectedPattern,
-    
+    createNewPattern,
+    isCreateNewPatternSelected,
+    createNewPatternName,
+    createNewPatternDescription,
+    setCreateNewPatternName,
+    setCreateNewPatternDescription,
+
   } = useImportStore();
   const [isLoading, setIsLoading] = useState(false);
   const [existingPatterns, setExistingPatterns] = useState<GrokPatternRequest[]>([]);
@@ -56,54 +62,78 @@ export const SavePatternDialog: FC<SavePatternDialogProps> = ({
 
   // Validate pattern name when it changes
   useEffect(() => {
-    if (selectedPattern && existingPatterns.length > 0) {
-      const patternExists = existingPatterns.some(pattern => 
-        pattern.name.toLowerCase() === selectedPattern.name.toLowerCase()
+    // Determine which pattern name we are validating
+    const nameToCheck = isCreateNewPatternSelected ? createNewPatternName : selectedPattern?.name;
+
+    if (nameToCheck && existingPatterns.length > 0) {
+      const patternExists = existingPatterns.some(pattern =>
+        pattern.name.toLowerCase() === nameToCheck.toLowerCase()
       );
-      
+
       if (patternExists) {
-        setValidationError(`Pattern name '${selectedPattern.name}' already exists`);
+        setValidationError(`Pattern name '${nameToCheck}' already exists`);
       } else {
         setValidationError(null);
       }
     } else {
       setValidationError(null);
     }
-  }, [selectedPattern, existingPatterns]);
+  }, [selectedPattern, createNewPatternName, isCreateNewPatternSelected, existingPatterns]);
 
   const savePattern = async () => {
-    if (!selectedPattern) return;
-    
+    // Use createNewPattern if we are in creation mode, otherwise fallback to selectedPattern
+    // But verify we have the correct name and description if using createNewPattern
+
+    let patternToSave: GrokPatternRequest | null = null;
+
+    if (isCreateNewPatternSelected) {
+      patternToSave = {
+        name: createNewPatternName,
+        pattern: createNewPattern.pattern,
+        description: createNewPatternDescription,
+        custom_patterns: createNewPattern.custom_patterns || {},
+        priority: 0
+      };
+    } else if (selectedPattern) {
+      patternToSave = {
+        name: selectedPattern.name,
+        pattern: selectedPattern.pattern,
+        description: selectedPattern.description,
+        custom_patterns: selectedPattern.custom_patterns || {},
+        priority: 0
+      };
+    }
+
+    if (!patternToSave) return;
+
     // Check for existing pattern name
-    const patternExists = existingPatterns.some(pattern => 
-      pattern.name.toLowerCase() === selectedPattern.name.toLowerCase()
+    const patternExists = existingPatterns.some(pattern =>
+      pattern.name.toLowerCase() === patternToSave!.name.toLowerCase()
     );
-    
+
     if (patternExists) {
-      setValidationError(`Pattern name '${selectedPattern.name}' already exists`);
+      setValidationError(`Pattern name '${patternToSave.name}' already exists`);
       setShowErrorBanner(true);
       return;
     }
-    
+
+    if (!patternToSave.pattern || !patternToSave.pattern.trim()) {
+      setValidationError('Pattern content is missing');
+      setShowErrorBanner(true);
+      return;
+    }
+
     setIsLoading(true);
-    
-    const pattern: GrokPatternRequest = {
-      name: selectedPattern.name,
-      pattern: selectedPattern.pattern,
-      description: selectedPattern.description,
-      custom_patterns: selectedPattern.custom_patterns || {},
-      priority: 0
-    };
 
     try {
-      const response = await saveGrokPattern(pattern);
-      if (response.status === 'success') {  
-          toast({
-            title: 'Pattern saved',
-            description: 'Pattern saved successfully',
-            variant: 'default'
-          });
-          onClose();
+      const response = await saveGrokPattern(patternToSave);
+      if (response.status === 'success') {
+        toast({
+          title: 'Pattern saved',
+          description: 'Pattern saved successfully',
+          variant: 'default'
+        });
+        onClose();
       }
       else {
         setValidationError(response.error || 'Failed to save pattern');
@@ -131,7 +161,7 @@ export const SavePatternDialog: FC<SavePatternDialogProps> = ({
             Would you like to save this pattern for future use? This is optional.
           </DialogDescription>
         </DialogHeader>
-        
+
         {validationError && showErrorBanner && (
           <StatusBanner
             type="error"
@@ -140,7 +170,7 @@ export const SavePatternDialog: FC<SavePatternDialogProps> = ({
             onClose={() => setShowErrorBanner(false)}
           />
         )}
-        
+
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="pattern-name" className="text-right">
@@ -148,8 +178,14 @@ export const SavePatternDialog: FC<SavePatternDialogProps> = ({
             </Label>
             <Input
               id="pattern-name"
-              value={selectedPattern?.name || ''}
-              onChange={(e) => setSelectedPattern({ ...selectedPattern, name: e.target.value })}
+              value={isCreateNewPatternSelected ? createNewPatternName : (selectedPattern?.name || '')}
+              onChange={(e) => {
+                if (isCreateNewPatternSelected) {
+                  setCreateNewPatternName(e.target.value);
+                } else if (selectedPattern) {
+                  setSelectedPattern({ ...selectedPattern, name: e.target.value });
+                }
+              }}
               placeholder="My Custom Pattern"
               className={`col-span-3 ${validationError ? 'border-red-500' : ''}`}
             />
@@ -160,23 +196,29 @@ export const SavePatternDialog: FC<SavePatternDialogProps> = ({
             </Label>
             <Input
               id="pattern-desc"
-              value={selectedPattern?.description || ''}
-              onChange={(e) => setSelectedPattern({ ...selectedPattern, description: e.target.value })}
-              placeholder="Used for parsing specific log format"  
+              value={isCreateNewPatternSelected ? createNewPatternDescription : (selectedPattern?.description || '')}
+              onChange={(e) => {
+                if (isCreateNewPatternSelected) {
+                  setCreateNewPatternDescription(e.target.value);
+                } else if (selectedPattern) {
+                  setSelectedPattern({ ...selectedPattern, description: e.target.value });
+                }
+              }}
+              placeholder="Used for parsing specific log format"
               className="col-span-3"
             />
           </div>
         </div>
         <DialogFooter className="flex justify-between">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={skipSaveAndContinue}
           >
             Skip & Continue
           </Button>
-          <Button 
+          <Button
             onClick={savePattern}
-            disabled={!selectedPattern?.name.trim() || isLoading || !!validationError}
+            disabled={(!isCreateNewPatternSelected ? !selectedPattern?.name.trim() : !createNewPatternName.trim()) || isLoading || !!validationError}
             className="bg-green-600 hover:bg-green-700"
           >
             {isLoading ? (

@@ -28,7 +28,7 @@ export const PatternTestResults: FC<Omit<PatternTestResultsProps, 'parsedLogs' |
   const endIndex = Math.min(startIndex + logsPerPage, logs.length);
   const currentLogs = logs.slice(startIndex, endIndex);
 
-  const toggleRow = (idx: number) => {
+  const toggleRow = (idx: number) => {  
     setExpandedRows(prev => ({
       ...prev,
       [idx + startIndex]: !prev[idx + startIndex]

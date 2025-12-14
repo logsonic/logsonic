@@ -175,6 +175,11 @@ PORT=8081 npm run dev
 
 The backend is written in Go:
 
+If you don't have air installed, you can install it using:
+```bash
+go install github.com/air-verse/air@latest
+```
+
 ```bash
 cd backend
 # If using air for hot reloading

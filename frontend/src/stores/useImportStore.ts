@@ -30,7 +30,7 @@ export type ImportSource = string | null;
 interface ImportState {
   // Upload step tracking
   currentStep: UploadStep;
-  
+
   // Import source name
   importSource: ImportSource;
 
@@ -41,7 +41,7 @@ interface ImportState {
 
   // Used for display to the user
   selectedFileName: string | null
-  selectedFileHandle: object | null 
+  selectedFileHandle: object | null
   filePreviewBuffer: FilePreview | null;
 
   // Pattern data
@@ -56,20 +56,20 @@ interface ImportState {
   // Detection results
   detectionResult: DetectionResult | null;
   suggestResponse: SuggestResponse | null;
-  
+
   // Parsed logs data
   parsedLogs: Record<string, string>[];
   isTestingPattern: boolean;
-  
+
   // Upload status
   isUploading: boolean;
   uploadProgress: number;
   approxLines: number;
   totalLines: number;
-  
+
   // Source selection
   selectedSources: string[];
-  
+
   // Ingest session
   sessionID: string | null;
   sessionOptionsFileName: string;
@@ -78,17 +78,17 @@ interface ImportState {
   sessionOptionsYear: string;
   sessionOptionsMonth: string;
   sessionOptionsDay: string;
-  
+
   // Error handling
   error: string | null;
-  
+
   // Metadata
   metadata: Record<string, string | number | boolean>;
   providerUploadHandler: ProviderUploadHandler | null;
   // Actions
   setCurrentStep: (step: UploadStep) => void;
   setImportSource: (source: ImportSource) => void;
-  setSelectedFileName: (filename:  string | null) => void;
+  setSelectedFileName: (filename: string | null) => void;
   setSelectedFileHandle: (fileHandle: any | null) => void;
   setFilePreviewBuffer: (preview: FilePreview | null) => void;
   setAvailablePatterns: (patterns: GrokPatternRequest[]) => void;
@@ -165,12 +165,12 @@ export const useImportStore = create<ImportState>((set, get) => ({
   error: null,
   metadata: {},
   providerUploadHandler: null,
-  
+
   // Actions
   setCurrentStep: (currentStep) => set({ currentStep }),
-  
+
   setImportSource: (importSource) => set({ importSource }),
-  
+
   setSelectedFileName: (selectedFileName) => set({ selectedFileName }),
   setSelectedFileHandle: (selectedFileHandle) => set({ selectedFileHandle }),
   setFilePreviewBuffer: (filePreviewBuffer) => set({ filePreviewBuffer }),
@@ -185,7 +185,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
     ];
     set({ availablePatterns: patternsWithCustom });
   },
-  
+
 
   // Clear custom pattern selection if selected pattern is not custom
   setSelectedPattern: (selectedPattern) => {
@@ -197,55 +197,55 @@ export const useImportStore = create<ImportState>((set, get) => ({
     }
     set({ selectedPattern });
   },
-  
+
   setCreateNewPatternName: (name: string) => set({ createNewPatternName: name }),
   setCreateNewPatternDescription: (description: string) => set({ createNewPatternDescription: description }),
   setCreateNewPatternPriority: (priority: number) => set({ createNewPatternPriority: priority }),
   setCreateNewPattern: (createNewPattern = DEFAULT_PATTERN) => {
-   
+
     set({ createNewPattern });
     set({ isCreateNewPatternSelected: true });
   },
 
   setCreateNewPatternTokens: (tokens: Record<string, string>) => set({ createNewPatternTokens: tokens }),
   setDetectionResult: (detectionResult) => set({ detectionResult }),
-  
+
   setSuggestResponse: (suggestResponse) => set({ suggestResponse }),
-  
+
   setIsUploading: (isUploading) => set({ isUploading }),
-  
+
   setUploadProgress: (uploadProgress) => set({ uploadProgress }),
-  
+
   setApproxLines: (approxLines) => set({ approxLines }),
   setTotalLines: (totalLines) => set({ totalLines }),
   setSelectedSources: (selectedSources) => set({ selectedSources }),
-  
+
   setSessionID: (sessionID) => set({ sessionID }),
-  
+
   setSessionOptionFileName: (fileName: string) => set({ sessionOptionsFileName: fileName }),
   setSessionOptionSmartDecoder: (smartDecoder: boolean) => set({ sessionOptionsSmartDecoder: smartDecoder }),
   setSessionOptionTimezone: (timezone: string) => set({ sessionOptionsTimezone: timezone }),
   setSessionOptionYear: (year: string) => set({ sessionOptionsYear: year }),
   setSessionOptionMonth: (month: string) => set({ sessionOptionsMonth: month }),
   setSessionOptionDay: (day: string) => set({ sessionOptionsDay: day }),
-  
+
   setError: (error) => set({ error }),
-  
+
   setParsedLogs: (parsedLogs) => set({ parsedLogs }),
-  
+
   setIsTestingPattern: (isTestingPattern) => set({ isTestingPattern }),
-  
+
   // Handle file selection and preview generation
-  
+
 
   // Create a file from blob content (used for CloudWatch logs)
   setFileFromBlob: async (content, fileName) => {
     console.log(`Setting file from blob: ${fileName}, content length: ${content.length} bytes`);
-    
+
     // Create a File object
     const file = new File([content], fileName, { type: 'text/plain' });
-    
-    
+
+
     // Validate file content
     if (!content || content.length === 0) {
       const error = "Empty content provided for CloudWatch logs";
@@ -257,11 +257,11 @@ export const useImportStore = create<ImportState>((set, get) => ({
     // Generate preview
     const previewLines = content.split('\n');
     const approxLines = previewLines.length;
-    
+
     console.log(`Generated preview with ${previewLines.length} lines, using first ${Math.min(100, previewLines.length)} for display`);
-    
+
     // Set preview data and move to step 2
-    set({ 
+    set({
       filePreviewBuffer: {
         lines: previewLines.slice(0, 100), // Limit display lines to 100
         filename: fileName,
@@ -270,16 +270,16 @@ export const useImportStore = create<ImportState>((set, get) => ({
       sessionOptionsFileName: fileName, // Set the filename for the session
       currentStep: 2 // Ensure we move to step 2 for pattern detection
     });
-    
+
     console.log("CloudWatch logs ready for pattern detection, advancing to step 2");
   },
-  
+
   // Handle pattern operations
   handlePatternOperation: async (pattern, updateStore = true, onSuccess, onError) => {
-    const { 
-      selectedFileName, 
-      selectedFileHandle, 
-      filePreviewBuffer, 
+    const {
+      selectedFileName,
+      selectedFileHandle,
+      filePreviewBuffer,
       sessionOptionsFileName,
       sessionOptionsSmartDecoder,
       sessionOptionsTimezone,
@@ -289,25 +289,28 @@ export const useImportStore = create<ImportState>((set, get) => ({
       importSource,
       metadata
     } = get();
-    
+
     if (!selectedFileName || !filePreviewBuffer) {
       const errorMsg = 'No file selected or file preview not available';
       set({ error: errorMsg });
       if (onError) onError(errorMsg);
       return;
     }
-    
-    set({ isTestingPattern: true });
-    
+
+    set({
+      isTestingPattern: true,
+      error: null
+    });
+
     try {
       if (!filePreviewBuffer.lines || filePreviewBuffer.lines.length === 0) {
         throw new Error('No preview lines available to parse');
       }
-      
+
       const previewLines = filePreviewBuffer.lines.slice(0, 20); // Use first 20 lines for parsing test
 
       // Build session options
-      const sessionOptions : IngestSessionOptions= {
+      const sessionOptions: IngestSessionOptions = {
         name: pattern.name,
         pattern: pattern.pattern,
         priority: pattern.priority,
@@ -320,23 +323,23 @@ export const useImportStore = create<ImportState>((set, get) => ({
         force_start_day: sessionOptionsDay,
         meta: metadata
       };
-      
+
       const parseResult = await parseLogs({
         logs: previewLines,
         grok_pattern: pattern.pattern,
         custom_patterns: pattern.custom_patterns || {},
         session_options: sessionOptions
       });
-      
+
       const parsedLogs = parseResult.logs || [];
-      
+
       if (updateStore) {
-        set({ 
+        set({
           parsedLogs,
           selectedPattern: pattern,
         });
       }
-      
+
       if (onSuccess) onSuccess(parsedLogs);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Failed to test pattern';
@@ -350,14 +353,14 @@ export const useImportStore = create<ImportState>((set, get) => ({
   // Test the current pattern
   testPattern: async () => {
     const { selectedPattern, isCreateNewPatternSelected, createNewPattern } = get();
-    
+
     const pattern = isCreateNewPatternSelected ? createNewPattern : selectedPattern;
-    
+
     if (!pattern) {
       set({ error: 'No pattern selected' });
       return;
     }
-    
+
     await get().handlePatternOperation(pattern);
   },
   setMetadata: (metadata: Record<string, string | number | boolean>) => set({ metadata }),
