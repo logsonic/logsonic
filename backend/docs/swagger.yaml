@@ -130,6 +130,13 @@ definitions:
       query:
         type: string
     type: object
+  handlers.DeleteLogsByIdsRequest:
+    properties:
+      ids:
+        items:
+          type: string
+        type: array
+    type: object
   handlers.PingResponse:
     properties:
       status:
@@ -880,6 +887,38 @@ paths:
           schema:
             $ref: '#/definitions/types.ErrorResponse'
       summary: Read all logs
+      tags:
+      - logs
+  /logs/delete:
+    post:
+      consumes:
+      - application/json
+      description: Delete specific logs from the system identified by their document
+        IDs
+      parameters:
+      - description: IDs of logs to delete
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.DeleteLogsByIdsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Success message with deletion statistics
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request due to invalid parameters
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Delete logs by IDs
       tags:
       - logs
   /parse:

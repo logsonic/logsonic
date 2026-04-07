@@ -4,5 +4,6 @@ pkg/static/dist/**
 # Added by goreleaser init:
 dist/
 grok.json
+.env
 tmp/*
 logsonic

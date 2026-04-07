@@ -689,6 +689,53 @@ const docTemplate = `{
                 }
             }
         },
+        "/logs/delete": {
+            "post": {
+                "description": "Delete specific logs from the system identified by their document IDs",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "logs"
+                ],
+                "summary": "Delete logs by IDs",
+                "parameters": [
+                    {
+                        "description": "IDs of logs to delete",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.DeleteLogsByIdsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success message with deletion statistics",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request due to invalid parameters",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/parse": {
             "post": {
                 "description": "Parse logs using existing or temporary Grok patterns without storing them into the database.\nIf no grok_pattern is provided, this endpoint will suggest the best matching patterns for the logs.\nWhen a grok_pattern is provided, it will parse the logs using that pattern.",
@@ -953,6 +1000,17 @@ const docTemplate = `{
                 },
                 "query": {
                     "type": "string"
+                }
+            }
+        },
+        "handlers.DeleteLogsByIdsRequest": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
