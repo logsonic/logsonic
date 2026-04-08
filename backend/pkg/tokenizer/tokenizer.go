@@ -108,34 +108,34 @@ func NewTokenizer() (*Tokenizer, error) {
 	}, nil
 }
 
-// preparePatterns compiles the currently loaded patterns into a grok instance
+// preparePatterns compiles the currently loaded patterns into a grok instance.
+// This method acquires its own write lock — do NOT call while holding a lock.
 func (t *Tokenizer) preparePatterns() error {
-	// Create a local copy of patterns and customPatterns to work with
-	var patterns []string
-	var patternPriorities map[string]int
-	var customPatterns map[string]string
-
 	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.preparePatterns_locked()
+}
+
+// preparePatterns_locked compiles patterns. Caller MUST hold t.mutex write Lock.
+func (t *Tokenizer) preparePatterns_locked() error {
 	// Check if there are patterns to prepare
 	if len(t.patterns) == 0 {
-		t.mutex.Unlock()
 		return fmt.Errorf("no patterns available")
 	}
 
-	// Make copies of the data we need
-	patterns = make([]string, len(t.patterns))
+	// Make copies of the data we need (we already hold the lock)
+	patterns := make([]string, len(t.patterns))
 	copy(patterns, t.patterns)
 
-	patternPriorities = make(map[string]int, len(t.patternPriorities))
+	patternPriorities := make(map[string]int, len(t.patternPriorities))
 	for k, v := range t.patternPriorities {
 		patternPriorities[k] = v
 	}
 
-	customPatterns = make(map[string]string, len(t.customPatterns))
+	customPatterns := make(map[string]string, len(t.customPatterns))
 	for k, v := range t.customPatterns {
 		customPatterns[k] = v
 	}
-	t.mutex.Unlock()
 
 	// Create a new grok instance
 	g := grok.New()
@@ -156,7 +156,6 @@ func (t *Tokenizer) preparePatterns() error {
 	preparedPatterns := make([]string, 0, len(patterns))
 	for _, pattern := range patterns {
 		if err := g.Compile(pattern, true); err != nil {
-			// In production, we don't want to log warnings - just return the error
 			return fmt.Errorf("failed to compile pattern '%s': %w", pattern, err)
 		}
 		preparedPatterns = append(preparedPatterns, pattern)
@@ -167,11 +166,9 @@ func (t *Tokenizer) preparePatterns() error {
 		return fmt.Errorf("failed to compile any patterns")
 	}
 
-	// Update prepared patterns with write lock
-	t.mutex.Lock()
+	// Update prepared state (we already hold the lock)
 	t.preparedPatterns = preparedPatterns
 	t.preparedTokenizer = g
-	t.mutex.Unlock()
 
 	return nil
 }
@@ -285,21 +282,26 @@ func (t *Tokenizer) ParseLogs(logLines []string, ingestSessionOptions types.Inge
 		useSmartDecoder = true
 	}
 
-	// First check if we need to prepare patterns
-	needPrepare := false
-
+	// Double-checked locking for pattern preparation.
+	// Fast path: check under RLock (allows concurrent readers).
 	t.mutex.RLock()
-	if t.preparedPatterns == nil || t.preparedTokenizer == nil {
-		needPrepare = true
-	}
+	prepared := t.preparedPatterns != nil && t.preparedTokenizer != nil
+	t.mutex.RUnlock()
 
-	// If patterns need preparation, do it before proceeding
-	if needPrepare {
-		if err := t.preparePatterns(); err != nil {
-			return nil, 0, len(logLines), fmt.Errorf("failed to prepare patterns: %w", err)
+	if !prepared {
+		// Slow path: acquire write Lock, re-check, and prepare if still needed.
+		t.mutex.Lock()
+		if t.preparedPatterns == nil || t.preparedTokenizer == nil {
+			if err := t.preparePatterns_locked(); err != nil {
+				t.mutex.Unlock()
+				return nil, 0, len(logLines), fmt.Errorf("failed to prepare patterns: %w", err)
+			}
 		}
+		t.mutex.Unlock()
 	}
 
+	// Hold RLock for the duration of the read-only parsing phase.
+	t.mutex.RLock()
 	defer t.mutex.RUnlock()
 
 	// Create a slice of maps with string keys and interface{} values

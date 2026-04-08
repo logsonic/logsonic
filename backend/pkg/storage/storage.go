@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/blevesearch/bleve/v2"
@@ -15,6 +16,7 @@ import (
 // Storage handles log data persistence using Bleve with time-based sharding
 type Storage struct {
 	baseDir string
+	mu      sync.RWMutex           // protects indices map
 	indices map[string]bleve.Index // Map of date -> index
 }
 
@@ -67,10 +69,38 @@ func NewStorage(baseDir string) (*Storage, error) {
 	return storage, nil
 }
 
+// Close cleanly shuts down all open Bleve indices. Should be called on
+// server shutdown or at the end of tests to prevent goroutine leaks.
+func (s *Storage) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var firstErr error
+	for date, index := range s.indices {
+		if err := index.Close(); err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("failed to close index %s: %w", date, err)
+		}
+		delete(s.indices, date)
+	}
+	return firstErr
+}
+
 // getOrCreateIndex returns an index for the given date, creating it if necessary
 func (s *Storage) getOrCreateIndex(date string) (bleve.Index, error) {
-
+	// Fast path: check with read lock
+	s.mu.RLock()
 	index, exists := s.indices[date]
+	s.mu.RUnlock()
+	if exists {
+		return index, nil
+	}
+
+	// Slow path: acquire write lock and double-check
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Re-check after acquiring write lock (another goroutine may have created it)
+	index, exists = s.indices[date]
 	if exists {
 		return index, nil
 	}
@@ -204,6 +234,8 @@ func (s *Storage) Store(logs []map[string]interface{}, source string) error {
 
 // Clear removes all indices
 func (s *Storage) Clear() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	// Close all open indices first
 	for date, index := range s.indices {

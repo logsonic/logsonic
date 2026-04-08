@@ -227,6 +227,9 @@ func (s *Storage) Search(queryStr string, startDate, endDate *time.Time, sources
 func (s *Storage) GetSourceNames() ([]string, error) {
 	sourceNames := make(map[string]bool)
 
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	for _, index := range s.indices {
 		query := bleve.NewQueryStringQuery("_src:*")
 		searchRequest := bleve.NewSearchRequest(query)

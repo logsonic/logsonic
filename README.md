@@ -190,6 +190,36 @@ go run main.go
 ```
 Open http://localhost:8081 in your browser for local development 
 
+### Running Tests
+
+#### Backend Tests
+
+```bash
+cd backend
+go test ./... -v
+```
+
+To run tests for a specific package:
+
+```bash
+go test ./pkg/storage/ -v
+go test ./pkg/tokenizer/ -v
+go test ./pkg/server/handlers/ -v
+```
+
+#### Frontend Tests
+
+```bash
+cd frontend
+npm run test
+```
+
+To run tests with coverage report:
+
+```bash
+cd frontend
+npx vitest run --coverage
+```
 
 ## Architecture
 
