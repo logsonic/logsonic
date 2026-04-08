@@ -1,0 +1,400 @@
+2026-04-01T00:00:21.000Z  d4e5f6a1b2c3  nginx-proxy  Worker goroutine 1 started
+2026-04-01T00:03:44.000Z  a1b2c3d4e5f6  logsonic-api  Starting server on :8080
+2026-04-01T00:06:31.000Z  a1b2c3d4e5f6  logsonic-api  Webpack compiled successfully in 4321ms
+2026-04-01T00:09:51.000Z  e5f6a1b2c3d4  redis-cache  Slow operation detected: 1523ms for query
+2026-04-01T00:13:24.000Z  e5f6a1b2c3d4  redis-cache  Request throttled: too many connections from 10.0.0.5
+2026-04-01T00:16:16.000Z  c3d4e5f6a1b2  logsonic-db  Request throttled: too many connections from 10.0.0.5
+2026-04-01T00:19:44.000Z  b2c3d4e5f6a1  logsonic-frontend  OOMKiller triggered: process killed
+2026-04-01T00:22:40.000Z  e5f6a1b2c3d4  redis-cache  Health check endpoint /health registered
+2026-04-01T00:26:11.000Z  b2c3d4e5f6a1  logsonic-frontend  Log ingestion pipeline ready
+2026-04-01T00:29:23.000Z  b2c3d4e5f6a1  logsonic-frontend  Request throttled: too many connections from 10.0.0.5
+2026-04-01T00:32:47.000Z  c3d4e5f6a1b2  logsonic-db  Restarting due to exit code 137
+2026-04-01T00:35:41.000Z  e5f6a1b2c3d4  redis-cache  Cache initialized with 1024MB
+2026-04-01T00:38:49.000Z  b2c3d4e5f6a1  logsonic-frontend  Request throttled: too many connections from 10.0.0.5
+2026-04-01T00:42:29.000Z  e5f6a1b2c3d4  redis-cache  Worker goroutine 2 started
+2026-04-01T00:45:44.000Z  c3d4e5f6a1b2  logsonic-db  Restarting due to exit code 137
+2026-04-01T00:48:55.000Z  a1b2c3d4e5f6  logsonic-api  Memory usage: 342MB / 512MB
+2026-04-01T00:51:48.000Z  c3d4e5f6a1b2  logsonic-db  Cache initialized with 1024MB
+2026-04-01T00:55:05.000Z  a1b2c3d4e5f6  logsonic-api  Slow operation detected: 1523ms for query
+2026-04-01T00:58:23.000Z  e5f6a1b2c3d4  redis-cache  Memory usage: 342MB / 512MB
+2026-04-01T01:01:44.000Z  d4e5f6a1b2c3  nginx-proxy  Webpack compiled successfully in 4321ms
+2026-04-01T01:04:42.000Z  e5f6a1b2c3d4  redis-cache  Restarting due to exit code 137
+2026-04-01T01:08:18.000Z  c3d4e5f6a1b2  logsonic-db  Serving HTTP on 0.0.0.0:3000
+2026-04-01T01:11:26.000Z  e5f6a1b2c3d4  redis-cache  Restarting due to exit code 137
+2026-04-01T01:14:31.000Z  d4e5f6a1b2c3  nginx-proxy  Slow operation detected: 1523ms for query
+2026-04-01T01:17:42.000Z  d4e5f6a1b2c3  nginx-proxy  Connected to database successfully
+2026-04-01T01:20:54.000Z  d4e5f6a1b2c3  nginx-proxy  Log ingestion pipeline ready
+2026-04-01T01:24:30.000Z  a1b2c3d4e5f6  logsonic-api  Log ingestion pipeline ready
+2026-04-01T01:27:28.000Z  e5f6a1b2c3d4  redis-cache  Starting server on :8080
+2026-04-01T01:30:52.000Z  e5f6a1b2c3d4  redis-cache  Health check endpoint /health registered
+2026-04-01T01:33:57.000Z  d4e5f6a1b2c3  nginx-proxy  Worker goroutine 1 started
+2026-04-01T01:37:15.000Z  c3d4e5f6a1b2  logsonic-db  Log ingestion pipeline ready
+2026-04-01T01:40:23.000Z  d4e5f6a1b2c3  nginx-proxy  Request throttled: too many connections from 10.0.0.5
+2026-04-01T01:43:39.000Z  e5f6a1b2c3d4  redis-cache  OOMKiller triggered: process killed
+2026-04-01T01:47:11.000Z  a1b2c3d4e5f6  logsonic-api  Restarting due to exit code 137
+2026-04-01T01:50:17.000Z  e5f6a1b2c3d4  redis-cache  Worker goroutine 1 started
+2026-04-01T01:53:17.000Z  b2c3d4e5f6a1  logsonic-frontend  Serving HTTP on 0.0.0.0:3000
+2026-04-01T01:56:27.000Z  d4e5f6a1b2c3  nginx-proxy  Webpack compiled successfully in 4321ms
+2026-04-01T01:59:46.000Z  d4e5f6a1b2c3  nginx-proxy  OOMKiller triggered: process killed
+2026-04-01T02:03:04.000Z  a1b2c3d4e5f6  logsonic-api  Cache initialized with 1024MB
+2026-04-01T02:06:11.000Z  b2c3d4e5f6a1  logsonic-frontend  Worker goroutine 1 started
+2026-04-01T02:09:44.000Z  a1b2c3d4e5f6  logsonic-api  Cache initialized with 1024MB
+2026-04-01T02:12:35.000Z  d4e5f6a1b2c3  nginx-proxy  Cache initialized with 1024MB
+2026-04-01T02:16:05.000Z  c3d4e5f6a1b2  logsonic-db  Worker goroutine 1 started
+2026-04-01T02:19:05.000Z  a1b2c3d4e5f6  logsonic-api  Slow operation detected: 1523ms for query
+2026-04-01T02:22:24.000Z  b2c3d4e5f6a1  logsonic-frontend  Health check endpoint /health registered
+2026-04-01T02:25:32.000Z  e5f6a1b2c3d4  redis-cache  Worker goroutine 2 started
+2026-04-01T02:29:13.000Z  c3d4e5f6a1b2  logsonic-db  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T02:32:00.000Z  a1b2c3d4e5f6  logsonic-api  Worker goroutine 2 started
+2026-04-01T02:35:18.000Z  c3d4e5f6a1b2  logsonic-db  Worker goroutine 2 started
+2026-04-01T02:38:43.000Z  c3d4e5f6a1b2  logsonic-db  Log ingestion pipeline ready
+2026-04-01T02:41:48.000Z  b2c3d4e5f6a1  logsonic-frontend  Starting server on :8080
+2026-04-01T02:44:59.000Z  b2c3d4e5f6a1  logsonic-frontend  Health check endpoint /health registered
+2026-04-01T02:48:10.000Z  a1b2c3d4e5f6  logsonic-api  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T02:51:43.000Z  e5f6a1b2c3d4  redis-cache  OOMKiller triggered: process killed
+2026-04-01T02:54:42.000Z  d4e5f6a1b2c3  nginx-proxy  Health check endpoint /health registered
+2026-04-01T02:58:13.000Z  d4e5f6a1b2c3  nginx-proxy  Connected to database successfully
+2026-04-01T03:01:06.000Z  a1b2c3d4e5f6  logsonic-api  Serving HTTP on 0.0.0.0:3000
+2026-04-01T03:04:29.000Z  d4e5f6a1b2c3  nginx-proxy  Memory usage: 342MB / 512MB
+2026-04-01T03:07:56.000Z  b2c3d4e5f6a1  logsonic-frontend  Worker goroutine 2 started
+2026-04-01T03:11:10.000Z  c3d4e5f6a1b2  logsonic-db  Health check endpoint /health registered
+2026-04-01T03:14:21.000Z  a1b2c3d4e5f6  logsonic-api  Worker goroutine 2 started
+2026-04-01T03:17:28.000Z  a1b2c3d4e5f6  logsonic-api  Worker goroutine 1 started
+2026-04-01T03:20:48.000Z  d4e5f6a1b2c3  nginx-proxy  Received SIGTERM, shutting down gracefully
+2026-04-01T03:23:57.000Z  d4e5f6a1b2c3  nginx-proxy  Memory usage: 342MB / 512MB
+2026-04-01T03:27:15.000Z  b2c3d4e5f6a1  logsonic-frontend  OOMKiller triggered: process killed
+2026-04-01T03:30:24.000Z  e5f6a1b2c3d4  redis-cache  Cache initialized with 1024MB
+2026-04-01T03:33:36.000Z  c3d4e5f6a1b2  logsonic-db  Worker goroutine 2 started
+2026-04-01T03:37:00.000Z  a1b2c3d4e5f6  logsonic-api  Serving HTTP on 0.0.0.0:3000
+2026-04-01T03:40:19.000Z  d4e5f6a1b2c3  nginx-proxy  Log ingestion pipeline ready
+2026-04-01T03:43:31.000Z  a1b2c3d4e5f6  logsonic-api  Slow operation detected: 1523ms for query
+2026-04-01T03:46:27.000Z  a1b2c3d4e5f6  logsonic-api  Slow operation detected: 1523ms for query
+2026-04-01T03:49:53.000Z  a1b2c3d4e5f6  logsonic-api  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T03:53:03.000Z  a1b2c3d4e5f6  logsonic-api  Received SIGTERM, shutting down gracefully
+2026-04-01T03:56:23.000Z  e5f6a1b2c3d4  redis-cache  OOMKiller triggered: process killed
+2026-04-01T03:59:36.000Z  e5f6a1b2c3d4  redis-cache  Memory usage: 342MB / 512MB
+2026-04-01T04:02:44.000Z  c3d4e5f6a1b2  logsonic-db  Log ingestion pipeline ready
+2026-04-01T04:05:58.000Z  a1b2c3d4e5f6  logsonic-api  Log ingestion pipeline ready
+2026-04-01T04:09:06.000Z  d4e5f6a1b2c3  nginx-proxy  OOMKiller triggered: process killed
+2026-04-01T04:12:17.000Z  e5f6a1b2c3d4  redis-cache  Log ingestion pipeline ready
+2026-04-01T04:15:47.000Z  d4e5f6a1b2c3  nginx-proxy  Request throttled: too many connections from 10.0.0.5
+2026-04-01T04:19:05.000Z  c3d4e5f6a1b2  logsonic-db  Restarting due to exit code 137
+2026-04-01T04:22:02.000Z  e5f6a1b2c3d4  redis-cache  Webpack compiled successfully in 4321ms
+2026-04-01T04:25:19.000Z  a1b2c3d4e5f6  logsonic-api  Restarting due to exit code 137
+2026-04-01T04:28:44.000Z  b2c3d4e5f6a1  logsonic-frontend  Cache initialized with 1024MB
+2026-04-01T04:31:51.000Z  a1b2c3d4e5f6  logsonic-api  Request throttled: too many connections from 10.0.0.5
+2026-04-01T04:34:51.000Z  d4e5f6a1b2c3  nginx-proxy  Request throttled: too many connections from 10.0.0.5
+2026-04-01T04:38:28.000Z  e5f6a1b2c3d4  redis-cache  Serving HTTP on 0.0.0.0:3000
+2026-04-01T04:41:22.000Z  b2c3d4e5f6a1  logsonic-frontend  Health check endpoint /health registered
+2026-04-01T04:44:35.000Z  e5f6a1b2c3d4  redis-cache  Worker goroutine 1 started
+2026-04-01T04:48:16.000Z  e5f6a1b2c3d4  redis-cache  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T04:51:02.000Z  c3d4e5f6a1b2  logsonic-db  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T04:54:26.000Z  b2c3d4e5f6a1  logsonic-frontend  Health check endpoint /health registered
+2026-04-01T04:57:37.000Z  b2c3d4e5f6a1  logsonic-frontend  OOMKiller triggered: process killed
+2026-04-01T05:01:11.000Z  b2c3d4e5f6a1  logsonic-frontend  Slow operation detected: 1523ms for query
+2026-04-01T05:03:58.000Z  d4e5f6a1b2c3  nginx-proxy  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T05:07:30.000Z  c3d4e5f6a1b2  logsonic-db  Cache initialized with 1024MB
+2026-04-01T05:10:25.000Z  d4e5f6a1b2c3  nginx-proxy  Health check endpoint /health registered
+2026-04-01T05:14:00.000Z  c3d4e5f6a1b2  logsonic-db  Worker goroutine 1 started
+2026-04-01T05:17:01.000Z  d4e5f6a1b2c3  nginx-proxy  Worker goroutine 1 started
+2026-04-01T05:20:27.000Z  b2c3d4e5f6a1  logsonic-frontend  Restarting due to exit code 137
+2026-04-01T05:23:45.000Z  e5f6a1b2c3d4  redis-cache  Serving HTTP on 0.0.0.0:3000
+2026-04-01T05:26:51.000Z  c3d4e5f6a1b2  logsonic-db  Restarting due to exit code 137
+2026-04-01T05:30:02.000Z  d4e5f6a1b2c3  nginx-proxy  Starting server on :8080
+2026-04-01T05:33:27.000Z  a1b2c3d4e5f6  logsonic-api  Health check endpoint /health registered
+2026-04-01T05:36:32.000Z  b2c3d4e5f6a1  logsonic-frontend  Slow operation detected: 1523ms for query
+2026-04-01T05:39:56.000Z  a1b2c3d4e5f6  logsonic-api  Starting server on :8080
+2026-04-01T05:42:45.000Z  c3d4e5f6a1b2  logsonic-db  OOMKiller triggered: process killed
+2026-04-01T05:46:22.000Z  a1b2c3d4e5f6  logsonic-api  Cache initialized with 1024MB
+2026-04-01T05:49:39.000Z  e5f6a1b2c3d4  redis-cache  Starting server on :8080
+2026-04-01T05:52:48.000Z  c3d4e5f6a1b2  logsonic-db  Worker goroutine 2 started
+2026-04-01T05:56:01.000Z  e5f6a1b2c3d4  redis-cache  Received SIGTERM, shutting down gracefully
+2026-04-01T05:59:02.000Z  c3d4e5f6a1b2  logsonic-db  Cache initialized with 1024MB
+2026-04-01T06:02:23.000Z  e5f6a1b2c3d4  redis-cache  Worker goroutine 1 started
+2026-04-01T06:05:51.000Z  e5f6a1b2c3d4  redis-cache  Connected to database successfully
+2026-04-01T06:08:44.000Z  a1b2c3d4e5f6  logsonic-api  Memory usage: 342MB / 512MB
+2026-04-01T06:11:58.000Z  d4e5f6a1b2c3  nginx-proxy  Restarting due to exit code 137
+2026-04-01T06:15:07.000Z  b2c3d4e5f6a1  logsonic-frontend  OOMKiller triggered: process killed
+2026-04-01T06:18:40.000Z  e5f6a1b2c3d4  redis-cache  Starting server on :8080
+2026-04-01T06:21:50.000Z  b2c3d4e5f6a1  logsonic-frontend  OOMKiller triggered: process killed
+2026-04-01T06:24:52.000Z  c3d4e5f6a1b2  logsonic-db  Worker goroutine 1 started
+2026-04-01T06:28:02.000Z  a1b2c3d4e5f6  logsonic-api  Worker goroutine 2 started
+2026-04-01T06:31:26.000Z  e5f6a1b2c3d4  redis-cache  Serving HTTP on 0.0.0.0:3000
+2026-04-01T06:34:39.000Z  a1b2c3d4e5f6  logsonic-api  Log ingestion pipeline ready
+2026-04-01T06:38:10.000Z  d4e5f6a1b2c3  nginx-proxy  Request throttled: too many connections from 10.0.0.5
+2026-04-01T06:41:00.000Z  d4e5f6a1b2c3  nginx-proxy  Request throttled: too many connections from 10.0.0.5
+2026-04-01T06:44:19.000Z  b2c3d4e5f6a1  logsonic-frontend  Log ingestion pipeline ready
+2026-04-01T06:47:42.000Z  d4e5f6a1b2c3  nginx-proxy  OOMKiller triggered: process killed
+2026-04-01T06:50:51.000Z  b2c3d4e5f6a1  logsonic-frontend  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T06:54:18.000Z  d4e5f6a1b2c3  nginx-proxy  Cache initialized with 1024MB
+2026-04-01T06:57:10.000Z  c3d4e5f6a1b2  logsonic-db  Request throttled: too many connections from 10.0.0.5
+2026-04-01T07:00:39.000Z  a1b2c3d4e5f6  logsonic-api  Slow operation detected: 1523ms for query
+2026-04-01T07:03:40.000Z  b2c3d4e5f6a1  logsonic-frontend  Webpack compiled successfully in 4321ms
+2026-04-01T07:07:06.000Z  b2c3d4e5f6a1  logsonic-frontend  Restarting due to exit code 137
+2026-04-01T07:10:23.000Z  b2c3d4e5f6a1  logsonic-frontend  Webpack compiled successfully in 4321ms
+2026-04-01T07:13:30.000Z  e5f6a1b2c3d4  redis-cache  Received SIGTERM, shutting down gracefully
+2026-04-01T07:16:33.000Z  c3d4e5f6a1b2  logsonic-db  Request throttled: too many connections from 10.0.0.5
+2026-04-01T07:20:08.000Z  d4e5f6a1b2c3  nginx-proxy  Memory usage: 342MB / 512MB
+2026-04-01T07:23:09.000Z  a1b2c3d4e5f6  logsonic-api  Worker goroutine 2 started
+2026-04-01T07:26:41.000Z  c3d4e5f6a1b2  logsonic-db  OOMKiller triggered: process killed
+2026-04-01T07:29:34.000Z  e5f6a1b2c3d4  redis-cache  Connected to database successfully
+2026-04-01T07:33:09.000Z  c3d4e5f6a1b2  logsonic-db  Slow operation detected: 1523ms for query
+2026-04-01T07:35:54.000Z  c3d4e5f6a1b2  logsonic-db  Serving HTTP on 0.0.0.0:3000
+2026-04-01T07:39:33.000Z  a1b2c3d4e5f6  logsonic-api  Log ingestion pipeline ready
+2026-04-01T07:42:45.000Z  e5f6a1b2c3d4  redis-cache  Memory usage: 342MB / 512MB
+2026-04-01T07:45:46.000Z  d4e5f6a1b2c3  nginx-proxy  Health check endpoint /health registered
+2026-04-01T07:49:00.000Z  e5f6a1b2c3d4  redis-cache  Memory usage: 342MB / 512MB
+2026-04-01T07:52:24.000Z  e5f6a1b2c3d4  redis-cache  Worker goroutine 2 started
+2026-04-01T07:55:46.000Z  d4e5f6a1b2c3  nginx-proxy  Request throttled: too many connections from 10.0.0.5
+2026-04-01T07:58:53.000Z  c3d4e5f6a1b2  logsonic-db  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T08:01:48.000Z  c3d4e5f6a1b2  logsonic-db  Log ingestion pipeline ready
+2026-04-01T08:05:21.000Z  e5f6a1b2c3d4  redis-cache  Health check endpoint /health registered
+2026-04-01T08:08:19.000Z  b2c3d4e5f6a1  logsonic-frontend  Received SIGTERM, shutting down gracefully
+2026-04-01T08:11:50.000Z  b2c3d4e5f6a1  logsonic-frontend  Health check endpoint /health registered
+2026-04-01T08:15:02.000Z  a1b2c3d4e5f6  logsonic-api  Log ingestion pipeline ready
+2026-04-01T08:18:16.000Z  c3d4e5f6a1b2  logsonic-db  Worker goroutine 1 started
+2026-04-01T08:21:22.000Z  c3d4e5f6a1b2  logsonic-db  Log ingestion pipeline ready
+2026-04-01T08:24:38.000Z  d4e5f6a1b2c3  nginx-proxy  Memory usage: 342MB / 512MB
+2026-04-01T08:27:55.000Z  d4e5f6a1b2c3  nginx-proxy  OOMKiller triggered: process killed
+2026-04-01T08:31:11.000Z  c3d4e5f6a1b2  logsonic-db  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T08:34:19.000Z  b2c3d4e5f6a1  logsonic-frontend  Slow operation detected: 1523ms for query
+2026-04-01T08:37:31.000Z  e5f6a1b2c3d4  redis-cache  Worker goroutine 2 started
+2026-04-01T08:40:59.000Z  d4e5f6a1b2c3  nginx-proxy  Worker goroutine 1 started
+2026-04-01T08:44:03.000Z  b2c3d4e5f6a1  logsonic-frontend  Connected to database successfully
+2026-04-01T08:47:02.000Z  a1b2c3d4e5f6  logsonic-api  Worker goroutine 2 started
+2026-04-01T08:50:18.000Z  c3d4e5f6a1b2  logsonic-db  Request throttled: too many connections from 10.0.0.5
+2026-04-01T08:53:55.000Z  c3d4e5f6a1b2  logsonic-db  Request throttled: too many connections from 10.0.0.5
+2026-04-01T08:57:12.000Z  e5f6a1b2c3d4  redis-cache  Starting server on :8080
+2026-04-01T09:00:25.000Z  b2c3d4e5f6a1  logsonic-frontend  Health check endpoint /health registered
+2026-04-01T09:03:38.000Z  d4e5f6a1b2c3  nginx-proxy  Log ingestion pipeline ready
+2026-04-01T09:06:49.000Z  a1b2c3d4e5f6  logsonic-api  Restarting due to exit code 137
+2026-04-01T09:10:05.000Z  d4e5f6a1b2c3  nginx-proxy  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T09:13:05.000Z  b2c3d4e5f6a1  logsonic-frontend  Cache initialized with 1024MB
+2026-04-01T09:16:17.000Z  b2c3d4e5f6a1  logsonic-frontend  Slow operation detected: 1523ms for query
+2026-04-01T09:19:27.000Z  c3d4e5f6a1b2  logsonic-db  Serving HTTP on 0.0.0.0:3000
+2026-04-01T09:23:04.000Z  d4e5f6a1b2c3  nginx-proxy  OOMKiller triggered: process killed
+2026-04-01T09:26:11.000Z  c3d4e5f6a1b2  logsonic-db  Connected to database successfully
+2026-04-01T09:29:23.000Z  d4e5f6a1b2c3  nginx-proxy  Log ingestion pipeline ready
+2026-04-01T09:32:30.000Z  a1b2c3d4e5f6  logsonic-api  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T09:35:39.000Z  e5f6a1b2c3d4  redis-cache  OOMKiller triggered: process killed
+2026-04-01T09:38:47.000Z  d4e5f6a1b2c3  nginx-proxy  Health check endpoint /health registered
+2026-04-01T09:42:05.000Z  d4e5f6a1b2c3  nginx-proxy  Restarting due to exit code 137
+2026-04-01T09:45:37.000Z  e5f6a1b2c3d4  redis-cache  Serving HTTP on 0.0.0.0:3000
+2026-04-01T09:48:51.000Z  a1b2c3d4e5f6  logsonic-api  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T09:51:43.000Z  d4e5f6a1b2c3  nginx-proxy  OOMKiller triggered: process killed
+2026-04-01T09:55:16.000Z  e5f6a1b2c3d4  redis-cache  Serving HTTP on 0.0.0.0:3000
+2026-04-01T09:58:36.000Z  b2c3d4e5f6a1  logsonic-frontend  Log ingestion pipeline ready
+2026-04-01T10:01:28.000Z  e5f6a1b2c3d4  redis-cache  Worker goroutine 1 started
+2026-04-01T10:04:54.000Z  c3d4e5f6a1b2  logsonic-db  Memory usage: 342MB / 512MB
+2026-04-01T10:08:06.000Z  a1b2c3d4e5f6  logsonic-api  Worker goroutine 2 started
+2026-04-01T10:11:22.000Z  b2c3d4e5f6a1  logsonic-frontend  Restarting due to exit code 137
+2026-04-01T10:14:23.000Z  a1b2c3d4e5f6  logsonic-api  Serving HTTP on 0.0.0.0:3000
+2026-04-01T10:17:46.000Z  c3d4e5f6a1b2  logsonic-db  Log ingestion pipeline ready
+2026-04-01T10:20:59.000Z  c3d4e5f6a1b2  logsonic-db  Webpack compiled successfully in 4321ms
+2026-04-01T10:24:12.000Z  d4e5f6a1b2c3  nginx-proxy  Worker goroutine 1 started
+2026-04-01T10:27:26.000Z  e5f6a1b2c3d4  redis-cache  Starting server on :8080
+2026-04-01T10:30:44.000Z  e5f6a1b2c3d4  redis-cache  Log ingestion pipeline ready
+2026-04-01T10:33:45.000Z  d4e5f6a1b2c3  nginx-proxy  Request throttled: too many connections from 10.0.0.5
+2026-04-01T10:37:21.000Z  c3d4e5f6a1b2  logsonic-db  Serving HTTP on 0.0.0.0:3000
+2026-04-01T10:40:23.000Z  a1b2c3d4e5f6  logsonic-api  Received SIGTERM, shutting down gracefully
+2026-04-01T10:43:40.000Z  c3d4e5f6a1b2  logsonic-db  Received SIGTERM, shutting down gracefully
+2026-04-01T10:46:52.000Z  e5f6a1b2c3d4  redis-cache  Worker goroutine 1 started
+2026-04-01T10:50:23.000Z  a1b2c3d4e5f6  logsonic-api  Worker goroutine 1 started
+2026-04-01T10:53:31.000Z  a1b2c3d4e5f6  logsonic-api  Health check endpoint /health registered
+2026-04-01T10:56:42.000Z  b2c3d4e5f6a1  logsonic-frontend  Request throttled: too many connections from 10.0.0.5
+2026-04-01T10:59:51.000Z  b2c3d4e5f6a1  logsonic-frontend  Memory usage: 342MB / 512MB
+2026-04-01T11:02:56.000Z  a1b2c3d4e5f6  logsonic-api  Memory usage: 342MB / 512MB
+2026-04-01T11:06:30.000Z  a1b2c3d4e5f6  logsonic-api  Serving HTTP on 0.0.0.0:3000
+2026-04-01T11:09:39.000Z  e5f6a1b2c3d4  redis-cache  Slow operation detected: 1523ms for query
+2026-04-01T11:12:37.000Z  a1b2c3d4e5f6  logsonic-api  OOMKiller triggered: process killed
+2026-04-01T11:16:02.000Z  e5f6a1b2c3d4  redis-cache  Slow operation detected: 1523ms for query
+2026-04-01T11:19:21.000Z  d4e5f6a1b2c3  nginx-proxy  Worker goroutine 1 started
+2026-04-01T11:22:40.000Z  b2c3d4e5f6a1  logsonic-frontend  Worker goroutine 1 started
+2026-04-01T11:25:28.000Z  e5f6a1b2c3d4  redis-cache  Worker goroutine 1 started
+2026-04-01T11:28:45.000Z  e5f6a1b2c3d4  redis-cache  Memory usage: 342MB / 512MB
+2026-04-01T11:32:05.000Z  d4e5f6a1b2c3  nginx-proxy  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T11:35:20.000Z  a1b2c3d4e5f6  logsonic-api  Health check endpoint /health registered
+2026-04-01T11:38:26.000Z  a1b2c3d4e5f6  logsonic-api  Serving HTTP on 0.0.0.0:3000
+2026-04-01T11:41:39.000Z  e5f6a1b2c3d4  redis-cache  Slow operation detected: 1523ms for query
+2026-04-01T11:44:53.000Z  d4e5f6a1b2c3  nginx-proxy  Webpack compiled successfully in 4321ms
+2026-04-01T11:48:22.000Z  e5f6a1b2c3d4  redis-cache  Received SIGTERM, shutting down gracefully
+2026-04-01T11:51:29.000Z  e5f6a1b2c3d4  redis-cache  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T11:54:47.000Z  d4e5f6a1b2c3  nginx-proxy  Memory usage: 342MB / 512MB
+2026-04-01T11:57:52.000Z  b2c3d4e5f6a1  logsonic-frontend  Received SIGTERM, shutting down gracefully
+2026-04-01T12:01:12.000Z  e5f6a1b2c3d4  redis-cache  Starting server on :8080
+2026-04-01T12:04:30.000Z  c3d4e5f6a1b2  logsonic-db  Serving HTTP on 0.0.0.0:3000
+2026-04-01T12:07:54.000Z  c3d4e5f6a1b2  logsonic-db  Memory usage: 342MB / 512MB
+2026-04-01T12:11:11.000Z  a1b2c3d4e5f6  logsonic-api  Request throttled: too many connections from 10.0.0.5
+2026-04-01T12:14:19.000Z  b2c3d4e5f6a1  logsonic-frontend  Memory usage: 342MB / 512MB
+2026-04-01T12:17:41.000Z  d4e5f6a1b2c3  nginx-proxy  Worker goroutine 1 started
+2026-04-01T12:20:45.000Z  d4e5f6a1b2c3  nginx-proxy  Starting server on :8080
+2026-04-01T12:23:45.000Z  b2c3d4e5f6a1  logsonic-frontend  Received SIGTERM, shutting down gracefully
+2026-04-01T12:27:09.000Z  b2c3d4e5f6a1  logsonic-frontend  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T12:30:21.000Z  e5f6a1b2c3d4  redis-cache  Serving HTTP on 0.0.0.0:3000
+2026-04-01T12:33:50.000Z  d4e5f6a1b2c3  nginx-proxy  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T12:36:42.000Z  d4e5f6a1b2c3  nginx-proxy  Serving HTTP on 0.0.0.0:3000
+2026-04-01T12:40:09.000Z  e5f6a1b2c3d4  redis-cache  Connected to database successfully
+2026-04-01T12:43:13.000Z  b2c3d4e5f6a1  logsonic-frontend  Request throttled: too many connections from 10.0.0.5
+2026-04-01T12:46:23.000Z  c3d4e5f6a1b2  logsonic-db  Health check endpoint /health registered
+2026-04-01T12:49:59.000Z  c3d4e5f6a1b2  logsonic-db  Webpack compiled successfully in 4321ms
+2026-04-01T12:52:54.000Z  e5f6a1b2c3d4  redis-cache  Worker goroutine 2 started
+2026-04-01T12:56:01.000Z  b2c3d4e5f6a1  logsonic-frontend  OOMKiller triggered: process killed
+2026-04-01T12:59:22.000Z  b2c3d4e5f6a1  logsonic-frontend  Log ingestion pipeline ready
+2026-04-01T13:02:37.000Z  a1b2c3d4e5f6  logsonic-api  Cache initialized with 1024MB
+2026-04-01T13:06:04.000Z  e5f6a1b2c3d4  redis-cache  Memory usage: 342MB / 512MB
+2026-04-01T13:09:19.000Z  d4e5f6a1b2c3  nginx-proxy  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T13:12:37.000Z  d4e5f6a1b2c3  nginx-proxy  Request throttled: too many connections from 10.0.0.5
+2026-04-01T13:15:47.000Z  a1b2c3d4e5f6  logsonic-api  Cache initialized with 1024MB
+2026-04-01T13:18:51.000Z  e5f6a1b2c3d4  redis-cache  OOMKiller triggered: process killed
+2026-04-01T13:22:02.000Z  b2c3d4e5f6a1  logsonic-frontend  Request throttled: too many connections from 10.0.0.5
+2026-04-01T13:25:09.000Z  d4e5f6a1b2c3  nginx-proxy  Slow operation detected: 1523ms for query
+2026-04-01T13:28:23.000Z  a1b2c3d4e5f6  logsonic-api  Slow operation detected: 1523ms for query
+2026-04-01T13:31:45.000Z  d4e5f6a1b2c3  nginx-proxy  Starting server on :8080
+2026-04-01T13:35:00.000Z  c3d4e5f6a1b2  logsonic-db  Webpack compiled successfully in 4321ms
+2026-04-01T13:38:29.000Z  c3d4e5f6a1b2  logsonic-db  Webpack compiled successfully in 4321ms
+2026-04-01T13:41:19.000Z  b2c3d4e5f6a1  logsonic-frontend  Log ingestion pipeline ready
+2026-04-01T13:44:47.000Z  c3d4e5f6a1b2  logsonic-db  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T13:47:55.000Z  e5f6a1b2c3d4  redis-cache  Request throttled: too many connections from 10.0.0.5
+2026-04-01T13:51:19.000Z  a1b2c3d4e5f6  logsonic-api  Restarting due to exit code 137
+2026-04-01T13:54:34.000Z  e5f6a1b2c3d4  redis-cache  Starting server on :8080
+2026-04-01T13:57:50.000Z  e5f6a1b2c3d4  redis-cache  Received SIGTERM, shutting down gracefully
+2026-04-01T14:01:08.000Z  e5f6a1b2c3d4  redis-cache  Memory usage: 342MB / 512MB
+2026-04-01T14:04:10.000Z  b2c3d4e5f6a1  logsonic-frontend  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T14:07:22.000Z  c3d4e5f6a1b2  logsonic-db  Worker goroutine 1 started
+2026-04-01T14:10:39.000Z  d4e5f6a1b2c3  nginx-proxy  Restarting due to exit code 137
+2026-04-01T14:13:59.000Z  d4e5f6a1b2c3  nginx-proxy  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T14:17:01.000Z  b2c3d4e5f6a1  logsonic-frontend  OOMKiller triggered: process killed
+2026-04-01T14:20:21.000Z  e5f6a1b2c3d4  redis-cache  Log ingestion pipeline ready
+2026-04-01T14:23:30.000Z  e5f6a1b2c3d4  redis-cache  Restarting due to exit code 137
+2026-04-01T14:26:57.000Z  b2c3d4e5f6a1  logsonic-frontend  Connected to database successfully
+2026-04-01T14:29:59.000Z  b2c3d4e5f6a1  logsonic-frontend  Health check endpoint /health registered
+2026-04-01T14:33:22.000Z  d4e5f6a1b2c3  nginx-proxy  Restarting due to exit code 137
+2026-04-01T14:36:15.000Z  d4e5f6a1b2c3  nginx-proxy  Restarting due to exit code 137
+2026-04-01T14:39:30.000Z  a1b2c3d4e5f6  logsonic-api  Request throttled: too many connections from 10.0.0.5
+2026-04-01T14:43:09.000Z  d4e5f6a1b2c3  nginx-proxy  Cache initialized with 1024MB
+2026-04-01T14:46:02.000Z  c3d4e5f6a1b2  logsonic-db  Log ingestion pipeline ready
+2026-04-01T14:49:15.000Z  b2c3d4e5f6a1  logsonic-frontend  Request throttled: too many connections from 10.0.0.5
+2026-04-01T14:52:28.000Z  c3d4e5f6a1b2  logsonic-db  Webpack compiled successfully in 4321ms
+2026-04-01T14:56:07.000Z  a1b2c3d4e5f6  logsonic-api  Received SIGTERM, shutting down gracefully
+2026-04-01T14:59:00.000Z  b2c3d4e5f6a1  logsonic-frontend  Received SIGTERM, shutting down gracefully
+2026-04-01T15:02:11.000Z  d4e5f6a1b2c3  nginx-proxy  Health check endpoint /health registered
+2026-04-01T15:05:20.000Z  c3d4e5f6a1b2  logsonic-db  Received SIGTERM, shutting down gracefully
+2026-04-01T15:08:55.000Z  e5f6a1b2c3d4  redis-cache  Starting server on :8080
+2026-04-01T15:11:56.000Z  a1b2c3d4e5f6  logsonic-api  Memory usage: 342MB / 512MB
+2026-04-01T15:15:10.000Z  a1b2c3d4e5f6  logsonic-api  Cache initialized with 1024MB
+2026-04-01T15:18:37.000Z  b2c3d4e5f6a1  logsonic-frontend  Starting server on :8080
+2026-04-01T15:21:42.000Z  e5f6a1b2c3d4  redis-cache  Cache initialized with 1024MB
+2026-04-01T15:24:52.000Z  b2c3d4e5f6a1  logsonic-frontend  Webpack compiled successfully in 4321ms
+2026-04-01T15:28:26.000Z  d4e5f6a1b2c3  nginx-proxy  Worker goroutine 1 started
+2026-04-01T15:31:31.000Z  e5f6a1b2c3d4  redis-cache  Request throttled: too many connections from 10.0.0.5
+2026-04-01T15:34:46.000Z  a1b2c3d4e5f6  logsonic-api  Received SIGTERM, shutting down gracefully
+2026-04-01T15:37:45.000Z  a1b2c3d4e5f6  logsonic-api  Restarting due to exit code 137
+2026-04-01T15:40:54.000Z  a1b2c3d4e5f6  logsonic-api  Connected to database successfully
+2026-04-01T15:44:38.000Z  a1b2c3d4e5f6  logsonic-api  Connected to database successfully
+2026-04-01T15:47:24.000Z  c3d4e5f6a1b2  logsonic-db  Slow operation detected: 1523ms for query
+2026-04-01T15:50:54.000Z  a1b2c3d4e5f6  logsonic-api  Restarting due to exit code 137
+2026-04-01T15:54:06.000Z  e5f6a1b2c3d4  redis-cache  Connected to database successfully
+2026-04-01T15:57:21.000Z  a1b2c3d4e5f6  logsonic-api  Slow operation detected: 1523ms for query
+2026-04-01T16:00:25.000Z  a1b2c3d4e5f6  logsonic-api  Serving HTTP on 0.0.0.0:3000
+2026-04-01T16:03:57.000Z  d4e5f6a1b2c3  nginx-proxy  Starting server on :8080
+2026-04-01T16:07:03.000Z  c3d4e5f6a1b2  logsonic-db  Webpack compiled successfully in 4321ms
+2026-04-01T16:10:22.000Z  d4e5f6a1b2c3  nginx-proxy  Received SIGTERM, shutting down gracefully
+2026-04-01T16:13:23.000Z  d4e5f6a1b2c3  nginx-proxy  Restarting due to exit code 137
+2026-04-01T16:16:40.000Z  d4e5f6a1b2c3  nginx-proxy  Worker goroutine 1 started
+2026-04-01T16:20:02.000Z  e5f6a1b2c3d4  redis-cache  Received SIGTERM, shutting down gracefully
+2026-04-01T16:22:56.000Z  e5f6a1b2c3d4  redis-cache  OOMKiller triggered: process killed
+2026-04-01T16:26:27.000Z  c3d4e5f6a1b2  logsonic-db  Request throttled: too many connections from 10.0.0.5
+2026-04-01T16:29:37.000Z  b2c3d4e5f6a1  logsonic-frontend  Health check endpoint /health registered
+2026-04-01T16:33:00.000Z  d4e5f6a1b2c3  nginx-proxy  Serving HTTP on 0.0.0.0:3000
+2026-04-01T16:36:08.000Z  e5f6a1b2c3d4  redis-cache  Serving HTTP on 0.0.0.0:3000
+2026-04-01T16:39:13.000Z  d4e5f6a1b2c3  nginx-proxy  Slow operation detected: 1523ms for query
+2026-04-01T16:42:50.000Z  d4e5f6a1b2c3  nginx-proxy  Memory usage: 342MB / 512MB
+2026-04-01T16:45:44.000Z  d4e5f6a1b2c3  nginx-proxy  Memory usage: 342MB / 512MB
+2026-04-01T16:49:02.000Z  e5f6a1b2c3d4  redis-cache  Restarting due to exit code 137
+2026-04-01T16:52:10.000Z  c3d4e5f6a1b2  logsonic-db  Serving HTTP on 0.0.0.0:3000
+2026-04-01T16:55:19.000Z  a1b2c3d4e5f6  logsonic-api  Request throttled: too many connections from 10.0.0.5
+2026-04-01T16:58:38.000Z  c3d4e5f6a1b2  logsonic-db  Serving HTTP on 0.0.0.0:3000
+2026-04-01T17:02:11.000Z  b2c3d4e5f6a1  logsonic-frontend  Serving HTTP on 0.0.0.0:3000
+2026-04-01T17:05:05.000Z  a1b2c3d4e5f6  logsonic-api  Request throttled: too many connections from 10.0.0.5
+2026-04-01T17:08:26.000Z  e5f6a1b2c3d4  redis-cache  Worker goroutine 2 started
+2026-04-01T17:11:50.000Z  d4e5f6a1b2c3  nginx-proxy  Cache initialized with 1024MB
+2026-04-01T17:14:42.000Z  b2c3d4e5f6a1  logsonic-frontend  Log ingestion pipeline ready
+2026-04-01T17:18:09.000Z  e5f6a1b2c3d4  redis-cache  Memory usage: 342MB / 512MB
+2026-04-01T17:21:24.000Z  c3d4e5f6a1b2  logsonic-db  Slow operation detected: 1523ms for query
+2026-04-01T17:24:23.000Z  a1b2c3d4e5f6  logsonic-api  Received SIGTERM, shutting down gracefully
+2026-04-01T17:27:57.000Z  e5f6a1b2c3d4  redis-cache  Worker goroutine 1 started
+2026-04-01T17:31:11.000Z  b2c3d4e5f6a1  logsonic-frontend  Restarting due to exit code 137
+2026-04-01T17:34:16.000Z  a1b2c3d4e5f6  logsonic-api  Cache initialized with 1024MB
+2026-04-01T17:37:28.000Z  d4e5f6a1b2c3  nginx-proxy  Log ingestion pipeline ready
+2026-04-01T17:40:50.000Z  d4e5f6a1b2c3  nginx-proxy  Starting server on :8080
+2026-04-01T17:44:04.000Z  e5f6a1b2c3d4  redis-cache  Request throttled: too many connections from 10.0.0.5
+2026-04-01T17:47:27.000Z  d4e5f6a1b2c3  nginx-proxy  Request throttled: too many connections from 10.0.0.5
+2026-04-01T17:50:42.000Z  d4e5f6a1b2c3  nginx-proxy  Restarting due to exit code 137
+2026-04-01T17:53:37.000Z  c3d4e5f6a1b2  logsonic-db  Received SIGTERM, shutting down gracefully
+2026-04-01T17:57:06.000Z  d4e5f6a1b2c3  nginx-proxy  Health check endpoint /health registered
+2026-04-01T18:00:26.000Z  d4e5f6a1b2c3  nginx-proxy  Log ingestion pipeline ready
+2026-04-01T18:03:29.000Z  c3d4e5f6a1b2  logsonic-db  Memory usage: 342MB / 512MB
+2026-04-01T18:06:35.000Z  d4e5f6a1b2c3  nginx-proxy  Connected to database successfully
+2026-04-01T18:10:08.000Z  d4e5f6a1b2c3  nginx-proxy  Worker goroutine 2 started
+2026-04-01T18:12:57.000Z  e5f6a1b2c3d4  redis-cache  Received SIGTERM, shutting down gracefully
+2026-04-01T18:16:29.000Z  b2c3d4e5f6a1  logsonic-frontend  Webpack compiled successfully in 4321ms
+2026-04-01T18:19:43.000Z  e5f6a1b2c3d4  redis-cache  Slow operation detected: 1523ms for query
+2026-04-01T18:23:03.000Z  a1b2c3d4e5f6  logsonic-api  OOMKiller triggered: process killed
+2026-04-01T18:25:59.000Z  e5f6a1b2c3d4  redis-cache  Log ingestion pipeline ready
+2026-04-01T18:29:05.000Z  e5f6a1b2c3d4  redis-cache  Health check endpoint /health registered
+2026-04-01T18:32:40.000Z  b2c3d4e5f6a1  logsonic-frontend  Connected to database successfully
+2026-04-01T18:35:41.000Z  e5f6a1b2c3d4  redis-cache  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T18:38:55.000Z  e5f6a1b2c3d4  redis-cache  Log ingestion pipeline ready
+2026-04-01T18:42:04.000Z  d4e5f6a1b2c3  nginx-proxy  Slow operation detected: 1523ms for query
+2026-04-01T18:45:28.000Z  b2c3d4e5f6a1  logsonic-frontend  Memory usage: 342MB / 512MB
+2026-04-01T18:48:50.000Z  a1b2c3d4e5f6  logsonic-api  Connected to database successfully
+2026-04-01T18:51:44.000Z  e5f6a1b2c3d4  redis-cache  Webpack compiled successfully in 4321ms
+2026-04-01T18:55:12.000Z  c3d4e5f6a1b2  logsonic-db  Memory usage: 342MB / 512MB
+2026-04-01T18:58:33.000Z  c3d4e5f6a1b2  logsonic-db  Starting server on :8080
+2026-04-01T19:01:52.000Z  b2c3d4e5f6a1  logsonic-frontend  Worker goroutine 1 started
+2026-04-01T19:04:54.000Z  b2c3d4e5f6a1  logsonic-frontend  Health check endpoint /health registered
+2026-04-01T19:08:09.000Z  d4e5f6a1b2c3  nginx-proxy  Restarting due to exit code 137
+2026-04-01T19:11:09.000Z  d4e5f6a1b2c3  nginx-proxy  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T19:14:19.000Z  c3d4e5f6a1b2  logsonic-db  Memory usage: 342MB / 512MB
+2026-04-01T19:17:55.000Z  a1b2c3d4e5f6  logsonic-api  Received SIGTERM, shutting down gracefully
+2026-04-01T19:20:53.000Z  a1b2c3d4e5f6  logsonic-api  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T19:24:20.000Z  c3d4e5f6a1b2  logsonic-db  Received SIGTERM, shutting down gracefully
+2026-04-01T19:27:21.000Z  d4e5f6a1b2c3  nginx-proxy  Slow operation detected: 1523ms for query
+2026-04-01T19:30:55.000Z  e5f6a1b2c3d4  redis-cache  Restarting due to exit code 137
+2026-04-01T19:34:07.000Z  b2c3d4e5f6a1  logsonic-frontend  Worker goroutine 2 started
+2026-04-01T19:37:17.000Z  b2c3d4e5f6a1  logsonic-frontend  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T19:40:22.000Z  c3d4e5f6a1b2  logsonic-db  Health check endpoint /health registered
+2026-04-01T19:43:48.000Z  d4e5f6a1b2c3  nginx-proxy  Serving HTTP on 0.0.0.0:3000
+2026-04-01T19:46:57.000Z  c3d4e5f6a1b2  logsonic-db  Worker goroutine 1 started
+2026-04-01T19:49:57.000Z  d4e5f6a1b2c3  nginx-proxy  Health check endpoint /health registered
+2026-04-01T19:53:31.000Z  d4e5f6a1b2c3  nginx-proxy  Serving HTTP on 0.0.0.0:3000
+2026-04-01T19:56:22.000Z  d4e5f6a1b2c3  nginx-proxy  Log ingestion pipeline ready
+2026-04-01T19:59:40.000Z  b2c3d4e5f6a1  logsonic-frontend  Connected to database successfully
+2026-04-01T20:03:10.000Z  c3d4e5f6a1b2  logsonic-db  Worker goroutine 2 started
+2026-04-01T20:06:26.000Z  d4e5f6a1b2c3  nginx-proxy  Connected to database successfully
+2026-04-01T20:09:44.000Z  a1b2c3d4e5f6  logsonic-api  Worker goroutine 2 started
+2026-04-01T20:12:48.000Z  a1b2c3d4e5f6  logsonic-api  Worker goroutine 1 started
+2026-04-01T20:16:12.000Z  b2c3d4e5f6a1  logsonic-frontend  Slow operation detected: 1523ms for query
+2026-04-01T20:19:07.000Z  e5f6a1b2c3d4  redis-cache  Memory usage: 342MB / 512MB
+2026-04-01T20:22:19.000Z  c3d4e5f6a1b2  logsonic-db  Health check endpoint /health registered
+2026-04-01T20:25:29.000Z  a1b2c3d4e5f6  logsonic-api  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T20:28:49.000Z  c3d4e5f6a1b2  logsonic-db  Webpack compiled successfully in 4321ms
+2026-04-01T20:32:02.000Z  b2c3d4e5f6a1  logsonic-frontend  Slow operation detected: 1523ms for query
+2026-04-01T20:35:10.000Z  b2c3d4e5f6a1  logsonic-frontend  Webpack compiled successfully in 4321ms
+2026-04-01T20:38:22.000Z  a1b2c3d4e5f6  logsonic-api  Health check endpoint /health registered
+2026-04-01T20:41:44.000Z  a1b2c3d4e5f6  logsonic-api  Worker goroutine 2 started
+2026-04-01T20:45:05.000Z  a1b2c3d4e5f6  logsonic-api  Replica set monitor ping failed: context deadline exceeded
+2026-04-01T20:48:15.000Z  b2c3d4e5f6a1  logsonic-frontend  Connected to database successfully
+2026-04-01T20:51:41.000Z  e5f6a1b2c3d4  redis-cache  Connected to database successfully
+2026-04-01T20:54:59.000Z  c3d4e5f6a1b2  logsonic-db  OOMKiller triggered: process killed
+2026-04-01T20:58:05.000Z  b2c3d4e5f6a1  logsonic-frontend  Serving HTTP on 0.0.0.0:3000
+2026-04-01T21:01:27.000Z  b2c3d4e5f6a1  logsonic-frontend  Worker goroutine 1 started
+2026-04-01T21:04:29.000Z  b2c3d4e5f6a1  logsonic-frontend  Log ingestion pipeline ready
+2026-04-01T21:07:35.000Z  d4e5f6a1b2c3  nginx-proxy  Health check endpoint /health registered
+2026-04-01T21:11:11.000Z  a1b2c3d4e5f6  logsonic-api  Memory usage: 342MB / 512MB
+2026-04-01T21:14:13.000Z  a1b2c3d4e5f6  logsonic-api  Webpack compiled successfully in 4321ms
+2026-04-01T21:17:11.000Z  a1b2c3d4e5f6  logsonic-api  Connected to database successfully
+2026-04-01T21:20:42.000Z  d4e5f6a1b2c3  nginx-proxy  Cache initialized with 1024MB
+2026-04-01T21:23:56.000Z  d4e5f6a1b2c3  nginx-proxy  Restarting due to exit code 137
+2026-04-01T21:27:16.000Z  a1b2c3d4e5f6  logsonic-api  Health check endpoint /health registered
+2026-04-01T21:30:31.000Z  c3d4e5f6a1b2  logsonic-db  Connected to database successfully

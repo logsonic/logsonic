@@ -225,6 +225,8 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 
 	// Store the session options
 	sessionOptions := types.IngestSessionOptions{
+		Name:            req.Name,
+		Pattern:         req.Pattern,
 		Source:          req.Source,
 		SmartDecoder:    req.SmartDecoder,
 		ForceTimezone:   req.ForceTimezone,

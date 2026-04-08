@@ -404,8 +404,12 @@ func (t *Tokenizer) ParseLogs(logLines []string, ingestSessionOptions types.Inge
 		}
 		if !matched {
 			failedCount++
+			errorMsg := fmt.Sprintf("Log line did not match the '%s' pattern", ingestSessionOptions.Name)
+			if ingestSessionOptions.Name == "" {
+				errorMsg = "Log line did not match any configured pattern"
+			}
 			failedLog := map[string]interface{}{
-				"error":     "No grok pattern matches given log line",
+				"error":     errorMsg,
 				"_raw":      logLine,
 				"message":   logLine,
 				// We can't decode the timestamp so assign an approximate timestamp based on the last timestamp and the time delta

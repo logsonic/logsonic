@@ -1,0 +1,400 @@
+2026-04-01 00:00:56.000 UTC [12348] api_service@metrics WARNING: duration: 0.1 ms  there is already a transaction in progress
+2026-04-01 00:04:09.000 UTC [12346] api_service@logsonic_test ERROR: duration: 5.4 ms  could not connect to the primary server: connection to server failed
+2026-04-01 00:08:03.000 UTC [12345] app_user@logsonic LOG: duration: 0.5 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 00:11:00.000 UTC [12348] app_user@logsonic LOG: duration: 150.0 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 00:15:17.000 UTC [12347] admin@logsonic_test LOG: duration: 1200.0 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 00:18:11.000 UTC [12345] readonly@logsonic_test LOG: duration: 0.5 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 00:22:31.000 UTC [12349] app_user@logsonic_test LOG: duration: 1200.0 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 00:25:36.000 UTC [12349] readonly@metrics FATAL: duration: 23.1 ms  password authentication failed for user "admin"
+2026-04-01 00:29:19.000 UTC [12346] api_service@metrics FATAL: duration: 0.1 ms  password authentication failed for user "admin"
+2026-04-01 00:33:08.000 UTC [12345] readonly@logsonic_test FATAL: duration: 150.0 ms  password authentication failed for user "admin"
+2026-04-01 00:36:22.000 UTC [12349] api_service@logsonic_test LOG: duration: 23.1 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 00:39:55.000 UTC [12348] api_service@logsonic_test LOG: duration: 1200.0 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 00:44:07.000 UTC [12346] api_service@logsonic_test ERROR: duration: 0.1 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 00:47:30.000 UTC [12347] app_user@metrics LOG: duration: 5.4 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 00:51:20.000 UTC [12346] readonly@logsonic_test LOG: duration: 150.0 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 00:55:07.000 UTC [12345] readonly@logsonic_test LOG: duration: 0.5 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 00:58:19.000 UTC [12346] admin@logsonic LOG: duration: 23.1 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 01:02:08.000 UTC [12349] app_user@metrics LOG: duration: 0.5 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 01:06:05.000 UTC [12349] admin@metrics LOG: duration: 0.1 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 01:09:38.000 UTC [12346] readonly@logsonic_test LOG: duration: 150.0 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 01:13:17.000 UTC [12348] admin@logsonic LOG: duration: 501.2 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 01:16:55.000 UTC [12346] readonly@logsonic LOG: duration: 1200.0 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 01:20:21.000 UTC [12347] readonly@logsonic_test ERROR: duration: 150.0 ms  could not connect to the primary server: connection to server failed
+2026-04-01 01:23:27.000 UTC [12345] api_service@metrics LOG: duration: 150.0 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 01:27:26.000 UTC [12349] admin@logsonic_test LOG: duration: 501.2 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 01:31:11.000 UTC [12345] app_user@logsonic LOG: duration: 1200.0 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 01:34:43.000 UTC [12349] readonly@logsonic FATAL: duration: 0.5 ms  password authentication failed for user "admin"
+2026-04-01 01:38:02.000 UTC [12345] admin@logsonic_test LOG: duration: 150.0 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 01:42:08.000 UTC [12348] readonly@logsonic LOG: duration: 23.1 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 01:45:19.000 UTC [12346] app_user@metrics WARNING: duration: 5.4 ms  there is already a transaction in progress
+2026-04-01 01:49:22.000 UTC [12346] readonly@metrics LOG: duration: 1.2 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 01:52:27.000 UTC [12348] admin@logsonic_test LOG: duration: 150.0 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 01:56:06.000 UTC [12347] readonly@logsonic_test LOG: duration: 5.4 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 01:59:47.000 UTC [12347] api_service@logsonic LOG: duration: 23.1 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 02:03:50.000 UTC [12348] readonly@logsonic LOG: duration: 150.0 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 02:06:58.000 UTC [12348] app_user@logsonic LOG: duration: 5.4 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 02:10:15.000 UTC [12346] readonly@logsonic_test WARNING: duration: 5.4 ms  there is already a transaction in progress
+2026-04-01 02:14:03.000 UTC [12345] api_service@metrics LOG: duration: 501.2 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 02:18:25.000 UTC [12349] api_service@logsonic_test LOG: duration: 0.1 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 02:22:03.000 UTC [12349] admin@logsonic WARNING: duration: 5.4 ms  there is already a transaction in progress
+2026-04-01 02:24:47.000 UTC [12348] app_user@logsonic WARNING: duration: 150.0 ms  there is already a transaction in progress
+2026-04-01 02:28:35.000 UTC [12347] api_service@logsonic_test LOG: duration: 23.1 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 02:31:59.000 UTC [12346] api_service@metrics LOG: duration: 1200.0 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 02:35:48.000 UTC [12348] readonly@logsonic_test LOG: duration: 1200.0 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 02:39:53.000 UTC [12348] app_user@logsonic WARNING: duration: 501.2 ms  there is already a transaction in progress
+2026-04-01 02:43:08.000 UTC [12347] app_user@metrics ERROR: duration: 23.1 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 02:46:36.000 UTC [12349] app_user@metrics LOG: duration: 23.1 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 02:50:56.000 UTC [12349] api_service@metrics LOG: duration: 23.1 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 02:54:14.000 UTC [12349] readonly@metrics LOG: duration: 501.2 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 02:57:38.000 UTC [12346] readonly@logsonic_test LOG: duration: 150.0 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 03:01:36.000 UTC [12346] admin@logsonic LOG: duration: 501.2 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 03:04:31.000 UTC [12349] admin@logsonic_test LOG: duration: 501.2 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 03:08:29.000 UTC [12348] api_service@logsonic LOG: duration: 501.2 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 03:11:54.000 UTC [12346] app_user@metrics LOG: duration: 150.0 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 03:15:28.000 UTC [12346] app_user@metrics ERROR: duration: 501.2 ms  could not connect to the primary server: connection to server failed
+2026-04-01 03:19:44.000 UTC [12347] app_user@logsonic_test LOG: duration: 150.0 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 03:23:31.000 UTC [12347] api_service@logsonic_test LOG: duration: 5.4 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 03:26:46.000 UTC [12347] app_user@logsonic_test FATAL: duration: 0.5 ms  password authentication failed for user "admin"
+2026-04-01 03:30:21.000 UTC [12347] api_service@logsonic_test LOG: duration: 501.2 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 03:33:24.000 UTC [12345] api_service@logsonic LOG: duration: 1200.0 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 03:37:08.000 UTC [12347] app_user@metrics WARNING: duration: 5.4 ms  there is already a transaction in progress
+2026-04-01 03:41:16.000 UTC [12347] admin@logsonic_test WARNING: duration: 0.5 ms  there is already a transaction in progress
+2026-04-01 03:44:15.000 UTC [12347] admin@metrics LOG: duration: 1.2 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 03:47:58.000 UTC [12349] app_user@logsonic_test ERROR: duration: 23.1 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 03:51:33.000 UTC [12346] admin@logsonic LOG: duration: 501.2 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 03:55:30.000 UTC [12346] api_service@logsonic LOG: duration: 1.2 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 03:59:21.000 UTC [12345] app_user@logsonic_test LOG: duration: 0.1 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 04:02:30.000 UTC [12349] api_service@metrics LOG: duration: 0.1 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 04:06:52.000 UTC [12348] readonly@metrics LOG: duration: 501.2 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 04:10:11.000 UTC [12346] readonly@metrics LOG: duration: 150.0 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 04:13:23.000 UTC [12347] app_user@logsonic LOG: duration: 1.2 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 04:16:51.000 UTC [12349] admin@logsonic LOG: duration: 5.4 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 04:20:39.000 UTC [12345] api_service@logsonic_test LOG: duration: 5.4 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 04:24:53.000 UTC [12347] admin@logsonic LOG: duration: 150.0 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 04:28:06.000 UTC [12349] readonly@metrics LOG: duration: 1.2 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 04:31:46.000 UTC [12349] app_user@logsonic_test FATAL: duration: 5.4 ms  password authentication failed for user "admin"
+2026-04-01 04:35:37.000 UTC [12348] admin@metrics LOG: duration: 501.2 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 04:39:11.000 UTC [12348] admin@logsonic_test FATAL: duration: 1.2 ms  password authentication failed for user "admin"
+2026-04-01 04:42:07.000 UTC [12346] admin@metrics FATAL: duration: 501.2 ms  password authentication failed for user "admin"
+2026-04-01 04:46:23.000 UTC [12347] readonly@logsonic LOG: duration: 501.2 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 04:50:05.000 UTC [12347] api_service@logsonic_test LOG: duration: 501.2 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 04:53:54.000 UTC [12349] admin@logsonic LOG: duration: 23.1 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 04:56:47.000 UTC [12346] readonly@logsonic_test WARNING: duration: 0.5 ms  there is already a transaction in progress
+2026-04-01 05:00:33.000 UTC [12346] api_service@logsonic LOG: duration: 1200.0 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 05:04:06.000 UTC [12345] readonly@logsonic LOG: duration: 0.5 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 05:07:50.000 UTC [12345] api_service@metrics WARNING: duration: 150.0 ms  there is already a transaction in progress
+2026-04-01 05:11:13.000 UTC [12345] readonly@logsonic_test FATAL: duration: 0.1 ms  password authentication failed for user "admin"
+2026-04-01 05:14:56.000 UTC [12345] admin@metrics LOG: duration: 23.1 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 05:18:42.000 UTC [12347] api_service@metrics LOG: duration: 0.1 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 05:22:04.000 UTC [12348] app_user@logsonic_test WARNING: duration: 0.5 ms  there is already a transaction in progress
+2026-04-01 05:26:29.000 UTC [12345] readonly@metrics LOG: duration: 1.2 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 05:29:57.000 UTC [12348] readonly@logsonic_test ERROR: duration: 0.5 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 05:33:32.000 UTC [12348] admin@logsonic LOG: duration: 5.4 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 05:36:55.000 UTC [12346] app_user@logsonic_test LOG: duration: 501.2 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 05:40:08.000 UTC [12349] admin@logsonic LOG: duration: 501.2 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 05:43:47.000 UTC [12349] app_user@logsonic LOG: duration: 501.2 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 05:47:39.000 UTC [12348] api_service@logsonic_test FATAL: duration: 150.0 ms  password authentication failed for user "admin"
+2026-04-01 05:51:21.000 UTC [12348] admin@logsonic WARNING: duration: 501.2 ms  there is already a transaction in progress
+2026-04-01 05:54:48.000 UTC [12348] readonly@logsonic ERROR: duration: 501.2 ms  could not connect to the primary server: connection to server failed
+2026-04-01 05:58:57.000 UTC [12345] admin@metrics ERROR: duration: 0.1 ms  could not connect to the primary server: connection to server failed
+2026-04-01 06:01:51.000 UTC [12349] api_service@logsonic_test ERROR: duration: 5.4 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 06:05:28.000 UTC [12346] app_user@logsonic ERROR: duration: 150.0 ms  could not connect to the primary server: connection to server failed
+2026-04-01 06:09:13.000 UTC [12349] admin@logsonic_test ERROR: duration: 1.2 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 06:13:22.000 UTC [12348] app_user@logsonic LOG: duration: 1.2 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 06:16:18.000 UTC [12348] app_user@logsonic ERROR: duration: 150.0 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 06:20:07.000 UTC [12349] app_user@logsonic ERROR: duration: 23.1 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 06:23:31.000 UTC [12349] readonly@logsonic LOG: duration: 1200.0 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 06:27:48.000 UTC [12347] admin@logsonic LOG: duration: 0.1 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 06:31:19.000 UTC [12346] admin@metrics ERROR: duration: 0.1 ms  could not connect to the primary server: connection to server failed
+2026-04-01 06:34:20.000 UTC [12349] api_service@logsonic LOG: duration: 501.2 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 06:38:41.000 UTC [12348] app_user@metrics LOG: duration: 1200.0 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 06:41:40.000 UTC [12347] api_service@logsonic LOG: duration: 150.0 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 06:45:19.000 UTC [12349] api_service@logsonic LOG: duration: 1.2 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 06:49:19.000 UTC [12345] app_user@logsonic_test LOG: duration: 501.2 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 06:52:50.000 UTC [12349] app_user@logsonic LOG: duration: 23.1 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 06:55:59.000 UTC [12346] readonly@logsonic LOG: duration: 1.2 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 06:59:32.000 UTC [12348] readonly@logsonic_test FATAL: duration: 5.4 ms  password authentication failed for user "admin"
+2026-04-01 07:03:17.000 UTC [12348] api_service@logsonic LOG: duration: 150.0 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 07:06:51.000 UTC [12348] api_service@logsonic LOG: duration: 1.2 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 07:11:03.000 UTC [12347] app_user@metrics LOG: duration: 0.5 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 07:14:02.000 UTC [12349] admin@logsonic_test LOG: duration: 23.1 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 07:17:53.000 UTC [12347] readonly@logsonic_test LOG: duration: 501.2 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 07:21:56.000 UTC [12347] readonly@metrics FATAL: duration: 0.5 ms  password authentication failed for user "admin"
+2026-04-01 07:25:50.000 UTC [12348] api_service@metrics ERROR: duration: 150.0 ms  could not connect to the primary server: connection to server failed
+2026-04-01 07:29:24.000 UTC [12346] app_user@logsonic LOG: duration: 23.1 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 07:32:44.000 UTC [12349] api_service@metrics LOG: duration: 1.2 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 07:36:12.000 UTC [12345] api_service@logsonic LOG: duration: 23.1 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 07:40:04.000 UTC [12349] readonly@logsonic LOG: duration: 150.0 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 07:42:59.000 UTC [12345] app_user@metrics LOG: duration: 23.1 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 07:46:37.000 UTC [12349] app_user@logsonic ERROR: duration: 150.0 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 07:51:06.000 UTC [12348] app_user@metrics FATAL: duration: 501.2 ms  password authentication failed for user "admin"
+2026-04-01 07:54:29.000 UTC [12349] api_service@logsonic LOG: duration: 1.2 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 07:57:27.000 UTC [12346] readonly@logsonic ERROR: duration: 0.5 ms  could not connect to the primary server: connection to server failed
+2026-04-01 08:01:34.000 UTC [12346] api_service@logsonic ERROR: duration: 1200.0 ms  could not connect to the primary server: connection to server failed
+2026-04-01 08:05:03.000 UTC [12349] app_user@metrics LOG: duration: 23.1 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 08:08:29.000 UTC [12345] app_user@metrics LOG: duration: 1.2 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 08:12:37.000 UTC [12349] app_user@logsonic LOG: duration: 23.1 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 08:15:43.000 UTC [12346] app_user@logsonic LOG: duration: 1200.0 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 08:19:58.000 UTC [12348] api_service@metrics LOG: duration: 501.2 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 08:23:18.000 UTC [12349] app_user@logsonic_test LOG: duration: 0.1 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 08:27:00.000 UTC [12349] app_user@metrics ERROR: duration: 23.1 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 08:30:38.000 UTC [12348] readonly@metrics FATAL: duration: 1.2 ms  password authentication failed for user "admin"
+2026-04-01 08:34:23.000 UTC [12346] app_user@metrics LOG: duration: 1.2 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 08:38:02.000 UTC [12347] app_user@logsonic FATAL: duration: 23.1 ms  password authentication failed for user "admin"
+2026-04-01 08:41:36.000 UTC [12346] app_user@logsonic LOG: duration: 1200.0 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 08:44:33.000 UTC [12348] readonly@logsonic LOG: duration: 150.0 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 08:48:08.000 UTC [12349] admin@logsonic WARNING: duration: 501.2 ms  there is already a transaction in progress
+2026-04-01 08:51:59.000 UTC [12345] readonly@logsonic_test ERROR: duration: 501.2 ms  could not connect to the primary server: connection to server failed
+2026-04-01 08:55:46.000 UTC [12346] admin@metrics ERROR: duration: 501.2 ms  could not connect to the primary server: connection to server failed
+2026-04-01 08:59:14.000 UTC [12346] admin@metrics FATAL: duration: 0.5 ms  password authentication failed for user "admin"
+2026-04-01 09:02:39.000 UTC [12347] readonly@metrics ERROR: duration: 1.2 ms  could not connect to the primary server: connection to server failed
+2026-04-01 09:06:24.000 UTC [12349] app_user@metrics LOG: duration: 1.2 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 09:10:22.000 UTC [12345] admin@logsonic_test WARNING: duration: 1200.0 ms  there is already a transaction in progress
+2026-04-01 09:14:08.000 UTC [12348] admin@logsonic ERROR: duration: 1.2 ms  could not connect to the primary server: connection to server failed
+2026-04-01 09:17:54.000 UTC [12346] readonly@logsonic_test ERROR: duration: 1.2 ms  could not connect to the primary server: connection to server failed
+2026-04-01 09:21:35.000 UTC [12347] admin@metrics ERROR: duration: 5.4 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 09:24:48.000 UTC [12345] admin@metrics LOG: duration: 0.1 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 09:28:40.000 UTC [12348] readonly@logsonic_test LOG: duration: 1200.0 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 09:31:52.000 UTC [12348] readonly@logsonic_test LOG: duration: 1.2 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 09:35:19.000 UTC [12346] readonly@logsonic_test LOG: duration: 23.1 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 09:39:08.000 UTC [12348] api_service@logsonic FATAL: duration: 23.1 ms  password authentication failed for user "admin"
+2026-04-01 09:43:03.000 UTC [12345] readonly@logsonic_test LOG: duration: 1.2 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 09:46:02.000 UTC [12345] app_user@metrics LOG: duration: 23.1 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 09:50:04.000 UTC [12347] readonly@metrics LOG: duration: 0.5 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 09:53:46.000 UTC [12348] admin@metrics LOG: duration: 0.1 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 09:56:59.000 UTC [12349] api_service@logsonic LOG: duration: 23.1 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 10:01:13.000 UTC [12348] readonly@logsonic_test LOG: duration: 23.1 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 10:04:41.000 UTC [12345] app_user@metrics LOG: duration: 150.0 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 10:08:06.000 UTC [12345] api_service@logsonic LOG: duration: 5.4 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 10:11:20.000 UTC [12347] admin@logsonic_test LOG: duration: 1200.0 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 10:14:56.000 UTC [12345] api_service@logsonic_test ERROR: duration: 23.1 ms  could not connect to the primary server: connection to server failed
+2026-04-01 10:18:41.000 UTC [12348] readonly@logsonic FATAL: duration: 1200.0 ms  password authentication failed for user "admin"
+2026-04-01 10:22:29.000 UTC [12345] api_service@metrics LOG: duration: 5.4 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 10:26:22.000 UTC [12345] readonly@logsonic_test WARNING: duration: 501.2 ms  there is already a transaction in progress
+2026-04-01 10:30:16.000 UTC [12347] readonly@logsonic FATAL: duration: 1.2 ms  password authentication failed for user "admin"
+2026-04-01 10:33:46.000 UTC [12345] readonly@logsonic WARNING: duration: 0.1 ms  there is already a transaction in progress
+2026-04-01 10:37:16.000 UTC [12349] app_user@logsonic_test LOG: duration: 5.4 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 10:41:01.000 UTC [12348] admin@logsonic_test LOG: duration: 1.2 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 10:44:08.000 UTC [12349] admin@logsonic ERROR: duration: 150.0 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 10:48:08.000 UTC [12347] readonly@logsonic_test ERROR: duration: 23.1 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 10:51:59.000 UTC [12345] readonly@logsonic LOG: duration: 5.4 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 10:54:48.000 UTC [12347] api_service@metrics ERROR: duration: 1200.0 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 10:59:04.000 UTC [12345] api_service@logsonic LOG: duration: 150.0 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 11:02:00.000 UTC [12346] admin@logsonic_test LOG: duration: 23.1 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 11:05:43.000 UTC [12345] readonly@metrics ERROR: duration: 150.0 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 11:09:23.000 UTC [12349] app_user@logsonic_test LOG: duration: 1200.0 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 11:13:30.000 UTC [12345] readonly@metrics ERROR: duration: 501.2 ms  could not connect to the primary server: connection to server failed
+2026-04-01 11:16:28.000 UTC [12348] app_user@metrics LOG: duration: 501.2 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 11:20:25.000 UTC [12345] readonly@logsonic_test LOG: duration: 0.1 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 11:23:57.000 UTC [12349] admin@metrics LOG: duration: 5.4 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 11:27:49.000 UTC [12346] admin@logsonic_test LOG: duration: 501.2 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 11:31:35.000 UTC [12346] app_user@metrics FATAL: duration: 0.5 ms  password authentication failed for user "admin"
+2026-04-01 11:34:56.000 UTC [12345] admin@metrics FATAL: duration: 501.2 ms  password authentication failed for user "admin"
+2026-04-01 11:38:02.000 UTC [12349] api_service@logsonic_test LOG: duration: 1.2 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 11:42:28.000 UTC [12345] app_user@metrics FATAL: duration: 501.2 ms  password authentication failed for user "admin"
+2026-04-01 11:45:49.000 UTC [12346] admin@logsonic_test FATAL: duration: 1.2 ms  password authentication failed for user "admin"
+2026-04-01 11:49:18.000 UTC [12348] readonly@logsonic ERROR: duration: 5.4 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 11:52:40.000 UTC [12346] admin@logsonic ERROR: duration: 0.1 ms  could not connect to the primary server: connection to server failed
+2026-04-01 11:56:12.000 UTC [12348] app_user@metrics LOG: duration: 501.2 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 12:00:41.000 UTC [12349] api_service@metrics LOG: duration: 501.2 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 12:03:29.000 UTC [12349] readonly@logsonic WARNING: duration: 5.4 ms  there is already a transaction in progress
+2026-04-01 12:07:08.000 UTC [12346] app_user@logsonic_test LOG: duration: 23.1 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 12:11:24.000 UTC [12349] api_service@metrics WARNING: duration: 1200.0 ms  there is already a transaction in progress
+2026-04-01 12:14:16.000 UTC [12348] readonly@logsonic LOG: duration: 23.1 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 12:18:37.000 UTC [12347] admin@metrics LOG: duration: 1.2 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 12:21:51.000 UTC [12345] app_user@metrics LOG: duration: 23.1 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 12:26:02.000 UTC [12347] readonly@metrics LOG: duration: 23.1 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 12:29:05.000 UTC [12348] app_user@metrics LOG: duration: 1.2 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 12:32:19.000 UTC [12345] admin@metrics ERROR: duration: 0.1 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 12:36:42.000 UTC [12346] readonly@metrics LOG: duration: 150.0 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 12:39:53.000 UTC [12349] app_user@logsonic_test LOG: duration: 150.0 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 12:43:57.000 UTC [12345] app_user@metrics WARNING: duration: 0.1 ms  there is already a transaction in progress
+2026-04-01 12:47:07.000 UTC [12345] app_user@logsonic WARNING: duration: 501.2 ms  there is already a transaction in progress
+2026-04-01 12:51:19.000 UTC [12345] admin@metrics LOG: duration: 5.4 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 12:54:02.000 UTC [12349] app_user@logsonic LOG: duration: 5.4 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 12:58:05.000 UTC [12347] readonly@metrics ERROR: duration: 0.1 ms  could not connect to the primary server: connection to server failed
+2026-04-01 13:01:26.000 UTC [12349] readonly@logsonic LOG: duration: 150.0 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 13:05:13.000 UTC [12345] admin@logsonic_test LOG: duration: 23.1 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 13:08:45.000 UTC [12347] api_service@logsonic FATAL: duration: 1200.0 ms  password authentication failed for user "admin"
+2026-04-01 13:13:01.000 UTC [12348] admin@logsonic LOG: duration: 23.1 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 13:16:38.000 UTC [12349] admin@logsonic WARNING: duration: 501.2 ms  there is already a transaction in progress
+2026-04-01 13:19:53.000 UTC [12347] api_service@metrics WARNING: duration: 150.0 ms  there is already a transaction in progress
+2026-04-01 13:23:15.000 UTC [12349] readonly@logsonic LOG: duration: 0.5 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 13:27:23.000 UTC [12348] app_user@logsonic LOG: duration: 23.1 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 13:30:49.000 UTC [12348] app_user@logsonic LOG: duration: 501.2 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 13:34:07.000 UTC [12349] admin@metrics ERROR: duration: 150.0 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 13:37:53.000 UTC [12348] readonly@metrics LOG: duration: 5.4 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 13:41:56.000 UTC [12347] readonly@logsonic LOG: duration: 1.2 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 13:44:51.000 UTC [12347] app_user@metrics LOG: duration: 0.5 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 13:49:10.000 UTC [12347] app_user@logsonic ERROR: duration: 5.4 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 13:52:49.000 UTC [12345] app_user@metrics LOG: duration: 150.0 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 13:55:44.000 UTC [12347] api_service@metrics FATAL: duration: 1200.0 ms  password authentication failed for user "admin"
+2026-04-01 13:59:55.000 UTC [12346] readonly@metrics LOG: duration: 501.2 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 14:03:21.000 UTC [12345] app_user@logsonic LOG: duration: 150.0 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 14:06:26.000 UTC [12345] readonly@logsonic_test ERROR: duration: 0.5 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 14:10:38.000 UTC [12348] app_user@metrics WARNING: duration: 1.2 ms  there is already a transaction in progress
+2026-04-01 14:13:43.000 UTC [12346] app_user@logsonic_test FATAL: duration: 1.2 ms  password authentication failed for user "admin"
+2026-04-01 14:17:21.000 UTC [12347] api_service@logsonic_test LOG: duration: 23.1 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 14:20:51.000 UTC [12345] admin@logsonic_test LOG: duration: 0.1 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 14:24:59.000 UTC [12348] readonly@logsonic_test LOG: duration: 23.1 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 14:28:52.000 UTC [12347] readonly@logsonic LOG: duration: 1.2 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 14:31:55.000 UTC [12349] app_user@logsonic LOG: duration: 23.1 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 14:35:31.000 UTC [12349] readonly@logsonic ERROR: duration: 5.4 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 14:39:31.000 UTC [12349] api_service@logsonic_test LOG: duration: 150.0 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 14:43:01.000 UTC [12349] app_user@metrics LOG: duration: 1.2 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 14:46:17.000 UTC [12349] admin@metrics WARNING: duration: 150.0 ms  there is already a transaction in progress
+2026-04-01 14:50:24.000 UTC [12349] api_service@metrics LOG: duration: 150.0 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 14:53:24.000 UTC [12346] app_user@metrics LOG: duration: 150.0 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 14:57:12.000 UTC [12347] app_user@logsonic_test LOG: duration: 5.4 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 15:01:33.000 UTC [12349] app_user@logsonic LOG: duration: 150.0 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 15:05:07.000 UTC [12347] admin@logsonic FATAL: duration: 23.1 ms  password authentication failed for user "admin"
+2026-04-01 15:08:09.000 UTC [12347] api_service@metrics LOG: duration: 5.4 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 15:12:17.000 UTC [12349] api_service@logsonic ERROR: duration: 0.5 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 15:15:06.000 UTC [12348] readonly@metrics LOG: duration: 0.5 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 15:18:56.000 UTC [12346] admin@logsonic LOG: duration: 0.5 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 15:22:41.000 UTC [12348] app_user@logsonic LOG: duration: 5.4 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 15:26:10.000 UTC [12347] admin@metrics LOG: duration: 0.5 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 15:30:06.000 UTC [12347] readonly@logsonic LOG: duration: 150.0 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 15:33:23.000 UTC [12348] readonly@metrics LOG: duration: 1.2 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 15:37:00.000 UTC [12349] readonly@logsonic LOG: duration: 5.4 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 15:40:50.000 UTC [12346] api_service@metrics WARNING: duration: 23.1 ms  there is already a transaction in progress
+2026-04-01 15:44:42.000 UTC [12348] api_service@logsonic_test LOG: duration: 1.2 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 15:48:24.000 UTC [12349] app_user@logsonic ERROR: duration: 1.2 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 15:51:25.000 UTC [12348] api_service@logsonic WARNING: duration: 150.0 ms  there is already a transaction in progress
+2026-04-01 15:54:50.000 UTC [12345] admin@metrics LOG: duration: 1200.0 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 15:58:44.000 UTC [12349] app_user@logsonic LOG: duration: 23.1 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 16:02:05.000 UTC [12348] admin@logsonic FATAL: duration: 501.2 ms  password authentication failed for user "admin"
+2026-04-01 16:05:43.000 UTC [12348] readonly@logsonic LOG: duration: 1.2 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 16:09:35.000 UTC [12346] app_user@metrics LOG: duration: 1.2 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 16:13:12.000 UTC [12347] app_user@metrics LOG: duration: 0.5 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 16:17:18.000 UTC [12349] api_service@logsonic LOG: duration: 0.5 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 16:21:03.000 UTC [12346] readonly@logsonic_test LOG: duration: 5.4 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 16:24:43.000 UTC [12345] app_user@logsonic_test LOG: duration: 0.1 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 16:27:32.000 UTC [12348] readonly@metrics LOG: duration: 23.1 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 16:31:18.000 UTC [12349] admin@metrics LOG: duration: 1200.0 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 16:35:34.000 UTC [12347] readonly@logsonic_test LOG: duration: 0.1 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 16:38:50.000 UTC [12345] app_user@metrics WARNING: duration: 0.5 ms  there is already a transaction in progress
+2026-04-01 16:41:50.000 UTC [12346] app_user@logsonic LOG: duration: 0.5 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 16:46:10.000 UTC [12347] readonly@logsonic_test ERROR: duration: 0.1 ms  could not connect to the primary server: connection to server failed
+2026-04-01 16:49:44.000 UTC [12349] app_user@logsonic_test ERROR: duration: 501.2 ms  could not connect to the primary server: connection to server failed
+2026-04-01 16:53:17.000 UTC [12348] admin@logsonic_test LOG: duration: 0.1 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 16:56:30.000 UTC [12348] readonly@logsonic LOG: duration: 150.0 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 17:00:27.000 UTC [12348] readonly@metrics LOG: duration: 150.0 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 17:04:13.000 UTC [12345] readonly@logsonic ERROR: duration: 1200.0 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 17:07:31.000 UTC [12347] readonly@metrics ERROR: duration: 23.1 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 17:11:43.000 UTC [12346] readonly@logsonic ERROR: duration: 0.5 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 17:15:19.000 UTC [12348] app_user@metrics ERROR: duration: 0.1 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 17:17:59.000 UTC [12346] app_user@logsonic WARNING: duration: 150.0 ms  there is already a transaction in progress
+2026-04-01 17:22:31.000 UTC [12346] admin@logsonic LOG: duration: 0.1 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 17:25:52.000 UTC [12345] app_user@logsonic_test LOG: duration: 501.2 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 17:29:37.000 UTC [12347] api_service@logsonic LOG: duration: 150.0 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 17:33:08.000 UTC [12349] app_user@metrics LOG: duration: 501.2 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 17:36:27.000 UTC [12348] api_service@logsonic LOG: duration: 150.0 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 17:40:24.000 UTC [12347] app_user@logsonic_test LOG: duration: 1.2 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 17:44:00.000 UTC [12349] app_user@logsonic LOG: duration: 501.2 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 17:46:56.000 UTC [12347] readonly@metrics LOG: duration: 0.1 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 17:50:58.000 UTC [12349] readonly@logsonic LOG: duration: 501.2 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 17:54:55.000 UTC [12347] readonly@metrics LOG: duration: 0.1 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 17:58:13.000 UTC [12345] api_service@metrics LOG: duration: 1.2 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 18:02:10.000 UTC [12346] readonly@logsonic LOG: duration: 501.2 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 18:05:06.000 UTC [12349] readonly@logsonic FATAL: duration: 501.2 ms  password authentication failed for user "admin"
+2026-04-01 18:08:46.000 UTC [12349] readonly@metrics LOG: duration: 150.0 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 18:12:15.000 UTC [12349] api_service@metrics LOG: duration: 23.1 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 18:16:07.000 UTC [12345] readonly@metrics FATAL: duration: 501.2 ms  password authentication failed for user "admin"
+2026-04-01 18:19:49.000 UTC [12345] readonly@logsonic LOG: duration: 0.5 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 18:23:07.000 UTC [12346] readonly@logsonic LOG: duration: 0.5 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 18:27:11.000 UTC [12349] app_user@logsonic FATAL: duration: 1.2 ms  password authentication failed for user "admin"
+2026-04-01 18:31:05.000 UTC [12345] api_service@metrics ERROR: duration: 0.1 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 18:34:02.000 UTC [12348] app_user@logsonic ERROR: duration: 0.5 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 18:38:20.000 UTC [12345] app_user@logsonic_test LOG: duration: 0.1 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 18:42:10.000 UTC [12348] admin@logsonic_test FATAL: duration: 23.1 ms  password authentication failed for user "admin"
+2026-04-01 18:44:50.000 UTC [12346] admin@metrics LOG: duration: 23.1 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 18:48:28.000 UTC [12348] app_user@logsonic_test LOG: duration: 1.2 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 18:52:03.000 UTC [12345] admin@logsonic LOG: duration: 23.1 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 18:56:29.000 UTC [12348] api_service@logsonic_test WARNING: duration: 23.1 ms  there is already a transaction in progress
+2026-04-01 18:59:25.000 UTC [12347] api_service@metrics LOG: duration: 0.1 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 19:03:23.000 UTC [12345] api_service@logsonic_test ERROR: duration: 0.1 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 19:07:29.000 UTC [12348] readonly@metrics ERROR: duration: 0.1 ms  could not connect to the primary server: connection to server failed
+2026-04-01 19:11:04.000 UTC [12346] readonly@logsonic_test LOG: duration: 0.1 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 19:13:59.000 UTC [12349] api_service@logsonic LOG: duration: 0.1 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 19:18:00.000 UTC [12349] admin@metrics LOG: duration: 1200.0 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 19:21:52.000 UTC [12349] readonly@logsonic_test FATAL: duration: 150.0 ms  password authentication failed for user "admin"
+2026-04-01 19:25:22.000 UTC [12347] app_user@logsonic LOG: duration: 23.1 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 19:28:24.000 UTC [12347] api_service@logsonic ERROR: duration: 0.1 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 19:32:24.000 UTC [12347] readonly@metrics LOG: duration: 5.4 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 19:35:56.000 UTC [12346] app_user@logsonic_test LOG: duration: 23.1 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 19:39:57.000 UTC [12346] app_user@logsonic_test LOG: duration: 501.2 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 19:43:01.000 UTC [12346] app_user@logsonic_test FATAL: duration: 23.1 ms  password authentication failed for user "admin"
+2026-04-01 19:46:54.000 UTC [12349] app_user@metrics LOG: duration: 1200.0 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 19:50:28.000 UTC [12346] readonly@metrics ERROR: duration: 501.2 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 19:53:37.000 UTC [12346] api_service@logsonic LOG: duration: 0.1 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 19:57:20.000 UTC [12345] admin@metrics LOG: duration: 23.1 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 20:00:46.000 UTC [12348] admin@metrics ERROR: duration: 150.0 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 20:04:59.000 UTC [12347] readonly@logsonic LOG: duration: 1200.0 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 20:08:23.000 UTC [12345] admin@metrics LOG: duration: 150.0 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 20:12:18.000 UTC [12349] api_service@metrics LOG: duration: 150.0 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 20:15:18.000 UTC [12345] admin@logsonic_test LOG: duration: 0.5 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 20:19:09.000 UTC [12345] api_service@metrics LOG: duration: 23.1 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 20:22:57.000 UTC [12349] readonly@logsonic LOG: duration: 5.4 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 20:26:25.000 UTC [12346] api_service@metrics ERROR: duration: 23.1 ms  could not connect to the primary server: connection to server failed
+2026-04-01 20:30:30.000 UTC [12345] admin@logsonic_test LOG: duration: 0.1 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 20:33:57.000 UTC [12347] app_user@metrics ERROR: duration: 1200.0 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 20:37:22.000 UTC [12348] api_service@logsonic_test FATAL: duration: 1200.0 ms  password authentication failed for user "admin"
+2026-04-01 20:40:33.000 UTC [12345] readonly@logsonic ERROR: duration: 5.4 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 20:44:56.000 UTC [12346] api_service@logsonic ERROR: duration: 150.0 ms  could not connect to the primary server: connection to server failed
+2026-04-01 20:48:04.000 UTC [12345] app_user@logsonic_test ERROR: duration: 1.2 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 20:51:43.000 UTC [12345] app_user@logsonic_test LOG: duration: 0.5 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 20:55:36.000 UTC [12346] admin@metrics LOG: duration: 150.0 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 20:58:48.000 UTC [12348] readonly@logsonic_test LOG: duration: 150.0 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 21:03:01.000 UTC [12346] readonly@logsonic_test LOG: duration: 150.0 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 21:06:30.000 UTC [12349] admin@metrics LOG: duration: 501.2 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 21:10:26.000 UTC [12346] readonly@logsonic LOG: duration: 0.1 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 21:14:00.000 UTC [12347] api_service@metrics WARNING: duration: 0.1 ms  there is already a transaction in progress
+2026-04-01 21:17:13.000 UTC [12348] admin@logsonic_test LOG: duration: 1.2 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 21:21:17.000 UTC [12346] admin@metrics LOG: duration: 150.0 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 21:24:31.000 UTC [12345] api_service@metrics WARNING: duration: 1.2 ms  there is already a transaction in progress
+2026-04-01 21:27:33.000 UTC [12346] admin@logsonic_test LOG: duration: 150.0 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 21:32:05.000 UTC [12347] readonly@metrics WARNING: duration: 0.5 ms  there is already a transaction in progress
+2026-04-01 21:35:00.000 UTC [12345] app_user@logsonic_test ERROR: duration: 0.1 ms  could not connect to the primary server: connection to server failed
+2026-04-01 21:38:44.000 UTC [12348] readonly@logsonic ERROR: duration: 501.2 ms  could not connect to the primary server: connection to server failed
+2026-04-01 21:42:36.000 UTC [12349] app_user@logsonic LOG: duration: 0.1 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 21:46:32.000 UTC [12347] app_user@logsonic LOG: duration: 1200.0 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 21:49:56.000 UTC [12347] readonly@metrics LOG: duration: 0.1 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 21:52:57.000 UTC [12349] readonly@logsonic_test FATAL: duration: 501.2 ms  password authentication failed for user "admin"
+2026-04-01 21:56:41.000 UTC [12348] app_user@metrics LOG: duration: 501.2 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 22:00:23.000 UTC [12346] app_user@logsonic_test WARNING: duration: 501.2 ms  there is already a transaction in progress
+2026-04-01 22:04:06.000 UTC [12347] readonly@logsonic LOG: duration: 5.4 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 22:07:35.000 UTC [12347] readonly@logsonic_test LOG: duration: 5.4 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 22:11:38.000 UTC [12348] api_service@metrics WARNING: duration: 501.2 ms  there is already a transaction in progress
+2026-04-01 22:15:13.000 UTC [12346] api_service@logsonic LOG: duration: 1200.0 ms  disconnection: session time: 0:05:23.456 user=app_user database=logsonic host=172.16.0.5
+2026-04-01 22:19:05.000 UTC [12348] api_service@logsonic_test LOG: duration: 23.1 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 22:22:02.000 UTC [12345] api_service@logsonic ERROR: duration: 1.2 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 22:26:01.000 UTC [12348] admin@logsonic_test LOG: duration: 150.0 ms  automatic vacuum of table "logsonic.public.logs": index scans: 0
+2026-04-01 22:29:52.000 UTC [12345] readonly@metrics FATAL: duration: 0.5 ms  password authentication failed for user "admin"
+2026-04-01 22:33:02.000 UTC [12346] api_service@logsonic_test LOG: duration: 0.5 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 22:36:50.000 UTC [12348] admin@logsonic ERROR: duration: 0.1 ms  could not connect to the primary server: connection to server failed
+2026-04-01 22:40:06.000 UTC [12346] api_service@logsonic LOG: duration: 1200.0 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 22:43:54.000 UTC [12346] app_user@logsonic ERROR: duration: 150.0 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 22:48:05.000 UTC [12349] admin@logsonic FATAL: duration: 0.5 ms  password authentication failed for user "admin"
+2026-04-01 22:51:09.000 UTC [12346] readonly@logsonic_test WARNING: duration: 1200.0 ms  there is already a transaction in progress
+2026-04-01 22:54:57.000 UTC [12347] admin@logsonic_test LOG: duration: 150.0 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 22:58:45.000 UTC [12349] admin@metrics LOG: duration: 501.2 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 23:02:31.000 UTC [12345] api_service@metrics LOG: duration: 501.2 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 23:05:53.000 UTC [12349] readonly@logsonic_test LOG: duration: 5.4 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 23:09:10.000 UTC [12349] admin@logsonic LOG: duration: 0.5 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 23:12:47.000 UTC [12346] api_service@logsonic_test LOG: duration: 0.5 ms  statement: SELECT * FROM logs WHERE created_at > NOW() - INTERVAL '1 hour'
+2026-04-01 23:16:43.000 UTC [12346] admin@metrics LOG: duration: 150.0 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 23:20:38.000 UTC [12349] api_service@logsonic LOG: duration: 23.1 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 23:23:53.000 UTC [12348] readonly@logsonic_test LOG: duration: 0.5 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 23:27:29.000 UTC [12348] admin@logsonic_test ERROR: duration: 1200.0 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 23:31:07.000 UTC [12349] readonly@metrics LOG: duration: 150.0 ms  statement: UPDATE sessions SET last_seen = NOW() WHERE id = $1
+2026-04-01 23:34:41.000 UTC [12346] app_user@logsonic LOG: duration: 5.4 ms  checkpoint complete: wrote 312 buffers (1.9%); 0 WAL file(s) added
+2026-04-01 23:38:42.000 UTC [12348] api_service@logsonic_test LOG: duration: 1200.0 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-01 23:42:11.000 UTC [12346] api_service@logsonic_test ERROR: duration: 23.1 ms  could not connect to the primary server: connection to server failed
+2026-04-01 23:45:23.000 UTC [12347] app_user@logsonic LOG: duration: 150.0 ms  statement: INSERT INTO log_entries (id, message, level, timestamp) VALUES ($1, $2, $3, $4)
+2026-04-01 23:49:28.000 UTC [12345] admin@logsonic_test LOG: duration: 0.1 ms  connection authorized: user=app_user database=logsonic
+2026-04-01 23:52:15.000 UTC [12345] app_user@logsonic ERROR: duration: 0.5 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-01 23:55:55.000 UTC [12346] readonly@metrics ERROR: duration: 150.0 ms  duplicate key value violates unique constraint "log_entries_pkey"
+2026-04-02 00:00:18.000 UTC [12347] readonly@logsonic LOG: duration: 5.4 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic
+2026-04-02 00:03:29.000 UTC [12349] readonly@logsonic_test LOG: duration: 23.1 ms  connection received: host=172.16.0.5 port=43210 user=app_user database=logsonic

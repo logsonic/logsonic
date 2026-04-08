@@ -1,4 +1,4 @@
-import { DetectionResult, FilePreview, Pattern } from '@/components/Import/types';
+import { DetectionResult, FilePreview, FileSessionOptions, ImportFile, Pattern } from '@/components/Import/types';
 import { parseLogs } from '@/lib/api-client';
 import {
   GrokPatternRequest,
@@ -8,9 +8,6 @@ import {
 import { create } from 'zustand';
 
 // Default pattern to use if no pattern is detected
-
-
-// Custom pattern option that will always be available
 export const DEFAULT_PATTERN: Pattern = {
   name: "Custom Pattern",
   pattern: "%{GREEDYDATA:message}",
@@ -20,12 +17,24 @@ export const DEFAULT_PATTERN: Pattern = {
   priority: 0
 };
 
+export const DEFAULT_SESSION_OPTIONS: FileSessionOptions = {
+  smartDecoder: true,
+  timezone: '',
+  year: '',
+  month: '',
+  day: '',
+};
 
 // Add a type for the provider upload handler
 export type ProviderUploadHandler = (handleImport: (chunkSize: number, callback: (lines: string[], totalLines: number, next: () => void) => Promise<void>) => Promise<void>) => Promise<void>;
 
 export type UploadStep = 1 | 2 | 3 | 4;
 export type ImportSource = string | null;
+
+let fileIdCounter = 0;
+export function generateFileId(): string {
+  return `file-${Date.now()}-${++fileIdCounter}`;
+}
 
 interface ImportState {
   // Upload step tracking
@@ -34,14 +43,16 @@ interface ImportState {
   // Import source name
   importSource: ImportSource;
 
-
   readyToSelectPattern: boolean;
   readyToImportLogs: boolean;
-  // File data to import. Since every Import Provider could have a different file format, we leave it generic
 
-  // Used for display to the user
-  selectedFileName: string | null
-  selectedFileHandle: object | null
+  // --- Multi-file state ---
+  files: ImportFile[];
+  activeFileId: string | null; // Which file is currently being configured in detail
+
+  // --- Legacy single-file state (kept for CloudWatch compatibility) ---
+  selectedFileName: string | null;
+  selectedFileHandle: object | null;
   filePreviewBuffer: FilePreview | null;
 
   // Pattern data
@@ -53,6 +64,7 @@ interface ImportState {
   createNewPatternName: string;
   createNewPatternDescription: string;
   createNewPatternPriority: number;
+
   // Detection results
   detectionResult: DetectionResult | null;
   suggestResponse: SuggestResponse | null;
@@ -85,7 +97,18 @@ interface ImportState {
   // Metadata
   metadata: Record<string, string | number | boolean>;
   providerUploadHandler: ProviderUploadHandler | null;
-  // Actions
+
+  // --- Multi-file actions ---
+  addFiles: (newFiles: File[]) => void;
+  removeFile: (fileId: string) => void;
+  setActiveFileId: (fileId: string | null) => void;
+  updateFile: (fileId: string, updates: Partial<ImportFile>) => void;
+  updateFilePattern: (fileId: string, pattern: Pattern) => void;
+  updateFileSessionOptions: (fileId: string, options: Partial<FileSessionOptions>) => void;
+  setAllFilesPattern: (pattern: Pattern) => void;
+  getActiveFile: () => ImportFile | null;
+
+  // --- Legacy actions ---
   setCurrentStep: (step: UploadStep) => void;
   setImportSource: (source: ImportSource) => void;
   setSelectedFileName: (filename: string | null) => void;
@@ -166,11 +189,90 @@ export const useImportStore = create<ImportState>((set, get) => ({
   metadata: {},
   providerUploadHandler: null,
 
-  // Actions
+  // Multi-file state
+  files: [],
+  activeFileId: null,
+
+  // --- Multi-file actions ---
+
+  addFiles: (newFiles: File[]) => {
+    const importFiles: ImportFile[] = newFiles.map(file => ({
+      id: generateFileId(),
+      file,
+      fileName: file.name,
+      fileSize: file.size,
+      previewLines: [],
+      approxLines: 0,
+      detectedPattern: null,
+      selectedPattern: null,
+      isCustomPattern: false,
+      customPattern: null,
+      customPatternTokens: {},
+      detectionStatus: 'pending',
+      detectionError: null,
+      parsedLogs: [],
+      uploadStatus: 'pending',
+      uploadProgress: 0,
+      uploadError: null,
+      totalLinesProcessed: 0,
+      sessionOptions: { ...DEFAULT_SESSION_OPTIONS },
+    }));
+    set(state => ({ files: [...state.files, ...importFiles] }));
+  },
+
+  removeFile: (fileId: string) => {
+    set(state => ({
+      files: state.files.filter(f => f.id !== fileId),
+      activeFileId: state.activeFileId === fileId ? null : state.activeFileId,
+    }));
+  },
+
+  setActiveFileId: (fileId: string | null) => set({ activeFileId: fileId }),
+
+  updateFile: (fileId: string, updates: Partial<ImportFile>) => {
+    set(state => ({
+      files: state.files.map(f => f.id === fileId ? { ...f, ...updates } : f),
+    }));
+  },
+
+  updateFilePattern: (fileId: string, pattern: Pattern) => {
+    set(state => ({
+      files: state.files.map(f =>
+        f.id === fileId
+          ? { ...f, selectedPattern: pattern, isCustomPattern: pattern.name === DEFAULT_PATTERN.name }
+          : f
+      ),
+    }));
+  },
+
+  updateFileSessionOptions: (fileId: string, options: Partial<FileSessionOptions>) => {
+    set(state => ({
+      files: state.files.map(f =>
+        f.id === fileId
+          ? { ...f, sessionOptions: { ...f.sessionOptions, ...options } }
+          : f
+      ),
+    }));
+  },
+
+  setAllFilesPattern: (pattern: Pattern) => {
+    set(state => ({
+      files: state.files.map(f => ({
+        ...f,
+        selectedPattern: pattern,
+        isCustomPattern: pattern.name === DEFAULT_PATTERN.name,
+      })),
+    }));
+  },
+
+  getActiveFile: () => {
+    const { files, activeFileId } = get();
+    return files.find(f => f.id === activeFileId) || null;
+  },
+
+  // --- Legacy actions (unchanged) ---
   setCurrentStep: (currentStep) => set({ currentStep }),
-
   setImportSource: (importSource) => set({ importSource }),
-
   setSelectedFileName: (selectedFileName) => set({ selectedFileName }),
   setSelectedFileHandle: (selectedFileHandle) => set({ selectedFileHandle }),
   setFilePreviewBuffer: (filePreviewBuffer) => set({ filePreviewBuffer }),
@@ -178,7 +280,6 @@ export const useImportStore = create<ImportState>((set, get) => ({
   setReadyToImportLogs: (readyToImportLogs) => set({ readyToImportLogs }),
 
   setAvailablePatterns: (availablePatterns) => {
-    // Always include the Custom Pattern option
     const patternsWithCustom = [
       DEFAULT_PATTERN as unknown as GrokPatternRequest,
       ...availablePatterns.filter(p => p.name !== DEFAULT_PATTERN.name)
@@ -186,13 +287,10 @@ export const useImportStore = create<ImportState>((set, get) => ({
     set({ availablePatterns: patternsWithCustom });
   },
 
-
-  // Clear custom pattern selection if selected pattern is not custom
   setSelectedPattern: (selectedPattern) => {
     if (selectedPattern?.name !== DEFAULT_PATTERN.name) {
       set({ isCreateNewPatternSelected: false });
-    }
-    else {
+    } else {
       set({ isCreateNewPatternSelected: true });
     }
     set({ selectedPattern });
@@ -202,51 +300,33 @@ export const useImportStore = create<ImportState>((set, get) => ({
   setCreateNewPatternDescription: (description: string) => set({ createNewPatternDescription: description }),
   setCreateNewPatternPriority: (priority: number) => set({ createNewPatternPriority: priority }),
   setCreateNewPattern: (createNewPattern = DEFAULT_PATTERN) => {
-
     set({ createNewPattern });
     set({ isCreateNewPatternSelected: true });
   },
 
   setCreateNewPatternTokens: (tokens: Record<string, string>) => set({ createNewPatternTokens: tokens }),
   setDetectionResult: (detectionResult) => set({ detectionResult }),
-
   setSuggestResponse: (suggestResponse) => set({ suggestResponse }),
-
   setIsUploading: (isUploading) => set({ isUploading }),
-
   setUploadProgress: (uploadProgress) => set({ uploadProgress }),
-
   setApproxLines: (approxLines) => set({ approxLines }),
   setTotalLines: (totalLines) => set({ totalLines }),
   setSelectedSources: (selectedSources) => set({ selectedSources }),
-
   setSessionID: (sessionID) => set({ sessionID }),
-
   setSessionOptionFileName: (fileName: string) => set({ sessionOptionsFileName: fileName }),
   setSessionOptionSmartDecoder: (smartDecoder: boolean) => set({ sessionOptionsSmartDecoder: smartDecoder }),
   setSessionOptionTimezone: (timezone: string) => set({ sessionOptionsTimezone: timezone }),
   setSessionOptionYear: (year: string) => set({ sessionOptionsYear: year }),
   setSessionOptionMonth: (month: string) => set({ sessionOptionsMonth: month }),
   setSessionOptionDay: (day: string) => set({ sessionOptionsDay: day }),
-
   setError: (error) => set({ error }),
-
   setParsedLogs: (parsedLogs) => set({ parsedLogs }),
-
   setIsTestingPattern: (isTestingPattern) => set({ isTestingPattern }),
 
-  // Handle file selection and preview generation
-
-
-  // Create a file from blob content (used for CloudWatch logs)
   setFileFromBlob: async (content, fileName) => {
     console.log(`Setting file from blob: ${fileName}, content length: ${content.length} bytes`);
-
-    // Create a File object
     const file = new File([content], fileName, { type: 'text/plain' });
 
-
-    // Validate file content
     if (!content || content.length === 0) {
       const error = "Empty content provided for CloudWatch logs";
       console.error(error);
@@ -254,33 +334,24 @@ export const useImportStore = create<ImportState>((set, get) => ({
       return;
     }
 
-    // Generate preview
     const previewLines = content.split('\n');
     const approxLines = previewLines.length;
 
-    console.log(`Generated preview with ${previewLines.length} lines, using first ${Math.min(100, previewLines.length)} for display`);
-
-    // Set preview data and move to step 2
     set({
       filePreviewBuffer: {
-        lines: previewLines.slice(0, 100), // Limit display lines to 100
+        lines: previewLines.slice(0, 100),
         filename: fileName,
       },
       approxLines,
-      sessionOptionsFileName: fileName, // Set the filename for the session
-      currentStep: 2 // Ensure we move to step 2 for pattern detection
+      sessionOptionsFileName: fileName,
+      currentStep: 2
     });
-
-    console.log("CloudWatch logs ready for pattern detection, advancing to step 2");
   },
 
-  // Handle pattern operations
   handlePatternOperation: async (pattern, updateStore = true, onSuccess, onError) => {
     const {
       selectedFileName,
-      selectedFileHandle,
       filePreviewBuffer,
-      sessionOptionsFileName,
       sessionOptionsSmartDecoder,
       sessionOptionsTimezone,
       sessionOptionsYear,
@@ -297,19 +368,15 @@ export const useImportStore = create<ImportState>((set, get) => ({
       return;
     }
 
-    set({
-      isTestingPattern: true,
-      error: null
-    });
+    set({ isTestingPattern: true, error: null });
 
     try {
       if (!filePreviewBuffer.lines || filePreviewBuffer.lines.length === 0) {
         throw new Error('No preview lines available to parse');
       }
 
-      const previewLines = filePreviewBuffer.lines.slice(0, 20); // Use first 20 lines for parsing test
+      const previewLines = filePreviewBuffer.lines.slice(0, 20);
 
-      // Build session options
       const sessionOptions: IngestSessionOptions = {
         name: pattern.name,
         pattern: pattern.pattern,
@@ -334,10 +401,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
       const parsedLogs = parseResult.logs || [];
 
       if (updateStore) {
-        set({
-          parsedLogs,
-          selectedPattern: pattern,
-        });
+        set({ parsedLogs, selectedPattern: pattern });
       }
 
       if (onSuccess) onSuccess(parsedLogs);
@@ -350,10 +414,8 @@ export const useImportStore = create<ImportState>((set, get) => ({
     }
   },
 
-  // Test the current pattern
   testPattern: async () => {
     const { selectedPattern, isCreateNewPatternSelected, createNewPattern } = get();
-
     const pattern = isCreateNewPatternSelected ? createNewPattern : selectedPattern;
 
     if (!pattern) {
@@ -363,9 +425,9 @@ export const useImportStore = create<ImportState>((set, get) => ({
 
     await get().handlePatternOperation(pattern);
   },
+
   setMetadata: (metadata: Record<string, string | number | boolean>) => set({ metadata }),
 
-  // Reset the store to default values
   reset: () => {
     console.log("Resetting import store");
     set({
@@ -398,14 +460,12 @@ export const useImportStore = create<ImportState>((set, get) => ({
       sessionOptionsDay: '',
       error: null,
       providerUploadHandler: null,
+      files: [],
+      activeFileId: null,
     });
   },
+
   setProviderUploadHandler: (handler: ProviderUploadHandler | null) => {
-    if (handler) {
-      set({ providerUploadHandler: handler });
-    }
-    else {
-      set({ providerUploadHandler: null });
-    }
+    set({ providerUploadHandler: handler || null });
   },
-})) 
+}));

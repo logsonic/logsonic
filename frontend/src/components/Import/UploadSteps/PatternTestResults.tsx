@@ -5,12 +5,28 @@ import type { PatternTestResultsProps } from '../types';
 import { getFieldColors, highlightLogLine } from '../utils/patternUtils';
 import StatusBanner from './StatusBanner';
 
-export const PatternTestResults: FC<Omit<PatternTestResultsProps, 'parsedLogs' | 'isLoading' | 'error'>> = ({
+interface PatternTestResultsExtendedProps extends Omit<PatternTestResultsProps, 'parsedLogs' | 'isLoading' | 'error'> {
+  // When provided, these override the global store (used for per-file cards)
+  parsedLogsOverride?: Record<string, string>[];
+  isLoadingOverride?: boolean;
+  errorOverride?: string | null;
+}
+
+export const PatternTestResults: FC<PatternTestResultsExtendedProps> = ({
   logs,
   pattern,
-  customPatterns
+  customPatterns,
+  parsedLogsOverride,
+  isLoadingOverride,
+  errorOverride,
 }) => {
-  const { parsedLogs, isTestingPattern, error } = useImportStore();
+  const { parsedLogs: storeParsedLogs, isTestingPattern: storeIsTestingPattern, error: storeError } = useImportStore();
+
+  // Use override values when provided (multi-file mode), else fall back to global store
+  const parsedLogs  = parsedLogsOverride  !== undefined ? parsedLogsOverride  : storeParsedLogs;
+  const isTestingPattern = isLoadingOverride !== undefined ? isLoadingOverride : storeIsTestingPattern;
+  const error       = errorOverride       !== undefined ? errorOverride       : storeError;
+
   const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
   const [showStatusBanner, setShowStatusBanner] = useState(true);
   const [showErrorBanner, setShowErrorBanner] = useState(true);
@@ -28,7 +44,7 @@ export const PatternTestResults: FC<Omit<PatternTestResultsProps, 'parsedLogs' |
   const endIndex = Math.min(startIndex + logsPerPage, logs.length);
   const currentLogs = logs.slice(startIndex, endIndex);
 
-  const toggleRow = (idx: number) => {  
+  const toggleRow = (idx: number) => {
     setExpandedRows(prev => ({
       ...prev,
       [idx + startIndex]: !prev[idx + startIndex]
@@ -84,7 +100,7 @@ export const PatternTestResults: FC<Omit<PatternTestResultsProps, 'parsedLogs' |
   parsedLogs.forEach(log => {
     Object.keys(log).forEach(key => allFields.add(key));
   });
-  
+
   const fieldNames = Array.from(allFields);
   const fieldColors = getFieldColors(fieldNames);
 
@@ -93,7 +109,6 @@ export const PatternTestResults: FC<Omit<PatternTestResultsProps, 'parsedLogs' |
       {successfulMatches > 0 && showStatusBanner ? (
         <StatusBanner
           type="success"
-          
           title="Pattern test successful!"
           message={`Successfully parsed ${successfulMatches} of ${logs.length} log lines.`}
           onClose={() => setShowStatusBanner(false)}
@@ -106,7 +121,7 @@ export const PatternTestResults: FC<Omit<PatternTestResultsProps, 'parsedLogs' |
           onClose={() => setShowStatusBanner(false)}
         />
       ) : null}
-      
+
       <div className="flex flex-col flex-grow">
         <h3 className="text-lg font-medium p-2">Log Preview</h3>
         <div className="border rounded-md overflow-hidden shadow-sm flex flex-col">
@@ -114,18 +129,18 @@ export const PatternTestResults: FC<Omit<PatternTestResultsProps, 'parsedLogs' |
           <div className="grid grid-cols-[auto_1fr] bg-gray-50 border-b text-sm font-medium text-gray-600">
             <div className="px-4 py-3">Here is how Logsonic will parse your logs. Click on a row to expand it.</div>
           </div>
-          
+
           {/* Scrollable table body */}
           <div className="divide-y overflow-y-auto max-h-[400px]">
             {currentLogs.map((log, idx) => (
               <div key={idx} className="bg-white">
-                <div 
+                <div
                   className="grid grid-cols-[auto_1fr] hover:bg-gray-50 cursor-pointer transition-colors"
                   onClick={() => toggleRow(idx)}
                 >
                   <div className="px-4 py-3 font-mono text-sm truncate flex items-center">
-                    {expandedRows[idx + startIndex] ? 
-                      <ChevronDown className="h-5 w-5 mr-2 flex-shrink-0 text-gray-500" /> : 
+                    {expandedRows[idx + startIndex] ?
+                      <ChevronDown className="h-5 w-5 mr-2 flex-shrink-0 text-gray-500" /> :
                       <ChevronRight className="h-5 w-5 mr-2 flex-shrink-0 text-gray-500" />
                     }
                     {parsedLogs[idx + startIndex] ? (
@@ -141,7 +156,7 @@ export const PatternTestResults: FC<Omit<PatternTestResultsProps, 'parsedLogs' |
                     )}
                   </div>
                 </div>
-                
+
                 {/* Expanded row content */}
                 {expandedRows[idx + startIndex] && parsedLogs[idx + startIndex] && (
                   <div className="pl-14 pr-4 py-4 bg-gray-50 border-t">
@@ -163,8 +178,8 @@ export const PatternTestResults: FC<Omit<PatternTestResultsProps, 'parsedLogs' |
               </div>
             ))}
           </div>
-          
-          {/* Pagination navigation - always visible */}
+
+          {/* Pagination navigation */}
           <div className="flex justify-between items-center p-3 border-t bg-gray-50">
             <button
               onClick={goToPrevPage}
@@ -173,14 +188,13 @@ export const PatternTestResults: FC<Omit<PatternTestResultsProps, 'parsedLogs' |
                 currentPage === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'
               }`}
             >
-             <ArrowLeft className="h-4 w-4 mr-1" />
-             
+              <ArrowLeft className="h-4 w-4 mr-1" />
             </button>
-            
+
             <div className="text-sm text-gray-600">
               Showing {startIndex + 1}-{endIndex} of {logs.length} logs
             </div>
-            
+
             <button
               onClick={goToNextPage}
               disabled={currentPage >= totalPages - 1}
@@ -188,7 +202,6 @@ export const PatternTestResults: FC<Omit<PatternTestResultsProps, 'parsedLogs' |
                 currentPage >= totalPages - 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'
               }`}
             >
-              
               <ArrowRight className="h-4 w-4 ml-1" />
             </button>
           </div>
@@ -198,4 +211,4 @@ export const PatternTestResults: FC<Omit<PatternTestResultsProps, 'parsedLogs' |
   );
 };
 
-export default PatternTestResults; 
+export default PatternTestResults;

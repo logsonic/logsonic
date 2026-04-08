@@ -15,7 +15,7 @@ export const useFileSelectionService = () : LogSourceProviderService => {
       const text = e.target?.result as string;
 
       // Set approx lines
-      const lines = text.split('\n');
+      const lines = text.split(/\r?\n/).filter(line => line.length > 0);
       importStore.setApproxLines(lines.length);
       const preViewLines = lines.slice(0, 100);
       // TBD check if the file is binary or has no valid delimiter
@@ -36,7 +36,7 @@ export const useFileSelectionService = () : LogSourceProviderService => {
         const reader = new FileReader();
         reader.onload = async (e) => {
           const text = e.target?.result as string;
-          const lines = text.split('\n');
+          const lines = text.split(/\r?\n/).filter(line => line.length > 0);
           let totalLines = lines.length;
 
           const processChunk = async () => {

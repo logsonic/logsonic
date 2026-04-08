@@ -3,6 +3,11 @@
  * Run with: node e2e-test.mjs
  */
 import { chromium } from 'playwright';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SAMPLE_LOGS_DIR = path.resolve(__dirname, '../sample-logs');
 
 const BASE_URL = 'http://localhost:8080';
 const API_URL = 'http://localhost:8080/api/v1';
@@ -222,6 +227,127 @@ async function browserTests(browser) {
   }
 }
 
+// ─── Multi-file import tests ──────────────────────────────────────────────────
+async function multiFileImportTests(browser) {
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+  });
+  const page = await context.newPage();
+
+  // Capture console errors
+  const consoleErrors = [];
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  try {
+    // ── Navigate to import page ────────────────────────────────────────────
+    await section('Multi-File Import – Navigate to Import Page', async () => {
+      await page.goto(`${BASE_URL}/#/import`, { waitUntil: 'networkidle', timeout: 15000 });
+      await page.waitForSelector('text=Select Import Source', { timeout: 10000 });
+      await assert(await page.getByText('Select Import Source').count() > 0, 'Import page loaded');
+    });
+
+    // ── Select file source ─────────────────────────────────────────────────
+    await section('Multi-File Import – Select File Source', async () => {
+      await page.getByText('Upload Log File').click();
+      await page.waitForSelector('text=Drop your log files here', { timeout: 5000 });
+      await assert(await page.locator('text=Drop your log files here').count() > 0, 'File drop zone visible');
+      await assert(await page.locator('input[type="file"]').count() > 0, 'File input present');
+    });
+
+    // ── Upload multiple files ──────────────────────────────────────────────
+    await section('Multi-File Import – Upload 3 Sample Log Files', async () => {
+      await page.locator('input[type="file"]').setInputFiles([
+        `${SAMPLE_LOGS_DIR}/nginx-access.log`,
+        `${SAMPLE_LOGS_DIR}/apache.log`,
+        `${SAMPLE_LOGS_DIR}/linux-syslog.log`,
+      ]);
+
+      // App auto-advances to Step 2 (pattern detection) once file preview is loaded
+      await page.waitForSelector('text=Pattern Configuration', { timeout: 20000 });
+      await assert(await page.getByText('Pattern Configuration').count() > 0, 'Auto-advanced to pattern detection step');
+    });
+
+    // ── Pattern detection ──────────────────────────────────────────────────
+    await section('Multi-File Import – Auto-detect Patterns for Each File', async () => {
+      // Wait for all files to finish detection (no "Detecting..." or "Queued" badges remain)
+      await page.waitForFunction(() => {
+        const body = document.body.innerText;
+        return !body.includes('Detecting...') && !body.includes('Queued');
+      }, { timeout: 30000 });
+      await page.waitForTimeout(500);
+
+      const matched = await page.getByText('Pattern found').count();
+      const attention = await page.getByText('Manual selection needed').count();
+      await assert(matched + attention === 3, `All 3 files have detection results (${matched} matched, ${attention} need attention)`);
+
+      // Next button must be enabled (all files have selectedPattern and none still detecting)
+      await page.waitForFunction(() => {
+        const btns = Array.from(document.querySelectorAll('button'));
+        const next = btns.find(b => b.textContent?.trim() === 'Next');
+        return next && !next.disabled;
+      }, { timeout: 10000 });
+      await assert(true, 'Next button enabled after detection');
+    });
+
+    // ── Advance to confirm step ────────────────────────────────────────────
+    await section('Multi-File Import – Confirm Step UI', async () => {
+      await page.getByRole('button', { name: 'Next' }).last().click();
+      await page.waitForSelector('text=Files to Import', { timeout: 5000 });
+      await assert(await page.getByText('Files to Import').count() > 0, '"Files to Import" header shown');
+
+      // All 3 files should have checkboxes (pending state)
+      const checkboxCount = await page.locator('[id^="file-check-"]').count();
+      await assert(checkboxCount === 3, `3 per-file checkboxes shown (found ${checkboxCount})`);
+
+      // Import button label should reflect the selected count
+      await page.waitForSelector('button:has-text("Import 3 Files")', { timeout: 5000 });
+      await assert(true, '"Import 3 Files" button visible');
+
+      // Summary stats: 3 files card
+      const threeCard = await page.getByText('3', { exact: true }).count();
+      await assert(threeCard > 0, 'Summary shows "3" files');
+    });
+
+    // ── Trigger import and verify success ──────────────────────────────────
+    await section('Multi-File Import – Import All Files', async () => {
+      await page.getByRole('button', { name: 'Import 3 Files' }).last().click();
+
+      // handleNext(step 3) runs handleMultiFileUpload then setCurrentStep(4)
+      // Wait for step 4 to appear
+      await page.waitForSelector('text=/Import Successful|Import Complete/', { timeout: 60000 });
+      await assert(true, 'Import completed — success/complete screen shown');
+    });
+
+    // ── Verify success summary ─────────────────────────────────────────────
+    await section('Multi-File Import – Success Summary', async () => {
+      await page.waitForTimeout(300);
+
+      // Overall success message
+      const allSuccessMsg = await page.getByText(/All \d+ files have been successfully imported/i).count() > 0;
+      const partialMsg = await page.getByText(/\d+ of \d+ files imported/i).count() > 0;
+      await assert(allSuccessMsg || partialMsg, 'Success count message shown');
+
+      // "Lines Processed" stat visible
+      await assert(await page.getByText('Lines Processed').count() > 0, '"Lines Processed" stat shown');
+
+      // Per-file result rows (one per file in the summary list)
+      const resultRows = await page.locator('.border.rounded-lg.overflow-hidden.divide-y').last().locator('> div').count();
+      await assert(resultRows === 3, `3 per-file result rows shown (found ${resultRows})`);
+
+      // No critical JS errors during the full flow
+      const critErrors = consoleErrors.filter(e =>
+        !e.includes('favicon') && !e.includes('ollama') && !e.includes('ERR_CONNECTION_REFUSED')
+      );
+      await assert(critErrors.length === 0, `No critical JS errors during import (found ${critErrors.length})`);
+    });
+
+  } finally {
+    await context.close();
+  }
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 (async () => {
   console.log('=== Logsonic E2E Tests ===');
@@ -233,6 +359,7 @@ async function browserTests(browser) {
   const browser = await chromium.launch({ headless: true });
   try {
     await browserTests(browser);
+    await multiFileImportTests(browser);
   } finally {
     await browser.close();
   }

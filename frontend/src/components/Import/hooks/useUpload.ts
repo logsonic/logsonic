@@ -3,10 +3,9 @@ import { useCallback, useRef } from 'react';
 import { useIngestEnd, useIngestLogs, useIngestStart } from '@/hooks/useApi';
 import { IngestSessionOptions } from '@/lib/api-types';
 import { useImportStore } from '@/stores/useImportStore';
-import type {
-  UploadProgressHookResult
-} from '../types';
+import type { ImportFile, UploadProgressHookResult } from '../types';
 import { LogSourceProviderService } from '../types';
+
 export const useUpload = (): UploadProgressHookResult => {
   const {
     selectedFileName,
@@ -27,30 +26,106 @@ export const useUpload = (): UploadProgressHookResult => {
     sessionOptionsYear,
     sessionOptionsMonth,
     sessionOptionsDay,
-
+    files,
+    updateFile,
   } = useImportStore();
-  
 
-
-  // Use a ref to track the current progress value
   const progressRef = useRef(0);
-  
-  // Get the API functions from hooks outside the handleUpload function
+
   const ingestStartApi = useIngestStart();
   const ingestLogsApi = useIngestLogs();
-  const ingestEndApi = useIngestEnd();    
-  
+  const ingestEndApi = useIngestEnd();
+
+  // --- Multi-file upload ---
+  const handleMultiFileUpload = useCallback(async (
+    importFiles: ImportFile[],
+    fileService: LogSourceProviderService
+  ): Promise<ImportFile[]> => {
+    setIsUploading(true);
+    const results: ImportFile[] = [];
+
+    for (const importFile of importFiles) {
+      // Mark this file as uploading
+      updateFile(importFile.id, { uploadStatus: 'uploading', uploadProgress: 0 });
+
+      try {
+        // Step 1: Start ingest session for this file
+        const sessionOptions: IngestSessionOptions = {
+          pattern: importFile.selectedPattern?.pattern || '%{GREEDYDATA:message}',
+          name: importFile.selectedPattern?.name || 'Custom Pattern',
+          custom_patterns: importFile.selectedPattern?.custom_patterns || {},
+          priority: importFile.selectedPattern?.priority || 0,
+          source: importFile.fileName,
+          smart_decoder: importFile.sessionOptions.smartDecoder,
+          force_timezone: importFile.sessionOptions.timezone || undefined,
+          force_start_year: importFile.sessionOptions.year || undefined,
+          force_start_month: importFile.sessionOptions.month || undefined,
+          force_start_day: importFile.sessionOptions.day || undefined,
+          meta: { _src: `file.${importFile.fileName}` },
+        };
+
+        const startResponse = await ingestStartApi.execute(sessionOptions);
+        if (startResponse.status !== 'success' || !startResponse.session_id) {
+          throw new Error('Failed to start ingestion session');
+        }
+
+        const currentSessionID = startResponse.session_id;
+        let handledLines = 0;
+
+        // Step 2: Stream file chunks
+        await fileService.handleFileImport(importFile.file, 10000, async (lines, totalLines, next) => {
+          const requestBody = {
+            logs: lines,
+            session_id: currentSessionID,
+          };
+
+          const response = await ingestLogsApi.execute(requestBody);
+          if (response.status !== 'success') {
+            throw new Error(`Failed to ingest chunk`);
+          }
+
+          handledLines += lines.length;
+          const progress = Math.ceil((handledLines / totalLines) * 100);
+          updateFile(importFile.id, { uploadProgress: progress, totalLinesProcessed: handledLines });
+          next();
+        });
+
+        // Step 3: End session
+        await ingestEndApi.execute(currentSessionID);
+
+        updateFile(importFile.id, {
+          uploadStatus: 'success',
+          uploadProgress: 100,
+          totalLinesProcessed: handledLines,
+        });
+
+        results.push({ ...importFile, uploadStatus: 'success', totalLinesProcessed: handledLines });
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Upload failed';
+        updateFile(importFile.id, {
+          uploadStatus: 'failed',
+          uploadError: errorMsg,
+        });
+        results.push({ ...importFile, uploadStatus: 'failed', uploadError: errorMsg });
+
+        // Try to clean up the session
+        try {
+          if (sessionID) await ingestEndApi.execute(sessionID);
+        } catch { /* ignore cleanup error */ }
+      }
+    }
+
+    setIsUploading(false);
+    return results;
+  }, [updateFile, setIsUploading, ingestStartApi, ingestLogsApi, ingestEndApi, sessionID]);
+
+  // --- Legacy single-file upload ---
   const handleUpload = useCallback(async (provider: LogSourceProviderService) => {
-
-    console.log("Starting upload with provider");
-
-    
     try {
       setIsUploading(true);
       progressRef.current = 0;
       setUploadProgress(0);
-      
-      // Step 1: Start the ingestion session
+
       const ingestSessionOptions: IngestSessionOptions = {
         pattern: selectedPattern.pattern,
         name: selectedPattern.name,
@@ -64,28 +139,22 @@ export const useUpload = (): UploadProgressHookResult => {
         force_start_day: sessionOptionsDay,
         meta: metadata
       };
-      
+
       const startResponse = await ingestStartApi.execute(ingestSessionOptions);
       if (startResponse.status !== 'success' || !startResponse.session_id) {
         throw new Error('Failed to start ingestion session');
       }
-      
-      // Store the session ID
+
       const currentSessionID = startResponse.session_id;
       setSessionID(currentSessionID);
-      
-      // Update progress to 0%
+
       progressRef.current = 0;
       setUploadProgress(0);
-      
+
       let handledLines = 0;
       let i = 0;
 
-      // This is where we call the provider's handleFileImport method
-      await provider.handleFileImport(selectedFileHandle, 10000, async(lines, totalLines, next) =>{
-        
-        // Provider will call back with a chunk of lines
-        console.log("Ingesting chunk", i + 1, "of", totalLines);
+      await provider.handleFileImport(selectedFileHandle, 10000, async (lines, totalLines, next) => {
         setApproxLines(totalLines);
         const requestBody = {
           logs: lines,
@@ -93,7 +162,7 @@ export const useUpload = (): UploadProgressHookResult => {
         };
         i++;
         const response = await ingestLogsApi.execute(requestBody);
-       
+
         if (response.status !== 'success') {
           throw new Error(`Failed to ingest chunk ${i + 1}`);
         }
@@ -101,17 +170,15 @@ export const useUpload = (): UploadProgressHookResult => {
         setUploadProgress(Math.ceil(handledLines / totalLines * 100));
         setTotalLines(handledLines);
         next();
-      })
-   
-      // Step 4: End the ingestion session
+      });
+
       await ingestEndApi.execute(currentSessionID);
       setTotalLines(handledLines);
-      
-      progressRef.current = 100;  
+
+      progressRef.current = 100;
       setUploadProgress(100);
     } catch (error) {
       console.error('Upload failed:', error);
-      // Try to end the ingestion session even if there was an error
       try {
         if (sessionID) {
           await ingestEndApi.execute(sessionID);
@@ -129,8 +196,9 @@ export const useUpload = (): UploadProgressHookResult => {
     isUploading,
     uploadProgress,
     approxLines,
-    handleUpload: (provider: LogSourceProviderService) => handleUpload(provider)
+    handleUpload: (provider: LogSourceProviderService) => handleUpload(provider),
+    handleMultiFileUpload,
   };
 };
 
-export default useUpload; 
+export default useUpload;
