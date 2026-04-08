@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "fastmcp": "^1.21.0",
+    "fastmcp": "^3.35.0",
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {
