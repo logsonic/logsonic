@@ -405,52 +405,56 @@ export default function LogDistributionChart() {
   
   if (!isVisible) {
     return (
-      <div className="flex justify-end p-2 mt-[-40px]">
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={() => setIsVisible(true)} 
-          className="text-xs text-slate-500"
+      <div className="flex items-center justify-between px-3 py-1 border-b border-slate-100 bg-white">
+        <span className="text-xs text-slate-400 italic">Chart hidden</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setIsVisible(true)}
+          className="text-xs text-slate-400 hover:text-blue-600 h-6 px-2"
         >
           Show Chart
         </Button>
       </div>
     );
   }
-  
+
   return (
-    <div className="bg-white">
+    <div className="bg-white border-b border-slate-100">
       <div className="flex justify-between items-center px-3 py-1">
-        <div className="flex items-center">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => setIsCollapsed(!isCollapsed)} 
-            className="mr-2 h-7 w-7 p-0"
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="h-6 w-6 p-0 text-slate-400 hover:text-slate-600"
           >
-            {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+            {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
           </Button>
-          <h3 className="text-sm font-medium">Log Distribution</h3>
-          {isLoading && <Loader2 className="ml-2 h-4 w-4 animate-spin text-slate-500" />}
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Log Distribution</h3>
+          {isLoading && <Loader2 className="ml-1 h-3 w-3 animate-spin text-slate-400" />}
+          {!isCollapsed && (
+            <span className="text-[10px] text-slate-400 ml-1">· drag to zoom</span>
+          )}
         </div>
-        <div className="flex items-center space-x-1">
-          <Button 
-            variant="ghost" 
-            size="sm" 
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => searchStore.triggerSearch()}
-            className="h-7 w-7 p-0"
-            title="Refresh"
+            className="h-6 w-6 p-0 text-slate-400 hover:text-slate-600"
+            title="Refresh chart"
           >
-            <RefreshCw size={14} />
+            <RefreshCw size={12} />
           </Button>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => setIsVisible(false)} 
-            className="h-7 w-7 p-0"
-            title="Hide Chart"
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsVisible(false)}
+            className="h-6 w-6 p-0 text-slate-400 hover:text-slate-600"
+            title="Hide chart"
           >
-            <X size={14} />
+            <X size={12} />
           </Button>
         </div>
       </div>

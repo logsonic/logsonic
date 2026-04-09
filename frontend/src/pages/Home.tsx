@@ -6,44 +6,54 @@ import { LeftPanelContent, SIDEBAR_WIDTHS } from '@/components/Home/Sidebar/Coll
 import { SidebarPanel } from '@/components/Home/SidebarPanel';
 import { useCollapsiblePanel } from '@/hooks/useCollapsiblePanel';
 import useSearchQueryParamsStore from '@/stores/useSearchQueryParams';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+
+const SIDEBAR_WIDTH_STORAGE_KEY = 'logsonic-sidebar-width';
 
 /**
  * Home page component with sidebar and main content
  */
 const Home = () => {
-  // Use our custom hook for panel collapse management
   const { isCollapsed, toggleCollapse: togglePanelCollapse } = useCollapsiblePanel(true);
-
-  // Get sidebar tabs from SidebarPanel component
   const { tabs } = SidebarPanel();
-
   const { firstLoad, setFirstLoad, triggerSearch } = useSearchQueryParamsStore();
- 
+
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const saved = localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
+    return saved ? Math.max(240, Math.min(640, parseInt(saved, 10))) : SIDEBAR_WIDTHS.EXPANDED;
+  });
+
+  const handleSidebarWidthChange = useCallback((width: number) => {
+    setSidebarWidth(width);
+    localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(width));
+  }, []);
+
   useEffect(() => {
     if (firstLoad) {
-
       setFirstLoad(false);
       triggerSearch();
     }
   }, [firstLoad, setFirstLoad, triggerSearch]);
 
+  const marginLeft = isCollapsed ? SIDEBAR_WIDTHS.COLLAPSED : sidebarWidth;
+
   return (
     <div className="flex flex-col h-screen bg-slate-50">
       {/* Sidebar */}
-      <LeftPanelContent 
-        isCollapsed={isCollapsed} 
+      <LeftPanelContent
+        isCollapsed={isCollapsed}
         onToggleCollapse={togglePanelCollapse}
         tabs={tabs}
+        sidebarWidth={sidebarWidth}
+        onSidebarWidthChange={handleSidebarWidthChange}
       />
-      
+
       {/* Main content with margin to accommodate sidebar */}
-      <div 
-        className="flex-1 transition-all duration-300"
-        style={{ 
-          marginLeft: isCollapsed 
-            ? `${SIDEBAR_WIDTHS.COLLAPSED}px` 
-            : `${SIDEBAR_WIDTHS.EXPANDED}px` 
+      <div
+        className="flex-1"
+        style={{
+          marginLeft: `${marginLeft}px`,
+          transition: isCollapsed ? 'margin-left 0.3s' : undefined,
         }}
       >
         <div className="flex flex-col h-full">
@@ -53,7 +63,7 @@ const Home = () => {
           {/* Main content */}
           <div className="flex-1 overflow-hidden flex flex-col">
             {/* Search bar */}
-            <div className="py-2 px-3 bg-white">
+            <div className="py-2 px-3 bg-white border-b border-slate-100">
               <LogSearch />
             </div>
 
@@ -61,7 +71,7 @@ const Home = () => {
             <LogDistributionChart />
 
             {/* Log viewer */}
-            <div className="flex-1 bg-white m-3 rounded-lg flex flex-col border">
+            <div className="flex-1 bg-white mx-3 mb-3 rounded-lg flex flex-col border border-slate-200 shadow-sm overflow-hidden">
               <LogViewer />
             </div>
           </div>

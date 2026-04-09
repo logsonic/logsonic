@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, FilterX, Palette } from 'lucide-react';
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 
 // Sidebar width constants - adjust these values to change all sidebar dimensions
 export const SIDEBAR_WIDTHS = {
@@ -9,10 +9,12 @@ export const SIDEBAR_WIDTHS = {
   EXPANDED: 400   // Width in pixels when sidebar is expanded
 };
 
+const SIDEBAR_MIN_WIDTH = 240;
+const SIDEBAR_MAX_WIDTH = 640;
+
 // Tailwind classes for sidebar widths
 const SIDEBAR_WIDTH_CLASSES = {
   COLLAPSED: "w-[64px]",
-  EXPANDED: "w-[400px]"
 };
 
 // Props for the collapsible panel toggle button
@@ -55,16 +57,20 @@ export type LeftPanelContentProps = {
   onToggleCollapse: () => void;
   children?: ReactNode;
   tabs?: VerticalTab[];
+  sidebarWidth?: number;
+  onSidebarWidthChange?: (width: number) => void;
 };
 
 /**
  * Content container for the left panel with collapse functionality and vertical tabs
  */
-export const LeftPanelContent = ({ 
-  isCollapsed, 
-  onToggleCollapse, 
+export const LeftPanelContent = ({
+  isCollapsed,
+  onToggleCollapse,
   children,
-  tabs = []
+  tabs = [],
+  sidebarWidth,
+  onSidebarWidthChange,
 }: LeftPanelContentProps) => {
   const [activeTab, setActiveTab] = useState<string>(tabs.length > 0 ? tabs[0].id : '');
 
@@ -85,11 +91,11 @@ export const LeftPanelContent = ({
   ];
 
   const tabsToUse = tabs.length > 0 ? tabs : defaultTabs;
+  const effectiveExpandedWidth = sidebarWidth ?? SIDEBAR_WIDTHS.EXPANDED;
 
   // Handle tab selection in collapsed state
   const handleTabClick = (tabId: string) => {
     setActiveTab(tabId);
-    // Expand the panel when a tab is clicked in collapsed state
     if (isCollapsed) {
       onToggleCollapse();
     }
@@ -98,24 +104,58 @@ export const LeftPanelContent = ({
   // Set a CSS variable for the sidebar width
   useEffect(() => {
     document.documentElement.style.setProperty(
-      '--sidebar-width', 
-      isCollapsed 
-        ? `${SIDEBAR_WIDTHS.COLLAPSED}px` 
-        : `${SIDEBAR_WIDTHS.EXPANDED}px`
+      '--sidebar-width',
+      isCollapsed
+        ? `${SIDEBAR_WIDTHS.COLLAPSED}px`
+        : `${effectiveExpandedWidth}px`
     );
-  }, [isCollapsed]);
+  }, [isCollapsed, effectiveExpandedWidth]);
+
+  // Resize drag handle logic
+  const isResizingRef = useRef(false);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(effectiveExpandedWidth);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    startXRef.current = e.clientX;
+    startWidthRef.current = effectiveExpandedWidth;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const delta = e.clientX - startXRef.current;
+      const newWidth = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, startWidthRef.current + delta));
+      onSidebarWidthChange?.(newWidth);
+    };
+
+    const onMouseUp = () => {
+      isResizingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [effectiveExpandedWidth, onSidebarWidthChange]);
+
+  const currentWidth = isCollapsed ? SIDEBAR_WIDTHS.COLLAPSED : effectiveExpandedWidth;
 
   return (
-    <div className={cn(
-      "h-full bg-white border-r border-slate-200 shadow-sm fixed left-0 top-0 bottom-0 z-50 transition-all duration-300",
-      isCollapsed 
-        ? SIDEBAR_WIDTH_CLASSES.COLLAPSED
-        : SIDEBAR_WIDTH_CLASSES.EXPANDED
-    )}>
+    <div
+      className={cn(
+        "h-full bg-white border-r border-slate-200 shadow-sm fixed left-0 top-0 bottom-0 z-50 transition-[width] duration-300",
+        isCollapsed ? SIDEBAR_WIDTH_CLASSES.COLLAPSED : undefined
+      )}
+      style={!isCollapsed ? { width: `${effectiveExpandedWidth}px` } : undefined}
+    >
       <div className="h-full flex flex-col">
-        {/* Header area - consistent in both states */}
-        <div className="h-12 flex items-center justify-between px-3 border-b border-slate-200 bg-white">
-          {/* Logo/Expand button - only visible when collapsed */}
+        {/* Header area */}
+        <div className="h-12 flex items-center justify-between px-3 border-b border-slate-200 bg-white flex-shrink-0">
           {isCollapsed && (
             <Button
               variant="ghost"
@@ -128,21 +168,19 @@ export const LeftPanelContent = ({
               <ChevronRight className="h-4 w-4" />
             </Button>
           )}
-          
-          {/* Title - only visible when expanded */}
+
           {!isCollapsed && (
-            <span className="text-sm font-medium flex-1 truncate">
+            <span className="text-sm font-semibold text-slate-700 flex-1 truncate">
               {tabsToUse.find(tab => tab.id === activeTab)?.label}
             </span>
           )}
-          
-          {/* Collapse button - only visible when expanded */}
+
           {!isCollapsed && (
             <Button
               variant="ghost"
               size="icon"
               onClick={onToggleCollapse}
-              className="h-8 w-8 border border-slate-200 rounded-md text-slate-700 hover:text-slate-900 hover:bg-slate-100"
+              className="h-8 w-8 border border-slate-200 rounded-md text-slate-700 hover:text-slate-900 hover:bg-slate-100 flex-shrink-0"
               aria-label="Collapse"
               title="Collapse sidebar"
             >
@@ -150,13 +188,13 @@ export const LeftPanelContent = ({
             </Button>
           )}
         </div>
-        
-        {/* Tab navigation area - consistent structure in both states */}
+
+        {/* Tab navigation area */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Vertical tab navigation - always visible */}
+          {/* Vertical tab navigation */}
           <div className={cn(
-            "pt-4 flex flex-col items-center bg-white",
-            isCollapsed ? "w-full" : "w-16 border-r border-slate-200"
+            "pt-3 flex flex-col items-center bg-white flex-shrink-0",
+            isCollapsed ? "w-full" : "w-14 border-r border-slate-100"
           )}>
             {tabsToUse.map((tab) => (
               <Button
@@ -164,26 +202,26 @@ export const LeftPanelContent = ({
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-10 w-10 mb-3 relative border border-slate-200 rounded-md transition-all",
-                  activeTab === tab.id 
-                    ? "bg-blue-50/70 text-blue-700 border-slate-200" 
-                    : "text-slate-700 hover:bg-slate-100"
+                  "h-9 w-9 mb-2 relative rounded-lg transition-all",
+                  activeTab === tab.id
+                    ? "bg-blue-50 text-blue-600 shadow-sm"
+                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                 )}
                 onClick={() => handleTabClick(tab.id)}
                 aria-label={tab.label}
                 title={tab.label}
               >
                 {tab.icon}
-                {activeTab === tab.id && (
-                  <div className="absolute top-[15%] right-0 bottom-[15%] w-[2px] bg-blue-400 rounded-full"></div>
+                {activeTab === tab.id && !isCollapsed && (
+                  <div className="absolute right-0 top-[20%] bottom-[20%] w-0.5 bg-blue-500 rounded-full" />
                 )}
               </Button>
             ))}
           </div>
-          
-          {/* Tab content - only visible when expanded */}
+
+          {/* Tab content */}
           {!isCollapsed && (
-            <div className="flex-1 p-2 overflow-auto bg-white">
+            <div className="flex-1 p-3 overflow-auto bg-white min-w-0">
               {tabsToUse.map((tab) => (
                 activeTab === tab.id && (
                   <div key={tab.id} className="h-full">
@@ -195,6 +233,17 @@ export const LeftPanelContent = ({
           )}
         </div>
       </div>
+
+      {/* Resize drag handle - only visible when expanded */}
+      {!isCollapsed && onSidebarWidthChange && (
+        <div
+          className="absolute top-0 right-0 bottom-0 w-1 cursor-col-resize group hover:bg-blue-400/30 transition-colors z-10"
+          onMouseDown={handleResizeMouseDown}
+          title="Drag to resize sidebar"
+        >
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-0.5 h-12 bg-slate-300 group-hover:bg-blue-400 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
+      )}
     </div>
   );
-}; 
+};

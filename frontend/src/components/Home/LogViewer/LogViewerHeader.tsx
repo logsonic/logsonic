@@ -71,17 +71,17 @@ export const LogViewerHeader = (
   }, [store]);
 
   return (
-    <div className="flex items-center justify-between p-2 border-b">
-      <div className="flex items-center gap-4">
-        <div className="flex items-center border rounded-md overflow-hidden">
-          <div className="px-3 py-1.5 bg-gray-50 border-r">
-            <span className="text-sm font-medium">Columns</span>
+    <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-100 bg-slate-50/50">
+      <div className="flex items-center gap-2">
+        <div className="flex items-center border border-slate-200 rounded-md overflow-hidden bg-white shadow-sm">
+          <div className="px-2.5 py-1 bg-slate-50 border-r border-slate-200">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Columns</span>
           </div>
           
           <Popover open={isColumnPopoverOpen} onOpenChange={setIsColumnPopoverOpen}>
             <PopoverTrigger asChild>
-              <Button variant="ghost" disabled={store.isColumnLocked} className="h-9 rounded-none border-r px-3 flex items-center gap-1">
-                <Columns className="h-4 w-4" />
+              <Button variant="ghost" disabled={store.isColumnLocked} className="h-7 rounded-none border-r border-slate-200 px-2.5 flex items-center gap-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100">
+                <Columns className="h-3.5 w-3.5" />
                 <span className="text-xs">Select</span>
               </Button>
             </PopoverTrigger>
@@ -167,52 +167,55 @@ export const LogViewerHeader = (
             </PopoverContent>
           </Popover>
 
-          <Button 
-            variant="ghost" 
-            className="h-9 rounded-none border-r px-3 flex items-center gap-1"
+          <Button
+            variant="ghost"
+            className="h-7 rounded-none border-r border-slate-200 px-2.5 flex items-center gap-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             onClick={autofitColumns}
             disabled={store.isColumnLocked}
             title="Auto-adjust column widths"
           >
-            <Maximize2 className="h-4 w-4" />
+            <Maximize2 className="h-3.5 w-3.5" />
             <span className="text-xs">Fit</span>
           </Button>
 
-          <Button 
-            variant="ghost" 
-            className="h-9 rounded-none px-3 flex items-center gap-1"
+          <Button
+            variant="ghost"
+            className="h-7 rounded-none px-2.5 flex items-center gap-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             onClick={toggleLock}
             title={store.isColumnLocked ? "Unlock layout" : "Lock layout"}
           >
             {store.isColumnLocked ? (
-             <>
-             <Unlock className="h-4 w-4" />
-             <span className="text-xs">Unlock</span>
-           </>
+              <>
+                <Unlock className="h-3.5 w-3.5" />
+                <span className="text-xs">Unlock</span>
+              </>
             ) : (
               <>
-              <Lock className="h-4 w-4" />
-              <span className="text-xs">Lock</span>
-            </>
-              
+                <Lock className="h-3.5 w-3.5" />
+                <span className="text-xs">Lock</span>
+              </>
             )}
           </Button>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="flex items-center gap-4">
-        <div className="text-sm text-gray-500">
+      <div className="flex items-center gap-3">
+        <div className="text-xs text-slate-500">
           {store.resultCount > 0 ? (
-            <>
-              Showing {store.resultCount}  
-              {systemInfo?.storage_info?.total_log_entries != store.resultCount ? (
-                <>
-                   &nbsp;out of &nbsp;{systemInfo?.storage_info?.total_log_entries.toLocaleString()} 
-                </>
-              ) : null} logs
-            </>
-          ) : "No logs to display"}
+            <span className="flex items-center gap-1">
+              <span className="font-semibold text-slate-700">{store.resultCount.toLocaleString()}</span>
+              {systemInfo?.storage_info?.total_log_entries != null && systemInfo.storage_info.total_log_entries !== store.resultCount ? (
+                <span className="text-slate-400">
+                  / {systemInfo.storage_info.total_log_entries.toLocaleString()} logs
+                </span>
+              ) : (
+                <span className="text-slate-400">logs</span>
+              )}
+            </span>
+          ) : (
+            <span className="text-slate-400 italic">No results</span>
+          )}
         </div>
       </div>
     </div>

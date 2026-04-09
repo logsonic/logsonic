@@ -235,7 +235,7 @@ export const ColorRulesPanel = () => {
             className="mb-4"  
           >
             <div className="flex items-center justify-between pb-2">
-              <h4 className="text-sm font-medium text-slate-600">Log Coloring Rules</h4>
+              <h4 className="text-xs font-medium text-slate-500">Rules</h4>
               <CollapsibleTrigger asChild>
                 <Button 
                   variant="outline" 
@@ -371,7 +371,7 @@ export const ColorRulesPanel = () => {
           
           {/* Existing rules */}
           <div className="space-y-2">
-            <h4 className="text-sm font-medium text-slate-600 mb-2">Current Rules</h4>
+            <h4 className="text-xs font-medium text-slate-500 mb-2">Current Rules</h4>
             
             {colorRules.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-4 px-3 bg-slate-50 rounded-md border border-dashed border-slate-200">
