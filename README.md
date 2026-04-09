@@ -221,6 +221,21 @@ cd frontend
 npx vitest run --coverage
 ```
 
+#### E2E Tests
+
+```bash
+cd frontend
+node e2e-test.mjs
+node e2e-comprehensive.mjs
+```
+
+By default the browser runs headless. Pass `--headed` to open a visible browser window:
+
+```bash
+node e2e-test.mjs --headed
+node e2e-comprehensive.mjs --headed
+```
+
 ## Architecture
 
 LogSonic uses a client-server architecture:

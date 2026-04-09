@@ -21,7 +21,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "node e2e-test.mjs"
+    "test:e2e": "node e2e-test.mjs",
+    "test:e2e:full": "node e2e-comprehensive.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

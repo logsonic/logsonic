@@ -12,6 +12,8 @@ const SAMPLE_LOGS_DIR = path.resolve(__dirname, '../sample-logs');
 const BASE_URL = 'http://localhost:8080';
 const API_URL = 'http://localhost:8080/api/v1';
 
+const headless = !process.argv.includes('--headed');
+
 let passed = 0;
 let failed = 0;
 
@@ -356,7 +358,7 @@ async function multiFileImportTests(browser) {
 
   await apiTests();
 
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless });
   try {
     await browserTests(browser);
     await multiFileImportTests(browser);
