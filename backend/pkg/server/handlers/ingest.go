@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"logsonic/pkg/tokenizer"
 	"logsonic/pkg/types"
@@ -53,12 +54,12 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		json.NewEncoder(w).Encode(types.ErrorResponse{
 			Status: "error",
 			Error:  "Method not allowed",
 			Code:   "METHOD_NOT_ALLOWED",
 		})
-		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -297,4 +298,29 @@ func (h *Services) HandleIngestEnd(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(types.IngestResponse{
 		Status: "success",
 	})
+}
+
+// StartSessionCleanup launches a background goroutine that sweeps sessionMap
+// every 5 minutes and removes sessions older than SessionTimeout.
+// It runs until ctx is cancelled (i.e. on server shutdown).
+func StartSessionCleanup(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				now := time.Now()
+				sessionMapMutex.Lock()
+				for id, session := range sessionMap {
+					if now.Sub(session.CreationTime) > SessionTimeout {
+						delete(sessionMap, id)
+					}
+				}
+				sessionMapMutex.Unlock()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 }

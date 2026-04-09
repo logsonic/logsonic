@@ -27,3 +27,14 @@ func NewHandler(storage storage.StorageInterface, tokenizer tokenizer.TokenizerI
 		cacheValid:       false,
 	}
 }
+
+// CloseStorage cleanly shuts down all open Bleve indices.
+func (s *Services) CloseStorage() error {
+	type closer interface {
+		Close() error
+	}
+	if c, ok := s.storage.(closer); ok {
+		return c.Close()
+	}
+	return nil
+}

@@ -25,12 +25,12 @@ func (h *Services) HandleParse(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		json.NewEncoder(w).Encode(types.ErrorResponse{
 			Status: "error",
 			Error:  "Method not allowed",
 			Code:   "METHOD_NOT_ALLOWED",
 		})
-		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 

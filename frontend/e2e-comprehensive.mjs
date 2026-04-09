@@ -1180,6 +1180,129 @@ async function clearLogsTest(browser) {
   }
 }
 
+// ─── Phase 5: Regression Tests ───────────────────────────────────────────────
+//
+// These tests exist specifically to catch regressions for bugs identified in
+// the critical review and subsequently fixed.  Each section documents:
+//   • WHAT was broken before the fix
+//   • HOW this test would have failed before the fix
+//   • WHAT it verifies now
+
+async function regressionTests() {
+
+  // ── Fix 3.4 / WriteHeader-after-write ──────────────────────────────────────
+  //
+  // BUG: Inside several handlers the json.Encode call (which implicitly commits
+  //      a 200 status) ran BEFORE w.WriteHeader(4xx), so Go silently dropped
+  //      the intended status code and the client always saw HTTP 200.
+  //
+  // NOTE on routing: Chi's r.Post() rejects wrong-method requests BEFORE the
+  //      handler runs, returning 405 with a plain-text body.  The handler's own
+  //      method guard is therefore a safety net (e.g. if the route is ever
+  //      re-registered method-agnostically).  We test two things separately:
+  //
+  //  (a) Wrong-method → 405 status (verifies Chi wiring is correct and the
+  //      endpoint path is right — would catch a regression where the route
+  //      accidentally accepts all methods).
+  //
+  //  (b) Valid-method + bad body → 400 with JSON error body (verifies the
+  //      handler's own WriteHeader-before-Encode ordering for the paths that
+  //      actually run through handler code, since those 400 paths do execute
+  //      inside the handler).
+  //
+  // BEFORE FIX (b): handlers that wrote Encode then WriteHeader would return
+  //      HTTP 200 with {"status":"error",...} — clients could not distinguish
+  //      success from error by status code alone.
+  // AFTER FIX (b): WriteHeader(400) is called first so the status is correct.
+
+  await section('Regression – GET /ingest/logs rejected with 405', async () => {
+    // Chi handles this before the handler; we just verify the path is wired correctly.
+    const r = await fetch(`${API_URL}/ingest/logs`, { method: 'GET' });
+    await assert(r.status === 405, `GET /ingest/logs → 405 (got ${r.status})`);
+  });
+
+  await section('Regression – GET /parse rejected with 405', async () => {
+    const r = await fetch(`${API_URL}/parse`, { method: 'GET' });
+    await assert(r.status === 405, `GET /parse → 405 (got ${r.status})`);
+  });
+
+  await section('Regression – GET /ingest/start rejected with 405', async () => {
+    const r = await fetch(`${API_URL}/ingest/start`, { method: 'GET' });
+    await assert(r.status === 405, `GET /ingest/start → 405 (got ${r.status})`);
+  });
+
+  await section('Regression – POST /parse with bad body returns 400 JSON (WriteHeader ordering)', async () => {
+    // This path runs through handler code, so WriteHeader ordering matters.
+    // BEFORE FIX: would have returned HTTP 200 with {"status":"error",...}.
+    // AFTER FIX:  returns HTTP 400 with {"status":"error",...}.
+    const r = await fetch(`${API_URL}/parse`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'not-valid-json',
+    });
+    await assert(r.status === 400, `POST /parse with bad body → 400 (got ${r.status})`);
+    const json = await r.json();
+    await assert(json.status === 'error', 'Error body has status:"error"');
+    await assert(json.code === 'INVALID_REQUEST', `Error body has code:"INVALID_REQUEST" (got "${json.code}")`);
+  });
+
+  await section('Regression – POST /ingest/start with bad body returns 400 JSON (WriteHeader ordering)', async () => {
+    const r = await fetch(`${API_URL}/ingest/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'not-valid-json',
+    });
+    await assert(r.status === 400, `POST /ingest/start with bad body → 400 (got ${r.status})`);
+    const json = await r.json();
+    await assert(json.status === 'error', 'Error body has status:"error"');
+  });
+
+  // ── Fix 2.5 / Sort double-allocation ───────────────────────────────────────
+  //
+  // BUG: sortLogs() sorted an index array then rebuilt results into a second
+  //      full slice and copy()d it back — allocating 2× the log memory.
+  //      The refactor changed sortLogs() to return the sorted slice directly
+  //      (caller: allLogs, availableColumns = sortLogs(allLogs, ...)).
+  //
+  // BEFORE FIX: if the return-value wiring had been wrong (e.g. the caller
+  //      ignored the returned slice), logs would come back in original insertion
+  //      order regardless of sort_order.
+  // AFTER FIX:  ascending sort produces non-decreasing timestamps;
+  //             descending produces non-increasing timestamps.
+
+  await section('Regression – sort asc returns timestamps in ascending order', async () => {
+    const r = await fetch(`${API_URL}/logs?sort_by=timestamp&sort_order=asc&limit=10`);
+    await assert(r.ok, 'GET /logs?sort_order=asc returns 200');
+    const json = await r.json();
+    const logs = json.logs ?? [];
+    await assert(logs.length > 0, `At least one log returned (got ${logs.length})`);
+
+    let inOrder = true;
+    for (let i = 1; i < logs.length; i++) {
+      const prev = new Date(logs[i - 1].timestamp ?? 0).getTime();
+      const curr = new Date(logs[i].timestamp ?? 0).getTime();
+      if (prev > curr) { inOrder = false; break; }
+    }
+    await assert(inOrder, 'Timestamps are non-decreasing (ascending sort)');
+  });
+
+  await section('Regression – sort desc returns timestamps in descending order', async () => {
+    const r = await fetch(`${API_URL}/logs?sort_by=timestamp&sort_order=desc&limit=10`);
+    await assert(r.ok, 'GET /logs?sort_order=desc returns 200');
+    const json = await r.json();
+    const logs = json.logs ?? [];
+    await assert(logs.length > 0, `At least one log returned (got ${logs.length})`);
+
+    let inOrder = true;
+    for (let i = 1; i < logs.length; i++) {
+      const prev = new Date(logs[i - 1].timestamp ?? 0).getTime();
+      const curr = new Date(logs[i].timestamp ?? 0).getTime();
+      if (prev < curr) { inOrder = false; break; }
+    }
+    await assert(inOrder, 'Timestamps are non-increasing (descending sort)');
+  });
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 (async () => {
@@ -1214,8 +1337,12 @@ async function clearLogsTest(browser) {
     await sidebarTests(browser);
     await systemAndNavTests(browser);
 
-    // Phase 4: Destructive
-    console.log('\n━━━ Phase 4: Destructive ━━━');
+    // Phase 4: Regression (needs data from Phase 2 to be present)
+    console.log('\n━━━ Phase 4: Regression Tests ━━━');
+    await regressionTests();
+
+    // Phase 5: Destructive
+    console.log('\n━━━ Phase 5: Destructive ━━━');
     await clearLogsTest(browser);
 
   } finally {

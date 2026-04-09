@@ -7,6 +7,7 @@ import (
 	"io"
 	"logsonic/pkg/types"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -114,14 +115,17 @@ func (h *Services) HandleQueryTranslation(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Set ollama endpoint - default to localhost
-	// TODO: Make this configurable
-	ollamaEndpoint := "http://localhost:11434/api/generate"
-	
+	// Set ollama endpoint - configurable via OLLAMA_ENDPOINT env var
+	ollamaBase := os.Getenv("OLLAMA_ENDPOINT")
+	if ollamaBase == "" {
+		ollamaBase = "http://localhost:11434"
+	}
+	ollamaEndpoint := ollamaBase + "/api/generate"
+
 	// Get available models to find the right Logsonic model
 	availableModels := []string{}
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get("http://localhost:11434/api/tags")
+	resp, err := client.Get(ollamaBase + "/api/tags")
 	if err == nil {
 		defer resp.Body.Close()
 		

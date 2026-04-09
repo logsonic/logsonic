@@ -188,7 +188,7 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Sort logs and get available columns in a single pass
-	availableColumns := sortLogs(allLogs, sortBy, sortOrder)
+	allLogs, availableColumns := sortLogs(allLogs, sortBy, sortOrder)
 
 	// Calculate log distribution over time
 	logDistributionEntries, _ := calculateLogDistribution(allLogs)
@@ -473,8 +473,9 @@ func (h *Services) HandleDeleteByIds(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// sortLogs optimizes sorting for large log datasets and extracts available columns
-func sortLogs(logs []map[string]interface{}, sortBy, sortOrder string) []string {
+// sortLogs sorts logs by the given field/order and returns the reordered slice
+// alongside the available column names. The input slice is not modified.
+func sortLogs(logs []map[string]interface{}, sortBy, sortOrder string) ([]map[string]interface{}, []string) {
 	// Create a slice of indices to sort
 	indices := make([]int, len(logs))
 	for i := range indices {
@@ -562,14 +563,11 @@ func sortLogs(logs []map[string]interface{}, sortBy, sortOrder string) []string 
 		}
 	})
 
-	// Reorder logs based on sorted indices
+	// Build the sorted result — returned directly to avoid a copy back into logs.
 	sortedLogs := make([]map[string]interface{}, len(logs))
 	for i, idx := range indices {
 		sortedLogs[i] = logs[idx]
 	}
-
-	// Copy sorted logs back to original slice
-	copy(logs, sortedLogs)
 
 	// Convert column keys map to sorted slice
 	availableColumns := make([]string, 0, len(columnKeysMap))
@@ -580,5 +578,5 @@ func sortLogs(logs []map[string]interface{}, sortBy, sortOrder string) []string 
 	// Sort column names for consistent ordering
 	sort.Strings(availableColumns)
 
-	return availableColumns
+	return sortedLogs, availableColumns
 }

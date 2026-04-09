@@ -1,10 +1,14 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"logsonic/docs"
@@ -251,11 +255,55 @@ func NewServer(cfg Config) (*Server, error) {
 	}, nil
 }
 
-// Start initializes and starts the HTTP server
+// Start initializes and starts the HTTP server. It blocks until SIGINT or
+// SIGTERM is received, then performs a graceful shutdown with a 30-second
+// drain timeout before closing all storage indices.
 func (s *Server) Start() error {
-	fmt.Printf("Server starting on %s\n", s.config.Host+s.config.Port)
-	return http.ListenAndServe(s.config.Host+s.config.Port, s.router)
-}
+	addr := s.config.Host + s.config.Port
+	fmt.Printf("Server starting on %s\n", addr)
 
-// Move all the request/response types and handler methods here...
-// [Copy all the types and handler methods from main.go]
+	httpServer := &http.Server{
+		Addr:    addr,
+		Handler: s.router,
+	}
+
+	// Start session cleanup goroutine; cancel it on shutdown.
+	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
+	handlers.StartSessionCleanup(cleanupCtx)
+
+	// Listen for OS signals in the background.
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	serverErr := make(chan error, 1)
+	go func() {
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			serverErr <- err
+		}
+	}()
+
+	select {
+	case err := <-serverErr:
+		cancelCleanup()
+		return err
+	case <-quit:
+		fmt.Println("\nShutting down server…")
+	}
+
+	cancelCleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := httpServer.Shutdown(ctx); err != nil {
+		return fmt.Errorf("graceful shutdown failed: %w", err)
+	}
+
+	// Close all Bleve indices cleanly.
+	if err := s.services.CloseStorage(); err != nil {
+		return fmt.Errorf("storage close failed: %w", err)
+	}
+
+	fmt.Println("Server stopped.")
+	return nil
+}

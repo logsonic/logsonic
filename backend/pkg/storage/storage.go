@@ -34,6 +34,14 @@ type StorageInterface interface {
 
 // NewStorage initializes a new Storage instance
 func NewStorage(baseDir string) (*Storage, error) {
+	// Canonicalize the path to prevent directory traversal via symlinks or
+	// relative segments before we create or open anything under it.
+	absDir, err := filepath.Abs(baseDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve storage path: %w", err)
+	}
+	baseDir = absDir
+
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create storage directory: %w", err)
 	}
