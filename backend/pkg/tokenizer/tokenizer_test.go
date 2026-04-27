@@ -504,3 +504,67 @@ func TestTokenizer_ConcurrentParseLogs(t *testing.T) {
 		<-done
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Built-in extended pattern library (NewComplete)
+// ---------------------------------------------------------------------------
+
+// TestBuiltinPatterns_HttpdErrorDate verifies that %{HTTPDERROR_DATE} resolves
+// without requiring a custom_patterns entry (it lives in go-grok's httpd patterns).
+func TestBuiltinPatterns_HttpdErrorDate(t *testing.T) {
+	tok, _ := NewTokenizer()
+	// No custom patterns registered — HTTPDERROR_DATE must come from NewComplete.
+	err := tok.AddPattern(`\[%{HTTPDERROR_DATE:timestamp}\] \[%{LOGLEVEL:level}\] \[client %{IPORHOST:clientip}\] %{GREEDYDATA:message}`)
+	if err != nil {
+		t.Fatalf("pattern using %%{HTTPDERROR_DATE} should not require custom_patterns: %v", err)
+	}
+
+	opts := types.IngestSessionOptions{Source: "test"}
+	logs := []string{"[Wed Jan 23 14:05:01 2023] [error] [client 192.168.0.1] File does not exist: /var/www/html/favicon.ico"}
+	_, success, _, err := tok.ParseLogs(logs, opts)
+	if err != nil {
+		t.Fatalf("ParseLogs: %v", err)
+	}
+	if success != 1 {
+		t.Errorf("expected 1 match, got %d", success)
+	}
+}
+
+// TestBuiltinPatterns_JavaClass verifies %{JAVACLASS} resolves without custom_patterns.
+func TestBuiltinPatterns_JavaClass(t *testing.T) {
+	tok, _ := NewTokenizer()
+	err := tok.AddPattern(`%{TIMESTAMP_ISO8601:timestamp} \[%{DATA:thread}\] %{LOGLEVEL:level} %{JAVACLASS:logger} - %{GREEDYDATA:message}`)
+	if err != nil {
+		t.Fatalf("pattern using %%{JAVACLASS} should not require custom_patterns: %v", err)
+	}
+
+	opts := types.IngestSessionOptions{Source: "test"}
+	logs := []string{"2023-01-23T14:05:01.123Z [main] INFO com.example.MyClass - Application started"}
+	_, success, _, err := tok.ParseLogs(logs, opts)
+	if err != nil {
+		t.Fatalf("ParseLogs: %v", err)
+	}
+	if success != 1 {
+		t.Errorf("expected 1 match, got %d", success)
+	}
+}
+
+// TestBuiltinPatterns_CiscoTimestamp verifies %{CISCOTIMESTAMP} resolves without custom_patterns.
+func TestBuiltinPatterns_CiscoTimestamp(t *testing.T) {
+	tok, _ := NewTokenizer()
+	err := tok.AddPattern(`%{CISCOTIMESTAMP:timestamp}: %%{WORD:tag}: %{GREEDYDATA:message}`)
+	if err != nil {
+		t.Fatalf("pattern using %%{CISCOTIMESTAMP} should not require custom_patterns: %v", err)
+	}
+}
+
+// TestCustomPattern_ReferencingBuiltin verifies AddCustomPattern accepts patterns
+// that reference built-in macros from the extended library (e.g. HTTPDERROR_DATE).
+func TestCustomPattern_ReferencingBuiltin(t *testing.T) {
+	tok, _ := NewTokenizer()
+	// MY_APACHE_TS builds on HTTPDERROR_DATE — must validate without error.
+	err := tok.AddCustomPattern("MY_APACHE_TS", `\[%{HTTPDERROR_DATE}\]`)
+	if err != nil {
+		t.Fatalf("AddCustomPattern referencing %%{HTTPDERROR_DATE} should not fail: %v", err)
+	}
+}

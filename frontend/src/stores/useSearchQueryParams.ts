@@ -330,7 +330,11 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
         updateRelativeValue: () => {
           const currentState = get();
           if (currentState.isRelative) {
-            const { startDate, endDate } = calculateRelativeDateRange(currentState.relativeValue);
+            const { startDate, endDate } = calculateRelativeDateRange(
+              currentState.relativeValue,
+              currentState.customRelativeUnit,
+              currentState.customRelativeCount
+            );
             
          
             currentState.setUTCTimeSince(startDate);

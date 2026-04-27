@@ -11,6 +11,7 @@ import (
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/index/upsidedown/store/goleveldb"
+	"github.com/blevesearch/bleve/v2/mapping"
 )
 
 // Storage handles log data persistence using Bleve with time-based sharding
@@ -93,9 +94,47 @@ func (s *Storage) Close() error {
 	return firstErr
 }
 
-// getOrCreateIndex returns an index for the given date, creating it if necessary
+// buildIndexMapping returns the standard Bleve index mapping used for all shards.
+func buildIndexMapping() mapping.IndexMapping {
+	mapping := bleve.NewIndexMapping()
+	logMapping := bleve.NewDocumentMapping()
+
+	dateField := bleve.NewDateTimeFieldMapping()
+	dateField.Store = true
+	dateField.Index = false
+	logMapping.AddFieldMappingsAt("timestamp", dateField)
+
+	textField := bleve.NewTextFieldMapping()
+	textField.Store = true
+	textField.Analyzer = "standard"
+	textField.IncludeTermVectors = false
+	textField.IncludeInAll = true
+	logMapping.AddFieldMappingsAt("_raw", textField)
+
+	mapping.DefaultMapping = logMapping
+	mapping.DefaultAnalyzer = "standard"
+	mapping.IndexDynamic = true
+	mapping.StoreDynamic = true
+	mapping.DocValuesDynamic = false
+	return mapping
+}
+
+// kvConfig is the LevelDB configuration shared by all Bleve shards.
+var kvConfig = map[string]interface{}{
+	"create_if_missing":         true,
+	"error_if_exists":           false,
+	"block_size":                32768,
+	"write_buffer_size":         16777216,
+	"lru_cache_capacity":        33554432,
+	"bloom_filter_bits_per_key": 15,
+	"compression":               "snappy",
+}
+
+// getOrCreateIndex returns the Bleve index for the given date, creating it if
+// it does not exist yet.  s.mu is held for the duration of index creation to
+// prevent concurrent goroutines from initialising the same shard twice.
 func (s *Storage) getOrCreateIndex(date string) (bleve.Index, error) {
-	// Fast path: check with read lock
+	// Fast path: index already open.
 	s.mu.RLock()
 	index, exists := s.indices[date]
 	s.mu.RUnlock()
@@ -103,72 +142,23 @@ func (s *Storage) getOrCreateIndex(date string) (bleve.Index, error) {
 		return index, nil
 	}
 
-	// Slow path: acquire write lock and double-check
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Re-check after acquiring write lock (another goroutine may have created it)
-	index, exists = s.indices[date]
-	if exists {
+	// Re-check inside write lock (another goroutine may have created it).
+	if index, exists = s.indices[date]; exists {
 		return index, nil
 	}
 
 	indexPath := filepath.Join(s.baseDir, fmt.Sprintf("logs-%s.bleve", date))
 	var err error
 
-	// Check if index exists
-	_, statErr := os.Stat(indexPath)
-	if os.IsNotExist(statErr) {
-		mapping := bleve.NewIndexMapping()
-		logMapping := bleve.NewDocumentMapping()
-
-		// Map the "timestamp" field as a DateTime type
-		dateField := bleve.NewDateTimeFieldMapping()
-		dateField.Store = true // We need to retrieve this
-		dateField.Index = false
-		logMapping.AddFieldMappingsAt("timestamp", dateField)
-
-		// Map the "raw" field as text with efficient settings
-		textField := bleve.NewTextFieldMapping()
-		textField.Store = true // We need to retrieve the raw content
-		textField.Analyzer = "standard"
-		// Disable term vectors to save space - they're not needed for basic search
-		textField.IncludeTermVectors = false
-		textField.IncludeInAll = true
-		logMapping.AddFieldMappingsAt("_raw", textField)
-
-		mapping.DefaultMapping = logMapping
-		mapping.DefaultAnalyzer = "standard"
-
-		// Enable dynamic indexing but optimize storage
-		mapping.IndexDynamic = true
-
-		// Avoid storing duplicates of field values that are already in _raw
-		mapping.StoreDynamic = true      // Store dynamic fields separately (already in _raw)
-		mapping.DocValuesDynamic = false // Disable doc values for dynamic fields (saves space)
-
-		// Configure LevelDB options for better compression and performance
-		kvConfig := map[string]interface{}{
-			"create_if_missing": true,
-			"error_if_exists":   false,
-			// More aggressive compression settings
-			"block_size":                32768,    // 32KB blocks for better compression ratio
-			"write_buffer_size":         16777216, // 16MB write buffer for better batching
-			"lru_cache_capacity":        33554432, // 32MB LRU cache
-			"bloom_filter_bits_per_key": 15,       // Bloom filter for performance
-			"compression":               "snappy", // Use Snappy compression for better performance/space trade-off
-
-		}
-
-		indexConfig := map[string]interface{}{
-			"store": kvConfig,
-		}
-
-		index, err = bleve.NewUsing(indexPath, mapping, "scorch", goleveldb.Name, indexConfig)
+	if _, statErr := os.Stat(indexPath); os.IsNotExist(statErr) {
+		indexConfig := map[string]interface{}{"store": kvConfig}
+		index, err = bleve.NewUsing(indexPath, buildIndexMapping(), "scorch", goleveldb.Name, indexConfig)
 	} else {
 		index, err = bleve.Open(indexPath)
 	}
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize index for date %s: %w", date, err)
 	}
@@ -177,10 +167,10 @@ func (s *Storage) getOrCreateIndex(date string) (bleve.Index, error) {
 	return index, nil
 }
 
-// Store saves the parsed log data to appropriate daily indices
+// Store saves the parsed log data to appropriate daily indices.
 func (s *Storage) Store(logs []map[string]interface{}, source string) error {
 
-	// Group logs by date
+	// Group logs by date.
 	logsByDate := make(map[string][]map[string]interface{})
 	for _, log := range logs {
 		ts := log["timestamp"].(time.Time)
@@ -188,7 +178,6 @@ func (s *Storage) Store(logs []map[string]interface{}, source string) error {
 		logsByDate[date] = append(logsByDate[date], log)
 	}
 
-	// Store logs in appropriate daily indices
 	for date, dateLogs := range logsByDate {
 		index, err := s.getOrCreateIndex(date)
 		if err != nil {
@@ -197,41 +186,31 @@ func (s *Storage) Store(logs []map[string]interface{}, source string) error {
 
 		batch := index.NewBatch()
 		for i, log := range dateLogs {
-			// Create a copy with potential numeric values converted
-			logCopy := make(map[string]interface{})
-
-			// First, copy all fields as strings
+			logCopy := make(map[string]interface{}, len(log))
 			for k, v := range log {
 				logCopy[k] = v
 			}
-
-			// Then try to convert any fields that look like numbers
 			for k, v := range log {
-				// Skip timestamp field - we want to keep it as a string
-				// Skip if key is any of the known smart decoder or fixed field
-
 				if k == "timestamp" || strings.HasPrefix(k, "_") {
 					continue
 				}
-
-				// Try to convert to int first
-				if intVal, err := strconv.ParseInt(v.(string), 10, 64); err == nil {
+				str, ok := v.(string)
+				if !ok {
+					continue
+				}
+				if intVal, err := strconv.ParseInt(str, 10, 64); err == nil {
 					logCopy[k] = intVal
 					continue
 				}
-
-				// If not an int, try float
-				if floatVal, err := strconv.ParseFloat(v.(string), 64); err == nil {
+				if floatVal, err := strconv.ParseFloat(str, 64); err == nil {
 					logCopy[k] = floatVal
 				}
 			}
-			// Generate a unique ID for the log entry with Unix timestamp, source and index number
 			docID := fmt.Sprintf("%d-%s-%d", log["timestamp"].(time.Time).UnixNano(), source, i)
 			if err := batch.Index(docID, logCopy); err != nil {
 				return fmt.Errorf("failed to index log entry: %w", err)
 			}
 		}
-
 		if err := index.Batch(batch); err != nil {
 			return fmt.Errorf("failed to commit batch for date %s: %w", date, err)
 		}

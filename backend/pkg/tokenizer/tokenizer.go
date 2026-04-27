@@ -137,10 +137,15 @@ func (t *Tokenizer) preparePatterns_locked() error {
 		customPatterns[k] = v
 	}
 
-	// Create a new grok instance
-	g := grok.New()
+	// NewComplete loads all built-in pattern libraries (httpd, java, firewalls,
+	// syslog, aws, etc.) so macros like %{HTTPDERROR_DATE}, %{JAVACLASS},
+	// %{CISCOTIMESTAMP} resolve without requiring explicit custom_patterns entries.
+	g, err := grok.NewComplete()
+	if err != nil {
+		return fmt.Errorf("failed to initialize grok: %w", err)
+	}
 
-	// Add all custom patterns
+	// Add all custom patterns (these override any built-ins with the same name)
 	for name, pattern := range customPatterns {
 		if err := g.AddPattern(name, pattern); err != nil {
 			return fmt.Errorf("failed to add custom pattern '%s': %w", name, err)
@@ -359,50 +364,49 @@ func (t *Tokenizer) ParseLogs(logLines []string, ingestSessionOptions types.Inge
 
 	for _, logLine := range logLines {
 		var matched bool = false
-		for range t.preparedPatterns {
-			parsed, err := t.preparedTokenizer.ParseString(logLine)
-			if err == nil && len(parsed) > 0 {
+		// preparedTokenizer internally tries all compiled patterns in priority order;
+		// a single call is sufficient — the outer loop was dead code (O(N²) waste).
+		parsed, err := t.preparedTokenizer.ParseString(logLine)
+		if err == nil && len(parsed) > 0 {
 
-				// Convert map[string]string to map[string]interface{}
-				parsedInterface := make(map[string]interface{})
-				for k, v := range parsed {
-					parsedInterface[k] = v
-				}
-
-				parsedInterface["_raw"] = logLine
-				parsedInterface["_src"] = ingestSessionOptions.Source
-
-				// Add metadata fields if provided
-				if ingestSessionOptions.Meta != nil {
-					for key, value := range ingestSessionOptions.Meta {
-						parsedInterface[key] = value
-					}
-				}
-
-				// Convert timestamp string to time.Time
-				if tsStr, ok := parsed["timestamp"]; ok {
-					ts := updateTimestamp(tsStr, ingestSessionOptions)
-					parsedInterface["timestamp"] = ts
-					lastTimeDelta = int(ts.Sub(lastTimestamp).Milliseconds())
-					lastTimestamp = ts
-				} else {
-					parsedInterface["timestamp"] = time.Now()
-				}
-
-				// Apply smart decoder if enabled
-				if useSmartDecoder {
-					smartDecoderResults := SmartDecodeLog(logLine)
-					for key, values := range smartDecoderResults {
-						// Join values with comma instead of using fmt.Sprintf to avoid brackets
-						parsedInterface["_"+key] = strings.Join(values, ", ")
-					}
-				}
-
-				parsedLogs = append(parsedLogs, parsedInterface)
-				matched = true
-				successCount++
-				break // Stop after first successful match (highest priority)
+			// Convert map[string]string to map[string]interface{}
+			parsedInterface := make(map[string]interface{})
+			for k, v := range parsed {
+				parsedInterface[k] = v
 			}
+
+			parsedInterface["_raw"] = logLine
+			parsedInterface["_src"] = ingestSessionOptions.Source
+
+			// Add metadata fields if provided
+			if ingestSessionOptions.Meta != nil {
+				for key, value := range ingestSessionOptions.Meta {
+					parsedInterface[key] = value
+				}
+			}
+
+			// Convert timestamp string to time.Time
+			if tsStr, ok := parsed["timestamp"]; ok {
+				ts := updateTimestamp(tsStr, ingestSessionOptions)
+				parsedInterface["timestamp"] = ts
+				lastTimeDelta = int(ts.Sub(lastTimestamp).Milliseconds())
+				lastTimestamp = ts
+			} else {
+				parsedInterface["timestamp"] = time.Now()
+			}
+
+			// Apply smart decoder if enabled
+			if useSmartDecoder {
+				smartDecoderResults := SmartDecodeLog(logLine)
+				for key, values := range smartDecoderResults {
+					// Join values with comma instead of using fmt.Sprintf to avoid brackets
+					parsedInterface["_"+key] = strings.Join(values, ", ")
+				}
+			}
+
+			parsedLogs = append(parsedLogs, parsedInterface)
+			matched = true
+			successCount++
 		}
 		if !matched {
 			failedCount++
@@ -459,8 +463,12 @@ func (t *Tokenizer) AddPattern(pattern string, priority ...int) error {
 
 // AddCustomPattern adds a custom named pattern
 func (t *Tokenizer) AddCustomPattern(name, pattern string) error {
-	// Verify the pattern is valid
-	g := grok.New()
+	// Validate using the complete pattern library so that patterns which
+	// reference built-in macros (e.g. %{HTTPDERROR_DATE}) pass validation.
+	g, err := grok.NewComplete()
+	if err != nil {
+		return fmt.Errorf("failed to initialize grok for validation: %w", err)
+	}
 	if err := g.AddPattern(name, pattern); err != nil {
 		return fmt.Errorf("invalid pattern definition: %w", err)
 	}
@@ -549,8 +557,10 @@ func (t *Tokenizer) AddPersistentPattern(pattern string) error {
 
 // AddPersistentCustomPattern adds a custom named pattern that persists between requests
 func (t *Tokenizer) AddPersistentCustomPattern(name, pattern string) error {
-	// Verify the pattern is valid
-	g := grok.New()
+	g, err := grok.NewComplete()
+	if err != nil {
+		return fmt.Errorf("failed to initialize grok for validation: %w", err)
+	}
 	if err := g.AddPattern(name, pattern); err != nil {
 		return fmt.Errorf("invalid persistent custom pattern definition: %w", err)
 	}

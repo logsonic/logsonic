@@ -25,8 +25,12 @@ export const useSearchLogs = (
       
       let startDate: Date = store.UTCTimeSince;
       let endDate: Date = store.UTCTimeTo;
-      if (store.isRelative) { 
-        const { startDate: relativeStartDate, endDate: relativeEndDate } = calculateRelativeDateRange(store.relativeValue);
+      if (store.isRelative) {
+        const { startDate: relativeStartDate, endDate: relativeEndDate } = calculateRelativeDateRange(
+          store.relativeValue,
+          store.customRelativeUnit,
+          store.customRelativeCount
+        );
         startDate = relativeStartDate;
         endDate = relativeEndDate;
       }

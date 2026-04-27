@@ -54,6 +54,27 @@ func (h *Services) loadPatternsFromFile() error {
 	}
 
 	currentPatterns = patternsConfig.Patterns
+
+	// Merge in any default patterns whose Name is not present in the file.
+	// This ensures patterns added to DefaultGrokPatterns() in new releases are
+	// available automatically without requiring users to delete grok.json.
+	// User-added or user-modified patterns (by Name) are never overwritten.
+	existing := make(map[string]bool, len(currentPatterns))
+	for _, p := range currentPatterns {
+		existing[p.Name] = true
+	}
+	added := 0
+	for _, def := range DefaultGrokPatterns() {
+		if !existing[def.Name] {
+			currentPatterns = append(currentPatterns, def)
+			added++
+		}
+	}
+	if added > 0 {
+		// Persist new defaults back so future startups don't re-add them.
+		_ = h.savePatternsToFile()
+	}
+
 	return nil
 }
 

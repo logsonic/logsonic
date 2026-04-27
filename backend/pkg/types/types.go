@@ -182,6 +182,9 @@ type AutosuggestResult struct {
 	PatternDescription string                   `json:"pattern_description"`
 	Pattern            string                   `json:"pattern"`
 	Score              float64                  `json:"score"`
+	// Coverage is the fraction of input lines matched by this pattern (0.0–1.0).
+	// Heterogeneous streams will show multiple patterns each covering a subset.
+	Coverage           float64                  `json:"coverage"`
 	ParsedLogs         []map[string]interface{} `json:"parsed_logs"`
 	CustomPatterns     map[string]string        `json:"custom_patterns,omitempty"`
 }

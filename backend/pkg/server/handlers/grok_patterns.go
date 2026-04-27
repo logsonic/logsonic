@@ -270,12 +270,17 @@ func DefaultGrokPatterns() []types.GrokPatternDefinition {
 			// Example: [**] [1:1000001:1] ATTACK-RESPONSES id check returned root [**]\n[Classification: Potentially Bad Traffic] [Priority: 2]\n2023-01-23T14:05:01.123 192.168.0.1:12345 -> 10.0.0.1:80
 		},
 		{
+			// Fix #4: The original pattern assumed a fixed JSON key order, which is not
+			// guaranteed by the JSON spec and breaks silently when serialisers reorder keys.
+			// The JSON auto-detection path in autosuggest handles Suricata EVE JSON properly;
+			// this grok fallback is kept as a best-effort alternative for ingestion pipelines
+			// that need a named pattern and where key order happens to be stable.
 			Name:        "Suricata EVE JSON",
-			Pattern:     "\\{\"timestamp\":\"%{TIMESTAMP_ISO8601:timestamp}\".*\"event_type\":\"%{WORD:event_type}\".*\"src_ip\":\"%{IP:src_ip}\".*\"src_port\":%{NUMBER:src_port}.*\"dest_ip\":\"%{IP:dest_ip}\".*\"dest_port\":%{NUMBER:dest_port}.*\"proto\":\"%{WORD:protocol}\".*(?:\"alert\":\\{.*\"signature\":\"%{DATA:alert_signature}\".*\"signature_id\":%{NUMBER:signature_id}.*\"category\":\"%{DATA:alert_category}\".*\\})?.*\\}",
+			Pattern:     "\\{[^}]*\"timestamp\":\\s*\"%{TIMESTAMP_ISO8601:timestamp}\"[^}]*\"event_type\":\\s*\"%{WORD:event_type}\"[^}]*\"src_ip\":\\s*\"%{IP:src_ip}\"[^}]*\"dest_ip\":\\s*\"%{IP:dest_ip}\"[^}]*\\}",
 			Priority:    48,
-			Description: "Suricata EVE JSON Log Format",
+			Description: "Suricata EVE JSON (use JSON auto-detection for key-order-independent parsing)",
 			Type:        "security",
-			// Example: {"timestamp":"2023-01-23T14:05:01.123Z","event_type":"alert","src_ip":"192.168.0.1","src_port":12345,"dest_ip":"10.0.0.1","dest_port":80,"proto":"TCP","alert":{"signature":"ET POLICY SSH Brute Force Attempt","signature_id":2001219,"category":"Attempted Administrator Privilege Gain"}}
+			// Example: {"timestamp":"2023-01-23T14:05:01.123Z","event_type":"alert","src_ip":"192.168.0.1","src_port":12345,"dest_ip":"10.0.0.1","dest_port":80,"proto":"TCP"}
 		},
 		{
 			Name:        "OSSEC Alert",
@@ -673,6 +678,132 @@ func DefaultGrokPatterns() []types.GrokPatternDefinition {
 			Description: "NATS Messaging Server Log Format",
 			Type:        "streaming",
 			// Example: [12345] [INF] Server is ready
+		},
+
+		// -----------------------------------------------------------------------
+		// Fix #9 — Additional patterns covering previously omitted formats
+		// -----------------------------------------------------------------------
+
+		// klog — used by every Kubernetes component (kubelet, kube-apiserver,
+		// kube-scheduler, controller-manager, etcd sidecar, etc.)
+		// Example: I0123 14:05:01.123456 12345 reconciler.go:154] Starting reconciler
+		{
+			Name:        "klog",
+			Pattern:     "(?P<severity>[IWEF])(?P<month>[01]\\d)(?P<day>[0-3]\\d) (?P<time>\\d{2}:\\d{2}:\\d{2}\\.\\d+)\\s+(?P<thread>\\d+) (?P<file>[^:]+):(?P<line>\\d+)\\] %{GREEDYDATA:message}",
+			Priority:    33,
+			Description: "klog — Kubernetes component structured log format (kubelet, kube-apiserver, controller-manager, scheduler)",
+			Type:        "standard",
+		},
+
+		// logfmt — key=value pairs used by Go applications, Heroku dynos, Prometheus, etc.
+		// Example: ts=2023-01-23T14:05:01Z level=info msg="request complete" method=GET path=/api status=200
+		{
+			Name:        "logfmt",
+			Pattern:     "(?:ts=%{NOTSPACE:timestamp}\\s+)?level=%{WORD:level}\\s+msg=\"%{DATA:message}\"(?:\\s+%{GREEDYDATA:fields})?",
+			Priority:    34,
+			Description: "logfmt (key=value) — used by Go applications, Prometheus, Heroku, and many 12-factor apps",
+			Type:        "standard",
+		},
+
+		// RFC 5424 — extended syslog with structured data (IETF standard)
+		// Example: <34>1 2003-10-11T22:14:15.003Z mymachine.example.com su - ID47 [exampleSDID@32473 iut="3"] An application event
+		{
+			Name:        "RFC 5424 Syslog",
+			Pattern:     "<(?P<pri>\\d+)>(?P<version>\\d+) (?P<timestamp>\\S+) (?P<hostname>\\S+) (?P<appname>\\S+) (?P<procid>\\S+) (?P<msgid>\\S+) (?P<structured_data>(?:\\[.*?\\])+|-) %{GREEDYDATA:message}",
+			Priority:    35,
+			Description: "RFC 5424 syslog with structured-data blocks (IETF standard, used by rsyslog ≥8, syslog-ng, many appliances)",
+			Type:        "standard",
+		},
+
+		// AWS VPC Flow Logs (v2 default fields)
+		// Example: 2 123456789012 eni-1a2b3c4d 10.0.0.1 10.0.1.1 443 52314 6 10 840 1620000000 1620001000 ACCEPT OK
+		{
+			Name:        "AWS VPC Flow Log",
+			Pattern:     "%{INT:version} %{INT:account_id} %{NOTSPACE:interface_id} (?:%{IP:srcaddr}|-) (?:%{IP:dstaddr}|-) (?:%{INT:srcport}|-) (?:%{INT:dstport}|-) (?:%{INT:protocol}|-) (?:%{INT:packets}|-) (?:%{INT:bytes}|-) (?:%{INT:start}|-) (?:%{INT:end}|-) (?:%{WORD:action}|-) (?:%{WORD:log_status}|-)",
+			Priority:    118,
+			Description: "AWS VPC Flow Logs — network-level traffic record for ENI/subnet/VPC monitoring",
+			Type:        "cloud",
+		},
+
+		// CEF — Common Event Format (ArcSight / SIEM standard, used by Palo Alto, Fortinet, etc.)
+		// Example: CEF:0|Security|ThreatManager|1.0|100|worm successfully stopped|10|src=10.0.0.1 dst=2.1.2.2 spt=1232
+		{
+			Name:        "CEF",
+			Pattern:     "CEF:%{INT:cef_version}\\|%{DATA:device_vendor}\\|%{DATA:device_product}\\|%{DATA:device_version}\\|%{DATA:signature_id}\\|%{DATA:name}\\|%{DATA:severity}\\|%{GREEDYDATA:extensions}",
+			Priority:    44,
+			Description: "Common Event Format (CEF) — security/SIEM standard used by ArcSight, Palo Alto, Fortinet, and many SIEM sources",
+			Type:        "security",
+		},
+
+		// LEEF — Log Event Extended Format (IBM QRadar / security standard)
+		// Example: LEEF:2.0|Vendor|Product|2.0|600|sev=5	src=192.168.0.1	dst=10.0.0.1
+		{
+			Name:        "LEEF",
+			Pattern:     "LEEF:%{DATA:leef_version}\\|%{DATA:device_vendor}\\|%{DATA:device_product}\\|%{DATA:device_version}\\|%{DATA:event_id}\\|%{GREEDYDATA:attributes}",
+			Priority:    44,
+			Description: "Log Event Extended Format (LEEF) — IBM QRadar SIEM security standard",
+			Type:        "security",
+		},
+
+		// AWS ALB v2 access log (Application Load Balancer)
+		// Example: https 2023-01-23T14:05:01.186Z app/my-alb/50dc6c495c0c9188 192.168.1.1:2817 10.0.0.1:80 0.086 0.048 0.037 200 200 0 57 "GET https://example.com:443/ HTTP/1.1" "curl/7.46.0" ECDHE-RSA-AES128-GCM-SHA256 TLSv1.2 arn:aws:elasticloadbalancing:us-east-1:1234:targetgroup/my-tg/abc "Root=1-abc-123" "example.com" "-" 1 2023-01-23T14:05:00Z "forward" "-" "-" 10.0.0.1:80 200 "-" "-"
+		{
+			Name:        "AWS ALB v2 Access Log",
+			Pattern:     "%{WORD:type} %{TIMESTAMP_ISO8601:timestamp} %{NOTSPACE:elb} %{IP:client_ip}:%{INT:client_port} (?:%{IP:target_ip}:%{INT:target_port}|-) %{NUMBER:request_processing_time} %{NUMBER:target_processing_time} %{NUMBER:response_processing_time} (?:%{INT:elb_status_code}|-) (?:%{INT:target_status_code}|-) %{INT:received_bytes} %{INT:sent_bytes} \"%{WORD:http_method} %{NOTSPACE:request_url} HTTP/%{NUMBER:http_version}\" \"%{DATA:user_agent}\" %{NOTSPACE:ssl_cipher} %{NOTSPACE:ssl_protocol} %{NOTSPACE:target_group_arn} \"%{DATA:trace_id}\" \"%{DATA:domain_name}\" \"%{DATA:chosen_cert_arn}\" %{GREEDYDATA:extra}",
+			Priority:    102,
+			Description: "AWS Application Load Balancer (ALB) v2 access log",
+			Type:        "cloud",
+		},
+
+		// Kubernetes audit log (text/JSON hybrid; text variant shown here)
+		// Example: 2023-01-23T14:05:01Z AUDIT verb=get uri="/api/v1/pods" user="admin" sourceIPs="192.168.1.1"
+		{
+			Name:        "Kubernetes Audit Log",
+			Pattern:     "%{TIMESTAMP_ISO8601:timestamp} AUDIT\\s+verb=%{WORD:verb}\\s+uri=\"%{DATA:uri}\"\\s+user=\"%{DATA:user}\"\\s+%{GREEDYDATA:extra}",
+			Priority:    36,
+			Description: "Kubernetes API-server audit log (text format; use JSON auto-detection for structured audit JSON)",
+			Type:        "standard",
+		},
+
+		// OpenTelemetry / OTLP text log record (simplified)
+		// Example: 2023-01-23T14:05:01.123Z INFO [service=api trace_id=abc123 span_id=def456] Request processed
+		{
+			Name:        "OpenTelemetry Log",
+			Pattern:     "%{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:severity} \\[%{DATA:attributes}\\] %{GREEDYDATA:message}",
+			Priority:    195,
+			Description: "OpenTelemetry (OTLP) text log record with bracketed attribute bag",
+			Type:        "standard",
+		},
+
+		// Caddy / Traefik JSON access log — covered by JSON auto-detection.
+		// Text fallback for Caddy's default format:
+		// Example: 2023/01/23 14:05:01.123 INFO http.log.access handled request {"method": "GET", "status": 200}
+		{
+			Name:        "Caddy Access Log",
+			Pattern:     "(?P<timestamp>\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d+) %{LOGLEVEL:level} %{NOTSPACE:logger} %{DATA:message} \\{%{GREEDYDATA:fields}\\}",
+			Priority:    196,
+			Description: "Caddy web server access log (text format; use JSON auto-detection for Caddy JSON mode)",
+			Type:        "standard",
+		},
+
+		// -----------------------------------------------------------------------
+		// HPC / Supercomputer Logs
+		// -----------------------------------------------------------------------
+
+		// IBM Blue Gene/L (BGL) supercomputer log
+		// Fields: flag unix_ts date node_id high_precision_ts node_label component category severity message
+		// timestamp field carries the Unix epoch integer (10-digit); dateparse resolves it correctly.
+		// Example: - 1117838570 2005.06.03 R02-M1-N0-C:J12-U11 2005-06-03-15.42.50.675872 R02-M1-N0-C:J12-U11 RAS KERNEL INFO instruction cache parity error corrected
+		// Example: APPREAD 1117869872 2005.06.04 R04-M1-N4-I:J18-U11 2005-06-04-00.24.32.432192 R04-M1-N4-I:J18-U11 RAS APP FATAL ciod: failed to read message prefix
+		{
+			Name:        "IBM BGL Supercomputer",
+			Pattern:     "%{NOTSPACE:flag} %{INT:timestamp} (?P<date>\\d{4}\\.\\d{2}\\.\\d{2}) %{NOTSPACE:node_id} %{BGL_TIMESTAMP:datetime} %{NOTSPACE:node_label} %{WORD:component} %{WORD:category} %{LOGLEVEL:severity} %{GREEDYDATA:message}",
+			Priority:    197,
+			Description: "IBM Blue Gene/L (BGL) supercomputer RAS log — flag, Unix epoch, dot-date, node ID, high-precision timestamp, component, category, severity, message",
+			Type:        "standard",
+			CustomPatterns: map[string]string{
+				"BGL_TIMESTAMP": "\\d{4}-\\d{2}-\\d{2}-\\d{2}\\.\\d{2}\\.\\d{2}\\.\\d+",
+			},
 		},
 
 		// Default Enhanced Catchall Patterns
