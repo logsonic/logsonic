@@ -31,6 +31,11 @@ func NewHandler(store storage.StorageInterface, tok tokenizer.TokenizerInterface
 	}
 }
 
+// GetStorage returns the underlying StorageInterface for use by external components.
+func (s *Services) GetStorage() storage.StorageInterface {
+	return s.storage
+}
+
 // CloseStorage cleanly shuts down all open Bleve indices.
 func (s *Services) CloseStorage() error {
 	type closer interface {

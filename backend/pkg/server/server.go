@@ -134,6 +134,9 @@ func NewServer(cfg Config) (*Server, error) {
 	// Initialize Grok patterns
 	h.InitializeGrokPatterns()
 
+	// Initialize alert rules (load from disk + sync to bus if active)
+	h.InitializeAlertRules()
+
 	// Helper function to serve static files with proper MIME types
 	serveWithMimeType := func(w http.ResponseWriter, r *http.Request) {
 		// Set appropriate content types for common file extensions
@@ -248,6 +251,13 @@ func NewServer(cfg Config) (*Server, error) {
 			r.Post("/translate-query", h.HandleQueryTranslation)
 		})
 
+		// Alert rule CRUD (always active)
+		r.Route("/alerts", func(r chi.Router) {
+			r.Get("/", h.HandleAlertRules)
+			r.Post("/", h.HandleAlertRules)
+			r.Delete("/", h.HandleAlertRules)
+		})
+
 		// Stream WebSocket endpoint (active when bus is wired up)
 		if cfg.StreamBus != nil {
 			r.Get("/stream/ws", h.HandleStreamWS)
@@ -281,6 +291,13 @@ func (s *Server) Start() error {
 		s.services.StartTestEventGenerator(cleanupCtx)
 	}
 
+	// Start async Bleve indexer when stream bus is active.
+	var bleveIndexer *stream.BleveIndexer
+	if s.config.StreamBus != nil {
+		bleveIndexer = stream.NewBleveIndexer(s.config.StreamBus, s.services.GetStorage(), stream.IndexerConfig{})
+		bleveIndexer.Start(cleanupCtx)
+	}
+
 	// Listen for OS signals in the background.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
@@ -307,6 +324,11 @@ func (s *Server) Start() error {
 
 	if err := httpServer.Shutdown(ctx); err != nil {
 		return fmt.Errorf("graceful shutdown failed: %w", err)
+	}
+
+	// Stop async indexer before closing storage (flushes pending batch).
+	if bleveIndexer != nil {
+		bleveIndexer.Stop()
 	}
 
 	// Close all Bleve indices cleanly.

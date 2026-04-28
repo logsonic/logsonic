@@ -33,8 +33,9 @@ type wsClientMsg struct {
 }
 
 type wsServerMsg struct {
-	Type  string                 `json:"type"`  // "log" | "status" | "error"
-	Entry map[string]interface{} `json:"entry,omitempty"`
+	Type  string                 `json:"type"`            // "log" | "status" | "error" | "alert"
+	Entry map[string]interface{} `json:"entry,omitempty"` // log fields (log/alert)
+	Rule  *stream.AlertRule      `json:"rule,omitempty"`  // matched rule (alert only)
 	State string                 `json:"state,omitempty"`
 	Msg   string                 `json:"message,omitempty"`
 }
@@ -116,6 +117,14 @@ func (h *Services) HandleStreamWS(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			if err := writeJSON(conn, wsServerMsg{Type: "log", Entry: ev.Fields}); err != nil {
+				return
+			}
+		case fire, ok := <-sub.AlertCh:
+			if !ok {
+				return
+			}
+			ruleCopy := fire.Rule
+			if err := writeJSON(conn, wsServerMsg{Type: "alert", Rule: &ruleCopy, Entry: fire.Entry}); err != nil {
 				return
 			}
 		}

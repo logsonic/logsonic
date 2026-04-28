@@ -24,6 +24,7 @@ type Event struct {
 type Subscriber struct {
 	id          int
 	Ch          chan *Event
+	AlertCh     chan AlertFire
 	filterQuery string // Bleve-style field:value query; empty = no filter
 }
 
@@ -41,6 +42,8 @@ type Bus struct {
 
 	tokMu     sync.RWMutex
 	streamTok tokenizer.TokenizerInterface // nil = no re-tokenization
+
+	alerts alertState
 }
 
 // NewBus creates a new stream bus with a 50k-event ring buffer.
@@ -80,18 +83,19 @@ func (b *Bus) Subscribe(bufSize int) (*Subscriber, []*Event) {
 	defer b.mu.Unlock()
 	id := b.nextID
 	b.nextID++
-	sub := &Subscriber{id: id, Ch: make(chan *Event, bufSize)}
+	sub := &Subscriber{id: id, Ch: make(chan *Event, bufSize), AlertCh: make(chan AlertFire, 64)}
 	b.subs[id] = sub
 	return sub, b.replayLocked()
 }
 
-// Unsubscribe removes a subscriber and closes its channel.
+// Unsubscribe removes a subscriber and closes its channels.
 func (b *Bus) Unsubscribe(sub *Subscriber) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if _, ok := b.subs[sub.id]; ok {
 		delete(b.subs, sub.id)
 		close(sub.Ch)
+		close(sub.AlertCh)
 	}
 }
 
@@ -106,6 +110,11 @@ func (b *Bus) Publish(e *Event) {
 	if tok != nil {
 		e = applyGROK(tok, e)
 	}
+
+	// Snapshot alert rules outside the main lock.
+	b.alerts.mu.RLock()
+	rules := b.alerts.rules
+	b.alerts.mu.RUnlock()
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -127,6 +136,19 @@ func (b *Bus) Publish(e *Event) {
 		default:
 		}
 	}
+	// Evaluate alert rules; fan-out fires to all subscribers.
+	for _, rule := range rules {
+		if !rule.Enabled || !matchFilter(e.Fields, rule.Query) {
+			continue
+		}
+		fire := AlertFire{Rule: rule, Entry: e.Fields}
+		for _, sub := range b.subs {
+			select {
+			case sub.AlertCh <- fire:
+			default:
+			}
+		}
+	}
 }
 
 // Close shuts down the bus and closes all subscriber channels.
@@ -139,6 +161,7 @@ func (b *Bus) Close() {
 	b.closed = true
 	for _, sub := range b.subs {
 		close(sub.Ch)
+		close(sub.AlertCh)
 	}
 	b.subs = make(map[int]*Subscriber)
 }
