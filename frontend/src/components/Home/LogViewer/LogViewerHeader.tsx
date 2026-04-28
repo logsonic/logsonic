@@ -1,3 +1,4 @@
+import { StreamToggle } from '@/components/StreamToggle';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -73,6 +74,7 @@ export const LogViewerHeader = (
   return (
     <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-100 bg-slate-50/50">
       <div className="flex items-center gap-2">
+        <StreamToggle />
         <div className="flex items-center border border-slate-200 rounded-md overflow-hidden bg-white shadow-sm">
           <div className="px-2.5 py-1 bg-slate-50 border-r border-slate-200">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Columns</span>

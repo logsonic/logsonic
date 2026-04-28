@@ -39,6 +39,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useSearchLogs } from '@/hooks/useSearchLogs';
 import { deleteLogsById, getSystemInfo } from '@/lib/api-client';
 import { useLogResultStore } from '@/stores/useLogResultStore';
+import { useStreamStore } from '@/stores/streamStore';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import {
   DndContext,
@@ -153,7 +154,8 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
   const store = useSearchQueryParamsStore();
   const { logData, isLoading } = useLogResultStore();
   const { colorRules } = useColorRuleStore();
-  const logs = logData?.logs || [];
+  const { isLive, streamedLogs } = useStreamStore();
+  const logs = isLive ? streamedLogs : (logData?.logs || []);
   const { parseSearchQuery, createHighlighter } = useSearchParser();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -198,6 +200,13 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     calculateTableHeight();
   }, [store.pageSize, calculateTableHeight]);
 
+  // Auto-scroll to top when live and new entries arrive.
+  useEffect(() => {
+    if (!isLive || streamedLogs.length === 0) return;
+    const container = tableRef.current?.closest<HTMLElement>('[class*="overflow-auto"]');
+    container?.scrollTo(0, 0);
+  }, [isLive, streamedLogs.length]);
+
   // Extract search tokens from the current query
   const searchTokens = useMemo(() => {
     return parseSearchQuery(store.searchQuery || '');
@@ -214,35 +223,36 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
   }, [systemInfo]);
 
   const autofitColumns = useCallback(() => {
-    
+
     if (store.selectedColumns.length === 0) return;
-    if ( !logData || !logData.logs || logData.logs.length === 0) return;
-    
+    const sourceLogs = isLive ? streamedLogs : (logData?.logs || []);
+    if (sourceLogs.length === 0) return;
+
     // Calculate optimal width for each column based on content
     const columnWidths: Record<string, number> = {};
-    
+
     // Set fixed widths for utility columns - these should never be adjusted
     columnWidths['select'] = 40;
     columnWidths['expander'] = 40;
-    
+
     // Get the container width
     const containerWidth = tableRef.current?.clientWidth || 0;
-    
+
     // First pass: calculate content-based widths
     const contentBasedWidths: Record<string, number> = {};
     let totalContentWidth = 0;
-    
+
     // Process each selected column (excluding utility columns)
     store.selectedColumns.forEach(column => {
       // Skip utility columns as they have fixed widths
       if (column === 'select' || column === 'expander' || column === '_raw' || column === '_src') return;
-      
+
       // Start with column name length (plus some padding)
       let maxContentWidth = column.length * 10;
-      
+
       // Sample up to 100 logs to avoid performance issues with large datasets
-      const sampleSize = Math.min(logData.logs.length, store.pageSize);
-      const sampleLogs = logData.logs.slice(0, sampleSize);
+      const sampleSize = Math.min(sourceLogs.length, store.pageSize);
+      const sampleLogs = sourceLogs.slice(0, sampleSize);
       
       // Find the maximum content width
       sampleLogs.forEach(log => {
@@ -308,7 +318,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     // Update column widths in the store
     store.setColumnWidths(columnWidths);
     
-  }, [logData, store.selectedColumns, store.pageSize]);
+  }, [logData, streamedLogs, isLive, store.selectedColumns, store.pageSize]);
 
   // Expose the autofitColumns function through the ref
   React.useImperativeHandle(ref, () => ({
@@ -785,7 +795,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     return result;
   }, [colorRules]);
 
-  if (isLoading) {
+  if (isLoading && !isLive) {
     return (
       <div className="p-4">
         <LogViewerSkeleton columns={store.selectedColumns.length} rows={10} />
@@ -793,7 +803,15 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     );
   }
 
-    if (logs.length === 0) {
+  if (logs.length === 0) {
+
+      if (isLive) {
+        return (
+          <div className="flex items-center justify-center h-64">
+            <p className="text-muted-foreground animate-pulse">Waiting for live events…</p>
+          </div>
+        );
+      }
 
       if (noLogsInSystem){
         return (<div className="flex flex-col items-center justify-center text-slate-500 h-full" style={{marginTop: '-10vh'}}>
@@ -806,8 +824,8 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
           <p className="text-lg mb-6 text-slate-600">
             Looks like your log storage is as empty as a developer's coffee cup on Monday morning!
           </p>
-          <Button 
-            onClick={() =>  navigate('/import')} 
+          <Button
+            onClick={() =>  navigate('/import')}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
           >
             <Upload className="h-4 w-4" />
@@ -816,7 +834,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
         </div>
       </div>)
         }
-    
+
       return (
         <div className="flex items-center justify-center h-64">
           <p className="text-muted-foreground">No logs to display</p>
