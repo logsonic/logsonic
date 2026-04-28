@@ -26,6 +26,10 @@ export function useStream() {
 
       ws.onopen = () => {
         reconnectDelay.current = 1000;
+        // Send current filter immediately on (re)connect.
+        if (searchStore.searchQuery) {
+          ws.send(JSON.stringify({ type: 'filter', query: searchStore.searchQuery }));
+        }
       };
 
       ws.onmessage = (event) => {
@@ -68,6 +72,12 @@ export function useStream() {
       store.setWsRef(null);
     };
   }, [store.isLive]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Push filter changes to the server whenever the search query changes while live.
+  useEffect(() => {
+    if (!store.isLive) return;
+    store.sendFilter(searchStore.searchQuery);
+  }, [searchStore.searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return store;
 }

@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"logsonic/pkg/stream"
 	"logsonic/pkg/types"
 	"net/http"
 	"net/http/httptest"
@@ -122,7 +123,7 @@ func setupHandler(t *testing.T) (*Services, *mockStorage) {
 	tok := &mockTokenizer{}
 	dir := t.TempDir()
 	store.baseDir = dir
-	h := NewHandler(store, tok, dir)
+	h := NewHandler(store, tok, dir, stream.NewBus())
 	return h, store
 }
 

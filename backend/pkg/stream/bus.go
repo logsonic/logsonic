@@ -1,8 +1,12 @@
 package stream
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
+
+	"logsonic/pkg/tokenizer"
+	"logsonic/pkg/types"
 )
 
 const (
@@ -18,21 +22,25 @@ type Event struct {
 
 // Subscriber receives events from the bus.
 type Subscriber struct {
-	id int
-	Ch chan *Event
+	id          int
+	Ch          chan *Event
+	filterQuery string // Bleve-style field:value query; empty = no filter
 }
 
 // Bus is a thread-safe ring-buffer pub/sub bus for log stream events.
 // It keeps the last DefaultBufSize events for replay on new subscriber connect.
 type Bus struct {
-	mu      sync.Mutex
-	subs    map[int]*Subscriber
-	nextID  int
-	closed  bool
-	count   atomic.Int64
-	ringBuf []*Event
+	mu       sync.Mutex
+	subs     map[int]*Subscriber
+	nextID   int
+	closed   bool
+	count    atomic.Int64
+	ringBuf  []*Event
 	ringHead int
 	ringSize int
+
+	tokMu     sync.RWMutex
+	streamTok tokenizer.TokenizerInterface // nil = no re-tokenization
 }
 
 // NewBus creates a new stream bus with a 50k-event ring buffer.
@@ -40,6 +48,24 @@ func NewBus() *Bus {
 	return &Bus{
 		subs:    make(map[int]*Subscriber),
 		ringBuf: make([]*Event, DefaultBufSize),
+	}
+}
+
+// SetStreamTokenizer replaces the bus-level GROK tokenizer applied before publishing.
+// Pass nil to disable re-tokenization. Tok must be pre-configured with the desired pattern.
+func (b *Bus) SetStreamTokenizer(tok tokenizer.TokenizerInterface) {
+	b.tokMu.Lock()
+	defer b.tokMu.Unlock()
+	b.streamTok = tok
+}
+
+// SetSubscriberFilter updates the per-subscriber filter query.
+// Empty query clears the filter (all events pass).
+func (b *Bus) SetSubscriberFilter(sub *Subscriber, query string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if s, ok := b.subs[sub.id]; ok {
+		s.filterQuery = query
 	}
 }
 
@@ -69,9 +95,18 @@ func (b *Bus) Unsubscribe(sub *Subscriber) {
 	}
 }
 
-// Publish writes e to the ring buffer and fans out to all subscribers.
+// Publish applies the bus-level GROK tokenizer (if configured), stores the event
+// in the ring buffer, then fans out to subscribers that pass their filter.
 // Slow subscribers are dropped rather than blocking the publisher.
 func (b *Bus) Publish(e *Event) {
+	// Apply GROK outside the main lock — parsing can take non-trivial time.
+	b.tokMu.RLock()
+	tok := b.streamTok
+	b.tokMu.RUnlock()
+	if tok != nil {
+		e = applyGROK(tok, e)
+	}
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.closed {
@@ -84,6 +119,9 @@ func (b *Bus) Publish(e *Event) {
 		b.ringSize++
 	}
 	for _, sub := range b.subs {
+		if sub.filterQuery != "" && !matchFilter(e.Fields, sub.filterQuery) {
+			continue
+		}
 		select {
 		case sub.Ch <- e:
 		default:
@@ -131,4 +169,38 @@ func (b *Bus) replayLocked() []*Event {
 		out[i] = b.ringBuf[(start+i)%len(b.ringBuf)]
 	}
 	return out
+}
+
+// applyGROK re-parses the event's _raw field using tok and merges the result.
+// Returns the original event unchanged if _raw is absent or parsing fails.
+func applyGROK(tok tokenizer.TokenizerInterface, e *Event) *Event {
+	raw, ok := e.Fields["_raw"]
+	if !ok {
+		return e
+	}
+	rawStr, ok := raw.(string)
+	if !ok || rawStr == "" {
+		return e
+	}
+	src := ""
+	if v, ok := e.Fields["_src"]; ok {
+		src = fmt.Sprintf("%v", v)
+	}
+	opts := types.IngestSessionOptions{
+		Source:       src,
+		SmartDecoder: false,
+	}
+	parsed, _, _, err := tok.ParseLogs([]string{rawStr}, opts)
+	if err != nil || len(parsed) == 0 {
+		return e
+	}
+	// Merge: original fields first, then parsed (parsed wins for non-meta keys).
+	newFields := make(map[string]interface{}, len(e.Fields)+len(parsed[0]))
+	for k, v := range e.Fields {
+		newFields[k] = v
+	}
+	for k, v := range parsed[0] {
+		newFields[k] = v
+	}
+	return &Event{Fields: newFields}
 }

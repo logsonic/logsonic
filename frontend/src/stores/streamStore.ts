@@ -18,6 +18,8 @@ interface StreamState {
   toggle: () => void;
   pause: () => void;
   resume: () => void;
+  sendFilter: (query: string) => void;
+  setPattern: (patternId: string) => void;
 }
 
 export const useStreamStore = create<StreamState>((set, get) => ({
@@ -61,5 +63,19 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       wsRef.send(JSON.stringify({ type: 'resume' }));
     }
     set({ isPaused: false });
+  },
+
+  sendFilter: (query: string) => {
+    const { wsRef } = get();
+    if (wsRef?.readyState === WebSocket.OPEN) {
+      wsRef.send(JSON.stringify({ type: 'filter', query }));
+    }
+  },
+
+  setPattern: (patternId: string) => {
+    const { wsRef } = get();
+    if (wsRef?.readyState === WebSocket.OPEN) {
+      wsRef.send(JSON.stringify({ type: 'set_pattern', patternId }));
+    }
   },
 }));

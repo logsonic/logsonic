@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"logsonic/pkg/stream"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -57,7 +58,7 @@ func newBenchHandler(b *testing.B) *Services {
 	b.Helper()
 	store := newMockStorage()
 	tok := &mockTokenizer{}
-	h := NewHandler(store, tok, b.TempDir())
+	h := NewHandler(store, tok, b.TempDir(), stream.NewBus())
 	return h
 }
 

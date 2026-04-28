@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"logsonic/pkg/stream"
 	"logsonic/pkg/types"
 	"os"
 	"path/filepath"
@@ -13,7 +14,7 @@ import (
 // are added automatically on next startup without overwriting existing entries.
 func TestLoadPatternsFromFile_MergesNewDefaults(t *testing.T) {
 	dir := t.TempDir()
-	h := NewHandler(newMockStorage(), &mockTokenizer{}, dir)
+	h := NewHandler(newMockStorage(), &mockTokenizer{}, dir, stream.NewBus())
 
 	// Write a grok.json that has only one known pattern — simulates a file
 	// from an older release that predates the BGL and other new patterns.
@@ -68,7 +69,7 @@ func TestLoadPatternsFromFile_MergesNewDefaults(t *testing.T) {
 // whose Name matches a default is kept as-is (user version wins over default).
 func TestLoadPatternsFromFile_ExistingPatternNotOverwritten(t *testing.T) {
 	dir := t.TempDir()
-	h := NewHandler(newMockStorage(), &mockTokenizer{}, dir)
+	h := NewHandler(newMockStorage(), &mockTokenizer{}, dir, stream.NewBus())
 
 	customDescription := "MY CUSTOM DESCRIPTION — must survive merge"
 	writeGrokJSON(t, dir, []types.GrokPatternDefinition{
@@ -106,7 +107,7 @@ func TestLoadPatternsFromFile_ExistingPatternNotOverwritten(t *testing.T) {
 // produces the full default set (regression guard).
 func TestLoadPatternsFromFile_NoFileCreatesDefaults(t *testing.T) {
 	dir := t.TempDir() // empty — no grok.json
-	h := NewHandler(newMockStorage(), &mockTokenizer{}, dir)
+	h := NewHandler(newMockStorage(), &mockTokenizer{}, dir, stream.NewBus())
 
 	patternMutex.Lock()
 	currentPatterns = nil

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"logsonic/pkg/stream"
+	"logsonic/pkg/tokenizer"
 
 	"github.com/gorilla/websocket"
 )
@@ -26,7 +27,9 @@ var wsUpgrader = websocket.Upgrader{
 }
 
 type wsClientMsg struct {
-	Type string `json:"type"` // "pause" | "resume"
+	Type      string `json:"type"`      // "pause" | "resume" | "filter" | "set_pattern"
+	Query     string `json:"query"`     // for "filter": Bleve-style field:value query
+	PatternID string `json:"patternId"` // for "set_pattern": pattern name; empty clears
 }
 
 type wsServerMsg struct {
@@ -95,6 +98,15 @@ func (h *Services) HandleStreamWS(w http.ResponseWriter, r *http.Request) {
 			case "resume":
 				paused = false
 				_ = writeJSON(conn, wsServerMsg{Type: "status", State: "resumed"})
+			case "filter":
+				h.StreamBus.SetSubscriberFilter(sub, cm.Query)
+				_ = writeJSON(conn, wsServerMsg{Type: "status", State: "filter_set"})
+			case "set_pattern":
+				if err := h.applyStreamPattern(cm.PatternID); err != nil {
+					_ = writeJSON(conn, wsServerMsg{Type: "error", Msg: err.Error()})
+				} else {
+					_ = writeJSON(conn, wsServerMsg{Type: "status", State: "pattern_set"})
+				}
 			}
 		case ev, ok := <-sub.Ch:
 			if !ok {
@@ -108,6 +120,37 @@ func (h *Services) HandleStreamWS(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+// applyStreamPattern looks up patternID by name in the current pattern definitions,
+// builds a dedicated tokenizer for that pattern, and sets it on the stream bus.
+// An empty patternID clears the bus-level tokenizer (disabling re-tokenization).
+func (h *Services) applyStreamPattern(patternID string) error {
+	if patternID == "" {
+		h.StreamBus.SetStreamTokenizer(nil)
+		return nil
+	}
+	defs := h.GetPatternDefinitions()
+	for _, def := range defs {
+		if def.Name != patternID {
+			continue
+		}
+		tok, err := tokenizer.NewTokenizer()
+		if err != nil {
+			return fmt.Errorf("tokenizer init: %w", err)
+		}
+		for name, pat := range def.CustomPatterns {
+			if err := tok.AddCustomPattern(name, pat); err != nil {
+				return fmt.Errorf("custom pattern %q: %w", name, err)
+			}
+		}
+		if err := tok.AddPattern(def.Pattern, def.Priority); err != nil {
+			return fmt.Errorf("add pattern: %w", err)
+		}
+		h.StreamBus.SetStreamTokenizer(tok)
+		return nil
+	}
+	return fmt.Errorf("pattern %q not found", patternID)
 }
 
 // StartTestEventGenerator publishes synthetic log entries every 2 seconds until ctx is cancelled.
@@ -139,6 +182,7 @@ func (h *Services) StartTestEventGenerator(ctx context.Context) {
 						"message":   fmt.Sprintf("[dev] %s #%d", messages[i%len(messages)], i+1),
 						"level":     levels[i%len(levels)],
 						"_src":      "dev-events",
+						"_raw":      fmt.Sprintf("[dev] %s #%d level=%s", messages[i%len(messages)], i+1, levels[i%len(levels)]),
 					},
 				})
 				i++
@@ -146,7 +190,6 @@ func (h *Services) StartTestEventGenerator(ctx context.Context) {
 		}
 	}()
 }
-
 
 func writeJSON(conn *websocket.Conn, v interface{}) error {
 	data, err := json.Marshal(v)

@@ -92,3 +92,61 @@ func TestParseSyslogFallback(t *testing.T) {
 		t.Errorf("fallback: expected _src=syslog")
 	}
 }
+
+func TestMatchFilter(t *testing.T) {
+	fields := map[string]interface{}{
+		"level":   "error",
+		"message": "connection timeout",
+		"_raw":    "2024-01-01 level=error connection timeout",
+	}
+
+	cases := []struct {
+		query string
+		want  bool
+	}{
+		{"", true},
+		{"level:error", true},
+		{"level:ERROR", true},      // case-insensitive
+		{"level:warn", false},
+		{"connection", true},       // freetext matches _raw
+		{"timeout", true},          // freetext matches message
+		{"level:error timeout", true},  // AND
+		{"level:error level:warn", false},
+		{"level:missing_field", false},
+	}
+
+	for _, c := range cases {
+		got := matchFilter(fields, c.query)
+		if got != c.want {
+			t.Errorf("matchFilter(%q) = %v, want %v", c.query, got, c.want)
+		}
+	}
+}
+
+func TestBusFilterDelivery(t *testing.T) {
+	b := NewBus()
+	sub, _ := b.Subscribe(10)
+	b.SetSubscriberFilter(sub, "level:error")
+
+	b.Publish(&Event{Fields: map[string]interface{}{"level": "info", "message": "ok"}})
+	b.Publish(&Event{Fields: map[string]interface{}{"level": "error", "message": "boom"}})
+
+	// Only the error event should arrive.
+	select {
+	case ev := <-sub.Ch:
+		if ev.Fields["level"] != "error" {
+			t.Fatalf("expected error event, got %v", ev.Fields["level"])
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for filtered event")
+	}
+
+	select {
+	case ev := <-sub.Ch:
+		t.Fatalf("unexpected extra event: %v", ev.Fields)
+	default:
+		// nothing — correct, info event was filtered
+	}
+
+	b.Unsubscribe(sub)
+}
