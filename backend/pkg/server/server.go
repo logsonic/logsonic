@@ -13,7 +13,7 @@ import (
 
 	"logsonic/docs"
 	"logsonic/pkg/server/handlers"
-
+	"logsonic/pkg/stream"
 	"logsonic/pkg/static"
 	"logsonic/pkg/storage"
 	"logsonic/pkg/tokenizer"
@@ -36,6 +36,7 @@ type Config struct {
 	WorkDir     string // Directory where log files are stored
 	Timeout     time.Duration
 	Host        string
+	StreamBus   *stream.Bus // nil = streaming disabled
 }
 
 type Server struct {
@@ -112,7 +113,7 @@ func NewServer(cfg Config) (*Server, error) {
 	}))
 
 	// Initialize handler
-	h := handlers.NewHandler(store, tokenizer, cfg.StoragePath)
+	h := handlers.NewHandler(store, tokenizer, cfg.StoragePath, cfg.StreamBus)
 
 	// Serve static files from embedded filesystem
 	embeddedFS := static.GetFileSystem()
@@ -245,6 +246,11 @@ func NewServer(cfg Config) (*Server, error) {
 			r.Get("/status", h.HandleCheckAIStatus)
 			r.Post("/translate-query", h.HandleQueryTranslation)
 		})
+
+		// Stream WebSocket endpoint (active when bus is wired up)
+		if cfg.StreamBus != nil {
+			r.Get("/stream/ws", h.HandleStreamWS)
+		}
 
 	})
 

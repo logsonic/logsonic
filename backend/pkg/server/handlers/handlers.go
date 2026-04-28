@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"logsonic/pkg/storage"
+	"logsonic/pkg/stream"
 	"logsonic/pkg/tokenizer"
 	"sync"
 )
@@ -11,6 +12,7 @@ type Services struct {
 	tokenizer tokenizer.TokenizerInterface
 
 	StoragePath string
+	StreamBus   *stream.Bus
 
 	// Cache for system info
 	storageInfoCache any // Will store StorageInfoType from info.go
@@ -18,11 +20,12 @@ type Services struct {
 	cacheValid       bool
 }
 
-func NewHandler(storage storage.StorageInterface, tokenizer tokenizer.TokenizerInterface, storagePath string) *Services {
+func NewHandler(store storage.StorageInterface, tok tokenizer.TokenizerInterface, storagePath string, bus *stream.Bus) *Services {
 	return &Services{
-		storage:          storage,
-		tokenizer:        tokenizer,
+		storage:          store,
+		tokenizer:        tok,
 		StoragePath:      storagePath,
+		StreamBus:        bus,
 		storageInfoCache: nil,
 		cacheValid:       false,
 	}
