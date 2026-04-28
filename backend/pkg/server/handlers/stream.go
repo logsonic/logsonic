@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"logsonic/pkg/stream"
 
 	"github.com/gorilla/websocket"
 )
@@ -45,12 +49,19 @@ func (h *Services) HandleStreamWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	sub := h.StreamBus.Subscribe(500)
+	sub, replay := h.StreamBus.Subscribe(512)
 	defer h.StreamBus.Unsubscribe(sub)
 
 	// Send connected status.
 	if err := writeJSON(conn, wsServerMsg{Type: "status", State: "connected"}); err != nil {
 		return
+	}
+
+	// Replay buffered events (oldest-first).
+	for _, ev := range replay {
+		if err := writeJSON(conn, wsServerMsg{Type: "log", Entry: ev.Fields}); err != nil {
+			return
+		}
 	}
 
 	paused := false
@@ -98,6 +109,44 @@ func (h *Services) HandleStreamWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
+// StartTestEventGenerator publishes synthetic log entries every 2 seconds until ctx is cancelled.
+// Use with --dev-events flag for manual testing of the stream pipeline.
+func (h *Services) StartTestEventGenerator(ctx context.Context) {
+	levels := []string{"info", "warn", "error", "debug"}
+	messages := []string{
+		"user login successful",
+		"request processed in 42ms",
+		"cache miss for key user:session",
+		"connection pool at 80% capacity",
+		"scheduled job completed",
+		"health check passed",
+		"config reloaded",
+		"new deployment started",
+	}
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		i := 0
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case t := <-ticker.C:
+				h.StreamBus.Publish(&stream.Event{
+					Fields: map[string]interface{}{
+						"timestamp": t.UTC().Format(time.RFC3339),
+						"message":   fmt.Sprintf("[dev] %s #%d", messages[i%len(messages)], i+1),
+						"level":     levels[i%len(levels)],
+						"_src":      "dev-events",
+					},
+				})
+				i++
+			}
+		}
+	}()
+}
+
 
 func writeJSON(conn *websocket.Conn, v interface{}) error {
 	data, err := json.Marshal(v)

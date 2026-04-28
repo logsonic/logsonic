@@ -26,6 +26,7 @@ func main() {
 	pipeFlag := flag.Bool("pipe", false, "Alias for --stream")
 	syslogPortFlag := flag.Int("syslog-port", 514, "UDP/TCP port for syslog receiver (0 = disabled)")
 	syslogProtoFlag := flag.String("syslog-proto", "both", "Syslog protocol: udp|tcp|both")
+	devEventsFlag := flag.Bool("dev-events", false, "Publish synthetic log events every 2s (for stream UI testing)")
 
 	// Parse command line arguments
 	flag.Parse()
@@ -79,20 +80,17 @@ func main() {
 		}
 	}
 
-	// Build stream bus when any ingestion source is active.
 	pipeMode := *streamFlag || *pipeFlag
 	syslogEnabled := *syslogPortFlag > 0
 
-	var bus *stream.Bus
-	if pipeMode || syslogEnabled {
-		bus = stream.NewBus()
-	}
+	// Bus is always created so the /stream/ws endpoint is always available.
+	bus := stream.NewBus()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Start ingestion sources before the HTTP server.
-	if bus != nil {
+	{
 		tok, err := tokenizer.NewTokenizer()
 		if err != nil {
 			log.Fatalf("failed to initialize tokenizer for stream: %v", err)
@@ -123,6 +121,7 @@ func main() {
 		WorkDir:     workDir,
 		Timeout:     60 * time.Second,
 		StreamBus:   bus,
+		DevEvents:   *devEventsFlag,
 	}
 
 	fmt.Println("Please open the following URL in your browser: http://" + host + port)
@@ -153,6 +152,7 @@ func printUsage() {
 	fmt.Println("  -pipe              Alias for --stream")
 	fmt.Println("  -syslog-port int   UDP/TCP syslog listener port (default 514, 0=disabled)")
 	fmt.Println("  -syslog-proto str  Syslog protocol: udp|tcp|both (default both)")
+	fmt.Println("  -dev-events        Publish synthetic log events every 2s (stream UI testing)")
 	fmt.Println("  -help              Show this help message")
 	fmt.Println("\nEnvironment Variables:")
 	fmt.Println("  HOST           Host address to bind to")

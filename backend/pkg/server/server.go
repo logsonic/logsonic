@@ -37,6 +37,7 @@ type Config struct {
 	Timeout     time.Duration
 	Host        string
 	StreamBus   *stream.Bus // nil = streaming disabled
+	DevEvents   bool        // emit synthetic log events every 2s (for testing)
 }
 
 type Server struct {
@@ -276,6 +277,9 @@ func (s *Server) Start() error {
 	// Start session cleanup goroutine; cancel it on shutdown.
 	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
 	handlers.StartSessionCleanup(cleanupCtx)
+	if s.config.DevEvents {
+		s.services.StartTestEventGenerator(cleanupCtx)
+	}
 
 	// Listen for OS signals in the background.
 	quit := make(chan os.Signal, 1)

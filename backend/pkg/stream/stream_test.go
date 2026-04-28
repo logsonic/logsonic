@@ -8,7 +8,7 @@ import (
 
 func TestBusPubSub(t *testing.T) {
 	b := NewBus()
-	sub := b.Subscribe(10)
+	sub, _ := b.Subscribe(10)
 
 	b.Publish(&Event{Fields: map[string]interface{}{"msg": "hello"}})
 
@@ -29,7 +29,7 @@ func TestBusPubSub(t *testing.T) {
 
 func TestBusSlowSubscriberDrop(t *testing.T) {
 	b := NewBus()
-	sub := b.Subscribe(1) // tiny buffer
+	sub, _ := b.Subscribe(1) // tiny buffer
 
 	// Publish 3 events — only 1 fits; rest are dropped.
 	for i := 0; i < 3; i++ {
