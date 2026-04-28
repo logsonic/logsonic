@@ -765,3 +765,185 @@ func TestHandleReadAll_EmptyStore(t *testing.T) {
 		t.Errorf("expected 0 total, got %d", resp.TotalCount)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// HandleAlertRules
+// ---------------------------------------------------------------------------
+
+func resetAlerts(t *testing.T) {
+	t.Helper()
+	alertRulesMutex.Lock()
+	alertRules = nil
+	alertRulesMutex.Unlock()
+}
+
+func TestHandleAlertRules_MethodNotAllowed(t *testing.T) {
+	h, _ := setupHandler(t)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/alerts", nil)
+	w := httptest.NewRecorder()
+	h.HandleAlertRules(w, req)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+func TestHandleAlertRules_ListEmpty(t *testing.T) {
+	h, _ := setupHandler(t)
+	resetAlerts(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/alerts", nil)
+	w := httptest.NewRecorder()
+	h.HandleAlertRules(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	rules, ok := resp["rules"].([]interface{})
+	if !ok || len(rules) != 0 {
+		t.Errorf("expected empty rules array, got %v", resp["rules"])
+	}
+}
+
+func TestHandleAlertRules_Create(t *testing.T) {
+	h, _ := setupHandler(t)
+	resetAlerts(t)
+	defer resetAlerts(t)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"name":    "Error alert",
+		"query":   "level:error",
+		"enabled": true,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/alerts", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	h.HandleAlertRules(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected 201, got %d", w.Code)
+	}
+	var rule stream.AlertRule
+	json.NewDecoder(w.Body).Decode(&rule)
+	if rule.ID == "" {
+		t.Error("expected non-empty ID")
+	}
+	if rule.Name != "Error alert" {
+		t.Errorf("expected name 'Error alert', got %q", rule.Name)
+	}
+}
+
+func TestHandleAlertRules_CreateMissingFields(t *testing.T) {
+	h, _ := setupHandler(t)
+	resetAlerts(t)
+
+	body, _ := json.Marshal(map[string]interface{}{"name": "only-name"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/alerts", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	h.HandleAlertRules(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandleAlertRules_CreateInvalidBody(t *testing.T) {
+	h, _ := setupHandler(t)
+	resetAlerts(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/alerts", bytes.NewReader([]byte("{bad")))
+	w := httptest.NewRecorder()
+	h.HandleAlertRules(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandleAlertRules_DeleteSuccess(t *testing.T) {
+	h, _ := setupHandler(t)
+	resetAlerts(t)
+	defer resetAlerts(t)
+
+	// Create a rule first.
+	body, _ := json.Marshal(map[string]interface{}{
+		"name":  "To delete",
+		"query": "level:warn",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/alerts", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	h.HandleAlertRules(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("setup: expected 201, got %d", w.Code)
+	}
+	var created stream.AlertRule
+	json.NewDecoder(w.Body).Decode(&created)
+
+	// Delete it.
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/alerts?id="+created.ID, nil)
+	w = httptest.NewRecorder()
+	h.HandleAlertRules(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Errorf("expected 204, got %d", w.Code)
+	}
+
+	// Verify it's gone.
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/alerts", nil)
+	w = httptest.NewRecorder()
+	h.HandleAlertRules(w, req)
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	rules := resp["rules"].([]interface{})
+	if len(rules) != 0 {
+		t.Errorf("expected 0 rules after delete, got %d", len(rules))
+	}
+}
+
+func TestHandleAlertRules_DeleteNotFound(t *testing.T) {
+	h, _ := setupHandler(t)
+	resetAlerts(t)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/alerts?id=nonexistent", nil)
+	w := httptest.NewRecorder()
+	h.HandleAlertRules(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestHandleAlertRules_DeleteMissingID(t *testing.T) {
+	h, _ := setupHandler(t)
+	resetAlerts(t)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/alerts", nil)
+	w := httptest.NewRecorder()
+	h.HandleAlertRules(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandleAlertRules_CreateSyncsToStream(t *testing.T) {
+	h, _ := setupHandler(t)
+	resetAlerts(t)
+	defer resetAlerts(t)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"name":    "Bus sync test",
+		"query":   "level:error",
+		"enabled": true,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/alerts", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	h.HandleAlertRules(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", w.Code)
+	}
+
+	// Verify the bus now has the rule.
+	rules := h.StreamBus.GetAlertRules()
+	if len(rules) == 0 {
+		t.Fatal("expected rule to be synced to stream bus")
+	}
+	if rules[0].Query != "level:error" {
+		t.Errorf("expected query 'level:error', got %q", rules[0].Query)
+	}
+}

@@ -2,10 +2,29 @@ package stream
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"logsonic/pkg/types"
 )
+
+// errTokenizer always returns an error, forcing PipeReader's fallback path.
+type errTokenizer struct{}
+
+func (errTokenizer) ParseLogs(_ []string, _ types.IngestSessionOptions) ([]map[string]interface{}, int, int, error) {
+	return nil, 0, 0, errors.New("mock error")
+}
+func (errTokenizer) AddPattern(_ string, _ ...int) error                   { return nil }
+func (errTokenizer) AddCustomPattern(_, _ string) error                    { return nil }
+func (errTokenizer) AddPersistentPattern(_ string) error                   { return nil }
+func (errTokenizer) AddPersistentCustomPattern(_, _ string) error          { return nil }
+func (errTokenizer) ClearRequestPatterns()                                  {}
+func (errTokenizer) GetPersistentPatterns() []string                       { return nil }
+func (errTokenizer) GetCustomPatterns() map[string]string                  { return nil }
+func (errTokenizer) GetPatterns() []string                                 { return nil }
+func (errTokenizer) ClearPatterns() error                                   { return nil }
 
 func TestBusPubSub(t *testing.T) {
 	b := NewBus()
@@ -267,4 +286,169 @@ func TestBusFilterDelivery(t *testing.T) {
 	}
 
 	b.Unsubscribe(sub)
+}
+
+func TestBusClose(t *testing.T) {
+	b := NewBus()
+	sub1, _ := b.Subscribe(10)
+	sub2, _ := b.Subscribe(10)
+
+	b.Close()
+
+	// Both channels must be closed.
+	if _, ok := <-sub1.Ch; ok {
+		t.Fatal("sub1.Ch should be closed after Bus.Close()")
+	}
+	if _, ok := <-sub2.Ch; ok {
+		t.Fatal("sub2.Ch should be closed after Bus.Close()")
+	}
+
+	// Publish after close must not panic.
+	b.Publish(&Event{Fields: map[string]interface{}{"k": "v"}})
+
+	// Double-close must not panic.
+	b.Close()
+}
+
+func TestBusSubscriberCount(t *testing.T) {
+	b := NewBus()
+	if n := b.SubscriberCount(); n != 0 {
+		t.Fatalf("expected 0, got %d", n)
+	}
+	sub1, _ := b.Subscribe(10)
+	sub2, _ := b.Subscribe(10)
+	if n := b.SubscriberCount(); n != 2 {
+		t.Fatalf("expected 2, got %d", n)
+	}
+	b.Unsubscribe(sub1)
+	if n := b.SubscriberCount(); n != 1 {
+		t.Fatalf("expected 1, got %d", n)
+	}
+	b.Unsubscribe(sub2)
+	if n := b.SubscriberCount(); n != 0 {
+		t.Fatalf("expected 0, got %d", n)
+	}
+}
+
+func TestBusReplay(t *testing.T) {
+	b := NewBus()
+
+	total := ReplayCount + 50
+	for i := 0; i < total; i++ {
+		b.Publish(&Event{Fields: map[string]interface{}{"i": i}})
+	}
+
+	_, replay := b.Subscribe(10)
+	if len(replay) != ReplayCount {
+		t.Fatalf("expected %d replay events, got %d", ReplayCount, len(replay))
+	}
+	want := total - ReplayCount
+	if got := replay[0].Fields["i"].(int); got != want {
+		t.Fatalf("replay[0].i = %d, want %d", got, want)
+	}
+	if got := replay[len(replay)-1].Fields["i"].(int); got != total-1 {
+		t.Fatalf("replay[last].i = %d, want %d", got, total-1)
+	}
+}
+
+func TestBleveIndexerBatchFlush(t *testing.T) {
+	b := NewBus()
+	store := &mockStorage{}
+
+	batchSize := 5
+	idx := NewBleveIndexer(b, store, IndexerConfig{
+		FlushInterval: 10 * time.Second,
+		BatchSize:     batchSize,
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	idx.Start(ctx)
+
+	for i := 0; i < batchSize; i++ {
+		b.Publish(&Event{Fields: map[string]interface{}{"n": i}})
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if len(store.batches) > 0 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	if len(store.batches) == 0 {
+		t.Fatal("expected batch flush after reaching batchSize")
+	}
+	total := 0
+	for _, batch := range store.batches {
+		total += len(batch)
+	}
+	if total < batchSize {
+		t.Fatalf("expected %d events indexed, got %d", batchSize, total)
+	}
+}
+
+func TestBleveIndexerStopFlushesRemainder(t *testing.T) {
+	b := NewBus()
+	store := &mockStorage{}
+
+	idx := NewBleveIndexer(b, store, IndexerConfig{
+		FlushInterval: 10 * time.Second,
+		BatchSize:     100,
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	idx.Start(ctx)
+
+	b.Publish(&Event{Fields: map[string]interface{}{"x": 1}})
+	b.Publish(&Event{Fields: map[string]interface{}{"x": 2}})
+
+	// Give the indexer goroutine time to read both events into its batch
+	// before we trigger shutdown. Without this, cancel may race with reads.
+	time.Sleep(20 * time.Millisecond)
+
+	cancel()
+	idx.Stop()
+
+	total := 0
+	for _, batch := range store.batches {
+		total += len(batch)
+	}
+	if total < 2 {
+		t.Fatalf("expected 2 events flushed on stop, got %d", total)
+	}
+}
+
+func TestPipeReader(t *testing.T) {
+	b := NewBus()
+	sub, _ := b.Subscribe(20)
+
+	r := strings.NewReader("line one\nline two\nline three\n")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		PipeReader(ctx, r, b, errTokenizer{})
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("PipeReader did not finish after EOF")
+	}
+
+	// nil tokenizer → fallback path: 3 raw events published.
+	if n := len(sub.Ch); n != 3 {
+		t.Fatalf("expected 3 events on bus, got %d", n)
+	}
+
+	ev := <-sub.Ch
+	if ev.Fields["_raw"] != "line one" {
+		t.Fatalf("expected _raw='line one', got %v", ev.Fields["_raw"])
+	}
+	if ev.Fields["_src"] != "stdin" {
+		t.Fatalf("expected _src='stdin', got %v", ev.Fields["_src"])
+	}
 }
