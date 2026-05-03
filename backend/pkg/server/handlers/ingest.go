@@ -3,20 +3,19 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"logsonic/pkg/tokenizer"
 	"logsonic/pkg/types"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	l2g "github.com/logsonic/log2grok/pkg/log2grok"
 )
 
-// Define constants for default pattern
 const (
 	DefaultPatternName = "DEFAULT_PATTERN"
 	DefaultPattern     = "%{GREEDYDATA:message}"
-	SessionTimeout     = 60 * time.Minute // Sessions expire after 60 minutes
+	SessionTimeout     = 60 * time.Minute
 )
 
 var defaultIngestSessionOptions = types.IngestSessionOptions{
@@ -29,14 +28,16 @@ var defaultIngestSessionOptions = types.IngestSessionOptions{
 	Meta:            nil,
 }
 
-// IngestSession tracks an ingest session and its expiration time
+// IngestSession ties one /ingest/start invocation to its compiled
+// log2grok Decoder so subsequent /ingest/logs calls don't recompile the
+// pattern per request. Decoders are immutable + goroutine-safe so we
+// can hand the same pointer to many concurrent callers.
 type IngestSession struct {
 	Options      types.IngestSessionOptions
 	CreationTime time.Time
-	Tokenizer    *tokenizer.Tokenizer
+	Decoder      *l2g.Decoder
 }
 
-// Map to store session options by session ID
 var sessionMap = make(map[string]IngestSession)
 var sessionMapMutex = &sync.RWMutex{}
 
@@ -75,11 +76,10 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get session options using the provided session ID
 	sessionMapMutex.RLock()
 	session, exists := sessionMap[req.SessionID]
 	sessionOptions := session.Options
-	sessionTokenizer := session.Tokenizer
+	sessionDecoder := session.Decoder
 	sessionMapMutex.RUnlock()
 
 	if !exists || req.SessionID == "" {
@@ -92,17 +92,8 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonOutput, successCount, failedCount, err := sessionTokenizer.ParseLogs(req.Logs, sessionOptions)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(types.ErrorResponse{
-			Status:  "error",
-			Error:   "Failed to parse logs",
-			Code:    "PARSE_ERROR",
-			Details: err.Error(),
-		})
-		return
-	}
+	results := sessionDecoder.Decode(req.Logs)
+	jsonOutput, successCount, failedCount := postProcess(results, sessionOptions)
 
 	if err := h.storage.Store(jsonOutput, sessionOptions.Source); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -115,7 +106,6 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Invalidate info cache after successful log ingestion
 	h.InvalidateInfoCache()
 
 	json.NewEncoder(w).Encode(types.IngestResponse{
@@ -161,7 +151,6 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate request
 	if req.Name == "" && req.Pattern == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(types.ErrorResponse{
@@ -172,45 +161,15 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create a new tokenizer for the session
-	tempTokenizer, err := tokenizer.NewTokenizer()
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(types.ErrorResponse{
-			Status:  "error",
-			Error:   "Failed to create tokenizer",
-			Code:    "TOKENIZER_ERROR",
-			Details: err.Error(),
-		})
-		return
-	}
-
-	patternToLoad := types.GrokPatternDefinition{
+	dec, err := l2g.NewDecoder(l2g.PatternSpec{
 		Name:           req.Name,
-		Pattern:        req.Pattern,
+		Grok:           req.Pattern,
 		CustomPatterns: req.CustomPatterns,
 		Priority:       req.Priority,
-	}
-
-	// Add custom patterns first
-	if len(patternToLoad.CustomPatterns) > 0 {
-		for name, pattern := range patternToLoad.CustomPatterns {
-			if err := tempTokenizer.AddCustomPattern(name, pattern); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(types.ErrorResponse{
-					Status:  "error",
-					Error:   "Failed to add custom pattern",
-					Code:    "CUSTOM_PATTERN_ERROR",
-					Details: err.Error(),
-				})
-				return
-			}
-		}
-	}
-
-	// Add the main pattern and prepare all patterns at once
-	// This avoids multiple pattern preparations when adding custom patterns
-	if err := tempTokenizer.AddPattern(patternToLoad.Pattern, patternToLoad.Priority); err != nil {
+	}, l2g.DecoderOptions{
+		SmartDecode: req.SmartDecoder,
+	})
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(types.ErrorResponse{
 			Status:  "error",
@@ -221,10 +180,8 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate a unique session ID
 	sessionID := uuid.New().String()
 
-	// Store the session options
 	sessionOptions := types.IngestSessionOptions{
 		Name:            req.Name,
 		Pattern:         req.Pattern,
@@ -234,22 +191,20 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		ForceStartYear:  req.ForceStartYear,
 		ForceStartMonth: req.ForceStartMonth,
 		ForceStartDay:   req.ForceStartDay,
-		// Meta field can be used to add additional attributes to all logs
-		// For example, when ingesting CloudWatch logs, add metadata like:
-		// "aws_region", "log_group", "log_stream", etc.
+		// Meta is freely passed through so callers (e.g. CloudWatch
+		// ingest path) can stamp every record with aws_region,
+		// log_group, log_stream, etc.
 		Meta: req.Meta,
 	}
 
-	// Store in the session map
 	sessionMapMutex.Lock()
 	sessionMap[sessionID] = IngestSession{
 		Options:      sessionOptions,
 		CreationTime: time.Now(),
-		Tokenizer:    tempTokenizer,
+		Decoder:      dec,
 	}
 	sessionMapMutex.Unlock()
 
-	// Respond with success
 	json.NewEncoder(w).Encode(types.IngestResponse{
 		Status:    "success",
 		SessionID: sessionID,
@@ -281,14 +236,12 @@ func (h *Services) HandleIngestEnd(w http.ResponseWriter, r *http.Request) {
 
 	var req types.IngestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		// If no body is provided, just return success
 		json.NewEncoder(w).Encode(types.IngestResponse{
 			Status: "success",
 		})
 		return
 	}
 
-	// Remove the session if session ID is provided
 	if req.SessionID != "" {
 		sessionMapMutex.Lock()
 		delete(sessionMap, req.SessionID)
@@ -300,9 +253,9 @@ func (h *Services) HandleIngestEnd(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// StartSessionCleanup launches a background goroutine that sweeps sessionMap
-// every 5 minutes and removes sessions older than SessionTimeout.
-// It runs until ctx is cancelled (i.e. on server shutdown).
+// StartSessionCleanup launches a background goroutine that sweeps
+// sessionMap every 5 minutes and removes sessions older than
+// SessionTimeout. Runs until ctx is cancelled (i.e. on server shutdown).
 func StartSessionCleanup(ctx context.Context) {
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)

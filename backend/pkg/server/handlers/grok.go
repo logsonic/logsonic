@@ -1,112 +1,20 @@
-// Package grok provides handlers for Grok pattern management
-// Its a simple CRUD interface for managing current and custom grok patterns
+// Package handlers — grok pattern CRUD.
+//
+// All persistence + validation lives in log2grok now (patterns.json /
+// primitives.json under <cwd>/.log2grok). These handlers are a thin
+// translation layer between the HTTP/JSON shape the frontend expects
+// (types.GrokPatternRequest) and log2grok's KnownPattern type.
 package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"logsonic/pkg/types"
 	"net/http"
-	"os"
-	"path/filepath"
-	"slices"
-	"sync"
+
+	l2g "github.com/logsonic/log2grok/pkg/log2grok"
 )
-
-var (
-	currentPatterns = []types.GrokPatternDefinition{}
-	patternMutex    = &sync.Mutex{}
-	patternsFile    = "grok.json"
-)
-
-// loadPatternsFromFile reads patterns from the JSON file and loads them into memory
-// If the file doesn't exist, it creates a new one with default patterns
-func (h *Services) loadPatternsFromFile() error {
-	patternMutex.Lock()
-	defer patternMutex.Unlock()
-
-	// Use StoragePath from handlers' config rather than assuming current directory
-	// And use filepath.Clean to prevent path traversal attacks
-	safePatternFilePath := filepath.Clean(filepath.Join(h.StoragePath, patternsFile))
-
-	// Check if patterns file exists
-	if _, err := os.Stat(safePatternFilePath); os.IsNotExist(err) {
-		// File doesn't exist, initialize with default patterns
-		fmt.Println("No patterns file found, creating with default patterns")
-		currentPatterns = DefaultGrokPatterns()
-
-		// Save the default patterns to file
-		return h.savePatternsToFile()
-	}
-
-	// Read patterns from file
-	data, err := os.ReadFile(safePatternFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to read patterns file: %w", err)
-	}
-
-	var patternsConfig struct {
-		Patterns []types.GrokPatternDefinition `json:"patterns"`
-	}
-
-	if err := json.Unmarshal(data, &patternsConfig); err != nil {
-		return fmt.Errorf("failed to parse patterns file: %w", err)
-	}
-
-	currentPatterns = patternsConfig.Patterns
-
-	// Merge in any default patterns whose Name is not present in the file.
-	// This ensures patterns added to DefaultGrokPatterns() in new releases are
-	// available automatically without requiring users to delete grok.json.
-	// User-added or user-modified patterns (by Name) are never overwritten.
-	existing := make(map[string]bool, len(currentPatterns))
-	for _, p := range currentPatterns {
-		existing[p.Name] = true
-	}
-	added := 0
-	for _, def := range DefaultGrokPatterns() {
-		if !existing[def.Name] {
-			currentPatterns = append(currentPatterns, def)
-			added++
-		}
-	}
-	if added > 0 {
-		// Persist new defaults back so future startups don't re-add them.
-		_ = h.savePatternsToFile()
-	}
-
-	return nil
-}
-
-// savePatternsToFile writes current patterns to the JSON file
-func (h *Services) savePatternsToFile() error {
-	patternsConfig := struct {
-		Patterns []types.GrokPatternDefinition `json:"patterns"`
-	}{
-		Patterns: currentPatterns,
-	}
-
-	data, err := json.MarshalIndent(patternsConfig, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal patterns: %w", err)
-	}
-
-	// Use StoragePath from handlers' config rather than assuming current directory
-	// And use filepath.Clean to prevent path traversal attacks
-	safePatternFilePath := filepath.Clean(filepath.Join(h.StoragePath, patternsFile))
-
-	// Create directory if it doesn't exist
-	dir := filepath.Dir(safePatternFilePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create patterns directory: %w", err)
-	}
-
-	if err := os.WriteFile(safePatternFilePath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write patterns file: %w", err)
-	}
-
-	return nil
-}
 
 // @Summary Manage Grok patterns
 // @Description Create, read, update, and delete Grok patterns for log parsing
@@ -153,7 +61,6 @@ func (h *Services) createGrokPattern(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate request
 	if req.Name == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(types.GrokPatternResponse{
@@ -163,43 +70,40 @@ func (h *Services) createGrokPattern(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Prepare new pattern definition
-	newPattern := types.GrokPatternDefinition{
+	// Reject if a pattern with this name already exists. We deliberately
+	// don't expose update-via-POST yet — the legacy handler returned 409
+	// Conflict and the frontend relies on that semantics for its
+	// "rename to overwrite" flow.
+	for _, kp := range l2g.ListLibrary() {
+		if kp.Name == req.Name {
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(types.GrokPatternResponse{
+				Status: "error",
+				Error:  fmt.Sprintf("Pattern name '%s' already exists", req.Name),
+			})
+			return
+		}
+	}
+
+	kp := l2g.KnownPattern{
 		Name:           req.Name,
 		Pattern:        req.Pattern,
 		Priority:       req.Priority,
 		Description:    req.Description,
-		Type:           "custom", // All user defined patterns are custom
 		CustomPatterns: req.CustomPatterns,
 	}
-
-	// Check if pattern already exists
-	patternExists := false
-	for _, existingPattern := range currentPatterns {
-		if existingPattern.Name == req.Name {
-			patternExists = true
-			break
+	if _, err := l2g.UpsertLibraryEntry(kp); err != nil {
+		// log2grok validates the grok body up front, so a non-nil err
+		// here is almost always a 400 (bad regex). Surface it as 400 so
+		// the editor can highlight the offending field.
+		status := http.StatusBadRequest
+		if errors.Is(err, l2g.ErrConfigNotLoaded) {
+			status = http.StatusInternalServerError
 		}
-	}
-
-	// If pattern doesn't exist, append it
-	if !patternExists {
-		currentPatterns = append(currentPatterns, newPattern)
-	} else {
-		w.WriteHeader(http.StatusConflict)
+		w.WriteHeader(status)
 		json.NewEncoder(w).Encode(types.GrokPatternResponse{
 			Status: "error",
-			Error:  fmt.Sprintf("Pattern name '%s' already exists", req.Name),
-		})
-		return
-	}
-
-	// Save updated patterns to file
-	if err := h.savePatternsToFile(); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(types.GrokPatternResponse{
-			Status: "error",
-			Error:  fmt.Sprintf("Failed to save patterns: %v", err),
+			Error:  fmt.Sprintf("Failed to save pattern: %v", err),
 		})
 		return
 	}
@@ -221,39 +125,29 @@ func (h *Services) createGrokPattern(w http.ResponseWriter, r *http.Request) {
 
 func (h *Services) deleteGrokPattern(w http.ResponseWriter, r *http.Request) {
 	patternName := r.URL.Query().Get("name")
-
-	// Find and remove the specific pattern
-	updatedPatterns := currentPatterns
-	patternFound := false
-
-	for i, pattern := range currentPatterns {
-		if pattern.Name == patternName {
-			patternFound = true
-			// Remove the pattern from the list using slices.Delete
-			updatedPatterns = slices.Delete(updatedPatterns, i, i+1)
-			break
-		}
-	}
-
-	// Check if pattern was found
-	if !patternFound {
-		w.WriteHeader(http.StatusNotFound)
+	if patternName == "" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(types.GrokPatternResponse{
 			Status: "error",
-			Error:  fmt.Sprintf("Pattern '%s' not found", patternName),
+			Error:  "name query param is required",
 		})
 		return
 	}
 
-	// Update current patterns
-	currentPatterns = updatedPatterns
-
-	// Save updated patterns to file
-	if err := h.savePatternsToFile(); err != nil {
+	removed, err := l2g.RemoveLibraryEntry(patternName)
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(types.GrokPatternResponse{
 			Status: "error",
-			Error:  fmt.Sprintf("Failed to save patterns: %v", err),
+			Error:  fmt.Sprintf("Failed to delete pattern: %v", err),
+		})
+		return
+	}
+	if !removed {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(types.GrokPatternResponse{
+			Status: "error",
+			Error:  fmt.Sprintf("Pattern '%s' not found", patternName),
 		})
 		return
 	}
@@ -264,17 +158,16 @@ func (h *Services) deleteGrokPattern(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Services) getGrokPatterns(w http.ResponseWriter, r *http.Request) {
-
-	// Convert current patterns to GrokPatternRequest
-	convertedPatterns := make([]types.GrokPatternRequest, len(currentPatterns))
-	for i, pattern := range currentPatterns {
+func (h *Services) getGrokPatterns(w http.ResponseWriter, _ *http.Request) {
+	library := l2g.ListLibrary()
+	convertedPatterns := make([]types.GrokPatternRequest, len(library))
+	for i, kp := range library {
 		convertedPatterns[i] = types.GrokPatternRequest{
-			Name:           pattern.Name,
-			Pattern:        pattern.Pattern,
-			Priority:       pattern.Priority,
-			Description:    pattern.Description,
-			CustomPatterns: pattern.CustomPatterns,
+			Name:           kp.Name,
+			Pattern:        kp.Pattern,
+			Priority:       kp.Priority,
+			Description:    kp.Description,
+			CustomPatterns: kp.CustomPatterns,
 		}
 	}
 
@@ -282,21 +175,4 @@ func (h *Services) getGrokPatterns(w http.ResponseWriter, r *http.Request) {
 		Status:   "success",
 		Patterns: convertedPatterns,
 	})
-}
-
-// InitializeGrokPatterns should be called during server startup
-func (h *Services) InitializeGrokPatterns() error {
-	h.loadPatternsFromFile()
-	return nil
-}
-
-// GetPatternDefinitions returns a copy of the current pattern definitions
-// This function is used by other handlers to access the patterns
-func (h *Services) GetPatternDefinitions() []types.GrokPatternDefinition {
-	patternMutex.Lock()
-	defer patternMutex.Unlock()
-
-	patterns := make([]types.GrokPatternDefinition, len(currentPatterns))
-	copy(patterns, currentPatterns)
-	return patterns
 }

@@ -1,4 +1,5 @@
 .logsonic/**
+.log2grok/** 
 pkg/static/dist/**
 .patterns.json
 # Added by goreleaser init:

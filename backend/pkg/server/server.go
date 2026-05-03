@@ -16,11 +16,11 @@ import (
 
 	"logsonic/pkg/static"
 	"logsonic/pkg/storage"
-	"logsonic/pkg/tokenizer"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	l2g "github.com/logsonic/log2grok/pkg/log2grok"
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
@@ -59,10 +59,17 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
 	}
 
-	// Initialize tokenizer
-	tokenizer, err := tokenizer.NewTokenizer()
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize tokenizer: %w", err)
+	// Externalize the grok pattern catalog under .log2grok in the
+	// current working directory. LoadConfig seeds the dir from the
+	// embedded defaults on first run and reuses it on subsequent boots.
+	if err := l2g.LoadConfig("", os.Stderr); err != nil {
+		return nil, fmt.Errorf("failed to initialize log2grok config: %w", err)
+	}
+	// One-shot migration of any pre-existing <storagePath>/grok.json
+	// into the log2grok library. The legacy file is renamed afterwards
+	// so this is idempotent across restarts.
+	if err := handlers.MigrateLegacyGrokJSON(cfg.StoragePath); err != nil {
+		fmt.Fprintf(os.Stderr, "logsonic: legacy grok.json migration warning: %v\n", err)
 	}
 
 	// Initialize router with middleware
@@ -112,7 +119,7 @@ func NewServer(cfg Config) (*Server, error) {
 	}))
 
 	// Initialize handler
-	h := handlers.NewHandler(store, tokenizer, cfg.StoragePath)
+	h := handlers.NewHandler(store, cfg.StoragePath)
 
 	// Serve static files from embedded filesystem
 	embeddedFS := static.GetFileSystem()
@@ -128,9 +135,6 @@ func NewServer(cfg Config) (*Server, error) {
 		}
 		fileServer.ServeHTTP(w, r)
 	})
-
-	// Initialize Grok patterns
-	h.InitializeGrokPatterns()
 
 	// Helper function to serve static files with proper MIME types
 	serveWithMimeType := func(w http.ResponseWriter, r *http.Request) {

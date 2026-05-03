@@ -83,7 +83,9 @@ const Import: FC = () => {
           const patterns = response.patterns.map(p => ({
             name: p.name || 'Unnamed Pattern',
             pattern: p.pattern || '',
-            description: p.description || 'No description available',
+            description: (p.description && p.description.trim())
+              ? p.description
+              : `Grok pattern for ${p.name || 'unknown'} logs`,
             custom_patterns: p.custom_patterns,
             fields: extractFields(p.pattern || ''),
             priority: p.priority || 0

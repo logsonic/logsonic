@@ -8,8 +8,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
+
+	l2g "github.com/logsonic/log2grok/pkg/log2grok"
 )
 
 // ---------------------------------------------------------------------------
@@ -50,13 +53,9 @@ func (m *mockStorage) Search(query string, startDate, endDate *time.Time, source
 	return m.logs, time.Millisecond, nil
 }
 
-func (m *mockStorage) List() ([]string, error) {
-	return m.listDates, nil
-}
+func (m *mockStorage) List() ([]string, error) { return m.listDates, nil }
 
-func (m *mockStorage) GetSourceNames() ([]string, error) {
-	return m.sourceNames, nil
-}
+func (m *mockStorage) GetSourceNames() ([]string, error) { return m.sourceNames, nil }
 
 func (m *mockStorage) Clear() error {
 	if m.clearErr != nil {
@@ -66,63 +65,43 @@ func (m *mockStorage) Clear() error {
 	return nil
 }
 
-func (m *mockStorage) BaseDir() string {
-	return m.baseDir
-}
+func (m *mockStorage) BaseDir() string { return m.baseDir }
 
-func (m *mockStorage) GetDocCount(date string) (uint64, error) {
-	return m.docCounts[date], nil
-}
+func (m *mockStorage) GetDocCount(date string) (uint64, error) { return m.docCounts[date], nil }
 
-func (m *mockStorage) DeleteByIds(ids []string) (int, error) {
-	return len(ids), nil
-}
+func (m *mockStorage) DeleteByIds(ids []string) (int, error) { return len(ids), nil }
 
 // ---------------------------------------------------------------------------
-// Mock Tokenizer
+// Test helpers
 // ---------------------------------------------------------------------------
 
-type mockTokenizer struct {
-	parseErr error
-}
+// log2grok config is a process-global singleton, so any test that
+// touches the library state must hold testConfigMu to avoid races
+// between subtests. Each test that calls activateL2GConfig holds it
+// for the duration of the test.
+var testConfigMu sync.Mutex
 
-func (m *mockTokenizer) ParseLogs(logLines []string, opts types.IngestSessionOptions) ([]map[string]interface{}, int, int, error) {
-	if m.parseErr != nil {
-		return nil, 0, len(logLines), m.parseErr
+// activateL2GConfig points log2grok at a per-test temp dir. Returns
+// the dir and a cleanup function (via t.Cleanup) that resets state for
+// the next test by removing every entry the test added.
+func activateL2GConfig(t *testing.T) string {
+	t.Helper()
+	testConfigMu.Lock()
+	t.Cleanup(testConfigMu.Unlock)
+
+	dir := t.TempDir()
+	if err := l2g.LoadConfig(dir, nil); err != nil {
+		t.Fatalf("LoadConfig: %v", err)
 	}
-	results := make([]map[string]interface{}, len(logLines))
-	for i, line := range logLines {
-		results[i] = map[string]interface{}{
-			"_raw":      line,
-			"message":   line,
-			"timestamp": time.Now(),
-			"_src":      opts.Source,
-		}
-	}
-	return results, len(logLines), 0, nil
+	return dir
 }
-
-func (m *mockTokenizer) AddPattern(pattern string, priority ...int) error   { return nil }
-func (m *mockTokenizer) AddCustomPattern(name, pattern string) error        { return nil }
-func (m *mockTokenizer) AddPersistentPattern(pattern string) error          { return nil }
-func (m *mockTokenizer) AddPersistentCustomPattern(name, pattern string) error { return nil }
-func (m *mockTokenizer) ClearRequestPatterns()                              {}
-func (m *mockTokenizer) GetPersistentPatterns() []string                    { return nil }
-func (m *mockTokenizer) GetCustomPatterns() map[string]string               { return nil }
-func (m *mockTokenizer) GetPatterns() []string                              { return nil }
-func (m *mockTokenizer) ClearPatterns() error                               { return nil }
-
-// ---------------------------------------------------------------------------
-// Test helper
-// ---------------------------------------------------------------------------
 
 func setupHandler(t *testing.T) (*Services, *mockStorage) {
 	t.Helper()
 	store := newMockStorage()
-	tok := &mockTokenizer{}
-	dir := t.TempDir()
+	dir := activateL2GConfig(t)
 	store.baseDir = dir
-	h := NewHandler(store, tok, dir)
+	h := NewHandler(store, dir)
 	return h, store
 }
 
@@ -183,7 +162,6 @@ func TestHandleIngestStart_Success(t *testing.T) {
 		t.Error("expected non-empty session ID")
 	}
 
-	// Verify session was stored
 	sessionMapMutex.RLock()
 	_, exists := sessionMap[resp.SessionID]
 	sessionMapMutex.RUnlock()
@@ -191,7 +169,6 @@ func TestHandleIngestStart_Success(t *testing.T) {
 		t.Error("session not found in sessionMap")
 	}
 
-	// Cleanup
 	sessionMapMutex.Lock()
 	delete(sessionMap, resp.SessionID)
 	sessionMapMutex.Unlock()
@@ -267,7 +244,6 @@ func TestHandleIngest_MethodNotAllowed(t *testing.T) {
 
 	h.HandleIngest(w, req)
 
-	// The handler writes body before header for this case, so it's 200
 	var resp types.ErrorResponse
 	json.NewDecoder(w.Body).Decode(&resp)
 	if resp.Code != "METHOD_NOT_ALLOWED" {
@@ -294,7 +270,6 @@ func TestHandleIngest_InvalidBody(t *testing.T) {
 func TestHandleIngestEnd_Success(t *testing.T) {
 	h, _ := setupHandler(t)
 
-	// Create a session first
 	sessionMapMutex.Lock()
 	sessionMap["test-session-end"] = IngestSession{
 		Options:      types.IngestSessionOptions{Source: "test.log"},
@@ -312,7 +287,6 @@ func TestHandleIngestEnd_Success(t *testing.T) {
 		t.Errorf("expected 200, got %d", w.Code)
 	}
 
-	// Verify session was removed
 	sessionMapMutex.RLock()
 	_, exists := sessionMap["test-session-end"]
 	sessionMapMutex.RUnlock()
@@ -349,13 +323,8 @@ func TestHandleIngestEnd_EmptyBody(t *testing.T) {
 // HandleGrokPatterns
 // ---------------------------------------------------------------------------
 
-func TestHandleGrokPatterns_GetEmpty(t *testing.T) {
+func TestHandleGrokPatterns_GetReturnsLibrary(t *testing.T) {
 	h, _ := setupHandler(t)
-
-	// Reset global state for test isolation
-	patternMutex.Lock()
-	currentPatterns = []types.GrokPatternDefinition{}
-	patternMutex.Unlock()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/grok", nil)
 	w := httptest.NewRecorder()
@@ -371,19 +340,18 @@ func TestHandleGrokPatterns_GetEmpty(t *testing.T) {
 	if resp.Status != "success" {
 		t.Errorf("expected 'success', got '%s'", resp.Status)
 	}
+	// Embedded library has many entries, but the test must not assume
+	// a specific count — just that ListLibrary surfaced something.
+	if len(resp.Patterns) == 0 {
+		t.Error("expected non-empty embedded library via GET")
+	}
 }
 
 func TestHandleGrokPatterns_CreateAndGet(t *testing.T) {
 	h, _ := setupHandler(t)
 
-	// Reset global state
-	patternMutex.Lock()
-	currentPatterns = []types.GrokPatternDefinition{}
-	patternMutex.Unlock()
-
-	// Create a pattern
 	body, _ := json.Marshal(types.GrokPatternRequest{
-		Name:        "test-pattern",
+		Name:        "ls-handler-test-pattern",
 		Pattern:     "%{GREEDYDATA:message}",
 		Description: "Test pattern",
 		Priority:    1,
@@ -396,37 +364,37 @@ func TestHandleGrokPatterns_CreateAndGet(t *testing.T) {
 		t.Errorf("expected 201, got %d", w.Code)
 	}
 
-	// Verify it exists via GET
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/grok", nil)
 	w = httptest.NewRecorder()
 	h.HandleGrokPatterns(w, req)
 
 	var resp types.GrokPatternResponse
 	json.NewDecoder(w.Body).Decode(&resp)
-	if len(resp.Patterns) != 1 {
-		t.Errorf("expected 1 pattern, got %d", len(resp.Patterns))
-	}
-	if resp.Patterns[0].Name != "test-pattern" {
-		t.Errorf("expected 'test-pattern', got '%s'", resp.Patterns[0].Name)
-	}
 
-	// Cleanup global state
-	patternMutex.Lock()
-	currentPatterns = []types.GrokPatternDefinition{}
-	patternMutex.Unlock()
+	found := false
+	for _, p := range resp.Patterns {
+		if p.Name == "ls-handler-test-pattern" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("created pattern not visible via GET")
+	}
 }
 
 func TestHandleGrokPatterns_CreateDuplicate(t *testing.T) {
 	h, _ := setupHandler(t)
 
-	patternMutex.Lock()
-	currentPatterns = []types.GrokPatternDefinition{
-		{Name: "existing", Pattern: "%{GREEDYDATA:msg}"},
+	if _, err := l2g.UpsertLibraryEntry(l2g.KnownPattern{
+		Name:    "ls-handler-existing",
+		Pattern: "%{GREEDYDATA:msg}",
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
 	}
-	patternMutex.Unlock()
 
 	body, _ := json.Marshal(types.GrokPatternRequest{
-		Name:    "existing",
+		Name:    "ls-handler-existing",
 		Pattern: "%{GREEDYDATA:msg}",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/grok", bytes.NewReader(body))
@@ -436,10 +404,6 @@ func TestHandleGrokPatterns_CreateDuplicate(t *testing.T) {
 	if w.Code != http.StatusConflict {
 		t.Errorf("expected 409 for duplicate, got %d", w.Code)
 	}
-
-	patternMutex.Lock()
-	currentPatterns = []types.GrokPatternDefinition{}
-	patternMutex.Unlock()
 }
 
 func TestHandleGrokPatterns_CreateMissingName(t *testing.T) {
@@ -460,13 +424,14 @@ func TestHandleGrokPatterns_CreateMissingName(t *testing.T) {
 func TestHandleGrokPatterns_Delete(t *testing.T) {
 	h, _ := setupHandler(t)
 
-	patternMutex.Lock()
-	currentPatterns = []types.GrokPatternDefinition{
-		{Name: "to-delete", Pattern: "%{GREEDYDATA:msg}"},
+	if _, err := l2g.UpsertLibraryEntry(l2g.KnownPattern{
+		Name:    "ls-handler-delete-me",
+		Pattern: "%{GREEDYDATA:msg}",
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
 	}
-	patternMutex.Unlock()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/grok?name=to-delete", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/grok?name=ls-handler-delete-me", nil)
 	w := httptest.NewRecorder()
 	h.HandleGrokPatterns(w, req)
 
@@ -480,22 +445,17 @@ func TestHandleGrokPatterns_Delete(t *testing.T) {
 		t.Errorf("expected 'success', got '%s'", resp.Status)
 	}
 
-	patternMutex.Lock()
-	if len(currentPatterns) != 0 {
-		t.Errorf("expected 0 patterns after delete, got %d", len(currentPatterns))
+	for _, kp := range l2g.ListLibrary() {
+		if kp.Name == "ls-handler-delete-me" {
+			t.Fatal("entry still present after delete")
+		}
 	}
-	currentPatterns = []types.GrokPatternDefinition{}
-	patternMutex.Unlock()
 }
 
 func TestHandleGrokPatterns_DeleteNotFound(t *testing.T) {
 	h, _ := setupHandler(t)
 
-	patternMutex.Lock()
-	currentPatterns = []types.GrokPatternDefinition{}
-	patternMutex.Unlock()
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/grok?name=nonexistent", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/grok?name=ls-handler-nonexistent-name-xyz", nil)
 	w := httptest.NewRecorder()
 	h.HandleGrokPatterns(w, req)
 
@@ -558,12 +518,10 @@ func TestHandleInfo_CacheInvalidation(t *testing.T) {
 	store.listDates = []string{"2024-01-15"}
 	store.sourceNames = []string{"app.log"}
 
-	// First request populates cache
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/info", nil)
 	w := httptest.NewRecorder()
 	h.HandleInfo(w, req)
 
-	// Verify cache is valid
 	h.infoCacheMutex.RLock()
 	cached := h.cacheValid
 	h.infoCacheMutex.RUnlock()
@@ -571,7 +529,6 @@ func TestHandleInfo_CacheInvalidation(t *testing.T) {
 		t.Error("expected cache to be valid after first request")
 	}
 
-	// Invalidate
 	h.InvalidateInfoCache()
 
 	h.infoCacheMutex.RLock()
@@ -587,12 +544,10 @@ func TestHandleInfo_RefreshParam(t *testing.T) {
 	store.listDates = []string{}
 	store.sourceNames = []string{}
 
-	// Populate cache
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/info", nil)
 	w := httptest.NewRecorder()
 	h.HandleInfo(w, req)
 
-	// Request with refresh=true
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/info?refresh=true", nil)
 	w = httptest.NewRecorder()
 	h.HandleInfo(w, req)
@@ -662,11 +617,6 @@ func TestHandleParse_WithPattern(t *testing.T) {
 func TestHandleParse_AutosuggestNoPatterns(t *testing.T) {
 	h, _ := setupHandler(t)
 
-	// Ensure no patterns are loaded
-	patternMutex.Lock()
-	currentPatterns = []types.GrokPatternDefinition{}
-	patternMutex.Unlock()
-
 	body, _ := json.Marshal(types.ParseRequest{
 		Logs: []string{"Jan 15 10:30:00 myhost test message"},
 	})
@@ -691,21 +641,18 @@ func TestHandleParse_AutosuggestNoPatterns(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Grok patterns file persistence
+// Grok pattern persistence — verify writes hit log2grok's patterns.json
 // ---------------------------------------------------------------------------
 
 func TestGrokPatterns_FilePersistence(t *testing.T) {
 	h, _ := setupHandler(t)
-	dir := h.StoragePath
+	dir := l2g.ConfigDir()
+	if dir == "" {
+		t.Fatal("log2grok ConfigDir empty after setupHandler")
+	}
 
-	// Reset state
-	patternMutex.Lock()
-	currentPatterns = []types.GrokPatternDefinition{}
-	patternMutex.Unlock()
-
-	// Create a pattern (triggers save)
 	body, _ := json.Marshal(types.GrokPatternRequest{
-		Name:    "persist-test",
+		Name:    "ls-persist-test",
 		Pattern: "%{IP:client}",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/grok", bytes.NewReader(body))
@@ -716,16 +663,17 @@ func TestGrokPatterns_FilePersistence(t *testing.T) {
 		t.Fatalf("expected 201, got %d", w.Code)
 	}
 
-	// Verify file was created
-	filePath := filepath.Join(dir, patternsFile)
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		t.Fatal("patterns file was not created")
+	patternsFile := filepath.Join(dir, "patterns.json")
+	if _, err := os.Stat(patternsFile); os.IsNotExist(err) {
+		t.Fatal("log2grok patterns.json was not created")
 	}
-
-	// Cleanup
-	patternMutex.Lock()
-	currentPatterns = []types.GrokPatternDefinition{}
-	patternMutex.Unlock()
+	data, err := os.ReadFile(patternsFile)
+	if err != nil {
+		t.Fatalf("read patterns.json: %v", err)
+	}
+	if !bytes.Contains(data, []byte("ls-persist-test")) {
+		t.Error("patterns.json missing the upserted entry")
+	}
 }
 
 // ---------------------------------------------------------------------------

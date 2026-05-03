@@ -2,26 +2,24 @@ package handlers
 
 import (
 	"logsonic/pkg/storage"
-	"logsonic/pkg/tokenizer"
 	"sync"
 )
 
 type Services struct {
-	storage   storage.StorageInterface
-	tokenizer tokenizer.TokenizerInterface
+	storage storage.StorageInterface
 
 	StoragePath string
 
-	// Cache for system info
-	storageInfoCache any // Will store StorageInfoType from info.go
+	storageInfoCache any
 	infoCacheMutex   sync.RWMutex
 	cacheValid       bool
 }
 
-func NewHandler(storage storage.StorageInterface, tokenizer tokenizer.TokenizerInterface, storagePath string) *Services {
+// NewHandler wires up the HTTP service surface. Pattern + decode logic
+// is fully owned by log2grok now, so no tokenizer dependency is needed.
+func NewHandler(storage storage.StorageInterface, storagePath string) *Services {
 	return &Services{
 		storage:          storage,
-		tokenizer:        tokenizer,
 		StoragePath:      storagePath,
 		storageInfoCache: nil,
 		cacheValid:       false,
