@@ -35,8 +35,22 @@ export const SavePatternDialog: FC<SavePatternDialogProps> = ({
     createNewPatternDescription,
     setCreateNewPatternName,
     setCreateNewPatternDescription,
-
+    timestampInference,
+    timestampOverrides,
+    getActiveFile,
   } = useImportStore();
+
+  // The user's effective resolution at the moment they clicked Save.
+  // Prefer the active file's per-file state (multi-file mode) and
+  // fall back to global state. Returns undefined when there's no
+  // inference yet so the side-file isn't polluted with stub configs.
+  const captureCurrentResolution = () => {
+    const activeFile = getActiveFile();
+    const inf = activeFile?.timestampInference ?? timestampInference;
+    const overrides = activeFile?.timestampOverrides ?? timestampOverrides;
+    if (!inf) return undefined;
+    return { ...inf.resolution, ...overrides };
+  };
   const [isLoading, setIsLoading] = useState(false);
   const [existingPatterns, setExistingPatterns] = useState<GrokPatternRequest[]>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -86,13 +100,16 @@ export const SavePatternDialog: FC<SavePatternDialogProps> = ({
 
     let patternToSave: GrokPatternRequest | null = null;
 
+    const tsConfig = captureCurrentResolution();
+
     if (isCreateNewPatternSelected) {
       patternToSave = {
         name: createNewPatternName,
         pattern: createNewPattern.pattern,
         description: createNewPatternDescription,
         custom_patterns: createNewPattern.custom_patterns || {},
-        priority: 0
+        priority: 0,
+        timestamp_config: tsConfig,
       };
     } else if (selectedPattern) {
       patternToSave = {
@@ -100,7 +117,8 @@ export const SavePatternDialog: FC<SavePatternDialogProps> = ({
         pattern: selectedPattern.pattern,
         description: selectedPattern.description,
         custom_patterns: selectedPattern.custom_patterns || {},
-        priority: 0
+        priority: 0,
+        timestamp_config: tsConfig,
       };
     }
 

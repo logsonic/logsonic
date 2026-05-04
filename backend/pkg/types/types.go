@@ -1,6 +1,12 @@
 // Package types contains shared type definitions used across packages
 package types
 
+import (
+	"time"
+
+	"logsonic/pkg/timeresolve"
+)
+
 // IngestSessionOptions defines options for log ingestion
 type IngestSessionOptions struct {
 	Name            string            `json:"name,omitempty"`
@@ -13,6 +19,14 @@ type IngestSessionOptions struct {
 	ForceStartYear  string            `json:"force_start_year,omitempty"`
 	ForceStartMonth string            `json:"force_start_month,omitempty"`
 	ForceStartDay   string            `json:"force_start_day,omitempty"`
+	// SourceMTime is the modification time of the source file when
+	// known. Lets the resolver anchor year-less or 2-digit-year
+	// timestamps against the file rather than wall-clock now.
+	SourceMTime *time.Time `json:"source_mtime,omitempty"`
+	// TimestampConfig is the user-confirmed resolution from the import
+	// wizard. When nil, the resolver auto-derives defaults from a
+	// sample (legacy ForceStart* fields are still honoured).
+	TimestampConfig *timeresolve.Resolution `json:"timestamp_config,omitempty"`
 	// Meta contains additional fields to be added to each log entry
 	// These fields will be directly added to the JSON output for each log
 	// Example: for CloudWatch logs: {"aws_region": "us-west-2", "log_group": "my-group", "log_stream": "stream-1"}
@@ -82,6 +96,11 @@ type ParseResponse struct {
 
 	// Array of parsed log entries, where each entry is a key-value map
 	Logs []map[string]interface{} `json:"logs"`
+
+	// TimestampInference describes how the resolver interpreted the
+	// timestamps in this sample. Drives the wizard's diagnostic chip
+	// and live preview. Empty when no logs were provided.
+	TimestampInference *timeresolve.Inference `json:"timestamp_inference,omitempty"`
 }
 
 // ErrorResponse represents a standardized error response
@@ -136,6 +155,10 @@ type GrokPatternRequest struct {
 	Pattern string `json:"pattern,omitempty"`
 	// Human-readable description of the pattern
 	Description string `json:"description,omitempty"`
+	// TimestampConfig is the user's preferred resolution for this
+	// pattern. Persisted in a logsonic-side file (log2grok's library
+	// schema doesn't carry it) and re-applied on subsequent imports.
+	TimestampConfig *timeresolve.Resolution `json:"timestamp_config,omitempty"`
 }
 
 // GrokPatternResponse represents the response for Grok pattern operations

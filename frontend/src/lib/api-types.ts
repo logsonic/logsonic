@@ -16,6 +16,9 @@ export interface GrokPatternRequest {
   name: string;
   pattern: string;
   priority: number;
+  // Saved alongside the pattern so a recurring import (same source
+  // family) restores the user's last-used anchor / year strategy / tz.
+  timestamp_config?: TimestampResolution;
 }
 
 export interface GrokPatternResponse {
@@ -55,7 +58,78 @@ export interface IngestSessionOptions {
   force_start_year?: string;
   force_start_month?: string;
   force_start_day?: string;
+  source_mtime?: string;                  // RFC3339
+  timestamp_config?: TimestampResolution;
   meta?: Record<string, any>;
+}
+
+// --- Timestamp resolution (mirrors backend pkg/timeresolve) ---
+
+export type TimestampStatus = 'exact' | 'inferred' | 'ambiguous' | 'missing';
+export type TimestampConfidence = 'exact' | 'inferred' | 'carried' | 'synthetic';
+export type AnchorKind = 'file_mtime' | 'first_parsed' | 'custom' | 'now';
+export type YearStrategy = 'parsed' | 'inferred_century' | 'forced' | 'from_anchor';
+export type TimezoneKind = 'as_parsed' | 'forced';
+export type ForceMode = 'fill_missing' | 'overwrite';
+
+export interface Anchor {
+  kind: AnchorKind;
+  value: string; // RFC3339
+}
+
+export interface TimezoneCfg {
+  kind: TimezoneKind;
+  value?: string; // IANA zone when kind=forced
+}
+
+export interface TimestampResolution {
+  anchor: Anchor;
+  year_strategy: YearStrategy;
+  forced_year?: number;
+  forced_month?: number;
+  forced_day?: number;
+  timezone: TimezoneCfg;
+  rollover: boolean;
+  force_mode: ForceMode;
+  // Names a non-canonical capture (e.g. "bgl_timestamp") to use as
+  // the line's timestamp. Empty = canonical scan.
+  source_field?: string;
+  // Hint for parsing source_field: empty = auto, "unix_seconds",
+  // "unix_millis", "unix_nanos", or a Go time layout
+  // (e.g. "2006-01-02-15.04.05.000000").
+  source_format?: string;
+}
+
+export interface FieldCandidate {
+  name: string;
+  sample: string;
+  parses: boolean;
+  parsed?: string; // RFC3339 result when parses
+  format?: string; // detected format hint
+  score?: number;
+}
+
+export interface TimestampLayout {
+  has_timestamp_field: boolean;
+  components_present: string[];
+  year_width: number; // 0, 2, or 4
+  inferred_format_label: string;
+}
+
+export interface TimestampPreviewRow {
+  raw: string;
+  captured: Record<string, string>;
+  resolved: string;
+  confidence: TimestampConfidence;
+}
+
+export interface TimestampInference {
+  status: TimestampStatus;
+  layout: TimestampLayout;
+  resolution: TimestampResolution;
+  preview: TimestampPreviewRow[];
+  warnings?: string[];
+  field_candidates?: FieldCandidate[];
 }
 
 // Log Query Types
@@ -101,6 +175,20 @@ export interface ParseResponse {
   pattern_description?: string;
   processed?: number;
   status?: string;
+  timestamp_inference?: TimestampInference;
+}
+
+export interface TimestampPreviewRequest {
+  logs: string[];
+  grok_pattern?: string;
+  custom_patterns?: Record<string, string>;
+  resolution: Partial<TimestampResolution>;
+  source_mtime?: string;
+}
+
+export interface TimestampPreviewResponse {
+  status: string;
+  inference: TimestampInference;
 }
 
 // Suggest Types

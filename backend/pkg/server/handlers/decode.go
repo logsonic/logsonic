@@ -3,38 +3,35 @@ package handlers
 import (
 	"fmt"
 	"strconv"
-	"time"
 
+	"logsonic/pkg/timeresolve"
 	"logsonic/pkg/types"
 
-	"github.com/araddon/dateparse"
 	l2g "github.com/logsonic/log2grok/pkg/log2grok"
 )
 
-// postProcess converts log2grok decoder output into the JSON shape that
+// postProcess converts log2grok decoder output into the JSON shape
 // the rest of logsonic (frontend, storage, search) expects. It owns:
 //
-//   - timestamp parsing via dateparse plus the ForceTimezone /
-//     ForceStartYear/Month/Day overrides expressed in
-//     IngestSessionOptions.
+//   - timestamp resolution via timeresolve.Resolver, which composes a
+//     time.Time from the line captures (year/month/day/time/timestamp)
+//     and applies user overrides (ForceStart*, ForceTimezone,
+//     TimestampConfig).
 //   - merging Meta fields into every record (success and failure alike).
 //   - copying smart-decode aux fields straight from LineResult.Smart so
 //     the wire shape stays identical to the previous in-house tokenizer
 //     ("_ipv4_addr", "_email_addr", "_urls", "_mac_addr", "_uuids").
 //   - synthesizing fallback timestamps for unmatched lines so the
 //     downstream Bleve store always gets a sortable @timestamp value.
-//
-// It deliberately keeps the on-the-wire field set byte-identical to
-// what tokenizer.ParseLogs produced so the React frontend and Playwright
-// e2e suite need no changes.
-func postProcess(results []l2g.LineResult, opts types.IngestSessionOptions) (parsedLogs []map[string]interface{}, success, failed int) {
+func postProcess(results []l2g.LineResult, opts types.IngestSessionOptions) (parsedLogs []map[string]interface{}, success, failed int, inference timeresolve.Inference) {
 	parsedLogs = make([]map[string]interface{}, 0, len(results))
-	lastTimestamp := time.Now()
-	lastTimeDelta := 0
+
+	resolution, inference := buildResolution(results, opts)
+	resolver := timeresolve.New(resolution)
 
 	for _, r := range results {
 		if r.Matched {
-			row := make(map[string]interface{}, len(r.Fields)+len(r.Smart)+4)
+			row := make(map[string]interface{}, len(r.Fields)+len(r.Smart)+5)
 			for k, v := range r.Fields {
 				row[k] = v
 			}
@@ -45,16 +42,8 @@ func postProcess(results []l2g.LineResult, opts types.IngestSessionOptions) (par
 				row[k] = v
 			}
 
-			// Timestamp: prefer the named "timestamp" capture; fall back
-			// to time.Now() so storage indexing always has a value.
-			if tsStr, ok := r.Fields["timestamp"]; ok && tsStr != "" {
-				ts := updateTimestamp(tsStr, opts)
-				row["timestamp"] = ts
-				lastTimeDelta = int(ts.Sub(lastTimestamp).Milliseconds())
-				lastTimestamp = ts
-			} else {
-				row["timestamp"] = time.Now()
-			}
+			ts, _ := resolver.Resolve(r.Fields)
+			row["timestamp"] = ts
 
 			for k, v := range r.Smart {
 				row[k] = v
@@ -65,8 +54,6 @@ func postProcess(results []l2g.LineResult, opts types.IngestSessionOptions) (par
 			continue
 		}
 
-		// Failure path mirrors the legacy tokenizer: keep _raw + message
-		// + a synthesized timestamp so search & sort still work.
 		errorMsg := r.Error
 		if errorMsg == "" {
 			if opts.Name != "" {
@@ -75,14 +62,12 @@ func postProcess(results []l2g.LineResult, opts types.IngestSessionOptions) (par
 				errorMsg = "Log line did not match any configured pattern"
 			}
 		}
-		approx := lastTimestamp.Add(time.Duration(lastTimeDelta) * time.Millisecond)
 		row := map[string]interface{}{
 			"error":     errorMsg,
 			"_raw":      r.Raw,
 			"message":   r.Raw,
-			"timestamp": approx,
+			"timestamp": resolver.Carry(),
 		}
-		lastTimestamp = approx
 		for k, v := range opts.Meta {
 			row[k] = v
 		}
@@ -90,80 +75,136 @@ func postProcess(results []l2g.LineResult, opts types.IngestSessionOptions) (par
 		failed++
 	}
 
-	return parsedLogs, success, failed
+	// The inference returned to /parse should preview the actual
+	// resolution used, including any overrides. Build a fresh preview
+	// that reflects what the wire payload contains.
+	inference.Preview = buildPreviewFromResults(results, resolution)
+	return parsedLogs, success, failed, inference
 }
 
-// updateTimestamp resolves a timestamp captured from the log line into
-// a wall-clock time.Time. It applies the optional Force* overrides from
-// IngestSessionOptions (year/month/day/timezone) so users can backfill
-// logs that lack a year or that arrived in the wrong tz. Falls back to
-// time.Now() if every parser path fails — the caller always receives a
-// usable time. Logic is copied verbatim from the previous in-tree
-// tokenizer to preserve byte-identical behaviour.
-func updateTimestamp(timestamp string, options types.IngestSessionOptions) time.Time {
-	if timestamp == "" {
-		return time.Now()
+// buildResolution sniffs the sample to derive defaults, then layers
+// user-provided overrides on top: the new TimestampConfig wins,
+// otherwise legacy ForceStart* fields are translated to a partial
+// override.
+func buildResolution(results []l2g.LineResult, opts types.IngestSessionOptions) (timeresolve.Resolution, timeresolve.Inference) {
+	samples := make([]map[string]string, 0, len(results))
+	for _, r := range results {
+		if r.Matched {
+			samples = append(samples, r.Fields)
+		}
 	}
+	inf := timeresolve.Sniff(samples, opts.SourceMTime)
 
-	parsedTime, err := dateparse.ParseAny(timestamp)
-	if err != nil {
-		// dateparse can't handle Android logcat timestamps like
-		// "03-17 16:16:08.538"; try that explicit layout next and
-		// stamp on the current year, since the format omits it.
-		androidLayout := "01-02 15:04:05.000"
-		androidTime, androidErr := time.Parse(androidLayout, timestamp)
-		if androidErr == nil {
-			parsedTime = time.Date(
-				time.Now().Year(),
-				androidTime.Month(),
-				androidTime.Day(),
-				androidTime.Hour(),
-				androidTime.Minute(),
-				androidTime.Second(),
-				androidTime.Nanosecond(),
-				androidTime.Location(),
-			)
-		} else {
-			return time.Now()
-		}
+	res := inf.Resolution
+	if opts.TimestampConfig != nil {
+		res = mergeResolution(res, *opts.TimestampConfig)
+	} else {
+		res = applyLegacyOverrides(res, opts)
 	}
+	inf.Resolution = res
+	return res, inf
+}
 
-	// dateparse leaves Year() = 0 for formats that omit the year
-	// (e.g. syslog "Jan 02 15:04:05"). Promote to current year, then
-	// rewind one if the result is in the future.
-	if parsedTime.Year() == 0 {
-		parsedTime = parsedTime.AddDate(time.Now().Year(), 0, 0)
-		if parsedTime.After(time.Now()) {
-			parsedTime = parsedTime.AddDate(-1, 0, 0)
+// applyLegacyOverrides translates the pre-existing ForceStart*
+// session options into a Resolution. Legacy semantics were
+// "overwrite" (the override stomps any parsed value), so we honour
+// that by switching ForceMode.
+func applyLegacyOverrides(res timeresolve.Resolution, opts types.IngestSessionOptions) timeresolve.Resolution {
+	anyForce := false
+	if v := opts.ForceStartYear; v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			res.ForcedYear = &n
+			res.YearStrategy = timeresolve.YearForced
+			anyForce = true
 		}
 	}
+	if v := opts.ForceStartMonth; v != "" && v != "auto" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 12 {
+			res.ForcedMonth = &n
+			anyForce = true
+		}
+	}
+	if v := opts.ForceStartDay; v != "" && v != "auto" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 31 {
+			res.ForcedDay = &n
+			anyForce = true
+		}
+	}
+	if v := opts.ForceTimezone; v != "" && v != "auto" {
+		res.Timezone = timeresolve.TimezoneCfg{Kind: timeresolve.TimezoneForced, Value: v}
+		anyForce = true
+	}
+	if anyForce {
+		res.ForceMode = timeresolve.ForceModeOverwrite
+	}
+	return res
+}
 
-	if options.ForceStartYear != "" {
-		if year, err := strconv.Atoi(options.ForceStartYear); err == nil {
-			parsedTime = time.Date(year, parsedTime.Month(), parsedTime.Day(),
-				parsedTime.Hour(), parsedTime.Minute(), parsedTime.Second(),
-				parsedTime.Nanosecond(), parsedTime.Location())
-		}
+// mergeResolution overlays a user-provided override onto a base
+// (sniffed) Resolution. Empty/zero fields in the override are ignored
+// so the wizard can send a partial config.
+func mergeResolution(base, over timeresolve.Resolution) timeresolve.Resolution {
+	if over.Anchor.Kind != "" {
+		base.Anchor = over.Anchor
 	}
-	if options.ForceStartMonth != "" {
-		if month, err := strconv.Atoi(options.ForceStartMonth); err == nil && month >= 1 && month <= 12 {
-			parsedTime = time.Date(parsedTime.Year(), time.Month(month), parsedTime.Day(),
-				parsedTime.Hour(), parsedTime.Minute(), parsedTime.Second(),
-				parsedTime.Nanosecond(), parsedTime.Location())
-		}
+	if over.YearStrategy != "" {
+		base.YearStrategy = over.YearStrategy
 	}
-	if options.ForceStartDay != "" {
-		if day, err := strconv.Atoi(options.ForceStartDay); err == nil && day >= 1 && day <= 31 {
-			parsedTime = time.Date(parsedTime.Year(), parsedTime.Month(), day,
-				parsedTime.Hour(), parsedTime.Minute(), parsedTime.Second(),
-				parsedTime.Nanosecond(), parsedTime.Location())
-		}
+	if over.ForcedYear != nil {
+		base.ForcedYear = over.ForcedYear
 	}
-	if options.ForceTimezone != "" {
-		if loc, err := time.LoadLocation(options.ForceTimezone); err == nil {
-			parsedTime = parsedTime.In(loc)
-		}
+	if over.ForcedMonth != nil {
+		base.ForcedMonth = over.ForcedMonth
 	}
+	if over.ForcedDay != nil {
+		base.ForcedDay = over.ForcedDay
+	}
+	if over.Timezone.Kind != "" {
+		base.Timezone = over.Timezone
+	}
+	if over.ForceMode != "" {
+		base.ForceMode = over.ForceMode
+	}
+	// SourceField / SourceFormat: pulled together so an Auto-detect
+	// reset (both blank in the override) clears any prior pick.
+	if over.SourceField != "" || over.SourceFormat != "" {
+		base.SourceField = over.SourceField
+		base.SourceFormat = over.SourceFormat
+	}
+	// Rollover: honour any explicit user choice.
+	base.Rollover = over.Rollover
+	return base
+}
 
-	return parsedTime
+func buildPreviewFromResults(results []l2g.LineResult, res timeresolve.Resolution) []timeresolve.PreviewRow {
+	// Match the frontend's preview page size so every visible row in
+	// the fused log-preview/timestamp UI has a resolved timestamp.
+	const maxRows = 20
+	if len(results) == 0 {
+		return nil
+	}
+	r := timeresolve.New(res)
+	out := make([]timeresolve.PreviewRow, 0, maxRows)
+	for _, lr := range results {
+		if !lr.Matched {
+			continue
+		}
+		ts, conf := r.Resolve(lr.Fields)
+		captured := map[string]string{}
+		for _, k := range []string{"timestamp", "date", "time", "year", "month", "day", "hour", "minute", "second", "millis", "nanos", "tz"} {
+			if v, ok := lr.Fields[k]; ok && v != "" {
+				captured[k] = v
+			}
+		}
+		out = append(out, timeresolve.PreviewRow{
+			Raw:        lr.Raw,
+			Captured:   captured,
+			Resolved:   ts.Format("2006-01-02T15:04:05.000Z07:00"),
+			Confidence: conf,
+		})
+		if len(out) >= maxRows {
+			break
+		}
+	}
+	return out
 }

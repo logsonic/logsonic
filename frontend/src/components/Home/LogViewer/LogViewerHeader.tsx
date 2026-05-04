@@ -141,26 +141,35 @@ export const LogViewerHeader = (
                 </div>
                 
                 {/* Quick actions */}
-                <div className="flex justify-between pt-2 border-t">
+                <div className="flex justify-between items-center pt-2 border-t">
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        // Clear all except mandatory columns
+                        handleColumnSelectionChange(store.mandatoryColumns);
+                      }}
+                    >
+                      Clear All
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        // Select all columns
+                        handleColumnSelectionChange([...availableColumns]);
+                      }}
+                    >
+                      Select All
+                    </Button>
+                  </div>
                   <Button
-                    variant="outline"
                     size="sm"
-                    onClick={() => {
-                      // Clear all except mandatory columns
-                      handleColumnSelectionChange(store.mandatoryColumns);
-                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={() => setIsColumnPopoverOpen(false)}
                   >
-                    Clear All
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      // Select all columns
-                      handleColumnSelectionChange([...availableColumns]);
-                    }}
-                  >
-                    Select All
+                    Close
                   </Button>
                 </div>
               </div>

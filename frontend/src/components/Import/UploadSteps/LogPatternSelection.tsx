@@ -13,10 +13,15 @@ export const LogPatternSelection: FC<LogPatternSelectionProps> = ({
 
 }) => {
   const {
-    selectedPattern, 
-    availablePatterns, 
-    isTestingPattern, 
-    testPattern, 
+    selectedPattern,
+    availablePatterns,
+    isTestingPattern,
+    testPattern,
+    importSource,
+    files,
+    getActiveFile,
+    patchTimestampOverride,
+    patchFileTimestampOverride,
   } = useImportStore();
   
   const [open, setOpen] = useState(false);
@@ -40,7 +45,7 @@ export const LogPatternSelection: FC<LogPatternSelectionProps> = ({
   const handlePatternSelect = (value: string) => {
     // Find the selected pattern from available patterns
     const patternFromAvailable = availablePatterns.find(p => p.name === value);
-    
+
     if (patternFromAvailable) {
         // Make sure custom_patterns is included
         const patternWithCustomPatterns = {
@@ -48,6 +53,33 @@ export const LogPatternSelection: FC<LogPatternSelectionProps> = ({
             custom_patterns: patternFromAvailable.custom_patterns || {}
         };
         onPatternChange(patternWithCustomPatterns);
+
+        // Hydrate the saved timestamp resolution for this pattern. We
+        // can't just paste the resolution as-is — the saved anchor
+        // belongs to a previous file's mtime, so re-detection on this
+        // file's sample produces a fresh inference. Apply only the
+        // user-meaningful knobs (year strategy, forced year/tz, force
+        // mode, rollover) as overrides; the anchor will be re-derived.
+        const saved = patternFromAvailable.timestamp_config;
+        if (saved) {
+            const overrides = {
+                year_strategy: saved.year_strategy,
+                forced_year: saved.forced_year,
+                forced_month: saved.forced_month,
+                forced_day: saved.forced_day,
+                timezone: saved.timezone,
+                rollover: saved.rollover,
+                force_mode: saved.force_mode,
+            };
+            const isMultiFile = importSource === 'file' && files.length > 0;
+            const active = getActiveFile();
+            if (isMultiFile && active) {
+                patchFileTimestampOverride(active.id, overrides);
+            } else {
+                patchTimestampOverride(overrides);
+            }
+        }
+
         setOpen(false);
         setSearchQuery('');
     }

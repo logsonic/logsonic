@@ -94,7 +94,7 @@ func (h *Services) HandleParse(w http.ResponseWriter, r *http.Request) {
 	}
 
 	results := dec.Decode(req.Logs)
-	parsedLogs, successCount, failedCount := postProcess(results, req.IngestSessionOptions)
+	parsedLogs, successCount, failedCount, inference := postProcess(results, req.IngestSessionOptions)
 
 	// /parse never persists, so drop _raw before returning to keep the
 	// preview payload light. Storage paths keep _raw via ingest.
@@ -110,6 +110,7 @@ func (h *Services) HandleParse(w http.ResponseWriter, r *http.Request) {
 		PatternDescription: "",
 		CustomPatterns:     req.CustomPatterns,
 		Logs:               parsedLogs,
+		TimestampInference: &inference,
 	})
 }
 

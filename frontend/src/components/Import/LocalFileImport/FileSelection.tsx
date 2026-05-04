@@ -29,7 +29,7 @@ export const FileSelection: FC<LogSourceProvider> = ({
   onFilePreview,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { error, files, addFiles, removeFile, setMetadata, setSelectedFileName, setSelectedFileHandle, setFilePreviewBuffer } = useImportStore();
+  const { error, files, addFiles, removeFile, setMetadata, setSelectedFileName, setSelectedFileHandle, setFilePreviewBuffer, setSourceMTime } = useImportStore();
   const fileService = useFileSelectionService();
   const [isDragOver, setIsDragOver] = useState(false);
   const [fileErrors, setFileErrors] = useState<string[]>([]);
@@ -75,6 +75,15 @@ export const FileSelection: FC<LogSourceProvider> = ({
       setMetadata({ _src: `file.${primaryFile.name}` });
       setSelectedFileName(primaryFile.name);
       setSelectedFileHandle(primaryFile);
+      // Browser File API exposes lastModified as a unix epoch in ms.
+      // Hand it to the backend so the timestamp resolver can anchor
+      // year-less / 2-digit-year logs against the file's mtime instead
+      // of falling back to wall-clock now.
+      if (primaryFile.lastModified) {
+        setSourceMTime(new Date(primaryFile.lastModified).toISOString());
+      } else {
+        setSourceMTime(null);
+      }
 
       await onFileSelect(primaryFile.name);
 

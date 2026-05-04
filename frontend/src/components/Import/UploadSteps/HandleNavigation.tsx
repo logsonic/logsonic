@@ -7,9 +7,23 @@ const HandleNavigation: FC<{
     onNext: () => void;
     onBack: () => void;
 }> = ({ onNext, onBack }) => {
-    const { currentStep, importSource, readyToSelectPattern, isUploading, files } = useImportStore();
+    const { currentStep, importSource, readyToSelectPattern, isUploading, files, timestampInference, timestampConfirmed } = useImportStore();
 
     const isMultiFile = importSource === 'file' && files.length > 0;
+
+    // Block step-2 → step-3 when any inference says ambiguous/missing
+    // and that file hasn't been confirmed. In single-file mode we
+    // check the global slice; in multi-file mode every file must
+    // independently pass.
+    const fileNeedsConfirmation = (f: typeof files[number]) =>
+        f.timestampInference
+        && (f.timestampInference.status === 'ambiguous' || f.timestampInference.status === 'missing')
+        && !f.timestampConfirmed;
+    const timestampGated = isMultiFile
+        ? files.some(fileNeedsConfirmation)
+        : (timestampInference
+            && (timestampInference.status === 'ambiguous' || timestampInference.status === 'missing')
+            && !timestampConfirmed);
 
     // Determine if Next should be enabled
     const isNextDisabled = () => {
@@ -27,6 +41,7 @@ const HandleNavigation: FC<{
                     return files.some(f => !f.selectedPattern) ||
                            files.some(f => f.detectionStatus === 'detecting' || f.detectionStatus === 'pending');
                 }
+                if (timestampGated) return true;
                 return !readyToSelectPattern;
             case 3:
                 // Disable if no files are checked in multi-file mode

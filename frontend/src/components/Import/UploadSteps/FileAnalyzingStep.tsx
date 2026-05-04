@@ -328,6 +328,10 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
     setCreateNewPattern,
     handlePatternOperation,
     setParsedLogs,
+    setTimestampInference,
+    setSourceMTime,
+    setFileTimestampInference,
+    setActiveFileId,
     setError: setStoreError,
   } = useImportStore();
 
@@ -358,14 +362,30 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
       if (suggestResponse.results && suggestResponse.results.length > 0) {
         const bestMatch = suggestResponse.results[0];
 
-        // Test the best match
+        // Test the best match. Pass source_mtime so the resolver
+        // anchors year-less / 2-digit-year timestamps against the
+        // file rather than falling back to wall-clock now.
         const parseResponse = await parseLogs({
           logs: previewLines.slice(0, 20),
           grok_pattern: bestMatch.pattern,
           custom_patterns: bestMatch.custom_patterns || {},
+          session_options: {
+            source_mtime: file.file.lastModified ? new Date(file.file.lastModified).toISOString() : undefined,
+          },
         });
 
         if (parseResponse.logs && parseResponse.logs.length > 0) {
+          // Per-file: stash the resolver's verdict on the file record
+          // so the panel can show this file's own inference when
+          // active. Also mirror to global state for backward compat
+          // with the legacy/CloudWatch path that doesn't use files[].
+          if (parseResponse.timestamp_inference) {
+            setFileTimestampInference(file.id, parseResponse.timestamp_inference);
+            setTimestampInference(parseResponse.timestamp_inference);
+          }
+          if (file.file.lastModified) {
+            setSourceMTime(new Date(file.file.lastModified).toISOString());
+          }
           // Match a server pattern if possible
           const matchingPattern = availablePatterns.find(p => p.pattern === bestMatch.pattern);
           const detectedPattern: Pattern = matchingPattern
@@ -428,13 +448,25 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
     setAllDetecting(false);
     setReadyToImportLogs(true);
 
-    // Auto-expand the first file that needs attention
+    // Auto-expand the first file that needs attention. Also set
+    // activeFileId so the TimestampPanel can read that file's
+    // per-file inference. Priority: timestamp issue > pattern
+    // detection failure > first file.
     const currentFiles = useImportStore.getState().files;
-    const needsAttention = currentFiles.find(f => f.detectionStatus === 'failed');
+    const tsAttention = currentFiles.find(f =>
+      f.timestampInference && (f.timestampInference.status === 'ambiguous' || f.timestampInference.status === 'missing')
+    );
+    const needsAttention = tsAttention || currentFiles.find(f => f.detectionStatus === 'failed');
     if (needsAttention) {
       setExpandedFileId(needsAttention.id);
+      setActiveFileId(needsAttention.id);
     } else if (currentFiles.length === 1) {
       setExpandedFileId(currentFiles[0].id);
+      setActiveFileId(currentFiles[0].id);
+    } else if (currentFiles.length > 0) {
+      // Multi-file with everything green — still need an active file
+      // for the panel to render against.
+      setActiveFileId(currentFiles[0].id);
     }
 
     // Signal detection complete
@@ -477,6 +509,9 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
           });
 
           if (parseResponse.logs && parseResponse.logs.length > 0) {
+            if (parseResponse.timestamp_inference) {
+              setTimestampInference(parseResponse.timestamp_inference);
+            }
             const matchingServerPattern = availablePatterns.find(p => p.pattern === bestMatch.pattern);
             const suggestedPattern: Pattern = matchingServerPattern || {
               name: bestMatch.pattern_name || 'Auto-detected',

@@ -93,7 +93,7 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	results := sessionDecoder.Decode(req.Logs)
-	jsonOutput, successCount, failedCount := postProcess(results, sessionOptions)
+	jsonOutput, successCount, failedCount, _ := postProcess(results, sessionOptions)
 
 	if err := h.storage.Store(jsonOutput, sessionOptions.Source); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -191,6 +191,8 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		ForceStartYear:  req.ForceStartYear,
 		ForceStartMonth: req.ForceStartMonth,
 		ForceStartDay:   req.ForceStartDay,
+		SourceMTime:     req.SourceMTime,
+		TimestampConfig: req.TimestampConfig,
 		// Meta is freely passed through so callers (e.g. CloudWatch
 		// ingest path) can stamp every record with aws_region,
 		// log_group, log_stream, etc.

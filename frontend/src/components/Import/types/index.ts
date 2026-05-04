@@ -1,5 +1,7 @@
 // Types for the Import functionality
 
+import type { TimestampInference, TimestampResolution } from '@/lib/api-types';
+
 export type UploadStep = 1 | 2 | 3 | 4;
 
 export interface Pattern {
@@ -58,6 +60,14 @@ export interface ImportFile {
 
   // Per-file session options
   sessionOptions: FileSessionOptions;
+
+  // Timestamp resolution per file. Each file in a batch can have its
+  // own anchor (mtime), inferred layout, and user overrides. The
+  // upload path reads these instead of the global timestamp* state.
+  timestampInference: TimestampInference | null;
+  timestampOverrides: Partial<TimestampResolution>;
+  timestampConfirmed: boolean;
+  sourceMTime: string | null;
 }
 
 export interface FileSessionOptions {

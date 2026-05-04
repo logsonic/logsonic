@@ -150,6 +150,52 @@ HOST=0.0.0.0 PORT=9000 STORAGE_PATH=/var/logs/storage logsonic
 4. If your log format is not automatically detected, you can specify a custom Grok pattern
 5. Once imported, the log file will be indexed and available for searching
 
+### Timestamp Resolution
+
+LogSonic resolves a real wall-clock timestamp for every log line, even when the line itself doesn't carry a complete date. The resolver runs automatically during import and surfaces a diagnostic in step 3 of the wizard so you can confirm or override what it deduced before the file is indexed.
+
+#### What the resolver auto-detects
+
+The grok pattern emits a set of *captures* per line. The resolver looks at the canonical timestamp captures and composes a `time.Time` from whatever is available, in this priority order:
+
+| What the line carries | Example | What the resolver does |
+|---|---|---|
+| Full year-qualified timestamp | `2015-10-18 18:01:47,978` (Hadoop), `01/Apr/2026:00:00:56 +0000` (nginx) | Parses directly. No inference needed. |
+| Components with 4-digit year | `date=20171223 hour=22 minute=15` (HealthApp) | Composes from atomic fields. |
+| Components with 2-digit year | `year=17 month=06 day=09 time=20:10:40` (Spark) | Expands the century against the **anchor** so `17` becomes `2017` rather than `1917` or `2117`. |
+| Year-less timestamp | `Jun 14 15:16:01` (syslog, openssh, mac-system) | Borrows the year from the **anchor**. Detects Dec→Jan rollover when it sees the date jump backwards. |
+| Time-only continuation lines | `20:10:41` after a fully-stamped line | Carries the prior line's date forward. Detects 23:59→00:00 rollover. |
+| Nothing recognisable | bare app messages with no time fields | Falls back to the anchor; the import wizard flags the file with a red **Missing** chip so you can intervene before importing. |
+
+The **anchor** is the absolute reference the resolver uses to fill in missing components. It's chosen automatically:
+
+1. Source file's modification time (when LogSonic knows it — local file imports).
+2. The first fully-qualified timestamp seen in the sample.
+3. Wall-clock now (last resort — the wizard flags this as `synthetic`).
+
+The import wizard previews each row's resolved timestamp with a confidence label (`exact`, `inferred`, `carried`, `synthetic`) so you can verify before ingesting. The confidence is shown in the preview only — it isn't persisted with the indexed log record.
+
+#### When to override
+
+The wizard's "Timestamp Resolution" panel auto-expands when something is ambiguous. Override it when:
+
+- **The file's modification time isn't representative of its content** (e.g., you copied the file last week but it's from 2017). Pick `Custom date` for the anchor and enter a date inside the file's actual range.
+- **The file has 2-digit years and the anchor isn't close in time** to the log content. The default century-expansion picks the most recent century that doesn't go into the future relative to the anchor; setting an explicit anchor in the right decade fixes mis-expansions.
+- **The logs are in a non-UTC timezone but don't carry an offset.** Use `Force Timezone` to pin the source-side zone (`America/Los_Angeles`, `Asia/Kolkata`, etc.). This is interpretation, not display — search and the histogram still render in your browser's local time.
+- **You know the year a year-less file came from.** Set `Force Year`. By default this *fills* missing values only — it won't overwrite a year the line already carries. Switch to `Overwrite` mode if you need the legacy behaviour where the override wins regardless.
+- **A multi-day file spans a Dec→Jan boundary** and rollover detection guesses wrong. You can disable rollover and rely on a forced year instead.
+
+The panel shows a live preview of the first few resolved lines as you change knobs, so you can confirm the result before clicking **Start Ingest**. Once confirmed, the configuration is sent with the ingest request and applied to every line in the file (and saved alongside any pattern you persist).
+
+#### CLI / API users
+
+When ingesting via the API directly, pass:
+
+- `source_mtime` (RFC3339) on `/ingest/start` to anchor against the file's modification time.
+- `timestamp_config` on `/ingest/start` with the full resolution: `{ anchor, year_strategy, forced_year, timezone, rollover, force_mode }`.
+
+Without either, the resolver derives sensible defaults from the sample. The legacy `force_start_year` / `force_start_month` / `force_start_day` / `force_timezone` fields still work and are translated to a resolution with `force_mode=overwrite` to preserve their original semantics.
+
 ### Search and Analysis
 
 1. Use the search bar at the top to filter logs by time range and keywords

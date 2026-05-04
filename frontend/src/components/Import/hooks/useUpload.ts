@@ -26,9 +26,21 @@ export const useUpload = (): UploadProgressHookResult => {
     sessionOptionsYear,
     sessionOptionsMonth,
     sessionOptionsDay,
+    timestampInference,
+    timestampOverrides,
+    sourceMTime,
     files,
     updateFile,
   } = useImportStore();
+
+  // Effective timestamp config sent to /ingest/start = sniffed
+  // resolution overlaid with the user's overrides. Returns undefined
+  // when no inference exists yet (e.g. CloudWatch path) so the
+  // backend falls through to legacy ForceStart* handling.
+  const effectiveTimestampConfig = () => {
+    if (!timestampInference) return undefined;
+    return { ...timestampInference.resolution, ...timestampOverrides };
+  };
 
   const progressRef = useRef(0);
 
@@ -50,6 +62,14 @@ export const useUpload = (): UploadProgressHookResult => {
 
       try {
         // Step 1: Start ingest session for this file
+        // Per-file timestamp resolution: this file's own inference
+        // overlaid with this file's own overrides. Falls through to
+        // undefined when the file has no inference yet, in which case
+        // the backend re-derives defaults (legacy behaviour).
+        const fileTsConfig = importFile.timestampInference
+          ? { ...importFile.timestampInference.resolution, ...importFile.timestampOverrides }
+          : undefined;
+
         const sessionOptions: IngestSessionOptions = {
           pattern: importFile.selectedPattern?.pattern || '%{GREEDYDATA:message}',
           name: importFile.selectedPattern?.name || 'Custom Pattern',
@@ -61,6 +81,9 @@ export const useUpload = (): UploadProgressHookResult => {
           force_start_year: importFile.sessionOptions.year || undefined,
           force_start_month: importFile.sessionOptions.month || undefined,
           force_start_day: importFile.sessionOptions.day || undefined,
+          source_mtime: importFile.sourceMTime
+            ?? (importFile.file.lastModified ? new Date(importFile.file.lastModified).toISOString() : undefined),
+          timestamp_config: fileTsConfig,
           meta: { _src: `file.${importFile.fileName}` },
         };
 
@@ -137,6 +160,8 @@ export const useUpload = (): UploadProgressHookResult => {
         force_start_year: sessionOptionsYear,
         force_start_month: sessionOptionsMonth,
         force_start_day: sessionOptionsDay,
+        source_mtime: sourceMTime || undefined,
+        timestamp_config: effectiveTimestampConfig(),
         meta: metadata
       };
 

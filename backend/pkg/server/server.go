@@ -222,6 +222,7 @@ func NewServer(cfg Config) (*Server, error) {
 
 		// Parse endpoints
 		r.Post("/parse", h.HandleParse)
+		r.Post("/timestamp/preview", h.HandleTimestampPreview)
 		r.Route("/logs", func(r chi.Router) {
 			r.Get("/", h.HandleReadAll)
 			r.Delete("/", h.HandleClear)

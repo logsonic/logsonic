@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"logsonic/pkg/timeresolve"
 	"logsonic/pkg/types"
 	"net/http"
 
@@ -108,16 +109,27 @@ func (h *Services) createGrokPattern(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Persist the timestamp resolution to the side-file. Failure here
+	// is non-fatal — the pattern itself is already saved; the user
+	// just won't have their resolution restored next time.
+	if req.TimestampConfig != nil && h.PatternTimestamps != nil {
+		if err := h.PatternTimestamps.Set(req.Name, *req.TimestampConfig); err != nil {
+			// best-effort, don't fail the request
+			fmt.Printf("warning: failed to persist timestamp config for %q: %v\n", req.Name, err)
+		}
+	}
+
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(types.GrokPatternResponse{
 		Status: "success",
 		Patterns: []types.GrokPatternRequest{
 			{
-				Name:           req.Name,
-				Priority:       req.Priority,
-				CustomPatterns: req.CustomPatterns,
-				Pattern:        req.Pattern,
-				Description:    req.Description,
+				Name:            req.Name,
+				Priority:        req.Priority,
+				CustomPatterns:  req.CustomPatterns,
+				Pattern:         req.Pattern,
+				Description:     req.Description,
+				TimestampConfig: req.TimestampConfig,
 			},
 		},
 	})
@@ -152,6 +164,12 @@ func (h *Services) deleteGrokPattern(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Drop any side-file timestamp config so it doesn't shadow a
+	// future pattern reusing the same name. Best-effort.
+	if h.PatternTimestamps != nil {
+		_ = h.PatternTimestamps.Delete(patternName)
+	}
+
 	json.NewEncoder(w).Encode(types.GrokPatternResponse{
 		Status: "success",
 		Error:  fmt.Sprintf("Pattern '%s' has been deleted", patternName),
@@ -160,15 +178,30 @@ func (h *Services) deleteGrokPattern(w http.ResponseWriter, r *http.Request) {
 
 func (h *Services) getGrokPatterns(w http.ResponseWriter, _ *http.Request) {
 	library := l2g.ListLibrary()
+
+	// Look up timestamp configs by name from the side-file. Snapshot
+	// is taken once outside the loop so concurrent writes can't race.
+	var tsByName map[string]timeresolve.Resolution
+	if h.PatternTimestamps != nil {
+		tsByName = h.PatternTimestamps.Snapshot()
+	}
+
 	convertedPatterns := make([]types.GrokPatternRequest, len(library))
 	for i, kp := range library {
-		convertedPatterns[i] = types.GrokPatternRequest{
+		entry := types.GrokPatternRequest{
 			Name:           kp.Name,
 			Pattern:        kp.Pattern,
 			Priority:       kp.Priority,
 			Description:    kp.Description,
 			CustomPatterns: kp.CustomPatterns,
 		}
+		if tsByName != nil {
+			if r, ok := tsByName[kp.Name]; ok {
+				rCopy := r
+				entry.TimestampConfig = &rCopy
+			}
+		}
+		convertedPatterns[i] = entry
 	}
 
 	json.NewEncoder(w).Encode(types.GrokPatternResponse{

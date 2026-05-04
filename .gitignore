@@ -1,3 +1,4 @@
 .cursor/**
 node_modules
 .claude/**
+.playwright-mcp/**

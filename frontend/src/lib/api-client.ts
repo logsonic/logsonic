@@ -11,6 +11,8 @@ import {
   ParseResponse,
   SuggestResponse,
   SystemInfoResponse,
+  TimestampPreviewRequest,
+  TimestampPreviewResponse,
 } from './api-types';
 
 import {
@@ -124,6 +126,11 @@ export async function clearLogs(): Promise<any> {
 // Log Parsing
 export async function parseLogs(request: ParseRequest): Promise<ParseResponse> {
   return apiRequest<ParseResponse>('/parse', 'POST', request);
+}
+
+// Live timestamp re-preview for the import wizard's knob panel.
+export async function previewTimestamps(request: TimestampPreviewRequest): Promise<TimestampPreviewResponse> {
+  return apiRequest<TimestampPreviewResponse>('/timestamp/preview', 'POST', request);
 }
 
 // Pattern Suggestion
