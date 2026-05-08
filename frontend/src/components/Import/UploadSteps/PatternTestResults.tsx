@@ -16,19 +16,12 @@ interface PatternTestResultsExtendedProps extends Omit<PatternTestResultsProps, 
 
 // Visual cues for the resolved-timestamp column. Sync with the
 // confidenceClass map in TimestampToolbar so chip and per-row cells
-// use the same palette.
-const confidenceClass: Record<string, string> = {
-  exact:     'text-emerald-700',
-  inferred:  'text-sky-700',
-  carried:   'text-slate-500',
-  synthetic: 'text-rose-700',
-};
-
-const confidenceBadge: Record<string, string> = {
-  exact:     'bg-emerald-50 text-emerald-700 border-emerald-200',
-  inferred:  'bg-sky-50 text-sky-700 border-sky-200',
-  carried:   'bg-slate-50 text-slate-600 border-slate-200',
-  synthetic: 'bg-rose-50 text-rose-700 border-rose-200',
+// use the same palette. Token-based so dark mode works.
+const confidenceColor: Record<string, string> = {
+  exact:     'var(--ls-ok)',
+  inferred:  'var(--ls-info)',
+  carried:   'var(--ls-text-3)',
+  synthetic: 'var(--ls-err)',
 };
 
 // Pull the resolved time + confidence for a row index. Confidence
@@ -55,20 +48,18 @@ function rowTimestamp(
   return null;
 }
 
-// Format an ISO-ish timestamp for the leading column. Keeps date and
-// time stacked on two lines so the column stays narrow and the date
-// remains scan-able when the file spans multiple days.
-function formatResolved(iso: string): { date: string; time: string } {
-  // The backend formats using "2006-01-02T15:04:05.000Z07:00".
-  // Split on "T" — if missing, return as-is.
+// Format an ISO-ish timestamp into the same compact single-line form
+// the home log table uses: "2017-05-16 00:00:00.008". Strip timezone
+// suffix to keep the column narrow — TZ is communicated once in the
+// toolbar above, not per row.
+function formatResolved(iso: string): string {
   const tIdx = iso.indexOf('T');
-  if (tIdx < 0) return { date: iso, time: '' };
+  if (tIdx < 0) return iso;
   const date = iso.slice(0, tIdx);
-  // Drop the seconds-fraction trailing zeros for visual cleanliness:
-  // 2017-06-09T20:10:40.000Z → 20:10:40Z
   let time = iso.slice(tIdx + 1);
-  time = time.replace(/\.000(?=Z|[+-])/, '');
-  return { date, time };
+  // Drop trailing TZ ("Z" or "+02:00") — it'd just add visual noise.
+  time = time.replace(/(Z|[+-]\d{2}:?\d{2})$/, '');
+  return `${date} ${time}`;
 }
 
 export const PatternTestResults: FC<PatternTestResultsExtendedProps> = ({
@@ -168,87 +159,202 @@ export const PatternTestResults: FC<PatternTestResultsExtendedProps> = ({
   const fieldNames = Array.from(allFields);
   const fieldColors = getFieldColors(fieldNames);
 
+  // Column dimensions — match the home log table's compact rhythm.
+  // TIMESTAMP column is sized for "2017-05-16 00:00:00.008" + a small
+  // confidence dot prefix, no wasted slack.
+  const gridCols = '20px 200px 1fr';
+
   return (
     <div className="flex flex-col">
-      {/* Fused card: timestamp toolbar (chip + warnings + knobs +
-          confirm) followed by a unified preview table where each row
-          shows the resolved timestamp alongside the highlighted raw
-          line. Replaces the previous separate "Pattern test
-          successful!" banner + "Log Preview" + standalone
-          TimestampPanel arrangement. */}
-      <div className="border rounded-md overflow-hidden shadow-sm bg-white">
+      {/* Fused card: timestamp toolbar followed by a dense preview table
+          that mirrors the main home log-table styling — same mono font,
+          12px rows, sticky header strip, hover wash, accent expansion. */}
+      <div
+        style={{
+          borderRadius: 8,
+          border: '1px solid var(--ls-border)',
+          background: 'var(--ls-panel)',
+          overflow: 'hidden',
+          boxShadow: 'var(--ls-shadow-sm)',
+        }}
+      >
         {/* Toolbar header */}
-        <div className="px-3 pt-3 pb-2 border-b bg-gray-50/50">
+        <div
+          style={{
+            padding: '10px 12px 8px',
+            borderBottom: '1px solid var(--ls-border)',
+            background: 'var(--ls-bg-1)',
+          }}
+        >
           <TimestampToolbar />
-          <div className="text-xs text-muted-foreground mt-2 px-1">
+          <div
+            style={{
+              fontSize: 11,
+              color: 'var(--ls-text-3)',
+              marginTop: 6,
+              fontFamily: 'var(--ls-font-mono)',
+            }}
+          >
             Successfully parsed {successfulMatches} of {logs.length} log lines.
           </div>
         </div>
 
-        {/* Preview rows */}
-        <div className="divide-y">
+        {/* Column header row — uppercase, matches home log-table thead */}
+        <div
+          className="grid"
+          style={{
+            gridTemplateColumns: gridCols,
+            background: 'var(--ls-bg-2)',
+            borderBottom: '1px solid var(--ls-border)',
+            fontFamily: 'var(--ls-font-sans)',
+            fontSize: 10.5,
+            fontWeight: 600,
+            color: 'var(--ls-text-2)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em',
+          }}
+        >
+          <div />
+          <div style={{ padding: '6px 10px', borderRight: '1px solid var(--ls-border)' }}>
+            Timestamp
+          </div>
+          <div style={{ padding: '6px 10px' }}>Raw line</div>
+        </div>
+
+        {/* Preview rows — each row a single 12px mono line, hover wash */}
+        <div>
           {currentLogs.map((log, idx) => {
             const globalIdx = idx + startIndex;
             const parsed = parsedLogs[globalIdx];
             const ts = rowTimestamp(inference, parsed, globalIdx);
             const expanded = expandedRows[globalIdx];
             const hasError = parsed?.error;
+            const isLast = idx === currentLogs.length - 1;
 
             return (
-              <div key={globalIdx} className="bg-white">
+              <div key={globalIdx}>
                 <div
-                  className="grid grid-cols-[24px_180px_1fr] hover:bg-gray-50 cursor-pointer transition-colors items-start"
+                  className="grid cursor-pointer transition-colors items-center"
+                  style={{
+                    gridTemplateColumns: gridCols,
+                    borderBottom:
+                      !isLast || expanded ? '1px solid var(--ls-border-subtle)' : 'none',
+                    background: expanded ? 'var(--ls-accent-softer)' : 'transparent',
+                  }}
                   onClick={() => toggleRow(idx)}
+                  onMouseEnter={(e) => {
+                    if (!expanded) e.currentTarget.style.background = 'var(--ls-bg-2)';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!expanded) e.currentTarget.style.background = 'transparent';
+                  }}
                 >
-                  <div className="flex items-center justify-center pt-3">
+                  {/* Expander */}
+                  <div className="flex items-center justify-center" style={{ color: 'var(--ls-text-3)' }}>
                     {expanded
-                      ? <ChevronDown className="h-4 w-4 text-gray-500" />
-                      : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                      ? <ChevronDown size={12} />
+                      : <ChevronRight size={12} />}
                   </div>
 
-                  {/* Resolved timestamp + confidence pill */}
-                  <div className="px-2 py-2 border-r border-gray-100">
+                  {/* Resolved timestamp + tiny confidence dot prefix */}
+                  <div
+                    style={{
+                      padding: '4px 10px',
+                      borderRight: '1px solid var(--ls-border-subtle)',
+                      fontFamily: 'var(--ls-font-mono)',
+                      fontSize: 12,
+                      color: ts?.confidence ? confidenceColor[ts.confidence] : 'var(--ls-text-2)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                    title={ts?.confidence ? `${ts.confidence}: ${ts.resolved}` : ts?.resolved}
+                  >
                     {ts ? (
-                      <div className="flex flex-col gap-0.5">
-                        <span className={`font-mono text-xs ${ts.confidence ? confidenceClass[ts.confidence] : 'text-gray-700'}`}>
-                          {formatResolved(ts.resolved).date}
-                        </span>
-                        <span className={`font-mono text-xs ${ts.confidence ? confidenceClass[ts.confidence] : 'text-gray-700'}`}>
-                          {formatResolved(ts.resolved).time}
-                        </span>
+                      <span className="inline-flex items-center" style={{ gap: 6 }}>
                         {ts.confidence && (
-                          <span className={`mt-0.5 inline-flex w-fit text-[9px] uppercase tracking-wider px-1 py-0.5 rounded border ${confidenceBadge[ts.confidence] || 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                            {ts.confidence}
-                          </span>
+                          <span
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: '50%',
+                              background: confidenceColor[ts.confidence],
+                              flexShrink: 0,
+                            }}
+                          />
                         )}
-                      </div>
+                        <span>{formatResolved(ts.resolved)}</span>
+                      </span>
                     ) : (
-                      <span className="text-xs text-gray-400 italic">no timestamp</span>
+                      <span style={{ color: 'var(--ls-text-4)', fontStyle: 'italic' }}>
+                        no timestamp
+                      </span>
                     )}
                   </div>
 
                   {/* Raw line with grok-token highlighting */}
-                  <div className="px-3 py-3 font-mono text-sm overflow-hidden">
+                  <div
+                    className="overflow-hidden"
+                    style={{
+                      padding: '4px 10px',
+                      fontFamily: 'var(--ls-font-mono)',
+                      fontSize: 12,
+                      color: 'var(--ls-text)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
                     {parsed && !hasError ? (
                       <div className="truncate">{highlightLogLine(log, parsed)}</div>
                     ) : (
-                      <span className="text-gray-400 truncate block">{log}</span>
+                      <span
+                        className="truncate block"
+                        style={{ color: 'var(--ls-text-3)' }}
+                      >
+                        {log}
+                      </span>
                     )}
                   </div>
                 </div>
 
-                {/* Expanded row content — full field list */}
+                {/* Expanded row — full field list */}
                 {expanded && parsed && (
-                  <div className="px-4 pl-12 py-4 bg-gray-50 border-t">
-                    <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div
+                    style={{
+                      padding: '10px 16px 10px 36px',
+                      background: 'var(--ls-bg-1)',
+                      borderTop: '1px solid var(--ls-border-subtle)',
+                      borderBottom: !isLast ? '1px solid var(--ls-border-subtle)' : 'none',
+                    }}
+                  >
+                    <div className="grid grid-cols-2" style={{ gap: 6 }}>
                       {Object.entries(parsed).map(([field, value]) => (
-                        <div key={field} className="flex">
-                          <span className={`px-2 py-0.5 rounded mr-2 text-xs ${fieldColors[field] || 'bg-gray-100 text-gray-700'}`}>
-                            {field}
+                        <div key={field} className="flex items-center" style={{ minWidth: 0 }}>
+                          <span
+                            className="inline-flex items-center flex-shrink-0"
+                            style={{
+                              padding: '1px 6px',
+                              marginRight: 8,
+                              borderRadius: 4,
+                              fontSize: 10.5,
+                              fontFamily: 'var(--ls-font-mono)',
+                              border: '1px solid var(--ls-border)',
+                              background: fieldColors[field] ? undefined : 'var(--ls-bg-2)',
+                              color: fieldColors[field] ? undefined : 'var(--ls-text-2)',
+                            }}
+                          >
+                            <span className={fieldColors[field] || ''}>{field}</span>
                           </span>
-                          <span className="py-0.5 text-gray-700 truncate font-mono text-xs">
+                          <span
+                            className="truncate"
+                            style={{
+                              fontFamily: 'var(--ls-font-mono)',
+                              fontSize: 11.5,
+                              color: 'var(--ls-text)',
+                            }}
+                          >
                             {String(value).substring(0, 120)}
-                            {String(value).length > 120 ? '...' : ''}
+                            {String(value).length > 120 ? '…' : ''}
                           </span>
                         </div>
                       ))}
@@ -260,28 +366,61 @@ export const PatternTestResults: FC<PatternTestResultsExtendedProps> = ({
           })}
         </div>
 
-        {/* Pagination */}
-        <div className="flex justify-between items-center p-2 border-t bg-gray-50">
+        {/* Pagination footer */}
+        <div
+          className="flex justify-between items-center"
+          style={{
+            padding: '6px 10px',
+            borderTop: '1px solid var(--ls-border)',
+            background: 'var(--ls-bg-1)',
+          }}
+        >
           <button
+            type="button"
             onClick={goToPrevPage}
             disabled={currentPage === 0}
-            className={`flex items-center px-3 py-1 rounded border text-sm ${
-              currentPage === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'
-            }`}
+            className="inline-flex items-center justify-center transition-colors"
+            style={{
+              height: 24,
+              padding: '0 8px',
+              borderRadius: 4,
+              border: '1px solid var(--ls-border)',
+              background: 'var(--ls-panel)',
+              color: 'var(--ls-text-2)',
+              cursor: currentPage === 0 ? 'not-allowed' : 'pointer',
+              opacity: currentPage === 0 ? 0.4 : 1,
+            }}
+            aria-label="Previous page"
           >
-            <ArrowLeft className="h-4 w-4 mr-1" />
+            <ArrowLeft size={12} />
           </button>
-          <div className="text-sm text-gray-600">
+          <div
+            style={{
+              fontSize: 11,
+              color: 'var(--ls-text-3)',
+              fontFamily: 'var(--ls-font-mono)',
+            }}
+          >
             Showing {startIndex + 1}-{endIndex} of {logs.length} logs
           </div>
           <button
+            type="button"
             onClick={goToNextPage}
             disabled={currentPage >= totalPages - 1}
-            className={`flex items-center px-3 py-1 rounded border text-sm ${
-              currentPage >= totalPages - 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'
-            }`}
+            className="inline-flex items-center justify-center transition-colors"
+            style={{
+              height: 24,
+              padding: '0 8px',
+              borderRadius: 4,
+              border: '1px solid var(--ls-border)',
+              background: 'var(--ls-panel)',
+              color: 'var(--ls-text-2)',
+              cursor: currentPage >= totalPages - 1 ? 'not-allowed' : 'pointer',
+              opacity: currentPage >= totalPages - 1 ? 0.4 : 1,
+            }}
+            aria-label="Next page"
           >
-            <ArrowRight className="h-4 w-4 ml-1" />
+            <ArrowRight size={12} />
           </button>
         </div>
       </div>

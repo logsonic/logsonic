@@ -1,7 +1,7 @@
+import { ArrowRight } from "lucide-react";
 import { FC } from "react";
 import { useImportStore } from "../../../stores/useImportStore";
 import { selectedFileIdsForImport } from "./ImportConfirmStep";
-import { Button } from "../../ui/button";
 
 const HandleNavigation: FC<{
     onNext: () => void;
@@ -67,23 +67,73 @@ const HandleNavigation: FC<{
         return 'Next';
     };
 
+    const nextDisabled = isNextDisabled();
+    const isFinalAction = currentStep === 3 || currentStep === 4;
+
     return (
-        <div className="flex justify-between pt-4">
-            <Button
-                variant="outline"
+        <div className="flex justify-between items-center">
+            <button
+                type="button"
                 onClick={onBack}
                 disabled={isUploading}
+                className="inline-flex items-center transition-colors"
+                style={{
+                    height: 32,
+                    padding: '0 12px',
+                    borderRadius: 6,
+                    border: '1px solid var(--ls-border-strong)',
+                    background: 'var(--ls-panel)',
+                    color: 'var(--ls-text-2)',
+                    fontSize: 12.5,
+                    fontWeight: 500,
+                    cursor: isUploading ? 'not-allowed' : 'pointer',
+                    opacity: isUploading ? 0.5 : 1,
+                }}
+                onMouseEnter={(e) => {
+                    if (!isUploading) {
+                        e.currentTarget.style.background = 'var(--ls-bg-2)';
+                        e.currentTarget.style.color = 'var(--ls-text)';
+                    }
+                }}
+                onMouseLeave={(e) => {
+                    if (!isUploading) {
+                        e.currentTarget.style.background = 'var(--ls-panel)';
+                        e.currentTarget.style.color = 'var(--ls-text-2)';
+                    }
+                }}
             >
                 {currentStep === 1 ? 'Cancel' : 'Back'}
-            </Button>
+            </button>
 
-            <Button
+            <button
+                type="button"
                 onClick={onNext}
-                disabled={isNextDisabled()}
-                className="bg-blue-600 hover:bg-blue-700"
+                disabled={nextDisabled}
+                className="inline-flex items-center text-white transition-colors"
+                style={{
+                    gap: 6,
+                    height: 32,
+                    padding: '0 16px',
+                    borderRadius: 6,
+                    border: 'none',
+                    background: 'var(--ls-accent)',
+                    color: '#fff',
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.18)',
+                    cursor: nextDisabled ? 'not-allowed' : 'pointer',
+                    opacity: nextDisabled ? 0.5 : 1,
+                }}
+                onMouseEnter={(e) => {
+                    if (!nextDisabled) e.currentTarget.style.background = 'var(--ls-accent-hover)';
+                }}
+                onMouseLeave={(e) => {
+                    if (!nextDisabled) e.currentTarget.style.background = 'var(--ls-accent)';
+                }}
             >
-                {getNextLabel()}
-            </Button>
+                <span>{getNextLabel()}</span>
+                {!isFinalAction && <ArrowRight size={13} />}
+            </button>
         </div>
     );
 };

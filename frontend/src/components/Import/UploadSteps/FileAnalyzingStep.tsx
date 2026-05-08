@@ -8,8 +8,6 @@ import { extractFields } from '../utils/patternUtils';
 import { CustomPatternSelector } from './CustomPatternSelector';
 import { LogPatternSelection } from './LogPatternSelection';
 import { PatternTestResults } from './PatternTestResults';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -54,11 +52,11 @@ const FilePatternCard: FC<{
   }, []);
 
   const statusConfig = {
-    pending: { color: 'bg-gray-100 text-gray-600', label: 'Queued', icon: null },
-    detecting: { color: 'bg-blue-100 text-blue-700', label: 'Detecting...', icon: <Loader2 className="h-3 w-3 animate-spin" /> },
-    detected: { color: 'bg-green-100 text-green-700', label: 'Pattern found', icon: <Check className="h-3 w-3" /> },
-    failed: { color: 'bg-amber-100 text-amber-700', label: 'Manual selection needed', icon: <AlertTriangle className="h-3 w-3" /> },
-  };
+    pending:   { bg: 'var(--ls-bg-2)',     border: 'var(--ls-border)',                                                fg: 'var(--ls-text-3)', label: 'Queued',                  icon: null },
+    detecting: { bg: 'var(--ls-info-soft)', border: 'color-mix(in srgb, var(--ls-info) 25%, transparent)',            fg: 'var(--ls-info)',   label: 'Detecting…',              icon: <Loader2 className="h-3 w-3 animate-spin" /> },
+    detected:  { bg: 'var(--ls-ok-soft)',   border: 'color-mix(in srgb, var(--ls-ok) 25%, transparent)',              fg: 'var(--ls-ok)',     label: 'Pattern found',           icon: <Check className="h-3 w-3" /> },
+    failed:    { bg: 'var(--ls-warn-soft)', border: 'color-mix(in srgb, var(--ls-warn) 25%, transparent)',            fg: 'var(--ls-warn)',   label: 'Manual selection needed', icon: <AlertTriangle className="h-3 w-3" /> },
+  } as const;
 
   const status = statusConfig[importFile.detectionStatus];
   const selectedPattern = importFile.selectedPattern;
@@ -89,84 +87,201 @@ const FilePatternCard: FC<{
   };
 
   return (
-    <div className={`border rounded-lg overflow-hidden transition-all duration-200 ${
-      isExpanded ? 'shadow-md ring-1 ring-blue-200' : 'shadow-sm hover:shadow-md'
-    }`}>
+    <div
+      className="transition-all duration-200"
+      style={{
+        borderRadius: 8,
+        border: `1px solid ${isExpanded ? 'var(--ls-accent-border)' : 'var(--ls-border)'}`,
+        background: 'var(--ls-panel)',
+        boxShadow: isExpanded ? '0 0 0 3px var(--ls-accent-softer)' : 'var(--ls-shadow-sm)',
+        overflow: 'hidden',
+      }}
+    >
       {/* Card header - always visible */}
       <div
-        className="flex items-center gap-3 px-4 py-3 bg-white cursor-pointer select-none hover:bg-gray-50/50 transition-colors"
+        className="flex items-center cursor-pointer select-none transition-colors"
+        style={{
+          gap: 10,
+          padding: '10px 14px',
+          background: isExpanded ? 'var(--ls-bg-1)' : 'transparent',
+        }}
         onClick={onToggleExpand}
+        onMouseEnter={(e) => {
+          if (!isExpanded) e.currentTarget.style.background = 'var(--ls-bg-1)';
+        }}
+        onMouseLeave={(e) => {
+          if (!isExpanded) e.currentTarget.style.background = 'transparent';
+        }}
       >
         {/* Expand chevron */}
-        <div className="flex-shrink-0 text-gray-400">
+        <div className="flex-shrink-0" style={{ color: 'var(--ls-text-3)' }}>
           {isExpanded
-            ? <ChevronDown className="h-4 w-4" />
-            : <ChevronRight className="h-4 w-4" />
+            ? <ChevronDown size={14} />
+            : <ChevronRight size={14} />
           }
         </div>
 
         {/* File icon */}
-        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-          <File className="h-4 w-4 text-blue-600" />
+        <div
+          className="flex items-center justify-center flex-shrink-0"
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 6,
+            background: 'var(--ls-accent-soft)',
+            border: '1px solid var(--ls-accent-border)',
+          }}
+        >
+          <File size={13} style={{ color: 'var(--ls-accent)' }} />
         </div>
 
         {/* File name + size */}
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-gray-800 truncate">{importFile.fileName}</p>
-          <p className="text-xs text-gray-500">
+          <p
+            className="truncate"
+            style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ls-text)' }}
+          >
+            {importFile.fileName}
+          </p>
+          <p
+            style={{
+              fontSize: 11,
+              color: 'var(--ls-text-3)',
+              fontFamily: 'var(--ls-font-mono)',
+            }}
+          >
             {formatSize(importFile.fileSize)}
             {importFile.approxLines > 0 && ` \u00B7 ~${importFile.approxLines.toLocaleString()} lines`}
           </p>
         </div>
 
-        {/* Detection status badge */}
-        <Badge variant="secondary" className={`${status.color} flex items-center gap-1 text-xs flex-shrink-0`}>
+        {/* Detection status pill */}
+        <span
+          className="inline-flex items-center flex-shrink-0"
+          style={{
+            gap: 4,
+            height: 20,
+            padding: '0 8px',
+            borderRadius: 10,
+            background: status.bg,
+            color: status.fg,
+            border: `1px solid ${status.border}`,
+            fontSize: 11,
+            fontWeight: 500,
+          }}
+        >
           {status.icon}
           {status.label}
-        </Badge>
+        </span>
 
-        {/* Pattern name badge */}
+        {/* Pattern name pill */}
         {selectedPattern && importFile.detectionStatus !== 'detecting' && (
-          <Badge variant="outline" className="text-xs flex-shrink-0 max-w-[200px] truncate">
+          <span
+            className="inline-flex items-center truncate flex-shrink-0"
+            style={{
+              maxWidth: 200,
+              height: 20,
+              padding: '0 8px',
+              borderRadius: 4,
+              border: '1px solid var(--ls-border)',
+              background: 'var(--ls-bg-1)',
+              color: 'var(--ls-text-2)',
+              fontSize: 11,
+              fontFamily: 'var(--ls-font-mono)',
+            }}
+          >
             {selectedPattern.name}
-          </Badge>
+          </span>
         )}
 
         {/* Match rate indicator */}
         {importFile.detectionStatus === 'detected' && matchRate > 0 && (
-          <div className="flex items-center gap-1 flex-shrink-0" title={`${matchRate}% of preview lines matched`}>
-            <div className={`w-2 h-2 rounded-full ${
-              matchRate >= 80 ? 'bg-green-500' : matchRate >= 50 ? 'bg-amber-500' : 'bg-red-500'
-            }`} />
-            <span className="text-xs text-gray-500">{matchRate}%</span>
+          <div
+            className="flex items-center flex-shrink-0"
+            style={{ gap: 4 }}
+            title={`${matchRate}% of preview lines matched`}
+          >
+            <div
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background:
+                  matchRate >= 80
+                    ? 'var(--ls-ok)'
+                    : matchRate >= 50
+                      ? 'var(--ls-warn)'
+                      : 'var(--ls-err)',
+              }}
+            />
+            <span
+              style={{
+                fontSize: 11,
+                color: 'var(--ls-text-3)',
+                fontFamily: 'var(--ls-font-mono)',
+              }}
+            >
+              {matchRate}%
+            </span>
           </div>
         )}
       </div>
 
       {/* Expanded content */}
       {isExpanded && (
-        <div className="border-t bg-gray-50/50 px-4 py-4 space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+        <div
+          className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200"
+          style={{
+            padding: '14px 16px',
+            borderTop: '1px solid var(--ls-border)',
+            background: 'var(--ls-bg-1)',
+          }}
+        >
           {/* Pattern selector */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">Pattern</label>
-            <div className="flex gap-2" ref={dropdownRef}>
+            <label
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: 'var(--ls-text-3)',
+                display: 'block',
+              }}
+            >
+              Pattern
+            </label>
+            <div className="flex" style={{ gap: 8 }} ref={dropdownRef}>
               <div className="relative flex-1">
                 <div
-                  className="flex items-center border rounded-md h-9 px-3 justify-between bg-white cursor-pointer text-sm hover:border-gray-400 transition-colors"
+                  className="flex items-center justify-between cursor-pointer transition-colors"
+                  style={{
+                    height: 32,
+                    padding: '0 10px',
+                    borderRadius: 6,
+                    border: '1px solid var(--ls-border-strong)',
+                    background: 'var(--ls-panel)',
+                    fontSize: 12.5,
+                    color: 'var(--ls-text)',
+                  }}
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowPatternDropdown(!showPatternDropdown);
                   }}
+                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--ls-accent)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--ls-border-strong)')}
                 >
                   {selectedPattern ? (
                     <span className="truncate">
                       <b>{selectedPattern.name}</b>
-                      {selectedPattern.description && `: ${selectedPattern.description}`}
+                      {selectedPattern.description && (
+                        <span style={{ color: 'var(--ls-text-3)' }}>: {selectedPattern.description}</span>
+                      )}
                     </span>
                   ) : (
-                    <span className="text-gray-400">Select a pattern...</span>
+                    <span style={{ color: 'var(--ls-text-3)' }}>Select a pattern…</span>
                   )}
-                  <ChevronDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+                  <ChevronDown size={12} style={{ marginLeft: 8, opacity: 0.6, flexShrink: 0 }} />
                 </div>
 
                 {showPatternDropdown && (
@@ -208,16 +323,13 @@ const FilePatternCard: FC<{
                 )}
               </div>
 
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-9 text-sm"
+              <button
+                type="button"
                 disabled={!selectedPattern || importFile.detectionStatus === 'detecting'}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (!selectedPattern) return;
                   if (isShowingCustomEditor) {
-                    // Use the locally-edited pattern string
                     const patternToTest: Pattern = {
                       ...selectedPattern,
                       pattern: customPatternText,
@@ -228,21 +340,43 @@ const FilePatternCard: FC<{
                     onTestPattern(importFile.id, selectedPattern);
                   }
                 }}
+                className="inline-flex items-center justify-center transition-colors"
+                style={{
+                  gap: 5,
+                  height: 32,
+                  padding: '0 12px',
+                  borderRadius: 6,
+                  border: '1px solid var(--ls-border-strong)',
+                  background: 'var(--ls-panel)',
+                  color: 'var(--ls-text)',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  opacity: !selectedPattern || importFile.detectionStatus === 'detecting' ? 0.5 : 1,
+                }}
               >
-                <Search className="h-3 w-3 mr-1.5" />
+                <Search size={12} />
                 Test
-              </Button>
+              </button>
             </div>
 
             {/* Custom pattern editor — shown instead of the read-only preview */}
             {isShowingCustomEditor ? (
               <div className="space-y-1">
-                <label className="text-xs text-gray-500">Grok pattern string</label>
+                <label
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 500,
+                    color: 'var(--ls-text-3)',
+                    display: 'block',
+                  }}
+                >
+                  Grok pattern string
+                </label>
                 <Textarea
                   value={customPatternText}
                   onChange={(e) => setCustomPatternText(e.target.value)}
                   onBlur={() => {
-                    // Commit the edited pattern to the store on blur
                     const committed: Pattern = {
                       ...DEFAULT_PATTERN,
                       pattern: customPatternText,
@@ -251,17 +385,36 @@ const FilePatternCard: FC<{
                     onPatternChange(importFile.id, committed);
                   }}
                   placeholder="%{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:level} %{GREEDYDATA:message}"
-                  className="font-mono text-xs min-h-[56px] resize-none"
+                  className="resize-none"
+                  style={{
+                    fontFamily: 'var(--ls-font-mono)',
+                    fontSize: 11.5,
+                    minHeight: 60,
+                    background: 'var(--ls-panel)',
+                    border: '1px solid var(--ls-border-strong)',
+                    color: 'var(--ls-text)',
+                  }}
                   onClick={(e) => e.stopPropagation()}
                 />
-                <p className="text-xs text-gray-400">
+                <p style={{ fontSize: 11, color: 'var(--ls-text-3)' }}>
                   Type a Grok pattern, then click <strong>Test</strong> to preview results.
                 </p>
               </div>
             ) : (
               /* Read-only pattern preview for named patterns */
               selectedPattern && (
-                <div className="p-2 bg-white rounded border text-xs font-mono text-gray-600 overflow-x-auto">
+                <div
+                  className="overflow-x-auto"
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 6,
+                    border: '1px solid var(--ls-border)',
+                    background: 'var(--ls-panel)',
+                    fontFamily: 'var(--ls-font-mono)',
+                    fontSize: 11.5,
+                    color: 'var(--ls-text-2)',
+                  }}
+                >
                   {selectedPattern.pattern}
                 </div>
               )
@@ -269,11 +422,23 @@ const FilePatternCard: FC<{
 
             {/* Extracted fields */}
             {selectedPattern && selectedPattern.fields && selectedPattern.fields.length > 0 && (
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap" style={{ gap: 4 }}>
                 {selectedPattern.fields.map(field => (
-                  <Badge key={field} variant="secondary" className="text-xs bg-indigo-50 text-indigo-700">
+                  <span
+                    key={field}
+                    className="inline-flex items-center"
+                    style={{
+                      padding: '1px 6px',
+                      borderRadius: 4,
+                      background: 'var(--ls-accent-softer)',
+                      border: '1px solid var(--ls-accent-border)',
+                      color: 'var(--ls-accent-text)',
+                      fontFamily: 'var(--ls-font-mono)',
+                      fontSize: 10.5,
+                    }}
+                  >
                     {field}
-                  </Badge>
+                  </span>
                 ))}
               </div>
             )}
@@ -281,9 +446,20 @@ const FilePatternCard: FC<{
 
           {/* Detection error */}
           {importFile.detectionError && (
-            <div className="flex items-start gap-2 p-2 bg-amber-50 rounded-md text-sm text-amber-700">
-              <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-              <span>{importFile.detectionError}</span>
+            <div
+              className="flex items-start"
+              style={{
+                gap: 8,
+                padding: '8px 10px',
+                borderRadius: 6,
+                background: 'var(--ls-warn-soft)',
+                border: '1px solid color-mix(in srgb, var(--ls-warn) 25%, transparent)',
+              }}
+            >
+              <AlertTriangle size={14} style={{ color: 'var(--ls-warn)', flexShrink: 0, marginTop: 1 }} />
+              <span style={{ fontSize: 12, color: 'var(--ls-warn)' }}>
+                {importFile.detectionError}
+              </span>
             </div>
           )}
 
@@ -629,46 +805,108 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
         {/* Summary header */}
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-base font-medium text-gray-800">Pattern Configuration</h3>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <h3
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--ls-text)',
+                letterSpacing: '-0.005em',
+              }}
+            >
+              Pattern configuration
+            </h3>
+            <p style={{ fontSize: 12, color: 'var(--ls-text-3)', marginTop: 2 }}>
               {allDetecting ? (
-                'Auto-detecting patterns for each file...'
+                'Auto-detecting patterns for each file\u2026'
               ) : (
                 <>
-                  {detectedCount > 0 && <span className="text-green-600">{detectedCount} matched</span>}
-                  {detectedCount > 0 && failedCount > 0 && <span> \u00B7 </span>}
-                  {failedCount > 0 && <span className="text-amber-600">{failedCount} need attention</span>}
-                  {detectingCount > 0 && <span className="text-blue-600"> \u00B7 {detectingCount} detecting</span>}
+                  {detectedCount > 0 && (
+                    <span style={{ color: 'var(--ls-ok)' }}>
+                      {detectedCount} matched
+                    </span>
+                  )}
+                  {detectedCount > 0 && failedCount > 0 && (
+                    <span style={{ color: 'var(--ls-text-4)' }}> \u00B7 </span>
+                  )}
+                  {failedCount > 0 && (
+                    <span style={{ color: 'var(--ls-warn)' }}>
+                      {failedCount} need attention
+                    </span>
+                  )}
+                  {detectingCount > 0 && (
+                    <span style={{ color: 'var(--ls-info)' }}>
+                      {' '}
+                      \u00B7 {detectingCount} detecting
+                    </span>
+                  )}
                 </>
               )}
             </p>
           </div>
           {!allDetecting && (
-            <Button
-              variant="outline"
-              size="sm"
+            <button
+              type="button"
               onClick={() => {
                 detectionRanRef.current = false;
                 runAllDetections();
               }}
-              className="text-sm"
+              className="inline-flex items-center transition-colors"
+              style={{
+                gap: 5,
+                height: 28,
+                padding: '0 10px',
+                borderRadius: 6,
+                border: '1px solid var(--ls-border)',
+                background: 'var(--ls-panel)',
+                color: 'var(--ls-text-2)',
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--ls-bg-2)';
+                e.currentTarget.style.color = 'var(--ls-text)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'var(--ls-panel)';
+                e.currentTarget.style.color = 'var(--ls-text-2)';
+              }}
             >
-              <RefreshCw className="h-3 w-3 mr-1.5" />
+              <RefreshCw size={12} />
               Re-detect all
-            </Button>
+            </button>
           )}
         </div>
 
         {/* Progress bar during detection */}
         {allDetecting && (
           <div className="space-y-1">
-            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              style={{
+                height: 6,
+                borderRadius: 99,
+                overflow: 'hidden',
+                background: 'var(--ls-bg-2)',
+                border: '1px solid var(--ls-border)',
+              }}
+            >
               <div
-                className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                style={{ width: `${((detectedCount + failedCount) / files.length) * 100}%` }}
+                className="transition-all duration-500"
+                style={{
+                  height: '100%',
+                  background: 'var(--ls-accent)',
+                  width: `${((detectedCount + failedCount) / files.length) * 100}%`,
+                }}
               />
             </div>
-            <p className="text-xs text-gray-500 text-right">
+            <p
+              style={{
+                fontSize: 11,
+                color: 'var(--ls-text-3)',
+                textAlign: 'right',
+                fontFamily: 'var(--ls-font-mono)',
+              }}
+            >
               {detectedCount + failedCount} / {files.length} files analyzed
             </p>
           </div>
@@ -694,29 +932,53 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
 
   // CloudWatch / legacy single-file mode
   const logSourceInfo = isCloudWatch
-    ? { icon: <Cloud className="h-5 w-5 text-blue-500 mr-2" />, text: `Analyzing CloudWatch logs: ${sessionOptionsFileName || 'Unknown'}` }
-    : { icon: <File className="h-5 w-5 text-blue-500 mr-2" />, text: `Analyzing file: ${filePreviewBuffer?.filename || 'Unknown'}` };
+    ? { icon: <Cloud size={15} style={{ color: 'var(--ls-accent)' }} />, text: `Analyzing CloudWatch logs: ${sessionOptionsFileName || 'Unknown'}` }
+    : { icon: <File size={15} style={{ color: 'var(--ls-accent)' }} />, text: `Analyzing file: ${filePreviewBuffer?.filename || 'Unknown'}` };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center p-3 bg-blue-50 text-blue-700 rounded-md">
+    <div className="space-y-5">
+      <div
+        className="flex items-center"
+        style={{
+          gap: 8,
+          padding: '10px 12px',
+          borderRadius: 6,
+          background: 'var(--ls-accent-softer)',
+          border: '1px solid var(--ls-accent-border)',
+        }}
+      >
         {logSourceInfo.icon}
-        <span className="text-sm font-medium">{logSourceInfo.text}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ls-accent-text)' }}>
+          {logSourceInfo.text}
+        </span>
       </div>
 
       {isAnalyzing ? (
-        <div className="flex flex-col items-center justify-center py-8">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-          <p className="text-gray-600">Analyzing log format...</p>
+        <div className="flex flex-col items-center justify-center" style={{ padding: '32px 0' }}>
+          <Loader2 size={28} className="animate-spin" style={{ color: 'var(--ls-accent)', marginBottom: 12 }} />
+          <p style={{ fontSize: 12.5, color: 'var(--ls-text-2)' }}>Analyzing log format…</p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {isCreateNewPatternSelected && (
-            <div className="flex items-center gap-2 p-3 bg-yellow-50 text-yellow-700 rounded-md border border-yellow-200">
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+            <div
+              className="flex items-center"
+              style={{
+                gap: 10,
+                padding: '10px 12px',
+                borderRadius: 6,
+                background: 'var(--ls-warn-soft)',
+                border: '1px solid color-mix(in srgb, var(--ls-warn) 25%, transparent)',
+              }}
+            >
+              <AlertTriangle size={16} style={{ color: 'var(--ls-warn)', flexShrink: 0 }} />
               <div>
-                <p className="font-medium">Detected: Custom Pattern</p>
-                <p className="text-sm">No standard pattern matched your logs. Please define a custom pattern below.</p>
+                <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ls-warn)' }}>
+                  Detected: Custom Pattern
+                </p>
+                <p style={{ fontSize: 11.5, color: 'var(--ls-warn)', opacity: 0.85 }}>
+                  No standard pattern matched your logs. Please define a custom pattern below.
+                </p>
               </div>
             </div>
           )}

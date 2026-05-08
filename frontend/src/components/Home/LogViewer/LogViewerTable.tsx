@@ -901,25 +901,109 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     if (logs.length === 0) {
 
       if (noLogsInSystem){
-        return (<div className="flex flex-col items-center justify-center text-slate-500 h-full" style={{marginTop: '-10vh'}}>
-        <div className="max-w-lg text-center">
-          <div className="mb-6 relative">
-            <FileUp className="h-16 w-16 text-blue-500 mx-auto animate-bounce" />
-            <div className="absolute w-8 h-8 rounded-full bg-blue-100 -z-10 top-4 left-1/2 transform -translate-x-1/2 animate-ping" />
-          </div>
-          <h3 className="text-2xl font-medium text-slate-800 mb-3">No logs found!</h3>
-          <p className="text-lg mb-6 text-slate-600">
-            Looks like your log storage is as empty as a developer's coffee cup on Monday morning!
-          </p>
-          <Button 
-            onClick={() =>  navigate('/import')} 
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
+        return (
+          <div
+            className="flex flex-col items-center justify-center h-full"
+            style={{ marginTop: '-6vh' }}
           >
-            <Upload className="h-4 w-4" />
-            <span>Import Some Logs</span>
-          </Button>
-        </div>
-      </div>)
+            <div className="max-w-md text-center">
+              {/* Icon tile — uses accent token, matches the badge/chip aesthetic in the rest of the app */}
+              <div
+                className="mx-auto mb-5 inline-flex items-center justify-center"
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 12,
+                  background: 'var(--ls-accent-soft)',
+                  border: '1px solid var(--ls-accent-border)',
+                  boxShadow: 'var(--ls-shadow-sm)',
+                }}
+              >
+                <FileUp size={26} style={{ color: 'var(--ls-accent)' }} />
+              </div>
+
+              <h3
+                style={{
+                  fontFamily: 'var(--ls-font-sans)',
+                  fontSize: 18,
+                  fontWeight: 600,
+                  color: 'var(--ls-text)',
+                  letterSpacing: '-0.01em',
+                  marginBottom: 8,
+                }}
+              >
+                No logs yet
+              </h3>
+              <p
+                style={{
+                  fontSize: 13,
+                  color: 'var(--ls-text-2)',
+                  lineHeight: 1.5,
+                  marginBottom: 20,
+                }}
+              >
+                Your index is empty. Import a log file or stream from CloudWatch
+                to start searching.
+              </p>
+
+              <div className="flex items-center justify-center gap-2">
+                <Button
+                  onClick={() => navigate('/import')}
+                  className="inline-flex items-center text-white"
+                  style={{
+                    height: 32,
+                    padding: '0 14px',
+                    borderRadius: 6,
+                    background: 'var(--ls-accent)',
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.18)',
+                    gap: 6,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--ls-accent-hover)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--ls-accent)')}
+                >
+                  <Upload size={13} />
+                  <span>Import logs</span>
+                </Button>
+              </div>
+
+              {/* Quick hint row, mirrors the syntax-hint chips on LogSearch */}
+              <div
+                className="flex flex-wrap items-center justify-center gap-1.5 mt-5"
+                style={{ fontSize: 11 }}
+              >
+                <span
+                  style={{
+                    color: 'var(--ls-text-3)',
+                    fontSize: 10,
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                  }}
+                >
+                  Supported:
+                </span>
+                {['.log', '.txt', '.json', 'CloudWatch'].map((s) => (
+                  <span
+                    key={s}
+                    className="inline-flex items-center px-2 py-0.5"
+                    style={{
+                      borderRadius: 4,
+                      border: '1px solid var(--ls-border)',
+                      background: 'var(--ls-bg-1)',
+                      fontFamily: 'var(--ls-font-mono)',
+                      fontSize: 11,
+                      color: 'var(--ls-text-2)',
+                    }}
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
         }
     
       const totalIndexed = systemInfo?.storage_info?.total_log_entries ?? 0;

@@ -2,26 +2,31 @@ import { useCloudWatchStore } from '@/components/Import/CloudWatchImport/stores/
 import { cn } from '@/lib/utils';
 import { useImportStore } from '@/stores/useImportStore';
 import * as ProgressPrimitive from "@radix-ui/react-progress";
-import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CheckCircle, Cloud, Code, FileText, Loader2, XCircle } from 'lucide-react';
 import { FC, useEffect, useState } from 'react';
 import type { ImportFile } from '../types';
 
-// Custom progress component with blue indicator
+// Determinate progress bar — uses accent token, matches the rest of the app
 const GreenProgress: FC<{ value: number; className?: string }> = ({
   value,
-  className
+  className,
 }) => (
   <ProgressPrimitive.Root
-    className={cn(
-      "relative h-2 w-full overflow-hidden rounded-full bg-blue-100",
-      className
-    )}
+    className={cn('relative w-full overflow-hidden', className)}
+    style={{
+      height: 6,
+      borderRadius: 99,
+      background: 'var(--ls-bg-2)',
+      border: '1px solid var(--ls-border)',
+    }}
   >
     <ProgressPrimitive.Indicator
-      className="h-full w-full flex-1 bg-blue-500 transition-all"
-      style={{ transform: `translateX(-${100 - (value || 0)}%)` }}
+      className="h-full flex-1 transition-all"
+      style={{
+        background: 'var(--ls-accent)',
+        transform: `translateX(-${100 - (value || 0)}%)`,
+      }}
     />
   </ProgressPrimitive.Root>
 );
@@ -29,13 +34,17 @@ const GreenProgress: FC<{ value: number; className?: string }> = ({
 // Indeterminate oscillator progress for CloudWatch imports
 const IndeterminateProgress: FC<{ className?: string }> = ({ className }) => (
   <ProgressPrimitive.Root
-    className={cn(
-      "relative h-2 w-full overflow-hidden rounded-full bg-blue-100",
-      className
-    )}
+    className={cn('relative w-full overflow-hidden', className)}
+    style={{
+      height: 6,
+      borderRadius: 99,
+      background: 'var(--ls-bg-2)',
+      border: '1px solid var(--ls-border)',
+    }}
   >
     <div
-      className="absolute w-1/3 h-full bg-blue-500 animate-[oscillate_1.5s_ease-in-out_infinite_alternate]"
+      className="absolute h-full animate-[oscillate_1.5s_ease-in-out_infinite_alternate]"
+      style={{ width: '33%', background: 'var(--ls-accent)' }}
     />
   </ProgressPrimitive.Root>
 );
@@ -59,14 +68,30 @@ const FileProgressRow: FC<{
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  return (
-    <div className={`flex items-center gap-3 px-4 py-3 transition-colors ${
-      isUploading ? 'bg-blue-50/60' :
-      isSuccess   ? 'bg-green-50/40' :
-      isFailed    ? 'bg-red-50/40' :
-      !checked    ? 'bg-gray-50 opacity-50' : ''
-    }`}>
+  const rowBg =
+    isUploading ? 'var(--ls-info-soft)' :
+    isSuccess   ? 'var(--ls-ok-soft)' :
+    isFailed    ? 'var(--ls-err-soft)' :
+    !checked    ? 'var(--ls-bg-1)' :
+    'transparent';
 
+  const fileNameColor =
+    isSuccess   ? 'var(--ls-ok)' :
+    isFailed    ? 'var(--ls-err)' :
+    isUploading ? 'var(--ls-info)' :
+    !checked    ? 'var(--ls-text-3)' :
+    'var(--ls-text)';
+
+  return (
+    <div
+      className="flex items-center transition-colors"
+      style={{
+        gap: 12,
+        padding: '10px 14px',
+        background: rowBg,
+        opacity: !checked && isPending ? 0.6 : 1,
+      }}
+    >
       {/* Checkbox (pending / pre-upload) or status icon (during/after upload) */}
       <div className="flex-shrink-0 w-5 flex items-center justify-center">
         {isPending ? (
@@ -78,56 +103,103 @@ const FileProgressRow: FC<{
             className="h-4 w-4"
           />
         ) : isUploading ? (
-          <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+          <Loader2 size={14} className="animate-spin" style={{ color: 'var(--ls-info)' }} />
         ) : isSuccess ? (
-          <CheckCircle className="h-4 w-4 text-green-500" />
+          <CheckCircle size={14} style={{ color: 'var(--ls-ok)' }} />
         ) : (
-          <XCircle className="h-4 w-4 text-red-500" />
+          <XCircle size={14} style={{ color: 'var(--ls-err)' }} />
         )}
       </div>
 
       {/* Index */}
-      <span className="text-xs text-gray-400 w-4 text-right flex-shrink-0">{index + 1}.</span>
+      <span
+        className="flex-shrink-0 text-right"
+        style={{
+          width: 18,
+          fontSize: 11,
+          color: 'var(--ls-text-4)',
+          fontFamily: 'var(--ls-font-mono)',
+        }}
+      >
+        {index + 1}.
+      </span>
 
       {/* File name + pattern badge */}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center" style={{ gap: 8, flexWrap: 'wrap' }}>
           <label
             htmlFor={isPending ? `file-check-${file.id}` : undefined}
-            className={`text-sm font-medium truncate cursor-pointer ${
-              isSuccess ? 'text-green-700' :
-              isFailed  ? 'text-red-600' :
-              isUploading ? 'text-blue-700' :
-              !checked  ? 'text-gray-400' : 'text-gray-800'
-            }`}
+            className="truncate cursor-pointer"
+            style={{
+              fontSize: 12.5,
+              fontWeight: 500,
+              color: fileNameColor,
+            }}
           >
             {file.fileName}
           </label>
-          <Badge
-            variant="outline"
-            className={`text-xs flex-shrink-0 ${!checked && isPending ? 'opacity-40' : ''}`}
+          <span
+            className="inline-flex items-center flex-shrink-0"
+            style={{
+              padding: '1px 6px',
+              borderRadius: 4,
+              border: '1px solid var(--ls-border)',
+              background: 'var(--ls-bg-1)',
+              color: 'var(--ls-text-2)',
+              fontFamily: 'var(--ls-font-mono)',
+              fontSize: 10.5,
+              opacity: !checked && isPending ? 0.5 : 1,
+            }}
           >
             {file.selectedPattern?.name || 'No pattern'}
-          </Badge>
+          </span>
         </div>
 
         {/* Upload progress bar */}
         {isUploading && (
-          <div className="mt-1.5 flex items-center gap-2">
-            <GreenProgress value={file.uploadProgress} className="h-1.5 flex-1" />
-            <span className="text-xs text-blue-600 w-8 text-right">{Math.round(file.uploadProgress)}%</span>
+          <div className="flex items-center" style={{ gap: 8, marginTop: 5 }}>
+            <GreenProgress value={file.uploadProgress} className="flex-1" />
+            <span
+              className="text-right flex-shrink-0"
+              style={{
+                width: 30,
+                fontSize: 10.5,
+                color: 'var(--ls-info)',
+                fontFamily: 'var(--ls-font-mono)',
+              }}
+            >
+              {Math.round(file.uploadProgress)}%
+            </span>
           </div>
         )}
         {isSuccess && (
-          <p className="text-xs text-green-600 mt-0.5">{file.totalLinesProcessed.toLocaleString()} lines processed</p>
+          <p
+            style={{
+              fontSize: 11,
+              color: 'var(--ls-ok)',
+              marginTop: 2,
+              fontFamily: 'var(--ls-font-mono)',
+            }}
+          >
+            {file.totalLinesProcessed.toLocaleString()} lines processed
+          </p>
         )}
         {isFailed && file.uploadError && (
-          <p className="text-xs text-red-500 mt-0.5">{file.uploadError}</p>
+          <p style={{ fontSize: 11, color: 'var(--ls-err)', marginTop: 2 }}>
+            {file.uploadError}
+          </p>
         )}
       </div>
 
       {/* File size */}
-      <span className={`text-xs flex-shrink-0 ${!checked && isPending ? 'text-gray-300' : 'text-gray-400'}`}>
+      <span
+        className="flex-shrink-0"
+        style={{
+          fontSize: 11,
+          color: !checked && isPending ? 'var(--ls-text-4)' : 'var(--ls-text-3)',
+          fontFamily: 'var(--ls-font-mono)',
+        }}
+      >
         {formatSize(file.fileSize)}
       </span>
     </div>
@@ -227,41 +299,113 @@ export const ImportConfirmStep: FC = () => {
         }, 0) / checkedFiles.length
       : 0;
 
+    const statBoxStyle: React.CSSProperties = {
+      padding: '14px 12px',
+      borderRadius: 8,
+      border: '1px solid var(--ls-border)',
+      background: 'var(--ls-panel)',
+      textAlign: 'center',
+    };
+
     return (
-      <div className="space-y-5">
+      <div className="space-y-4">
         {/* Summary stats (selected files only) */}
         {!isUploading && (
-          <div className="grid grid-cols-3 gap-4">
-            <div className="p-4 rounded-lg border bg-white text-center">
-              <p className="text-2xl font-bold text-gray-800">{checkedFiles.length}</p>
-              <p className="text-sm text-gray-500">
+          <div className="grid grid-cols-3 gap-3">
+            <div style={statBoxStyle}>
+              <p
+                style={{
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: 'var(--ls-text)',
+                  fontFamily: 'var(--ls-font-mono)',
+                  letterSpacing: '-0.02em',
+                }}
+              >
+                {checkedFiles.length}
+              </p>
+              <p
+                style={{
+                  fontSize: 11,
+                  color: 'var(--ls-text-3)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  marginTop: 2,
+                }}
+              >
                 {checkedFiles.length === files.length ? 'Files' : `of ${files.length} Files`}
               </p>
             </div>
-            <div className="p-4 rounded-lg border bg-white text-center">
-              <p className="text-2xl font-bold text-gray-800">{formatFileSize(totalFileSize)}</p>
-              <p className="text-sm text-gray-500">Total Size</p>
+            <div style={statBoxStyle}>
+              <p
+                style={{
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: 'var(--ls-text)',
+                  fontFamily: 'var(--ls-font-mono)',
+                  letterSpacing: '-0.02em',
+                }}
+              >
+                {formatFileSize(totalFileSize)}
+              </p>
+              <p
+                style={{
+                  fontSize: 11,
+                  color: 'var(--ls-text-3)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  marginTop: 2,
+                }}
+              >
+                Total size
+              </p>
             </div>
-            <div className="p-4 rounded-lg border bg-white text-center">
-              <p className="text-2xl font-bold text-gray-800">
+            <div style={statBoxStyle}>
+              <p
+                style={{
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: 'var(--ls-text)',
+                  fontFamily: 'var(--ls-font-mono)',
+                  letterSpacing: '-0.02em',
+                }}
+              >
                 ~{totalApproxLines > 0 ? totalApproxLines.toLocaleString() : '—'}
               </p>
-              <p className="text-sm text-gray-500">Est. Lines</p>
+              <p
+                style={{
+                  fontSize: 11,
+                  color: 'var(--ls-text-3)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  marginTop: 2,
+                }}
+              >
+                Est. lines
+              </p>
             </div>
           </div>
         )}
 
         {/* Overall progress when uploading */}
         {isUploading && (
-          <div className="p-4 rounded-lg border bg-white space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <div className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                <span className="font-medium text-gray-700">
-                  Importing {uploadingFile ? `"${uploadingFile.fileName}"` : ''}...
+          <div
+            className="space-y-2"
+            style={{
+              padding: '14px',
+              borderRadius: 8,
+              border: '1px solid var(--ls-border)',
+              background: 'var(--ls-panel)',
+            }}
+          >
+            <div className="flex items-center justify-between" style={{ fontSize: 12.5 }}>
+              <div className="flex items-center" style={{ gap: 8 }}>
+                <Loader2 size={14} className="animate-spin" style={{ color: 'var(--ls-accent)' }} />
+                <span style={{ fontWeight: 500, color: 'var(--ls-text)' }}>
+                  Importing {uploadingFile ? `"${uploadingFile.fileName}"` : ''}…
                 </span>
               </div>
-              <span className="text-gray-500">
+              <span style={{ color: 'var(--ls-text-3)', fontFamily: 'var(--ls-font-mono)', fontSize: 11.5 }}>
                 {successCount} / {checkedFiles.length} files complete
               </span>
             </div>
@@ -270,9 +414,24 @@ export const ImportConfirmStep: FC = () => {
         )}
 
         {/* File list with checkboxes / per-file status */}
-        <div className="border rounded-lg overflow-hidden divide-y bg-white shadow-sm">
+        <div
+          style={{
+            borderRadius: 8,
+            border: '1px solid var(--ls-border)',
+            background: 'var(--ls-panel)',
+            overflow: 'hidden',
+          }}
+        >
           {/* Header with select-all */}
-          <div className="px-4 py-2.5 bg-gray-50 border-b flex items-center gap-3">
+          <div
+            className="flex items-center"
+            style={{
+              gap: 12,
+              padding: '8px 14px',
+              background: 'var(--ls-bg-1)',
+              borderBottom: '1px solid var(--ls-border)',
+            }}
+          >
             {!isUploading && (
               <Checkbox
                 id="select-all"
@@ -283,31 +442,60 @@ export const ImportConfirmStep: FC = () => {
             )}
             <label
               htmlFor={!isUploading ? 'select-all' : undefined}
-              className="text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
+              className="cursor-pointer select-none"
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: 'var(--ls-text-3)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }}
             >
-              Files to Import
+              Files to import
             </label>
             {!isUploading && someChecked && !allChecked && (
-              <span className="text-xs text-blue-600 ml-auto">{checkedIds.size} selected</span>
+              <span
+                style={{
+                  marginLeft: 'auto',
+                  fontSize: 11,
+                  color: 'var(--ls-accent)',
+                  fontFamily: 'var(--ls-font-mono)',
+                }}
+              >
+                {checkedIds.size} selected
+              </span>
             )}
           </div>
 
           {files.map((f, i) => (
-            <FileProgressRow
+            <div
               key={f.id}
-              file={f}
-              index={i}
-              checked={checkedIds.has(f.id)}
-              onCheckedChange={(v) => toggleFile(f.id, !!v)}
-              disabled={isUploading}
-            />
+              style={{
+                borderBottom: i < files.length - 1 ? '1px solid var(--ls-border-subtle)' : 'none',
+              }}
+            >
+              <FileProgressRow
+                file={f}
+                index={i}
+                checked={checkedIds.has(f.id)}
+                onCheckedChange={(v) => toggleFile(f.id, !!v)}
+                disabled={isUploading}
+              />
+            </div>
           ))}
         </div>
 
         {/* Errors summary */}
         {failedCount > 0 && !isUploading && (
-          <div className="p-3 bg-red-50 rounded-lg border border-red-100">
-            <p className="text-sm text-red-700 font-medium">
+          <div
+            style={{
+              padding: '10px 12px',
+              borderRadius: 6,
+              background: 'var(--ls-err-soft)',
+              border: '1px solid color-mix(in srgb, var(--ls-err) 25%, transparent)',
+            }}
+          >
+            <p style={{ fontSize: 12.5, color: 'var(--ls-err)', fontWeight: 500 }}>
               {failedCount} file{failedCount !== 1 ? 's' : ''} failed to import
             </p>
           </div>
@@ -315,8 +503,17 @@ export const ImportConfirmStep: FC = () => {
 
         {/* Nothing selected warning */}
         {!isUploading && checkedIds.size === 0 && (
-          <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
-            <p className="text-sm text-amber-700">Select at least one file to import.</p>
+          <div
+            style={{
+              padding: '10px 12px',
+              borderRadius: 6,
+              background: 'var(--ls-warn-soft)',
+              border: '1px solid color-mix(in srgb, var(--ls-warn) 25%, transparent)',
+            }}
+          >
+            <p style={{ fontSize: 12.5, color: 'var(--ls-warn)' }}>
+              Select at least one file to import.
+            </p>
           </div>
         )}
       </div>
@@ -326,173 +523,294 @@ export const ImportConfirmStep: FC = () => {
   // --- Legacy single-file / CloudWatch mode ---
 
   const sourceIcon = importSource === 'cloudwatch'
-    ? <Cloud className="h-5 w-5 text-blue-500 mr-2" />
-    : <FileText className="h-5 w-5 text-blue-500 mr-2" />;
+    ? <Cloud size={15} style={{ color: 'var(--ls-accent)' }} />
+    : <FileText size={15} style={{ color: 'var(--ls-accent)' }} />;
 
   const sourceTitle = importSource === 'cloudwatch'
-    ? 'CloudWatch Logs Information'
-    : 'File Information';
+    ? 'CloudWatch logs information'
+    : 'File information';
 
   const showIndeterminateProgress = importSource === 'cloudwatch' && isUploading;
   const showProgressBar = importSource !== 'cloudwatch' && isUploading;
 
+  const sectionStyle: React.CSSProperties = {
+    padding: 16,
+    borderRadius: 8,
+    border: '1px solid var(--ls-border)',
+    background: 'var(--ls-panel)',
+  };
+  const sectionTitleStyle: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 600,
+    color: 'var(--ls-text)',
+    letterSpacing: '-0.005em',
+  };
+  const kvKeyStyle: React.CSSProperties = {
+    fontSize: 11.5,
+    fontWeight: 500,
+    color: 'var(--ls-text-3)',
+    padding: '4px 0',
+    width: 200,
+    verticalAlign: 'top',
+  };
+  const kvValueStyle: React.CSSProperties = {
+    fontSize: 12,
+    color: 'var(--ls-text)',
+    padding: '4px 0',
+    fontFamily: 'var(--ls-font-mono)',
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="space-y-4 mx-auto">
-        <div className="p-5 rounded-lg shadow-sm border border-blue-100">
-          <div className="flex items-center mb-3">
+    <div className="space-y-4">
+      <div className="space-y-3">
+        <div style={sectionStyle}>
+          <div className="flex items-center" style={{ gap: 8, marginBottom: 10 }}>
             {sourceIcon}
-            <h3 className="text-md font-medium text-blue-700">{sourceTitle}</h3>
+            <h3 style={sectionTitleStyle}>{sourceTitle}</h3>
           </div>
-          <table className="text-md w-full">
-            <thead>
-              <tr>
-                <th className="w-[250px] text-gray-800 font-bold text-left">Key</th>
-                <th className="text-gray-800 font-bold text-left">Value</th>
-              </tr>
-            </thead>
+          <table className="w-full" style={{ borderCollapse: 'collapse' }}>
             <tbody>
               {importSource === 'cloudwatch' && (
                 <>
                   <tr>
-                    <td className="py-1 text-gray-800 font-bold">CloudWatch Region:</td>
-                    <td className="py-1 text-gray-800">{region}</td>
+                    <td style={kvKeyStyle}>CloudWatch region</td>
+                    <td style={kvValueStyle}>{region}</td>
                   </tr>
                   <tr>
-                    <td className="py-1 text-gray-800 font-bold">CloudWatch Profile:</td>
-                    <td className="py-1 text-gray-800">{profile}</td>
+                    <td style={kvKeyStyle}>CloudWatch profile</td>
+                    <td style={kvValueStyle}>{profile}</td>
                   </tr>
                   <tr>
-                    <td className="py-1 text-gray-800 font-bold">CloudWatch Stream name:</td>
-                    <td className="py-1 text-gray-800">{selectedFileName}</td>
+                    <td style={kvKeyStyle}>Stream name</td>
+                    <td style={kvValueStyle}>{selectedFileName}</td>
                   </tr>
                 </>
               )}
               {importSource === 'file' && (
                 <>
                   <tr>
-                    <td className="py-1 text-gray-800 font-bold">File Name:</td>
-                    <td className="py-1 text-gray-800">{selectedFileName}</td>
+                    <td style={kvKeyStyle}>File name</td>
+                    <td style={kvValueStyle}>{selectedFileName}</td>
                   </tr>
                   <tr>
-                    <td className="py-1 text-gray-800 font-bold">File Size:</td>
-                    <td className="py-1 text-gray-800">{file ? formatFileSize(file.size) : 'N/A'}</td>
+                    <td style={kvKeyStyle}>File size</td>
+                    <td style={kvValueStyle}>{file ? formatFileSize(file.size) : 'N/A'}</td>
                   </tr>
                   <tr>
-                    <td className="py-1 text-gray-800 font-bold">Total Lines:</td>
-                    <td className="py-1 text-gray-800">{approxLines.toLocaleString()} lines estimated</td>
+                    <td style={kvKeyStyle}>Total lines</td>
+                    <td style={kvValueStyle}>{approxLines.toLocaleString()} lines estimated</td>
                   </tr>
                 </>
               )}
               <tr>
-                <td className="py-1 text-gray-800 font-bold">Smart Decoder:</td>
-                <td className="py-1 text-gray-800">{sessionOptionsSmartDecoder ? 'Yes' : 'No'}</td>
+                <td style={kvKeyStyle}>Smart decoder</td>
+                <td style={kvValueStyle}>{sessionOptionsSmartDecoder ? 'Yes' : 'No'}</td>
               </tr>
               <tr>
-                <td className="py-1 text-gray-800 font-bold">Force Timezone:</td>
-                <td className="py-1 text-gray-800">{sessionOptionsTimezone || 'Auto-detect'}</td>
+                <td style={kvKeyStyle}>Force timezone</td>
+                <td style={kvValueStyle}>{sessionOptionsTimezone || 'Auto-detect'}</td>
               </tr>
               <tr>
-                <td className="py-1 text-gray-800 font-bold">Force Year:</td>
-                <td className="py-1 text-gray-800">{sessionOptionsYear || 'Auto-detect'}</td>
+                <td style={kvKeyStyle}>Force year</td>
+                <td style={kvValueStyle}>{sessionOptionsYear || 'Auto-detect'}</td>
               </tr>
               <tr>
-                <td className="py-1 text-gray-800 font-bold">Force Month:</td>
-                <td className="py-1 text-gray-800">{sessionOptionsMonth || 'Auto-detect'}</td>
+                <td style={kvKeyStyle}>Force month</td>
+                <td style={kvValueStyle}>{sessionOptionsMonth || 'Auto-detect'}</td>
               </tr>
               <tr>
-                <td className="py-1 text-gray-800 font-bold">Force Day:</td>
-                <td className="py-1 text-gray-800">{sessionOptionsDay || 'Auto-detect'}</td>
+                <td style={kvKeyStyle}>Force day</td>
+                <td style={kvValueStyle}>{sessionOptionsDay || 'Auto-detect'}</td>
               </tr>
               <tr>
-                <td className="py-1 text-gray-800 font-bold">Metadata:</td>
-                <td className="py-1 text-gray-800">{JSON.stringify(metadata)}</td>
+                <td style={kvKeyStyle}>Metadata</td>
+                <td style={kvValueStyle}>{JSON.stringify(metadata)}</td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        <div className="p-5 rounded-lg shadow-sm border border-indigo-100">
-          <div className="flex items-center mb-3">
-            <Code className="h-5 w-5 text-indigo-500 mr-2" />
-            <h3 className="text-md font-medium text-indigo-700">Pattern Information</h3>
+        <div style={sectionStyle}>
+          <div className="flex items-center" style={{ gap: 8, marginBottom: 10 }}>
+            <Code size={15} style={{ color: 'var(--ls-accent)' }} />
+            <h3 style={sectionTitleStyle}>Pattern information</h3>
           </div>
-          <table className="w-full text-md">
-            <thead>
-              <tr>
-                <th className="w-[250px] text-gray-800 font-bold text-left">Key</th>
-                <th className="text-gray-800 font-bold text-left">Value</th>
-              </tr>
-            </thead>
+          <table className="w-full" style={{ borderCollapse: 'collapse' }}>
             <tbody>
               <tr>
-                <td className="py-1 text-gray-800 font-bold w-[150px]">Pattern Name:</td>
-                <td className="py-1 text-gray-800">{selectedPattern?.name}</td>
+                <td style={kvKeyStyle}>Pattern name</td>
+                <td style={kvValueStyle}>{selectedPattern?.name}</td>
               </tr>
               <tr>
-                <td className="py-1 text-gray-800 font-bold">Description:</td>
-                <td className="py-1 text-gray-800">{selectedPattern?.description}</td>
+                <td style={kvKeyStyle}>Description</td>
+                <td style={{ ...kvValueStyle, fontFamily: 'var(--ls-font-sans)' }}>
+                  {selectedPattern?.description}
+                </td>
               </tr>
               <tr>
-                <td className="py-1 text-gray-800 font-bold">Priority:</td>
-                <td className="py-1 text-gray-800">{selectedPattern?.priority}</td>
+                <td style={kvKeyStyle}>Priority</td>
+                <td style={kvValueStyle}>{selectedPattern?.priority}</td>
               </tr>
               <tr>
-                <td className="py-1 text-gray-800 font-bold">Extracted Fields:</td>
-                <td className="py-1 text-gray-800">{selectedPattern?.fields?.join(', ')}</td>
+                <td style={kvKeyStyle}>Extracted fields</td>
+                <td style={{ ...kvValueStyle, padding: '6px 0' }}>
+                  {selectedPattern?.fields?.length ? (
+                    <span className="inline-flex flex-wrap" style={{ gap: 4 }}>
+                      {selectedPattern.fields.map((f) => (
+                        <span
+                          key={f}
+                          className="inline-flex items-center"
+                          style={{
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            background: 'var(--ls-accent-softer)',
+                            border: '1px solid var(--ls-accent-border)',
+                            color: 'var(--ls-accent-text)',
+                            fontSize: 10.5,
+                            fontFamily: 'var(--ls-font-mono)',
+                          }}
+                        >
+                          {f}
+                        </span>
+                      ))}
+                    </span>
+                  ) : (
+                    '—'
+                  )}
+                </td>
               </tr>
             </tbody>
           </table>
 
-          <div className="mt-3">
-            <div className="py-1 text-gray-800 font-bold">Pattern:</div>
-            <div className="bg-white p-2 text-sm rounded font-mono overflow-x-auto border">
+          <div style={{ marginTop: 10 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: 'var(--ls-text-3)',
+                marginBottom: 4,
+              }}
+            >
+              Pattern
+            </div>
+            <div
+              className="overflow-x-auto"
+              style={{
+                padding: '8px 10px',
+                fontSize: 11.5,
+                fontFamily: 'var(--ls-font-mono)',
+                color: 'var(--ls-text-2)',
+                borderRadius: 6,
+                border: '1px solid var(--ls-border)',
+                background: 'var(--ls-bg-1)',
+              }}
+            >
               {selectedPattern?.pattern}
             </div>
           </div>
 
           {selectedPattern?.custom_patterns && Object.keys(selectedPattern.custom_patterns).length > 0 && (
-            <div className="mt-3">
-              <div className="py-1 text-gray-800 font-bold">Custom Patterns:</div>
-              <table className="w-full bg-white rounded border shadow-inner font-mono">
-                <tbody>
-                  {Object.entries(selectedPattern.custom_patterns).map(([name, pattern]) => (
-                    <tr key={name}>
-                      <td className="p-1 border-b border-indigo-50 w-[150px] whitespace-nowrap">{name}:</td>
-                      <td className="p-1 border-b border-indigo-50 overflow-x-auto text-justify-left">{pattern}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div style={{ marginTop: 10 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  color: 'var(--ls-text-3)',
+                  marginBottom: 4,
+                }}
+              >
+                Custom patterns
+              </div>
+              <div
+                style={{
+                  borderRadius: 6,
+                  border: '1px solid var(--ls-border)',
+                  background: 'var(--ls-bg-1)',
+                  overflow: 'hidden',
+                }}
+              >
+                <table className="w-full" style={{ fontFamily: 'var(--ls-font-mono)', fontSize: 11.5 }}>
+                  <tbody>
+                    {Object.entries(selectedPattern.custom_patterns).map(([name, pattern], i, arr) => (
+                      <tr
+                        key={name}
+                        style={{
+                          borderBottom: i < arr.length - 1 ? '1px solid var(--ls-border-subtle)' : 'none',
+                        }}
+                      >
+                        <td
+                          style={{
+                            padding: '6px 10px',
+                            width: 160,
+                            whiteSpace: 'nowrap',
+                            color: 'var(--ls-text-3)',
+                          }}
+                        >
+                          {name}
+                        </td>
+                        <td style={{ padding: '6px 10px', overflowX: 'auto', color: 'var(--ls-text)' }}>
+                          {pattern}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
       </div>
 
       {showProgressBar && (
-        <div className="space-y-2 mx-auto w-full rounded-lg shadow-sm border p-6">
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-medium">Uploading...</span>
-            <span className="font-medium">{Math.round(uploadProgress)}%</span>
+        <div
+          className="space-y-2"
+          style={{
+            padding: 16,
+            borderRadius: 8,
+            border: '1px solid var(--ls-border)',
+            background: 'var(--ls-panel)',
+          }}
+        >
+          <div className="flex items-center justify-between" style={{ fontSize: 12.5 }}>
+            <span style={{ fontWeight: 500, color: 'var(--ls-text)' }}>Uploading…</span>
+            <span style={{ fontWeight: 500, color: 'var(--ls-accent)', fontFamily: 'var(--ls-font-mono)' }}>
+              {Math.round(uploadProgress)}%
+            </span>
           </div>
           <GreenProgress value={uploadProgress} />
-          <div className="flex items-center justify-center text-sm mt-2">
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            <span>Processing file, please wait...</span>
+          <div className="flex items-center justify-center" style={{ gap: 6, fontSize: 12, color: 'var(--ls-text-3)' }}>
+            <Loader2 size={13} className="animate-spin" />
+            <span>Processing file, please wait…</span>
           </div>
         </div>
       )}
 
       {showIndeterminateProgress && (
-        <div className="space-y-2 mx-auto w-full rounded-lg shadow-sm border p-6">
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-medium">Retrieving CloudWatch logs...</span>
-            <span className="font-medium">{totalLines.toLocaleString()} lines ingested</span>
+        <div
+          className="space-y-2"
+          style={{
+            padding: 16,
+            borderRadius: 8,
+            border: '1px solid var(--ls-border)',
+            background: 'var(--ls-panel)',
+          }}
+        >
+          <div className="flex items-center justify-between" style={{ fontSize: 12.5 }}>
+            <span style={{ fontWeight: 500, color: 'var(--ls-text)' }}>
+              Retrieving CloudWatch logs…
+            </span>
+            <span style={{ fontWeight: 500, color: 'var(--ls-accent)', fontFamily: 'var(--ls-font-mono)' }}>
+              {totalLines.toLocaleString()} lines ingested
+            </span>
           </div>
           <IndeterminateProgress />
-          <div className="flex items-center justify-center text-sm mt-2">
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            <span>Processing logs, please wait...</span>
+          <div className="flex items-center justify-center" style={{ gap: 6, fontSize: 12, color: 'var(--ls-text-3)' }}>
+            <Loader2 size={13} className="animate-spin" />
+            <span>Processing logs, please wait…</span>
           </div>
         </div>
       )}
