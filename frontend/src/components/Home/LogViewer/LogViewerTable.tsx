@@ -9,13 +9,14 @@ import {
   getSortedRowModel,
   useReactTable
 } from '@tanstack/react-table';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FileUp, GripVertical, Trash2, Upload } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FileUp, GripVertical, Maximize2, Trash2, Upload } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { ExpandedRow } from '@/components/Home/ExpandedRow';
 import { LogViewerSkeleton } from '@/components/Home/LogViewer/LogViewerSkeleton';
 import { Resizer } from '@/components/Home/Resizer';
+import { useFitRangeToData } from '@/hooks/useFitRangeToData';
 import { useSearchParser } from '@/hooks/useSearchParser.tsx';
 import { ColorRule, useColorRuleStore } from '@/stores/useColorRuleStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
@@ -212,6 +213,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
   const noLogsInSystem = useMemo(() => {
     return systemInfo?.storage_info?.total_log_entries === 0;
   }, [systemInfo]);
+  const fitRangeToData = useFitRangeToData();
 
   const autofitColumns = useCallback(() => {
     
@@ -462,22 +464,19 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
         {
           id: column,
           header: () => (
-            <div className="flex items-center">
+            <div className="flex items-center gap-1">
               <span>{column}</span>
               {store.sortBy === column && (
-                <div className="flex items-center ml-1">
+                <span
+                  className="inline-flex items-center text-slate-500"
+                  aria-label={`Sorted ${store.sortOrder === 'asc' ? 'ascending' : 'descending'}`}
+                >
                   {store.sortOrder === 'asc' ? (
-                    <>
-                      <ArrowUp className="h-4 w-4" />
-                      <span className="text-xs ml-1 text-gray-500">Asc</span>
-                    </>
+                    <ArrowUp className="h-3.5 w-3.5" />
                   ) : (
-                    <>
-                      <ArrowDown className="h-4 w-4" />
-                      <span className="text-xs ml-1 text-gray-500">Desc</span>
-                    </>
+                    <ArrowDown className="h-3.5 w-3.5" />
                   )}
-                </div>
+                </span>
               )}
             </div>
           ),
@@ -817,9 +816,22 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
       </div>)
         }
     
+      const totalIndexed = systemInfo?.storage_info?.total_log_entries ?? 0;
       return (
-        <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">No logs to display</p>
+        <div className="flex flex-col items-center justify-center h-64 gap-3">
+          <p className="text-muted-foreground">No logs match the current filters.</p>
+          {totalIndexed > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fitRangeToData}
+              className="gap-1.5"
+              title="Snap the time range to the span of indexed log data"
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+              Fit time range to {totalIndexed.toLocaleString()} indexed logs
+            </Button>
+          )}
         </div>
       );
     }
@@ -871,8 +883,8 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
                         <td 
                           key={cell.id}
                           className={`${
-                            cell.column.id === 'select' ? 'w-[40px] min-w-[40px] max-w-[40px] text-center px-2 py-2' : 
-                            cell.column.id === 'expander' ? 'w-[40px] min-w-[20px] max-w-[20px] text-center' : 'pl-6 py-2'
+                            cell.column.id === 'select' ? 'w-[40px] min-w-[40px] max-w-[40px] text-center px-2 py-2' :
+                            cell.column.id === 'expander' ? 'w-[20px] min-w-[20px] max-w-[20px] text-center' : 'pl-6 py-2'
                           }`}
                           data-column-id={cell.column.id}
                           style={{

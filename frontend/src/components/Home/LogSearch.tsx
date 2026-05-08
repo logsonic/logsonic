@@ -6,7 +6,7 @@ import { checkAIStatus } from "@/services/aiService";
 import { useLogResultStore } from "@/stores/useLogResultStore";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
 import { ArrowRight, HelpCircle, Search, Sparkles, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { PerformanceMetricsPopover } from "./PerformanceMetricsPopover";
@@ -41,6 +41,31 @@ export const LogSearch = ({
   const [isAIDialogOpen, setIsAIDialogOpen] = useState(false);
   const [isAIAvailable, setIsAIAvailable] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Global keyboard shortcut: `/` or Cmd/Ctrl+K focuses the search input.
+  // Skip when the user is already typing in an input/textarea/contenteditable.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isEditable =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable);
+
+      const cmdK = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k';
+      const slash = e.key === '/' && !isEditable;
+
+      if (cmdK || slash) {
+        e.preventDefault();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
 
   // Check if AI/Ollama is running
@@ -153,10 +178,11 @@ export const LogSearch = ({
             </div>
             
             <Input
+              ref={inputRef}
               type="text"
               value={localSearchQuery}
               onChange={handleInputChange}
-              placeholder="Search logs… try level:error or &quot;connection timeout&quot;"
+              placeholder='Search logs… (press / or ⌘K) — try level:error or "connection timeout"'
               className={cn(
                 "w-full pl-10 pr-10 py-5 text-sm rounded-lg border border-gray-300 shadow-sm focus-visible:ring-2",
                 "focus-visible:ring-offset-0 focus-visible:ring-blue-500/40 focus-visible:border-blue-500",

@@ -24,8 +24,10 @@ import { useClearLogs } from '@/hooks/useApi';
 import { useBackendStatus } from '@/hooks/useBackendStatus';
 import { getSystemInfo } from '@/lib/api-client';
 import { cn, formatBytes } from "@/lib/utils";
+import { useLogResultStore } from '@/stores/useLogResultStore';
+import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
-import { Bell, HardDrive, Trash2, Upload } from 'lucide-react';
+import { ExternalLink, HardDrive, Trash2, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import SystemInfoModal from './SystemInfoModal';
@@ -66,7 +68,9 @@ export const Header = () => {
   const { systemInfo, setSystemInfo } = useSystemInfoStore();
   const { isConnected } = useBackendStatus(5000); // Check every 5 seconds
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
-  
+  const resetLogResults = useLogResultStore(state => state.reset);
+  const resetSearchParams = useSearchQueryParamsStore(state => state.resetStore);
+
   // Handle clearing all logs
   const handleClearLogs = async () => {
     try {
@@ -78,7 +82,10 @@ export const Header = () => {
       });
       const data = await getSystemInfo(true);
       setSystemInfo(data);
-      window.location.reload();
+      // Reset client state instead of reloading the page so the user keeps
+      // their session, sidebar width, and color rules.
+      resetLogResults();
+      resetSearchParams();
     } catch (error) {
       toast({
         title: "Error",
@@ -132,17 +139,18 @@ export const Header = () => {
           <TooltipProvider>
             <Tooltip delayDuration={300}>
               <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
+                <Button
+                  variant="ghost"
+                  size="icon"
                   className="text-slate-600 hover:text-blue-700 hover:bg-blue-50"
-                  onClick={() => window.open('https://logsonic.io', '_blank')}
+                  onClick={() => window.open('https://logsonic.io', '_blank', 'noopener,noreferrer')}
+                  aria-label="Visit logsonic.io"
                 >
-                  <Bell className="h-4 w-4" />
-                </Button> 
+                  <ExternalLink className="h-4 w-4" />
+                </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs">
-                <p>Check for updates</p>
+                <p>Visit logsonic.io</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -181,7 +189,7 @@ export const Header = () => {
                       className="text-slate-600 hover:text-red-600 hover:bg-red-50"
                       aria-label="Clear logs"
                     >
-                      <Trash2 className="h-6 w-6" />
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </AlertDialogTrigger>
                 </TooltipTrigger>

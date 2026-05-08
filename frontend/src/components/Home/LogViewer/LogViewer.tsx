@@ -77,7 +77,9 @@ export const LogViewer = () => {
       }
       // Stringify to compare arrays and objects
       if (JSON.stringify(prevParams[key as keyof typeof prevParams]) != JSON.stringify(value)) {
-        console.log("Search triggered due to changed" , key, prevParams[key as keyof typeof prevParams], "=>", value  );
+        if (import.meta.env.DEV) {
+          console.log("Search triggered due to changed", key, prevParams[key as keyof typeof prevParams], "=>", value);
+        }
         return true;
       }
       return false;

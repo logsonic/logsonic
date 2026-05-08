@@ -22,6 +22,7 @@ export const RELATIVE_DATE_PRESETS = [
   { value: "year-to-date", label: "Year to date" },
   { value: "last-1-year", label: "Last year" },
   { value: "last-10-years", label: "Last 10 years" },
+  { value: "all-time", label: "All time" },
 ];
 
 /**
@@ -39,8 +40,13 @@ export const RELATIVE_DATE_OPTIONS_WITH_ICONS = [
   { value: "year-to-date", label: "Year to date", icon: Calendar },
   { value: "last-1-year", label: "Last year", icon: Calendar },
   { value: "last-10-years", label: "Last 10 years", icon: Calendar },
+  { value: "all-time", label: "All time", icon: Calendar },
   { value: "custom", label: "Custom", icon: Calendar },
 ];
+
+// "All time" can't span the full epoch — Bleve's date range query rejects extreme
+// values. 50 years back covers virtually any real-world log data while staying safe.
+const ALL_TIME_LOOKBACK_MS = 50 * 365 * 24 * 60 * 60 * 1000;
 
 /**
  * Available time units for custom relative dates
@@ -148,6 +154,8 @@ export const calculatePresetRelativeDate = (
       return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
     case "last-10-years":
       return new Date(now.getTime() - 10 * 365 * 24 * 60 * 60 * 1000);
+    case "all-time":
+      return new Date(now.getTime() - ALL_TIME_LOOKBACK_MS);
     default:
       return new Date(now.getTime() - 24 * 60 * 60 * 1000); // Default to 1 day ago
   }
