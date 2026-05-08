@@ -11,52 +11,19 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  NavigationMenu,
-  NavigationMenuItem,
-  NavigationMenuLink,
-  NavigationMenuList,
-  navigationMenuTriggerStyle
-} from "@/components/ui/navigation-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { useClearLogs } from '@/hooks/useApi';
 import { useBackendStatus } from '@/hooks/useBackendStatus';
 import { getSystemInfo } from '@/lib/api-client';
-import { cn, formatBytes } from "@/lib/utils";
+import { formatBytes } from "@/lib/utils";
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
-import { ExternalLink, HardDrive, Trash2, Upload } from 'lucide-react';
+import { useThemeStore } from '@/stores/useThemeStore';
+import { ExternalLink, HardDrive, Moon, Sun, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import SystemInfoModal from './SystemInfoModal';
-
-// Custom navigation menu trigger style with blue hover effect
-const blueNavigationMenuTriggerStyle = cn(
-  navigationMenuTriggerStyle(),
-  "hover:bg-blue-50 hover:text-blue-700 focus:bg-blue-50 focus:text-blue-700 data-[active]:bg-blue-100 data-[state=open]:bg-blue-100"
-);
-
-// Move the navigation menu list content to its own variable for readability
-const NavigationMenuItems = () => (
-  <NavigationMenuList className="space-x-2">
-    {/* Import Logs */}
-    <NavigationMenuItem>
-      <NavigationMenuLink asChild>
-        <Link 
-          to="/import" 
-          className={blueNavigationMenuTriggerStyle}
-        >
-          <div className="flex items-center gap-2">
-            <Upload className="h-4 w-4 text-blue-600" />
-            <span>Import Logs</span>
-          </div>
-        </Link>
-      </NavigationMenuLink>
-    </NavigationMenuItem>
-  </NavigationMenuList>
-);
 
 /**
  * Application header component with navigation and action buttons using Radix navigation menu
@@ -67,6 +34,8 @@ export const Header = () => {
   const [systemInfoOpen, setSystemInfoOpen] = useState(false);
   const { systemInfo, setSystemInfo } = useSystemInfoStore();
   const { isConnected } = useBackendStatus(5000); // Check every 5 seconds
+  const theme = useThemeStore((s) => s.theme);
+  const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const resetLogResults = useLogResultStore(state => state.reset);
   const resetSearchParams = useSearchQueryParamsStore(state => state.resetStore);
@@ -107,46 +76,54 @@ export const Header = () => {
   };
 
   return (
-    <div className="bg-white shadow-sm">
-      <div className="flex h-14 items-center justify-between px-4">
-        {/* Logo and Navigation */}
-        <div className="flex items-center gap-4">
-          <img src="/logo.png" alt="Logo" className="h-8 w-auto" />
-          
-
-          <NavigationMenu>
-            <NavigationMenuItems />
-          </NavigationMenu>
+    <div className="h-full">
+      <div
+        className="flex items-center justify-between h-full px-3"
+      >
+        {/* Page title / breadcrumbs */}
+        <div
+          className="flex items-center"
+          style={{ gap: 6, fontSize: 13, fontWeight: 500, color: 'var(--ls-text)' }}
+        >
+          <span style={{ color: 'var(--ls-text-3)' }}>LogSonic</span>
+          <span style={{ color: 'var(--ls-text-4)', margin: '0 6px' }}>/</span>
+          <span>Search</span>
         </div>
-        
+
         {/* Action Buttons */}
-        <div className="flex items-center gap-2">
-          {/* Status LED */}
-          <TooltipProvider>
-            <Tooltip delayDuration={300}>
-              <TooltipTrigger asChild>
-                <div 
-                  className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'} transition-colors duration-200`} 
-                  aria-label="Backend status"
-                />
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">
-                <p>{isConnected ? 'Backend connected' : 'Backend disconnected'}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          
+        <div className="flex items-center gap-1.5">
           <TooltipProvider>
             <Tooltip delayDuration={300}>
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="text-slate-600 hover:text-blue-700 hover:bg-blue-50"
+                  className="h-7 w-7"
+                  style={{ color: 'var(--ls-text-2)' }}
+                  onClick={toggleTheme}
+                  aria-label="Toggle theme"
+                >
+                  {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                <p>{theme === 'dark' ? 'Light theme' : 'Dark theme'}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  style={{ color: 'var(--ls-text-2)' }}
                   onClick={() => window.open('https://logsonic.io', '_blank', 'noopener,noreferrer')}
                   aria-label="Visit logsonic.io"
                 >
-                  <ExternalLink className="h-4 w-4" />
+                  <ExternalLink className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs">
@@ -154,19 +131,20 @@ export const Header = () => {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          
+
           <TooltipProvider>
             <Tooltip delayDuration={300}>
               <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  className="text-slate-600 hover:text-blue-700 hover:bg-blue-50 flex items-center gap-1.5"
+                <Button
+                  variant="ghost"
+                  className="h-7 px-2 flex items-center gap-1.5"
+                  style={{ color: 'var(--ls-text-2)' }}
                   onClick={() => handleSystemInfoClick()}
                   aria-label="System Information"
                 >
-                  <HardDrive className="h-4 w-4" />
-                  <span className="text-xs font-medium">
-                    {systemInfo ? formatBytes(systemInfo.storage_info.storage_size_bytes) : 'Loading...'}
+                  <HardDrive className="h-3.5 w-3.5" />
+                  <span className="text-[11px] font-medium" style={{ fontFamily: 'var(--ls-font-mono)' }}>
+                    {systemInfo ? formatBytes(systemInfo.storage_info.storage_size_bytes) : '…'}
                   </span>
                 </Button>
               </TooltipTrigger>
@@ -176,20 +154,19 @@ export const Header = () => {
             </Tooltip>
           </TooltipProvider>
 
-
-          
           <AlertDialog onOpenChange={handleAlertOpenChange}>
             <TooltipProvider>
               <Tooltip delayDuration={300}>
                 <TooltipTrigger asChild>
                   <AlertDialogTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="text-slate-600 hover:text-red-600 hover:bg-red-50"
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 hover:text-red-600 hover:bg-red-50"
+                      style={{ color: 'var(--ls-text-2)' }}
                       aria-label="Clear logs"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </AlertDialogTrigger>
                 </TooltipTrigger>
@@ -233,12 +210,48 @@ export const Header = () => {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          <span aria-hidden style={{ width: 1, height: 18, background: 'var(--ls-border)', margin: '0 4px' }} />
+
+          {/* Status chip */}
+          <TooltipProvider>
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <div
+                  className="inline-flex items-center gap-1.5 rounded-full"
+                  style={{
+                    height: 22,
+                    padding: '0 8px',
+                    background: 'var(--ls-bg-2)',
+                    border: '1px solid var(--ls-border)',
+                    color: 'var(--ls-text-2)',
+                    fontFamily: 'var(--ls-font-mono)',
+                    fontSize: 11,
+                  }}
+                  aria-label="Backend status"
+                >
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: '50%',
+                      background: isConnected ? 'var(--ls-ok)' : 'var(--ls-err)',
+                    }}
+                  />
+                  v2
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                <p>{isConnected ? 'Backend connected' : 'Backend disconnected'}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
-      
+
       {/* System Info Modal */}
-      <SystemInfoModal 
-        open={systemInfoOpen} 
+      <SystemInfoModal
+        open={systemInfoOpen}
         onOpenChange={setSystemInfoOpen}
       />
     </div>

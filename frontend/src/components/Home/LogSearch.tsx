@@ -163,20 +163,21 @@ export const LogSearch = ({
                   aria-label="Use AI to build query"
                   title="Use AI to build query"
                 >
-                  <Sparkles 
-                    size={18} 
-                    className="text-blue-500 hover:text-blue-600 cursor-pointer"
+                  <Sparkles
+                    size={16}
+                    className="cursor-pointer"
                     style={{
-                      filter: 'drop-shadow(0 0 4px rgba(139, 92, 246, 0.5))',
-                      animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+                      color: 'var(--ls-accent)',
+                      filter: 'drop-shadow(0 0 4px rgba(107, 77, 242, 0.5))',
+                      animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
                     }}
                   />
                 </button>
               ) : (
-                <Search size={18} className="text-gray-400 pointer-events-none" />
+                <Search size={16} style={{ color: 'var(--ls-text-3)' }} className="pointer-events-none" />
               )}
             </div>
-            
+
             <Input
               ref={inputRef}
               type="text"
@@ -184,10 +185,18 @@ export const LogSearch = ({
               onChange={handleInputChange}
               placeholder='Search logs… (press / or ⌘K) — try level:error or "connection timeout"'
               className={cn(
-                "w-full pl-10 pr-10 py-5 text-sm rounded-lg border border-gray-300 shadow-sm focus-visible:ring-2",
-                "focus-visible:ring-offset-0 focus-visible:ring-blue-500/40 focus-visible:border-blue-500",
-                isInputFocused && "border-blue-400"
+                "w-full pl-10 pr-10 text-sm rounded-md shadow-sm focus-visible:ring-2 focus-visible:ring-offset-0",
+                "focus-visible:ring-[var(--ls-accent-softer)] focus-visible:border-[var(--ls-accent)]",
+                isInputFocused && "border-[var(--ls-accent)]"
               )}
+              style={{
+                height: 36,
+                fontFamily: 'var(--ls-font-mono)',
+                fontSize: 12.5,
+                background: 'var(--ls-bg-1)',
+                borderColor: 'var(--ls-border-strong)',
+                color: 'var(--ls-text)',
+              }}
               onKeyDown={handleKeyDown}
               onFocus={() => setIsInputFocused(true)}
               onBlur={() => setTimeout(() => setIsInputFocused(false), 150)}
@@ -211,16 +220,32 @@ export const LogSearch = ({
           
           {/* Merged date range and search panel button */}
           <div className="flex-shrink-0">
-            <div className="flex h-[50px] rounded-lg overflow-hidden border border-gray-300 shadow-sm">
+            <div
+              className="flex h-[36px] rounded-md overflow-hidden"
+              style={{
+                border: '1px solid var(--ls-border-strong)',
+                background: 'var(--ls-bg-1)',
+              }}
+            >
               <DateTimeRangeButton />
-              
-              <Button 
+
+              <span aria-hidden style={{ width: 1, background: 'var(--ls-border-strong)' }} />
+
+              <Button
                 onClick={() => handleSearch(true)}
-                className="h-full px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-none"
+                className="h-full px-4 rounded-none text-white"
+                style={{
+                  background: 'var(--ls-accent)',
+                  fontWeight: 600,
+                  fontSize: 12.5,
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.18)',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--ls-accent-hover)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--ls-accent)')}
                 disabled={isLoading}
               >
-                <span className="hidden sm:inline mr-1">{isLoading ? 'Searching...' : 'Search'}</span>
-                <ArrowRight size={16} />
+                <span className="hidden sm:inline mr-1.5">{isLoading ? 'Searching…' : 'Search'}</span>
+                <ArrowRight size={14} />
               </Button>
             </div>
           </div>
@@ -229,29 +254,63 @@ export const LogSearch = ({
         {/* Inline syntax hints - appear when input is focused */}
         {showHints && (
           <div className="flex flex-wrap items-center gap-1.5 px-1 animate-in fade-in duration-150">
-            <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide mr-0.5">Syntax:</span>
+            <span
+              className="text-[10px] font-semibold uppercase tracking-wider mr-0.5"
+              style={{ color: 'var(--ls-text-3)' }}
+            >
+              Syntax:
+            </span>
             {SYNTAX_HINTS.map((hint) => (
               <button
                 key={hint.label}
                 type="button"
                 onClick={() => handleHintInsert(hint.insert)}
                 title={hint.description}
-                className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-[11px] font-mono text-slate-600 border border-slate-200 hover:border-blue-200 transition-colors"
+                className="inline-flex items-center px-2 py-0.5 transition-colors"
+                style={{
+                  borderRadius: 4,
+                  border: '1px solid var(--ls-border)',
+                  background: 'var(--ls-bg-1)',
+                  fontFamily: 'var(--ls-font-mono)',
+                  fontSize: 11,
+                  color: 'var(--ls-text-2)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--ls-accent)';
+                  e.currentTarget.style.color = 'var(--ls-accent-text)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--ls-border)';
+                  e.currentTarget.style.color = 'var(--ls-text-2)';
+                }}
               >
                 {hint.label}
               </button>
             ))}
             {columnHints.length > 0 && (
               <>
-                <span className="text-[10px] text-slate-300 mx-0.5">|</span>
-                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide mr-0.5">Fields:</span>
+                <span style={{ color: 'var(--ls-text-4)' }} className="mx-0.5">|</span>
+                <span
+                  className="text-[10px] font-semibold uppercase tracking-wider mr-0.5"
+                  style={{ color: 'var(--ls-text-3)' }}
+                >
+                  Fields:
+                </span>
                 {columnHints.map((col) => (
                   <button
                     key={col}
                     type="button"
                     onClick={() => handleColumnHint(col)}
                     title={`Search in field: ${col}`}
-                    className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-100 text-[11px] font-mono text-blue-600 border border-blue-100 hover:border-blue-300 transition-colors"
+                    className="inline-flex items-center px-2 py-0.5 transition-colors"
+                    style={{
+                      borderRadius: 4,
+                      border: '1px solid var(--ls-accent-border)',
+                      background: 'var(--ls-accent-softer)',
+                      fontFamily: 'var(--ls-font-mono)',
+                      fontSize: 11,
+                      color: 'var(--ls-accent-text)',
+                    }}
                   >
                     {col}:
                   </button>
@@ -264,7 +323,13 @@ export const LogSearch = ({
         {/* Search metadata display */}
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground px-1">
           <QueryHelperPopover trigger={
-            <Button variant="link" className="text-slate-400 hover:text-blue-600 text-xs h-auto p-0 gap-1">
+            <Button
+              variant="link"
+              className="text-xs h-auto p-0 gap-1"
+              style={{ color: 'var(--ls-text-3)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--ls-accent)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ls-text-3)')}
+            >
               <HelpCircle className="h-3 w-3" />
               Search Help
             </Button>

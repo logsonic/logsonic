@@ -21,14 +21,17 @@ const CopyButton = ({ content }: { content: string }) => {
   return (
     <button
       onClick={handleCopy}
-      className="p-1.5 text-gray-500 hover:text-gray-700 rounded"
+      className="p-1.5 rounded transition-colors"
+      style={{ color: 'var(--ls-text-3)' }}
+      onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--ls-accent)')}
+      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ls-text-3)')}
       title="Copy to clipboard"
       aria-label={copied ? 'Copied' : 'Copy to clipboard'}
     >
       {copied ? (
-        <Check className="h-4 w-4 text-green-500" />
+        <Check className="h-3.5 w-3.5" style={{ color: 'var(--ls-ok)' }} />
       ) : (
-        <Copy className="h-4 w-4" />
+        <Copy className="h-3.5 w-3.5" />
       )}
     </button>
   );
@@ -61,49 +64,81 @@ export const ExpandedRow = ({ data }: { data: Log }) => {
     }
   };
 
+  const tabBtn = (active: boolean): React.CSSProperties => ({
+    padding: '8px 10px',
+    fontSize: 12,
+    fontWeight: 500,
+    color: active ? 'var(--ls-text)' : 'var(--ls-text-2)',
+    borderBottom: `2px solid ${active ? 'var(--ls-accent)' : 'transparent'}`,
+    marginBottom: -1,
+    background: 'transparent',
+    cursor: 'pointer',
+  });
+
   return (
-    <div className="bg-slate-50/80 border-t border-slate-200">
+    <div
+      style={{
+        background: 'var(--ls-bg-1)',
+        borderTop: '1px solid var(--ls-border)',
+      }}
+    >
       {/* Tab bar */}
-      <div className="flex items-center border-b border-slate-200 px-3 bg-white">
-        <button
-          onClick={() => setActiveTab('fields')}
-          className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
-            activeTab === 'fields'
-              ? 'text-blue-600 border-blue-500'
-              : 'text-slate-500 border-transparent hover:text-slate-700'
-          }`}
-        >
-          Extracted Fields
+      <div
+        className="flex items-center px-3"
+        style={{
+          background: 'var(--ls-bg-1)',
+          borderBottom: '1px solid var(--ls-border)',
+          gap: 2,
+        }}
+      >
+        <button onClick={() => setActiveTab('fields')} style={tabBtn(activeTab === 'fields')}>
+          Extracted fields
         </button>
-        <button
-          onClick={() => setActiveTab('raw')}
-          className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
-            activeTab === 'raw'
-              ? 'text-blue-600 border-blue-500'
-              : 'text-slate-500 border-transparent hover:text-slate-700'
-          }`}
-        >
-          Raw Log
+        <button onClick={() => setActiveTab('raw')} style={tabBtn(activeTab === 'raw')}>
+          Raw log
         </button>
         <div className="ml-auto">
           <CopyButton content={getFormattedRawLog()} />
         </div>
       </div>
 
-      <div className="p-3">
+      <div style={{ padding: 12 }}>
         {activeTab === 'raw' && (
-          <pre className="text-xs bg-white p-3 rounded-md border border-slate-200 whitespace-pre-wrap font-mono overflow-x-auto max-h-56 text-slate-800 leading-relaxed">
+          <pre
+            className="overflow-x-auto"
+            style={{
+              fontFamily: 'var(--ls-font-mono)',
+              fontSize: 12,
+              padding: '10px 12px',
+              borderRadius: 6,
+              background: 'var(--ls-panel)',
+              border: '1px solid var(--ls-border)',
+              color: 'var(--ls-text)',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              maxHeight: 240,
+              lineHeight: 1.55,
+              margin: 0,
+            }}
+          >
             {store.searchQuery ? highlightText(getFormattedRawLog()) : getFormattedRawLog()}
           </pre>
         )}
 
         {activeTab === 'fields' && (
-          <div className="rounded-md border border-slate-200 overflow-hidden bg-white">
-            <table className="w-full">
-              <tbody className="divide-y divide-slate-100">
+          <div
+            style={{
+              borderRadius: 6,
+              border: '1px solid var(--ls-border)',
+              overflow: 'hidden',
+              background: 'var(--ls-panel)',
+            }}
+          >
+            <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+              <tbody>
                 {Object.entries(data)
                   .filter(([key]) => key !== '_raw' && key !== 'id')
-                  .map(([key, value], index) => {
+                  .map(([key, value]) => {
                     const stringValue = value !== null && value !== undefined
                       ? typeof value === 'object'
                         ? JSON.stringify(value)
@@ -113,24 +148,54 @@ export const ExpandedRow = ({ data }: { data: Log }) => {
                     return (
                       <tr
                         key={key}
-                        className="hover:bg-blue-50/40 transition-colors group"
+                        className="group"
+                        style={{ borderTop: '1px solid var(--ls-border-subtle)' }}
                       >
-                        <td className="py-1 px-3 w-[160px] min-w-[120px] max-w-[200px] border-r border-slate-100">
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
-                            <span className="text-[11px] font-semibold text-slate-600 font-mono truncate" title={key}>
-                              {key}
-                            </span>
-                          </div>
+                        <td
+                          style={{
+                            padding: '5px 10px',
+                            width: 160,
+                            minWidth: 120,
+                            maxWidth: 200,
+                            background: 'var(--ls-bg-1)',
+                            verticalAlign: 'top',
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontFamily: 'var(--ls-font-mono)',
+                              fontSize: 11.5,
+                              color: 'var(--ls-text-2)',
+                            }}
+                            title={key}
+                          >
+                            {key}
+                          </span>
                         </td>
-                        <td className="py-1 px-3">
+                        <td style={{ padding: '5px 10px' }}>
                           <div className="flex items-center justify-between">
-                            <code className="text-xs font-mono text-slate-800 break-all">
+                            <code
+                              style={{
+                                fontFamily: 'var(--ls-font-mono)',
+                                fontSize: 12,
+                                color: 'var(--ls-text)',
+                                wordBreak: 'break-all',
+                              }}
+                            >
                               {highlightText(stringValue, key)}
                             </code>
                             <button
                               onClick={() => navigator.clipboard.writeText(stringValue)}
-                              className="ml-2 text-slate-300 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                              className="ml-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 grid place-items-center rounded"
+                              style={{ width: 16, height: 16, color: 'var(--ls-text-3)' }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'var(--ls-bg-3)';
+                                e.currentTarget.style.color = 'var(--ls-accent)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'transparent';
+                                e.currentTarget.style.color = 'var(--ls-text-3)';
+                              }}
                               title="Copy value"
                               aria-label={`Copy value of ${key}`}
                             >

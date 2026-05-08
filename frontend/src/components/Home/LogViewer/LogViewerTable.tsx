@@ -92,9 +92,12 @@ const SortableHeader: React.FC<SortableHeaderProps> = ({ header, isLocked, handl
     <th
       ref={setNodeRef}
       data-column-id={header.id}
-      className={`relative border-b border-slate-200 bg-slate-50/80 px-2 py-1.5 text-left font-semibold text-slate-600 text-xs ${
-        header.column.getCanSort() ? 'cursor-pointer select-none hover:bg-slate-100 hover:text-slate-800' : ''
-      } ${isUtilityColumn ? `w-[40px] min-w-[40px] max-w-[40px] text-center` : ''}`}
+      className={`relative px-2 py-1.5 text-left font-semibold text-xs ${
+        header.column.getCanSort() ? 'cursor-pointer select-none' : ''
+      } ${
+        header.id === 'select' ? 'w-[36px] min-w-[36px] max-w-[36px] text-center' :
+        header.id === 'expander' ? 'w-[20px] min-w-[20px] max-w-[20px] text-center' : ''
+      }`}
       style={style}
       onClick={
         header.column.getCanSort()
@@ -109,27 +112,28 @@ const SortableHeader: React.FC<SortableHeaderProps> = ({ header, isLocked, handl
         // For utility columns (select/expander), render directly without the flex container
         flexRender(header.column.columnDef.header, header.getContext())
       ) : (
-        // For regular data columns, use the flex container with resizer
-        <div className="flex items-center group/header pr-6">
-          {!isLocked && (
-            <span
-              {...attributes}
-              {...listeners}
-              className="drag-handle mr-2 cursor-grab"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <GripVertical className="h-4 w-4 text-slate-400" />
-            </span>
-          )}
+        <>
+          <div className="flex items-center group/header min-w-0">
+            {!isLocked && (
+              <span
+                {...attributes}
+                {...listeners}
+                className="drag-handle mr-1.5 cursor-grab"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <GripVertical className="h-3.5 w-3.5" style={{ color: 'var(--ls-text-4)' }} />
+              </span>
+            )}
 
-          <div className="flex-1 truncate">
-            {header.isPlaceholder
-              ? null
-              : flexRender(header.column.columnDef.header, header.getContext())}
+            <div className="flex-1 truncate">
+              {header.isPlaceholder
+                ? null
+                : flexRender(header.column.columnDef.header, header.getContext())}
+            </div>
           </div>
 
           {header.column.getCanResize() && <Resizer columnId={header.id} />}
-        </div>
+        </>
       )}
     </th>
   );
@@ -224,8 +228,8 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     const columnWidths: Record<string, number> = {};
     
     // Set fixed widths for utility columns - these should never be adjusted
-    columnWidths['select'] = 40;
-    columnWidths['expander'] = 40;
+    columnWidths['select'] = 36;
+    columnWidths['expander'] = 20;
     
     // Get the container width
     const containerWidth = tableRef.current?.clientWidth || 0;
@@ -419,9 +423,9 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
           />
         </div>
       ),
-      size: 40, // Fixed size for checkbox column
-      minSize: 40, // Minimum size
-      maxSize: 40, // Maximum size
+      size: 36, // Fixed size for checkbox column
+      minSize: 36, // Minimum size
+      maxSize: 36, // Maximum size
       enableResizing: false,
     });
 
@@ -482,7 +486,66 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
           ),
           cell: info => {
             const text = info.getValue();
-            // Use the highlight function to highlight search matches
+            const colLower = column.toLowerCase();
+
+            // Level / severity column → colored badge
+            if (colLower === 'level' || colLower === 'severity' || colLower === 'log_level') {
+              const lvl = String(text || '').toUpperCase().trim();
+              if (lvl) {
+                const knownLvls = ['INFO', 'WARN', 'WARNING', 'ERROR', 'FATAL', 'DEBUG', 'TRACE'];
+                const cls = knownLvls.includes(lvl) ? `ls-lvl-${lvl}` : '';
+                return (
+                  <span className={`ls-lvl ${cls}`}>
+                    <span className="ls-lvl-dot" />
+                    {lvl}
+                  </span>
+                );
+              }
+            }
+
+            // Status code column → color by class (2xx ok, 3xx info, 4xx warn, 5xx err)
+            if (colLower === 'status' || colLower === 'status_code' || colLower === 'response_status' || colLower === 'http_status') {
+              const num = Number(text);
+              if (Number.isFinite(num) && num >= 100) {
+                const color =
+                  num >= 500 ? 'var(--ls-err)' :
+                  num >= 400 ? 'var(--ls-warn)' :
+                  num >= 300 ? 'var(--ls-info)' :
+                  num >= 200 ? 'var(--ls-ok)' : 'var(--ls-text-2)';
+                return (
+                  <span style={{ color, fontWeight: 600 }}>{String(text)}</span>
+                );
+              }
+            }
+
+            // Program / service column → accent text
+            if (colLower === 'program' || colLower === 'service' || colLower === 'app') {
+              return (
+                <div className="truncate" style={{ color: 'var(--ls-accent-text)' }}>
+                  {highlightText(text, column)}
+                </div>
+              );
+            }
+
+            // Host column → info color
+            if (colLower === 'host' || colLower === 'hostname') {
+              return (
+                <div className="truncate" style={{ color: 'var(--ls-info)' }}>
+                  {highlightText(text, column)}
+                </div>
+              );
+            }
+
+            // Timestamp column → muted secondary
+            if (colLower === 'timestamp' || colLower === 'time' || colLower === '@timestamp') {
+              return (
+                <div className="truncate" style={{ color: 'var(--ls-text-2)', fontVariantNumeric: 'tabular-nums' }}>
+                  {highlightText(text, column)}
+                </div>
+              );
+            }
+
+            // Default
             return <div className="truncate">{highlightText(text, column)}</div>;
           },
           size: store.columnWidths[column] || 150,
@@ -661,8 +724,12 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
         const columnId = column.id;
         
         // Ensure utility columns maintain their fixed size
-        if (fixedColumns.includes(columnId)) {
-          column.columnDef.size = 40;
+        if (columnId === 'select') {
+          column.columnDef.size = 36;
+          return;
+        }
+        if (columnId === 'expander') {
+          column.columnDef.size = 20;
           return;
         }
         
@@ -735,8 +802,8 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     }
     
     // Create base result object with selection class if needed
-    let result = { 
-      className: isSelected ? 'selected-row bg-blue-50' : '',
+    let result = {
+      className: isSelected ? 'selected-row' : '',
       colorClass: '',
       title: '',
     };
@@ -880,11 +947,11 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
                       title={rowStyleInfo.title}
                     >
                       {row.getVisibleCells().map(cell => (
-                        <td 
+                        <td
                           key={cell.id}
                           className={`${
-                            cell.column.id === 'select' ? 'w-[40px] min-w-[40px] max-w-[40px] text-center px-2 py-2' :
-                            cell.column.id === 'expander' ? 'w-[20px] min-w-[20px] max-w-[20px] text-center' : 'pl-6 py-2'
+                            cell.column.id === 'select' ? 'w-[36px] min-w-[36px] max-w-[36px] text-center px-2 py-2' :
+                            cell.column.id === 'expander' ? 'w-[20px] min-w-[20px] max-w-[20px] text-center px-0 py-2' : 'pl-1 pr-2 py-2'
                           }`}
                           data-column-id={cell.column.id}
                           style={{

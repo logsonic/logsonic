@@ -126,13 +126,23 @@ export const LogViewer = () => {
   };
 
   return (
-    <Card className="border-0 shadow-none h-full flex flex-col">
+    <Card
+      className="border-0 shadow-none h-full flex flex-col"
+      style={{ background: 'transparent' }}
+    >
       <LogViewerHeader autofitColumns={handleAutofitColumns} />
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto" style={{ background: 'var(--ls-bg-1)' }}>
         <LogViewerTable ref={logViewerTableRef} />
       </div>
-      
-      <div className="border-t p-2 sticky bottom-0 bg-white">
+
+      <div
+        className="sticky bottom-0"
+        style={{
+          background: 'var(--ls-panel)',
+          borderTop: '1px solid var(--ls-border)',
+          padding: '4px 0',
+        }}
+      >
         <PaginationControls
           onPageChange={handlePageChange}
           onPageSizeChange={handlePageSizeChange}

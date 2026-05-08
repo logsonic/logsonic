@@ -31,19 +31,60 @@ export const PaginationControls = ({
     onPageChange(newPage);
   };    
 
+  const navBtn = (disabled: boolean): React.CSSProperties => ({
+    opacity: disabled ? 0.4 : 1,
+    color: 'var(--ls-text-2)',
+  });
+
   return (
-    <div className="flex items-center justify-between px-2 py-1">
-      <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+    <div
+      className="flex items-center justify-between px-3"
+      style={{ gap: 8, fontSize: 11.5, color: 'var(--ls-text-3)', minHeight: 28 }}
+    >
+      <div className="flex items-center" style={{ gap: 8 }}>
         <span>
-          Showing {store.resultCount > 0 ? startItem : 0}-{endItem} of {store.resultCount} entries
+          Rows{' '}
+          <b
+            style={{
+              color: 'var(--ls-text)',
+              fontWeight: 500,
+              fontFamily: 'var(--ls-font-mono)',
+            }}
+          >
+            {store.resultCount > 0 ? startItem : 0}
+            –
+            {endItem}
+          </b>{' '}
+          of{' '}
+          <b
+            style={{
+              color: 'var(--ls-text)',
+              fontWeight: 500,
+              fontFamily: 'var(--ls-font-mono)',
+            }}
+          >
+            {store.resultCount.toLocaleString()}
+          </b>
         </span>
-        <div className="flex items-center space-x-1">
+        <span aria-hidden style={{ width: 1, height: 14, background: 'var(--ls-border)' }} />
+        <div className="flex items-center" style={{ gap: 4 }}>
           <span>Show</span>
           <Select
             value={store.pageSize.toString()}
             onValueChange={handlePageSizeChange}
           >
-            <SelectTrigger className="h-8 w-[70px]">
+            <SelectTrigger
+              className="w-[64px]"
+              style={{
+                height: 22,
+                padding: '0 6px',
+                fontSize: 11,
+                fontFamily: 'var(--ls-font-mono)',
+                background: 'var(--ls-panel)',
+                borderColor: 'var(--ls-border-strong)',
+                color: 'var(--ls-text)',
+              }}
+            >
               <SelectValue placeholder={store.pageSize.toString()} />
             </SelectTrigger>
             <SelectContent>
@@ -58,47 +99,61 @@ export const PaginationControls = ({
         </div>
       </div>
 
-      <div className="flex items-center space-x-1">
+      <div className="flex items-center" style={{ gap: 2 }}>
         <Button
-          variant="outline"
+          variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-6 w-6"
+          style={navBtn(store.currentPage === 1)}
           onClick={() => onPageChange(1)}
           disabled={store.currentPage === 1}
         >
-          <ChevronsLeft className="h-4 w-4" />
+          <ChevronsLeft className="h-3.5 w-3.5" />
         </Button>
         <Button
-          variant="outline"
+          variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-6 w-6"
+          style={navBtn(store.currentPage === 1)}
           onClick={() => onPageChange(store.currentPage - 1)}
           disabled={store.currentPage === 1}
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-3.5 w-3.5" />
         </Button>
-        
-        <span className="text-sm mx-2">
-          Page {store.currentPage} of {totalPages || 1}
+
+        <span
+          className="mx-2"
+          style={{ fontSize: 11.5, color: 'var(--ls-text-2)', fontVariantNumeric: 'tabular-nums' }}
+        >
+          Page{' '}
+          <b style={{ color: 'var(--ls-text)', fontWeight: 500, fontFamily: 'var(--ls-font-mono)' }}>
+            {store.currentPage}
+          </b>{' '}
+          of{' '}
+          <b style={{ color: 'var(--ls-text)', fontWeight: 500, fontFamily: 'var(--ls-font-mono)' }}>
+            {totalPages || 1}
+          </b>
         </span>
-        
+
         <Button
-          variant="outline"
+          variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-6 w-6"
+          style={navBtn(store.currentPage >= totalPages)}
           onClick={() => onPageChange(store.currentPage + 1)}
           disabled={store.currentPage >= totalPages}
         >
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-3.5 w-3.5" />
         </Button>
         <Button
-          variant="outline"
+          variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-6 w-6"
+          style={navBtn(store.currentPage >= totalPages)}
           onClick={() => onPageChange(totalPages)}
           disabled={store.currentPage >= totalPages}
         >
-          <ChevronsRight className="h-4 w-4" />
+          <ChevronsRight className="h-3.5 w-3.5" />
         </Button>
       </div>
     </div>

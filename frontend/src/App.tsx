@@ -2,11 +2,15 @@ import { lazy, Suspense, useEffect } from 'react';
 import { HashRouter, Routes, Route } from "react-router-dom";
 import { initializeApplication } from './lib/initialize';
 import { Toaster } from '@/components/ui/toaster';
+import { useThemeStore } from '@/stores/useThemeStore';
 
 // Lazy load page components for code-splitting
 const Home = lazy(() => import("./pages/Home.tsx"));
 const Import = lazy(() => import("./pages/Import.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+const SavedPage = lazy(() => import("./pages/Placeholder.tsx").then(m => ({ default: m.SavedPage })));
+const AlertsPage = lazy(() => import("./pages/Placeholder.tsx").then(m => ({ default: m.AlertsPage })));
+const SettingsPage = lazy(() => import("./pages/Placeholder.tsx").then(m => ({ default: m.SettingsPage })));
 
 // Loading component for Suspense fallback
 const LoadingScreen = () => (
@@ -19,10 +23,17 @@ const LoadingScreen = () => (
 );
 
 const App = () => {
+  // Hydrate theme on mount (sets data-theme + .dark)
+  const setTheme = useThemeStore((s) => s.setTheme);
+  const theme = useThemeStore((s) => s.theme);
+
   // Initialize application data on startup
   useEffect(() => {
     initializeApplication()
       .catch(error => console.error('Failed to initialize application:', error));
+    // Apply current theme on first render (handles fresh load before persist rehydration callback)
+    setTheme(theme);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -32,6 +43,9 @@ const App = () => {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/import" element={<Import />} />
+            <Route path="/saved" element={<SavedPage />} />
+            <Route path="/alerts" element={<AlertsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
