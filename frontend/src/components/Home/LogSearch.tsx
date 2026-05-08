@@ -377,31 +377,31 @@ export const LogSearch = ({
 
             {store.sources.length > 0 && (
               <span className="flex items-center gap-1">
-                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Sources:</span>
+                <span className="ls-meta-label">Sources:</span>
                 {store.sources.map(s => (
-                  <span key={s} className="bg-blue-50 text-blue-700 border border-blue-100 px-1.5 py-0.5 rounded text-[11px] font-medium">
+                  <span key={s} className="ls-chip ls-chip-info">
                     {s}
                   </span>
                 ))}
-                <span className="text-slate-300 mx-0.5">·</span>
+                <span className="ls-sep">·</span>
               </span>
             )}
             {store.searchQuery && (
               <span className="flex items-center gap-1">
-                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Query:</span>
-                <span className="bg-amber-50 text-amber-800 border border-amber-100 px-1.5 py-0.5 rounded text-[11px] font-mono">
+                <span className="ls-meta-label">Query:</span>
+                <span className="ls-chip ls-chip-warn ls-chip-mono">
                   {store.searchQuery}
                 </span>
-                <span className="text-slate-300 mx-0.5">·</span>
+                <span className="ls-sep">·</span>
               </span>
             )}
 
             {store.lastSearchStart && store.lastSearchEnd && (
               <span className="flex items-center gap-1">
-                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Range:</span>
-                <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[11px]">
+                <span className="ls-meta-label">Range:</span>
+                <span className="ls-chip ls-chip-neutral">
                   {store.lastSearchStart.toLocaleString()} – {store.lastSearchEnd.toLocaleString()}
-                  <span className="text-slate-400 ml-1">({store.timeZone})</span>
+                  <span className="ls-chip-sub ml-1">({store.timeZone})</span>
                 </span>
               </span>
             )}

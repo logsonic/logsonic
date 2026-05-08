@@ -162,7 +162,7 @@ export const Header = () => {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 hover:text-red-600 hover:bg-red-50"
+                      className="ls-danger-btn h-7 w-7"
                       style={{ color: 'var(--ls-text-2)' }}
                       aria-label="Clear logs"
                     >
@@ -199,9 +199,9 @@ export const Header = () => {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel className="border-slate-200 text-slate-700">Cancel</AlertDialogCancel>
-                <AlertDialogAction 
-                  className="bg-red-600 hover:bg-red-700 text-white" 
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="ls-danger-action text-white"
                   onClick={handleClearLogs}
                   disabled={isLoading || deleteConfirmation !== 'delete'}
                 >

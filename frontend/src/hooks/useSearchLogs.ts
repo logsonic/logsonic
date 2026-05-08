@@ -56,7 +56,7 @@ export const useSearchLogs = (
         
         // Update search params store with metadata from result
         if (result.available_columns) {
-          store.setAvailableColumns(result.available_columns);
+          store.setAvailableColumns(result.available_columns, result.logs);
         }
         
         if (result.total_count !== undefined) {

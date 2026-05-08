@@ -74,7 +74,7 @@ export interface SearchQueryParamsStoreState {
   setSortOrder: (sortOrder: string) => void;
   setPageSize: (pageSize: number) => void;
   setCurrentPage: (currentPage: number) => void;
-  setAvailableColumns: (availableColumns: string[]) => void;
+  setAvailableColumns: (availableColumns: string[], logs?: Array<Record<string, unknown>>) => void;
   setSelectedColumns: (selectedColumns: string[]) => void;
   setColumnWidths: (columnWidths: Record<string, number>) => void;
   setColumnLocked: (columnLocked: boolean) => void;
@@ -367,28 +367,44 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
             set({ currentPage });
           }
         },  
-        setAvailableColumns: (availableColumns) => {
+        setAvailableColumns: (availableColumns, logs) => {
           const currentState = get();
           //dedup the available columns
-          const dedupedAvailableColumns = availableColumns.filter((value, index, self) => 
+          const dedupedAvailableColumns = availableColumns.filter((value, index, self) =>
             self.indexOf(value) === index
           );
 
           // Initialize selected columns if they're empty
           if (currentState.selectedColumns.length === 0 && dedupedAvailableColumns.length > 0) {
             const mandatoryColumns = currentState.mandatoryColumns;
-            
+
             // Filter out columns starting with underscore for initial selection
             const visibleColumns = dedupedAvailableColumns.filter(col => !col.startsWith('_'));
-            
+
+            // Prefer columns that have at least one populated value across the
+            // returned logs. This keeps the default view dense — empty/extracted
+            // fields that nothing matched don't hog horizontal space.
+            const isPopulated = (col: string) => {
+              if (!logs || logs.length === 0) return true;
+              for (const row of logs) {
+                const v = row[col];
+                if (v === null || v === undefined) continue;
+                if (typeof v === 'string' && v.trim() === '') continue;
+                return true;
+              }
+              return false;
+            };
+            const populated = visibleColumns.filter(isPopulated);
+            const candidates = populated.length > 0 ? populated : visibleColumns;
+
             const initialSelectedColumns = [
               ...mandatoryColumns,
-              ...visibleColumns
+              ...candidates
                 .filter(col => !mandatoryColumns.includes(col))
                 .slice(0, 5)
             ];
-            
-            set({ 
+
+            set({
               availableColumns: dedupedAvailableColumns,
               selectedColumns: initialSelectedColumns
             });

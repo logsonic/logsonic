@@ -71,16 +71,43 @@ export const LogViewerHeader = (
   }, [store]);
 
   return (
-    <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-100 bg-slate-50/50">
+    <div
+      className="flex items-center justify-between px-3 py-1.5"
+      style={{
+        background: 'var(--ls-panel)',
+        borderBottom: '1px solid var(--ls-border)',
+      }}
+    >
       <div className="flex items-center gap-2">
-        <div className="flex items-center border border-slate-200 rounded-md overflow-hidden bg-white shadow-sm">
-          <div className="px-2.5 py-1 bg-slate-50 border-r border-slate-200">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Columns</span>
+        <div
+          className="ls-toolbar-group flex items-center overflow-hidden rounded-md"
+          style={{
+            background: 'var(--ls-bg-1)',
+            border: '1px solid var(--ls-border)',
+          }}
+        >
+          <div
+            className="px-2.5 py-1"
+            style={{
+              background: 'var(--ls-bg-2)',
+              borderRight: '1px solid var(--ls-border)',
+            }}
+          >
+            <span
+              className="text-[10px] font-semibold uppercase tracking-wide"
+              style={{ color: 'var(--ls-text-3)' }}
+            >
+              Columns
+            </span>
           </div>
-          
+
           <Popover open={isColumnPopoverOpen} onOpenChange={setIsColumnPopoverOpen}>
             <PopoverTrigger asChild>
-              <Button variant="ghost" disabled={store.isColumnLocked} className="h-7 rounded-none border-r border-slate-200 px-2.5 flex items-center gap-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100">
+              <Button
+                variant="ghost"
+                disabled={store.isColumnLocked}
+                className="ls-toolbar-btn h-7 rounded-none px-2.5 flex items-center gap-1"
+              >
                 <Columns className="h-3.5 w-3.5" />
                 <span className="text-xs">Select</span>
               </Button>
@@ -89,20 +116,20 @@ export const LogViewerHeader = (
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h4 className="font-medium text-base">Select Columns</h4>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     className="h-8 w-8 p-0"
                     onClick={() => setIsColumnPopoverOpen(false)}
                   >
-                    <X className="h-4 w-4 text-gray-500 hover:text-gray-900" />
+                    <X className="h-4 w-4" style={{ color: 'var(--ls-text-3)' }} />
                     <span className="sr-only">Close</span>
                   </Button>
                 </div>
-                
+
                 {/* Search input */}
                 <div className="relative">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-2 top-2.5 h-4 w-4" style={{ color: 'var(--ls-text-3)' }} />
                   <Input
                     placeholder="Search columns..."
                     value={headerSearchQuery}
@@ -110,8 +137,9 @@ export const LogViewerHeader = (
                     className="pl-8"
                   />
                   {headerSearchQuery && (
-                    <button 
-                      className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                    <button
+                      className="absolute right-2 top-2.5"
+                      style={{ color: 'var(--ls-text-3)' }}
                       onClick={() => setHeaderSearchQuery('')}
                       aria-label="Clear search"
                     >
@@ -119,12 +147,15 @@ export const LogViewerHeader = (
                     </button>
                   )}
                 </div>
-                
+
                 {/* Multi-column layout for column selection */}
                 <div className="max-h-[300px] overflow-y-auto pr-2">
                   <div className="grid grid-cols-2 gap-1">
                     {filteredColumns.map((column) => (
-                      <div key={column} className="flex items-center space-x-2 p-1 hover:bg-gray-50 rounded">
+                      <div
+                        key={column}
+                        className="flex items-center space-x-2 p-1 rounded ls-col-row"
+                      >
                         <Checkbox
                           id={`col-${column}`}
                           checked={store.selectedColumns.includes(column)}
@@ -139,9 +170,12 @@ export const LogViewerHeader = (
                     ))}
                   </div>
                 </div>
-                
+
                 {/* Quick actions */}
-                <div className="flex justify-between items-center pt-2 border-t">
+                <div
+                  className="flex justify-between items-center pt-2"
+                  style={{ borderTop: '1px solid var(--ls-border)' }}
+                >
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
@@ -166,7 +200,10 @@ export const LogViewerHeader = (
                   </div>
                   <Button
                     size="sm"
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    className="text-white"
+                    style={{ background: 'var(--ls-accent)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--ls-accent-hover)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--ls-accent)')}
                     onClick={() => setIsColumnPopoverOpen(false)}
                   >
                     Close
@@ -176,9 +213,11 @@ export const LogViewerHeader = (
             </PopoverContent>
           </Popover>
 
+          <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: 'var(--ls-border)' }} />
+
           <Button
             variant="ghost"
-            className="h-7 rounded-none border-r border-slate-200 px-2.5 flex items-center gap-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            className="ls-toolbar-btn h-7 rounded-none px-2.5 flex items-center gap-1"
             onClick={autofitColumns}
             disabled={store.isColumnLocked}
             title="Auto-adjust column widths"
@@ -187,9 +226,11 @@ export const LogViewerHeader = (
             <span className="text-xs">Fit</span>
           </Button>
 
+          <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: 'var(--ls-border)' }} />
+
           <Button
             variant="ghost"
-            className="h-7 rounded-none px-2.5 flex items-center gap-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            className="ls-toolbar-btn h-7 rounded-none px-2.5 flex items-center gap-1"
             onClick={toggleLock}
             title={store.isColumnLocked ? "Unlock layout" : "Lock layout"}
           >
@@ -210,20 +251,22 @@ export const LogViewerHeader = (
 
       {/* Stats */}
       <div className="flex items-center gap-3">
-        <div className="text-xs text-slate-500">
+        <div className="text-xs" style={{ color: 'var(--ls-text-3)' }}>
           {store.resultCount > 0 ? (
             <span className="flex items-center gap-1">
-              <span className="font-semibold text-slate-700">{store.resultCount.toLocaleString()}</span>
+              <span className="font-semibold" style={{ color: 'var(--ls-text)', fontFamily: 'var(--ls-font-mono)' }}>
+                {store.resultCount.toLocaleString()}
+              </span>
               {systemInfo?.storage_info?.total_log_entries != null && systemInfo.storage_info.total_log_entries !== store.resultCount ? (
-                <span className="text-slate-400">
+                <span style={{ color: 'var(--ls-text-4)' }}>
                   / {systemInfo.storage_info.total_log_entries.toLocaleString()} logs
                 </span>
               ) : (
-                <span className="text-slate-400">logs</span>
+                <span style={{ color: 'var(--ls-text-4)' }}>logs</span>
               )}
             </span>
           ) : (
-            <span className="text-slate-400 italic">No results</span>
+            <span style={{ color: 'var(--ls-text-4)', fontStyle: 'italic' }}>No results</span>
           )}
         </div>
       </div>

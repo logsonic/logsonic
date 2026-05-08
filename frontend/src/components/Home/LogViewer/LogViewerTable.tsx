@@ -220,101 +220,90 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
   const fitRangeToData = useFitRangeToData();
 
   const autofitColumns = useCallback(() => {
-    
+
     if (store.selectedColumns.length === 0) return;
-    if ( !logData || !logData.logs || logData.logs.length === 0) return;
-    
-    // Calculate optimal width for each column based on content
+    if (!logData || !logData.logs || logData.logs.length === 0) return;
+
     const columnWidths: Record<string, number> = {};
-    
-    // Set fixed widths for utility columns - these should never be adjusted
+
+    // Fixed widths for utility columns.
     columnWidths['select'] = 36;
     columnWidths['expander'] = 20;
-    
-    // Get the container width
+
     const containerWidth = tableRef.current?.clientWidth || 0;
-    
-    // First pass: calculate content-based widths
-    const contentBasedWidths: Record<string, number> = {};
-    let totalContentWidth = 0;
-    
-    // Process each selected column (excluding utility columns)
-    store.selectedColumns.forEach(column => {
-      // Skip utility columns as they have fixed widths
-      if (column === 'select' || column === 'expander' || column === '_raw' || column === '_src') return;
-      
-      // Start with column name length (plus some padding)
-      let maxContentWidth = column.length * 10;
-      
-      // Sample up to 100 logs to avoid performance issues with large datasets
+
+    // A column is "visible" iff at least one row has a populated value or
+    // the column is mandatory (timestamp, message). Empty columns are
+    // hidden via columnVisibility, so we mustn't waste autofit width on
+    // them — otherwise the visible columns end up too narrow.
+    const mandatorySet = new Set(store.mandatoryColumns);
+    const isVisible = (column: string) => {
+      if (column === 'select' || column === 'expander' || column === '_raw' || column === '_src') return false;
+      if (mandatorySet.has(column)) return true;
       const sampleSize = Math.min(logData.logs.length, store.pageSize);
-      const sampleLogs = logData.logs.slice(0, sampleSize);
-      
-      // Find the maximum content width
+      for (let i = 0; i < sampleSize; i++) {
+        const v = logData.logs[i][column];
+        if (v === null || v === undefined) continue;
+        if (typeof v === 'string' && v.trim() === '') continue;
+        return true;
+      }
+      return false;
+    };
+
+    const visibleDataCols = store.selectedColumns.filter(isVisible);
+
+    // Content-based widths for visible data columns.
+    const contentBasedWidths: Record<string, number> = {};
+    let totalContentWidth = columnWidths['select'] + columnWidths['expander'];
+    const sampleSize = Math.min(logData.logs.length, store.pageSize);
+    const sampleLogs = logData.logs.slice(0, sampleSize);
+
+    visibleDataCols.forEach(column => {
+      let maxContentWidth = column.length * 10;
       sampleLogs.forEach(log => {
         const value = log[column];
         if (value !== undefined && value !== null) {
-          const stringValue = typeof value === 'object' 
-            ? JSON.stringify(value).length 
+          const stringValue = typeof value === 'object'
+            ? JSON.stringify(value).length
             : String(value).length;
-          
-          // Use character count as a proxy for width (with some multiplier)
-          const estimatedWidth = Math.min(stringValue * 8, 500); // Cap at 500px
-          
+          const estimatedWidth = Math.min(stringValue * 8, 500);
           maxContentWidth = Math.max(maxContentWidth, estimatedWidth);
         }
       });
-      
-      // Set a reasonable width with min/max constraints
       contentBasedWidths[column] = Math.max(120, Math.min(maxContentWidth, 600));
       totalContentWidth += contentBasedWidths[column];
     });
-    
-    // Add utility column widths to total
-    const utilityColumnsWidth = columnWidths['select'] + columnWidths['expander'];
-    totalContentWidth += utilityColumnsWidth;
-    
-    // Second pass: distribute space proportionally based on container width
-    const availableWidth = containerWidth;
-    
-    // If calculated widths are too small for the container, expand them proportionally
-    if (totalContentWidth < availableWidth) {
-      // Determine how much extra space we have
-      const extraSpace = availableWidth - totalContentWidth;
-      
-      // Calculate expansion factor for each data column
-      const dataColumnsCount = Object.keys(contentBasedWidths).length;
-      if (dataColumnsCount > 0) {
-        const expansionPerColumn = extraSpace / dataColumnsCount;
-        
-        // Expand each non-utility column
-        Object.keys(contentBasedWidths).forEach(column => {
-          columnWidths[column] = contentBasedWidths[column] + expansionPerColumn;
-        });
-      }
-    } 
-    // If calculated widths exceed container, reduce them proportionally
-    else if (totalContentWidth > availableWidth) {
-      // Calculate shrink factor
-      const shrinkFactor = availableWidth / totalContentWidth;
-      
-      // Apply shrink factor to each data column
-      Object.keys(contentBasedWidths).forEach(column => {
-        // Apply shrink factor but maintain minimum width
+
+    if (totalContentWidth < containerWidth && visibleDataCols.length > 0) {
+      // Give the leftover space to the last visible data column (typically
+      // `message`). This matches Splunk/Kibana — narrow columns stay
+      // narrow, the wide content column fills the screen.
+      const extraSpace = containerWidth - totalContentWidth;
+      const lastCol = visibleDataCols[visibleDataCols.length - 1];
+      visibleDataCols.forEach(column => {
+        columnWidths[column] = contentBasedWidths[column] + (column === lastCol ? extraSpace : 0);
+      });
+    } else if (totalContentWidth > containerWidth) {
+      const shrinkFactor = containerWidth / totalContentWidth;
+      visibleDataCols.forEach(column => {
         columnWidths[column] = Math.max(120, contentBasedWidths[column] * shrinkFactor);
       });
-    } 
-    // If perfect fit, use the content-based widths directly
-    else {
-      Object.keys(contentBasedWidths).forEach(column => {
+    } else {
+      visibleDataCols.forEach(column => {
         columnWidths[column] = contentBasedWidths[column];
       });
     }
-    
-    // Update column widths in the store
+
+    // Preserve any persisted widths for currently-hidden columns so that
+    // turning them back on later doesn't reset their size.
+    store.selectedColumns.forEach(col => {
+      if (columnWidths[col] === undefined && store.columnWidths[col] !== undefined) {
+        columnWidths[col] = store.columnWidths[col];
+      }
+    });
+
     store.setColumnWidths(columnWidths);
-    
-  }, [logData, store.selectedColumns, store.pageSize]);
+  }, [logData, store.selectedColumns, store.mandatoryColumns, store.pageSize]);
 
   // Expose the autofitColumns function through the ref
   React.useImperativeHandle(ref, () => ({
@@ -337,7 +326,25 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
 
   useEffect(() => {
     autofitColumns();
-  }, [store.selectedColumns]);
+    // Re-fit on new search results too — the visible-column set is derived
+    // from log content, so widths must be recalculated when content changes.
+  }, [store.selectedColumns, logData]);
+
+  // Refit on viewport resize so the table never gets stuck wider/narrower
+  // than the available space when the user adjusts the window or sidebar.
+  useEffect(() => {
+    let raf = 0;
+    const onResize = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => autofitColumns());
+    };
+    const ro = new ResizeObserver(onResize);
+    if (tableRef.current) ro.observe(tableRef.current);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, [autofitColumns]);
 
   // State for column resizing
   const [columnResizeMode, setColumnResizeMode] = useState<ColumnResizeMode>('onChange');
@@ -368,29 +375,35 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     setSorting([{ id: store.sortBy || 'timestamp', desc: store.sortOrder === 'desc' }]);
   }, [store.sortBy, store.sortOrder]);
 
-  // Format timestamp for display
+  // Format timestamp for display.
+  // Compact, sortable, monospace-aligned: "2026-04-01 17:40:54.123".
+  // Timezone is intentionally omitted from the row — it's shown once in the
+  // search-metadata row above the table to avoid per-row visual clutter.
   const formatTimestamp = useCallback((timestamp: string) => {
     if (!timestamp) return '';
-    //Timestamp is in UTC format
     try {
       const date = new Date(timestamp);
+      if (Number.isNaN(date.getTime())) return timestamp;
 
-      // Use a more compatible approach for formatting with timezone
-      const formattedDate = new Intl.DateTimeFormat("default", {
+      const parts = new Intl.DateTimeFormat('en-CA', {
         year: 'numeric',
-        month: 'short',
-        day: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
+        hour12: false,
         timeZone: store.timeZone,
-        timeZoneName: "short"
+      }).formatToParts(date);
 
-      }).format(date);
-
-      return formattedDate;
+      const lookup: Record<string, string> = {};
+      for (const p of parts) lookup[p.type] = p.value;
+      const ms = String(date.getUTCMilliseconds()).padStart(3, '0');
+      // en-CA uses 24h "24" for midnight; normalize to "00".
+      const hour = lookup.hour === '24' ? '00' : lookup.hour;
+      return `${lookup.year}-${lookup.month}-${lookup.day} ${hour}:${lookup.minute}:${lookup.second}.${ms}`;
     } catch (e) {
-      console.error("Error formatting timestamp:", e);
+      console.error('Error formatting timestamp:', e);
       return timestamp;
     }
   }, [store.timeZone]);
@@ -459,7 +472,8 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     // Data columns
     const dataColumns = store.selectedColumns
       .filter(column => column !== '_raw' && column !== '_src') // Exclude _raw and _src fields from columns
-      .map(column => 
+      .map(column =>
+
       columnHelper.accessor(
         (row) => {
           const value = row[column];
@@ -560,6 +574,30 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     return [selectionColumn, expanderColumn, ...dataColumns];
   }, [store.selectedColumns, formatTimestamp, store.sortBy, store.sortOrder, expanded, store.isColumnLocked, columnHelper, store.columnWidths]);
 
+  // Compute which selected columns actually have data on the current page.
+  // Empty columns are hidden via TanStack's columnVisibility so they don't
+  // hog horizontal space when nothing in the result set populates them.
+  const columnVisibility = useMemo(() => {
+    const logs = logData?.logs ?? [];
+    const mandatory = new Set(store.mandatoryColumns);
+    const visibility: Record<string, boolean> = {};
+    if (logs.length === 0) return visibility;
+    for (const col of store.selectedColumns) {
+      if (col === '_raw' || col === '_src') continue;
+      if (mandatory.has(col)) { visibility[col] = true; continue; }
+      let hasValue = false;
+      for (const row of logs) {
+        const v = row[col];
+        if (v === null || v === undefined) continue;
+        if (typeof v === 'string' && v.trim() === '') continue;
+        hasValue = true;
+        break;
+      }
+      visibility[col] = hasValue;
+    }
+    return visibility;
+  }, [logData, store.selectedColumns, store.mandatoryColumns]);
+
   // Set up DnD sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -607,6 +645,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
       sorting,
       rowSelection,
       columnOrder,
+      columnVisibility,
     },
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
@@ -912,7 +951,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
           onDragEnd={handleDragEnd}
           modifiers={[restrictToHorizontalAxis]}
         >
-          <table 
+          <table
             className="w-full border-collapse"
             style={{ width: table.getCenterTotalSize() }}
           >

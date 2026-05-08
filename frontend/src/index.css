@@ -134,6 +134,80 @@ html, body {
   text-rendering: optimizeLegibility;
 }
 
+/* Search-metadata chips (sources / query / range). Token-based so they
+   work across light + dark themes without per-class overrides. */
+.ls-meta-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ls-text-3);
+}
+.ls-sep {
+  color: var(--ls-text-4);
+  margin: 0 2px;
+}
+.ls-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  line-height: 1.4;
+}
+.ls-chip-mono { font-family: var(--ls-font-mono); }
+.ls-chip-info {
+  background: var(--ls-info-soft);
+  color: var(--ls-info);
+  border-color: color-mix(in srgb, var(--ls-info) 25%, transparent);
+}
+.ls-chip-warn {
+  background: var(--ls-warn-soft);
+  color: var(--ls-warn);
+  border-color: color-mix(in srgb, var(--ls-warn) 25%, transparent);
+}
+.ls-chip-neutral {
+  background: var(--ls-bg-2);
+  color: var(--ls-text-2);
+  border-color: var(--ls-border);
+}
+.ls-chip-sub { color: var(--ls-text-3); }
+
+/* Inline toolbar button (used in LogViewerHeader). Tokenised so hover
+   works in light + dark themes — replaces hardcoded slate-/gray- classes. */
+.ls-toolbar-btn {
+  color: var(--ls-text-2) !important;
+  background: transparent !important;
+  transition: background 120ms ease, color 120ms ease;
+}
+.ls-toolbar-btn:hover:not(:disabled) {
+  background: var(--ls-bg-2) !important;
+  color: var(--ls-text) !important;
+}
+.ls-toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ls-col-row { transition: background 100ms ease; }
+.ls-col-row:hover { background: var(--ls-bg-2); }
+
+/* Danger affordances — token-based so the hover wash adapts to dark mode
+   instead of staying as Tailwind's bg-red-50 (which is unreadable on dark). */
+.ls-danger-btn { transition: background 120ms ease, color 120ms ease; }
+.ls-danger-btn:hover {
+  background: var(--ls-err-soft) !important;
+  color: var(--ls-err) !important;
+}
+.ls-danger-action {
+  background: var(--ls-err) !important;
+  border: 1px solid var(--ls-err) !important;
+}
+.ls-danger-action:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
