@@ -951,7 +951,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
                           key={cell.id}
                           className={`${
                             cell.column.id === 'select' ? 'w-[36px] min-w-[36px] max-w-[36px] text-center px-2 py-2' :
-                            cell.column.id === 'expander' ? 'w-[20px] min-w-[20px] max-w-[20px] text-center px-0 py-2' : 'pl-1 pr-2 py-2'
+                            cell.column.id === 'expander' ? 'w-[20px] min-w-[20px] max-w-[20px] text-center px-0 py-2' : 'pl-[30px] pr-2 py-2'
                           }`}
                           data-column-id={cell.column.id}
                           style={{

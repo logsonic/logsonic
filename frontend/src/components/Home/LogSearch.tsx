@@ -5,12 +5,51 @@ import { cn } from "@/lib/utils";
 import { checkAIStatus } from "@/services/aiService";
 import { useLogResultStore } from "@/stores/useLogResultStore";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
-import { ArrowRight, HelpCircle, Search, Sparkles, X } from "lucide-react";
+import { ArrowRight, BarChart3, Bell, Bookmark, Download, HelpCircle, Search, Share2, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { PerformanceMetricsPopover } from "./PerformanceMetricsPopover";
 import { QueryHelperPopover } from "./QueryHelperPopover";
+
+const GhostBtn = ({
+  icon,
+  children,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  onClick?: () => void;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="inline-flex items-center transition-colors"
+    style={{
+      gap: 6,
+      height: 24,
+      padding: '0 8px',
+      borderRadius: 5,
+      fontSize: 12,
+      fontWeight: 500,
+      background: 'transparent',
+      color: 'var(--ls-text-2)',
+      border: '1px solid transparent',
+      cursor: 'pointer',
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.background = 'var(--ls-bg-2)';
+      e.currentTarget.style.color = 'var(--ls-text)';
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.background = 'transparent';
+      e.currentTarget.style.color = 'var(--ls-text-2)';
+    }}
+  >
+    {icon}
+    <span>{children}</span>
+  </button>
+);
 
 // Syntax hint chips shown below the search bar when focused
 const SYNTAX_HINTS = [
@@ -321,55 +360,65 @@ export const LogSearch = ({
         )}
 
         {/* Search metadata display */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground px-1">
-          <QueryHelperPopover trigger={
-            <Button
-              variant="link"
-              className="text-xs h-auto p-0 gap-1"
-              style={{ color: 'var(--ls-text-3)' }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--ls-accent)')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ls-text-3)')}
-            >
-              <HelpCircle className="h-3 w-3" />
-              Search Help
-            </Button>
-          } />
+        <div className="flex items-start justify-between gap-2 text-xs text-muted-foreground px-1">
+          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+            <QueryHelperPopover trigger={
+              <Button
+                variant="link"
+                className="text-xs h-auto p-0 gap-1"
+                style={{ color: 'var(--ls-text-3)' }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--ls-accent)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ls-text-3)')}
+              >
+                <HelpCircle className="h-3 w-3" />
+                Search Help
+              </Button>
+            } />
 
-          {store.sources.length > 0 && (
-            <span className="flex items-center gap-1">
-              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Sources:</span>
-              {store.sources.map(s => (
-                <span key={s} className="bg-blue-50 text-blue-700 border border-blue-100 px-1.5 py-0.5 rounded text-[11px] font-medium">
-                  {s}
+            {store.sources.length > 0 && (
+              <span className="flex items-center gap-1">
+                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Sources:</span>
+                {store.sources.map(s => (
+                  <span key={s} className="bg-blue-50 text-blue-700 border border-blue-100 px-1.5 py-0.5 rounded text-[11px] font-medium">
+                    {s}
+                  </span>
+                ))}
+                <span className="text-slate-300 mx-0.5">·</span>
+              </span>
+            )}
+            {store.searchQuery && (
+              <span className="flex items-center gap-1">
+                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Query:</span>
+                <span className="bg-amber-50 text-amber-800 border border-amber-100 px-1.5 py-0.5 rounded text-[11px] font-mono">
+                  {store.searchQuery}
                 </span>
-              ))}
-              <span className="text-slate-300 mx-0.5">·</span>
-            </span>
-          )}
-          {store.searchQuery && (
-            <span className="flex items-center gap-1">
-              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Query:</span>
-              <span className="bg-amber-50 text-amber-800 border border-amber-100 px-1.5 py-0.5 rounded text-[11px] font-mono">
-                {store.searchQuery}
+                <span className="text-slate-300 mx-0.5">·</span>
               </span>
-              <span className="text-slate-300 mx-0.5">·</span>
-            </span>
-          )}
+            )}
 
-          {store.lastSearchStart && store.lastSearchEnd && (
-            <span className="flex items-center gap-1">
-              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Range:</span>
-              <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[11px]">
-                {store.lastSearchStart.toLocaleString()} – {store.lastSearchEnd.toLocaleString()}
-                <span className="text-slate-400 ml-1">({store.timeZone})</span>
+            {store.lastSearchStart && store.lastSearchEnd && (
+              <span className="flex items-center gap-1">
+                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Range:</span>
+                <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[11px]">
+                  {store.lastSearchStart.toLocaleString()} – {store.lastSearchEnd.toLocaleString()}
+                  <span className="text-slate-400 ml-1">({store.timeZone})</span>
+                </span>
               </span>
-            </span>
-          )}
+            )}
 
             {/* Performance metrics popover */}
-            <PerformanceMetricsPopover 
-              apiExecutionTime={apiExecutionTime} 
+            <PerformanceMetricsPopover
+              apiExecutionTime={apiExecutionTime}
             />
+          </div>
+
+          <div className="flex flex-shrink-0 items-center">
+            <GhostBtn icon={<BarChart3 size={13} />}>Visualize</GhostBtn>
+            <GhostBtn icon={<Bookmark size={13} />}>Save search</GhostBtn>
+            <GhostBtn icon={<Bell size={13} />}>Create alert</GhostBtn>
+            <GhostBtn icon={<Share2 size={13} />}>Share</GhostBtn>
+            <GhostBtn icon={<Download size={13} />}>Export</GhostBtn>
+          </div>
         </div>
       </div>
 

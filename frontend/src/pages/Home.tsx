@@ -4,7 +4,6 @@ import { LogSearch } from '@/components/Home/LogSearch';
 import { LogViewer } from '@/components/Home/LogViewer/LogViewer';
 import { LeftPanelContent, SIDEBAR_WIDTHS } from '@/components/Home/Sidebar/CollapsiblePanel';
 import { SidebarPanel } from '@/components/Home/SidebarPanel';
-import { SubToolbar } from '@/components/Home/SubToolbar';
 import { LeftRail } from '@/components/Shell/LeftRail';
 import { StatusBar } from '@/components/Shell/StatusBar';
 import { useCollapsiblePanel } from '@/hooks/useCollapsiblePanel';
@@ -179,8 +178,6 @@ const Home = () => {
           >
             <LogSearch />
           </div>
-
-          <SubToolbar />
 
           <LogDistributionChart />
 
