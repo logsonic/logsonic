@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { checkAIStatus } from "@/services/aiService";
 import { useLogResultStore } from "@/stores/useLogResultStore";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
-import { ArrowRight, BarChart3, Bell, Bookmark, Download, HelpCircle, Search, Share2, Sparkles, X } from "lucide-react";
+import { ArrowRight, Download, HelpCircle, Search, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -73,7 +73,7 @@ export const LogSearch = ({
   const store = useSearchQueryParamsStore();
   
   const { searchLogs } = useSearchLogs(onSearchComplete);
-  const { isLoading } = useLogResultStore();
+  const { isLoading, logData } = useLogResultStore();
   const [localSearchQuery, setLocalSearchQuery] = useState(store.searchQuery);
   
   // AI query related state
@@ -157,6 +157,24 @@ export const LogSearch = ({
       handleSearch();
     }
   }, [handleSearch]);
+
+  const handleExport = useCallback(() => {
+    const logs = logData?.logs ?? [];
+    if (logs.length === 0) return;
+
+    const jsonl = logs.map(log => JSON.stringify(log)).join('\n') + '\n';
+    const blob = new Blob([jsonl], { type: 'application/x-ndjson' });
+    const url = URL.createObjectURL(blob);
+
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `logsonic-export-${ts}.jsonl`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [logData]);
 
   // Insert a hint snippet into the search input
   const handleHintInsert = useCallback((insert: string) => {
@@ -360,7 +378,7 @@ export const LogSearch = ({
         )}
 
         {/* Search metadata display */}
-        <div className="flex items-start justify-between gap-2 text-xs text-muted-foreground px-1">
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground px-1">
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
             <QueryHelperPopover trigger={
               <Button
@@ -413,11 +431,12 @@ export const LogSearch = ({
           </div>
 
           <div className="flex flex-shrink-0 items-center">
-            <GhostBtn icon={<BarChart3 size={13} />}>Visualize</GhostBtn>
-            <GhostBtn icon={<Bookmark size={13} />}>Save search</GhostBtn>
-            <GhostBtn icon={<Bell size={13} />}>Create alert</GhostBtn>
-            <GhostBtn icon={<Share2 size={13} />}>Share</GhostBtn>
-            <GhostBtn icon={<Download size={13} />}>Export</GhostBtn>
+            <GhostBtn
+              icon={<Download size={13} />}
+              onClick={handleExport}
+            >
+              Export
+            </GhostBtn>
           </div>
         </div>
       </div>

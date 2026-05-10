@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { Bell, Bookmark, Eye, Filter, List, Settings, Upload, Zap } from 'lucide-react';
+import { Eye, Filter, List, Upload, Zap } from 'lucide-react';
 import { ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -33,9 +33,6 @@ export const LeftRail = ({
   const path = location.pathname || '/';
   const isHome = path === '/' || path.startsWith('/?') || path.startsWith('/#');
   const isImport = path.startsWith('/import');
-  const isSaved = path.startsWith('/saved');
-  const isSettings = path.startsWith('/settings');
-  const isAlerts = path.startsWith('/alerts');
 
   const primary: RailEntry[] = [
     {
@@ -65,27 +62,6 @@ export const LeftRail = ({
       label: 'Import',
       onClick: () => navigate('/import'),
       active: isImport,
-    },
-    {
-      id: 'saved',
-      icon: <Bookmark size={18} strokeWidth={1.7} />,
-      label: 'Saved searches',
-      onClick: () => navigate('/saved'),
-      active: isSaved,
-    },
-    {
-      id: 'alerts',
-      icon: <Bell size={18} strokeWidth={1.7} />,
-      label: 'Alerts',
-      onClick: () => navigate('/alerts'),
-      active: isAlerts,
-    },
-    {
-      id: 'settings',
-      icon: <Settings size={18} strokeWidth={1.7} />,
-      label: 'Settings',
-      onClick: () => navigate('/settings'),
-      active: isSettings,
     },
   ];
 

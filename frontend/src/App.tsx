@@ -8,9 +8,6 @@ import { useThemeStore } from '@/stores/useThemeStore';
 const Home = lazy(() => import("./pages/Home.tsx"));
 const Import = lazy(() => import("./pages/Import.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
-const SavedPage = lazy(() => import("./pages/Placeholder.tsx").then(m => ({ default: m.SavedPage })));
-const AlertsPage = lazy(() => import("./pages/Placeholder.tsx").then(m => ({ default: m.AlertsPage })));
-const SettingsPage = lazy(() => import("./pages/Placeholder.tsx").then(m => ({ default: m.SettingsPage })));
 
 // Loading component for Suspense fallback
 const LoadingScreen = () => (
@@ -43,9 +40,6 @@ const App = () => {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/import" element={<Import />} />
-            <Route path="/saved" element={<SavedPage />} />
-            <Route path="/alerts" element={<AlertsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

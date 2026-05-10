@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
 import { useSystemInfoStore } from "@/stores/useSystemInfoStore";
-import { CheckSquare2, FilterX, Loader2, Palette, Square } from "lucide-react";
+import { CheckSquare2, Eye, FilterX, Loader2, Square } from "lucide-react";
 import { useEffect } from "react";
 import { VerticalTab } from "./Sidebar/CollapsiblePanel";
 import { ColorRulesPanel } from "./Sidebar/ColorRulesPanel";
@@ -159,10 +159,19 @@ export const SidebarPanel = () => {
   // Create styling tab content
   const stylingContent = (
     <div className="pt-1">
-      <div>
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Log Coloring</p>
-        <ColorRulesPanel />
+      <div
+        className="flex items-center gap-1.5 pb-2 mb-2"
+        style={{ borderBottom: '1px solid var(--ls-border-subtle)' }}
+      >
+        <Eye className="h-3.5 w-3.5" style={{ color: 'var(--ls-text-2)' }} />
+        <span
+          className="flex-1 text-[12px] font-semibold tracking-tight"
+          style={{ color: 'var(--ls-text)' }}
+        >
+          Row coloring
+        </span>
       </div>
+      <ColorRulesPanel />
     </div>
   );
 
@@ -177,8 +186,8 @@ export const SidebarPanel = () => {
     },
     {
       id: 'styling',
-      icon: <Palette className="h-4 w-4" />,
-      label: 'Styling',
+      icon: <Eye className="h-4 w-4" />,
+      label: 'Logs',
       content: stylingContent
     }
   ];
