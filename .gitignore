@@ -2,3 +2,5 @@
 node_modules
 .claude/**
 .playwright-mcp/**
+.DS_Store
+**/.DS_Store

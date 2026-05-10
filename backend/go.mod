@@ -4,23 +4,16 @@ go 1.25.7
 
 toolchain go1.25.9
 
-// Local development replace: point at the in-tree log2grok checkout so
-// new APIs (Decoder, library admin, primitive admin) are picked up
-// without a release. Drop this directive when log2grok publishes a
-// tagged version that includes the new surface.
-replace github.com/logsonic/log2grok => /Users/akashgoswami/src/log2grok
-
 require (
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de
 	github.com/aws/aws-sdk-go-v2 v1.41.5
 	github.com/aws/aws-sdk-go-v2/config v1.29.11
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.68.0
 	github.com/blevesearch/bleve/v2 v2.5.7
-	github.com/elastic/go-grok v0.3.1
 	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/cors v1.2.1
 	github.com/google/uuid v1.6.0
-	github.com/logsonic/log2grok v0.1.0
+	github.com/logsonic/log2grok v0.2.0
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/swaggo/http-swagger v1.3.4
 	github.com/swaggo/swag v1.16.4
@@ -72,7 +65,6 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/lemire/constmap v1.0.1 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
-	github.com/magefile/mage v1.15.0 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
