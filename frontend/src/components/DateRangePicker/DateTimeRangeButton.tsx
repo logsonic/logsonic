@@ -110,10 +110,20 @@ export const DateTimeRangeButton: FC = () => {
       <PopoverContent
         className="w-auto p-0"
         align="end"
+        side="bottom"
+        sideOffset={6}
+        // Keep the picker inside the viewport — the CloudWatch importer
+        // places the trigger near the bottom of the page so without this
+        // Radix flips the panel above the trigger and the upper "Last X
+        // minutes" rows clip off-screen.
+        collisionPadding={12}
+        avoidCollisions
         style={{
           background: 'var(--ls-panel)',
           borderColor: 'var(--ls-border)',
           boxShadow: 'var(--ls-shadow-lg)',
+          maxHeight: 'calc(100vh - 32px)',
+          overflowY: 'auto',
         }}
       >
         <DateRangePicker

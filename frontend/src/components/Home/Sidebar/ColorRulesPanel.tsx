@@ -125,6 +125,8 @@ const RuleCard = ({
     <div
       className={cn(
         'rounded-md border px-2.5 py-1.5 transition-all',
+        // ls-rule-card hook lets dark mode dim the user-chosen pastel bg.
+        !disabled && 'ls-rule-card',
         disabled ? 'bg-[var(--ls-bg-2)] border-[var(--ls-border)]' : cn(rule.color, 'border-transparent')
       )}
     >

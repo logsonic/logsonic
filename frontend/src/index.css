@@ -321,6 +321,102 @@ html, body {
   opacity: 1 !important;
 }
 
+/* Filterable log cell — click to insert `field:value` into the search.
+   Hover affordance is subtle: a faint accent underline + accent text so the
+   row still scans visually as a data row. */
+.ls-filterable {
+  position: relative;
+  border-radius: 3px;
+  transition: background-color 80ms ease, color 80ms ease;
+}
+.ls-filterable:hover {
+  background: var(--ls-accent-softer);
+  color: var(--ls-accent-text);
+  text-decoration: underline;
+  text-decoration-color: var(--ls-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* Row-coloring rule cards in the sidebar use dynamic Tailwind classes
+   (`bg-red-100`, `bg-yellow-100`, …) chosen by the user. In dark mode those
+   light pastels look like high-glare blocks against the dark panel. Use a
+   semi-transparent overlay so the underlying panel color tints the chip,
+   and keep text fully legible. The same trick is applied to log rows that
+   inherit the same Tailwind bg classes via the colorClass row style. */
+[data-theme='dark'] .ls-rule-card[class*="bg-"],
+[data-theme='dark'] tr.log-row[class*="bg-"] > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 85%, currentColor 4%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-red-100,
+[data-theme='dark'] tr.log-row.bg-red-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #dc2626 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-yellow-100,
+[data-theme='dark'] tr.log-row.bg-yellow-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 72%, #ca8a04 14%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-amber-100,
+[data-theme='dark'] tr.log-row.bg-amber-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 72%, #d97706 14%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-green-100,
+[data-theme='dark'] tr.log-row.bg-green-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #16a34a 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-blue-100,
+[data-theme='dark'] tr.log-row.bg-blue-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #2563eb 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-pink-100,
+[data-theme='dark'] tr.log-row.bg-pink-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #db2777 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-purple-100,
+[data-theme='dark'] tr.log-row.bg-purple-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #9333ea 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-indigo-100,
+[data-theme='dark'] tr.log-row.bg-indigo-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #4f46e5 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-teal-100,
+[data-theme='dark'] tr.log-row.bg-teal-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #0d9488 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-sky-100,
+[data-theme='dark'] tr.log-row.bg-sky-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #0284c7 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-violet-100,
+[data-theme='dark'] tr.log-row.bg-violet-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #7c3aed 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-rose-100,
+[data-theme='dark'] tr.log-row.bg-rose-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #e11d48 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-slate-100,
+[data-theme='dark'] tr.log-row.bg-slate-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 80%, #64748b 10%) !important;
+}
+/* And keep title text legible — Tailwind `text-red-700` is fine on the
+   pastel light-mode chip but too dark against the muted dark-mode chip. */
+[data-theme='dark'] .ls-rule-card .text-red-700,
+[data-theme='dark'] .ls-rule-card .text-rose-700,
+[data-theme='dark'] .ls-rule-card .text-pink-700 { color: #fca5a5 !important; }
+[data-theme='dark'] .ls-rule-card .text-amber-700,
+[data-theme='dark'] .ls-rule-card .text-yellow-700 { color: #fcd34d !important; }
+[data-theme='dark'] .ls-rule-card .text-green-700,
+[data-theme='dark'] .ls-rule-card .text-emerald-700,
+[data-theme='dark'] .ls-rule-card .text-teal-700 { color: #86efac !important; }
+[data-theme='dark'] .ls-rule-card .text-blue-700,
+[data-theme='dark'] .ls-rule-card .text-sky-700 { color: #93c5fd !important; }
+[data-theme='dark'] .ls-rule-card .text-indigo-700,
+[data-theme='dark'] .ls-rule-card .text-violet-700,
+[data-theme='dark'] .ls-rule-card .text-purple-700 { color: #c4b5fd !important; }
+[data-theme='dark'] .ls-rule-card .text-slate-700 { color: #cbd5e1 !important; }
+
 /* Pulse animation for live indicators */
 @keyframes ls-pulse {
   0%   { box-shadow: 0 0 0 0 rgba(21,128,61,0.45); }

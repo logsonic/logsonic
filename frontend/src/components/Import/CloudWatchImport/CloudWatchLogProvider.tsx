@@ -11,10 +11,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { calculatePresetRelativeDate } from '@/lib/date-utils';
 import { useImportStore } from '@/stores/useImportStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { ChevronDown, Cloud, Loader2, Search } from "lucide-react";
-import { FC, useEffect } from 'react';
+import { FC, useEffect, useRef } from 'react';
 import { useCloudWatchHooks } from './CloudWatchHooks';
 import { useCloudWatchLogProviderService } from './CloudWatchLogProviderService';
 
@@ -41,12 +42,68 @@ const DEFAULT_REGIONS = [
   'me-south-1',
   'sa-east-1',
 ];
-export const CloudWatchLogProvider: FC<LogSourceProvider> = ({ 
+export const CloudWatchLogProvider: FC<LogSourceProvider> = ({
   onFilePreview,
 }) => {
-  const { UTCTimeSince, UTCTimeTo} = useSearchQueryParamsStore();
+  const searchStore = useSearchQueryParamsStore();
+  const { UTCTimeSince, UTCTimeTo, isRelative, relativeValue } = searchStore;
   const { fetchLogGroups, fetchLogStreams } = useCloudWatchHooks();
   const cloudWatchLogService = useCloudWatchLogProviderService();
+
+  // CloudWatch use cases skew toward "what happened recently" — `Last 10
+  // years` (which the search view defaults to) makes API calls absurdly
+  // expensive and surfaces 1976→today as the displayed range. Snap to a
+  // sensible default the first time the user lands on this provider, then
+  // restore the user's prior range on unmount so we don't leak the CW
+  // default back into the search view when the user navigates back.
+  const didDefaultRef = useRef(false);
+  const savedRangeRef = useRef<null | {
+    isRelative: boolean;
+    relativeValue: string;
+    UTCTimeSinceMs: number;
+    UTCTimeToMs: number;
+  }>(null);
+  useEffect(() => {
+    if (didDefaultRef.current) return;
+    const tooWide = isRelative && (
+      relativeValue === 'last-10-years' ||
+      relativeValue === 'all-time' ||
+      relativeValue === 'last-year' ||
+      relativeValue === 'last-quarter'
+    );
+    if (tooWide) {
+      // Snapshot the current range before overriding.
+      const s = useSearchQueryParamsStore.getState();
+      savedRangeRef.current = {
+        isRelative: s.isRelative,
+        relativeValue: s.relativeValue,
+        UTCTimeSinceMs: s.UTCTimeSinceMs,
+        UTCTimeToMs: s.UTCTimeToMs,
+      };
+      const now = new Date();
+      const startDate = calculatePresetRelativeDate(now, 'last-60-minutes');
+      searchStore.setRelativeValue('last-60-minutes');
+      searchStore.setIsRelative(true);
+      searchStore.setUTCTimeSince(startDate);
+      searchStore.setUTCTimeSinceMs(startDate.getTime());
+      searchStore.setUTCTimeTo(now);
+      searchStore.setUTCTimeToMs(now.getTime());
+    }
+    didDefaultRef.current = true;
+  }, [isRelative, relativeValue, searchStore]);
+
+  // Restore the user's prior search-view range when leaving CloudWatch.
+  useEffect(() => {
+    return () => {
+      const saved = savedRangeRef.current;
+      if (!saved) return;
+      const s = useSearchQueryParamsStore.getState();
+      s.setIsRelative(saved.isRelative);
+      s.setRelativeValue(saved.relativeValue);
+      s.setUTCTimeSinceMs(saved.UTCTimeSinceMs);
+      s.setUTCTimeToMs(saved.UTCTimeToMs);
+    };
+  }, []);
   
   // Use the CloudWatch store
   const {
@@ -161,69 +218,68 @@ export const CloudWatchLogProvider: FC<LogSourceProvider> = ({
     <div className="space-y-4">
       <Card>
         <CardContent className="p-4">
-          <div className="space-y-4">
-            {/* Region, AWS Profile, Time Range and Connect button in one line */}
-            <div className="flex items-end space-x-4">
-              <div className="w-1/5">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Region</label>
-                <Select
-                  value={region}
-                  onValueChange={(value) => handleAuthChange('region', value)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select a region" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DEFAULT_REGIONS.map((r) => (
-                      <SelectItem key={r} value={r}>{r}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="w-1/5">
-                <label className="block text-sm font-medium text-gray-700 mb-1">AWS Profile</label>
-                <Input
-                  placeholder="default"
-                  value={profile}
-                  onChange={(e) => handleAuthChange('profile', e.target.value)}
-                  className="w-full"
-                />
-              </div>
-              
-              <div className="w-1/5 flex-grow">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Time Range</label>
-                <div className="flex h-10 w-full ">
-                  <DateTimeRangeButton />
-                </div>
-              </div>
-              
-              <div className="w-1/5">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Time Range</label>
-                <div className="text-sm text-gray-700 mb-1">
-                  {UTCTimeSince.toISOString()} - {UTCTimeTo.toISOString()}
-                </div>
-              </div>
-
-
-                <Button 
-                  onClick={() => fetchLogGroups(UTCTimeSince, UTCTimeTo)}
-                  disabled={isLoading}
-                className="bg-blue-600 hover:bg-blue-700 h-10"
+          {/* Region, AWS Profile, Time Range and Connect button in one line.
+              Earlier this had a duplicate "Time Range" label rendering raw
+              ISO timestamps over the picker button — collapsed into one
+              cleanly-laid-out row with a wrapping behavior at narrow widths. */}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[140px]">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Region</label>
+              <Select
+                value={region}
+                onValueChange={(value) => handleAuthChange('region', value)}
               >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Fetching...
-                  </>
-                ) : (
-                  <>
-                    <Cloud className="mr-2 h-4 w-4" />
-                    Load Log Streams
-                  </>
-                )}
-              </Button>
+                <SelectTrigger className="w-full h-10">
+                  <SelectValue placeholder="Select a region" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DEFAULT_REGIONS.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+
+            <div className="flex-1 min-w-[140px]">
+              <label className="block text-sm font-medium text-gray-700 mb-1">AWS Profile</label>
+              <Input
+                placeholder="default"
+                value={profile}
+                onChange={(e) => handleAuthChange('profile', e.target.value)}
+                className="w-full h-10"
+              />
+            </div>
+
+            <div className="flex-[1.5] min-w-[200px]">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Time Range</label>
+              <div
+                className="flex h-10 w-full rounded-md overflow-hidden"
+                style={{
+                  border: '1px solid var(--ls-border-strong)',
+                  background: 'var(--ls-bg-1)',
+                }}
+              >
+                <DateTimeRangeButton />
+              </div>
+            </div>
+
+            <Button
+              onClick={() => fetchLogGroups(UTCTimeSince, UTCTimeTo)}
+              disabled={isLoading}
+              className="bg-blue-600 hover:bg-blue-700 h-10 flex-shrink-0"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Fetching...
+                </>
+              ) : (
+                <>
+                  <Cloud className="mr-2 h-4 w-4" />
+                  Load Log Streams
+                </>
+              )}
+            </Button>
           </div>
         </CardContent>
       </Card>

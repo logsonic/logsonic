@@ -249,24 +249,25 @@ export const LogViewerHeader = (
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats — "matches" is the count after the search query + time range
+          filter; "indexed" is the total in storage. Showing both with explicit
+          labels avoids the old ambiguous "500 / 2,500 logs". */}
       <div className="flex items-center gap-3">
         <div className="text-xs" style={{ color: 'var(--ls-text-3)' }}>
           {store.resultCount > 0 ? (
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1.5">
               <span className="font-semibold" style={{ color: 'var(--ls-text)', fontFamily: 'var(--ls-font-mono)' }}>
                 {store.resultCount.toLocaleString()}
               </span>
-              {systemInfo?.storage_info?.total_log_entries != null && systemInfo.storage_info.total_log_entries !== store.resultCount ? (
+              <span style={{ color: 'var(--ls-text-4)' }}>matches</span>
+              {systemInfo?.storage_info?.total_log_entries != null && systemInfo.storage_info.total_log_entries !== store.resultCount && (
                 <span style={{ color: 'var(--ls-text-4)' }}>
-                  / {systemInfo.storage_info.total_log_entries.toLocaleString()} logs
+                  · {systemInfo.storage_info.total_log_entries.toLocaleString()} indexed
                 </span>
-              ) : (
-                <span style={{ color: 'var(--ls-text-4)' }}>logs</span>
               )}
             </span>
           ) : (
-            <span style={{ color: 'var(--ls-text-4)', fontStyle: 'italic' }}>No results</span>
+            <span style={{ color: 'var(--ls-text-4)', fontStyle: 'italic' }}>No matches</span>
           )}
         </div>
       </div>

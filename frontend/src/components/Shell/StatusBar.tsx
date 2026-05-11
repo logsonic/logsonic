@@ -56,17 +56,28 @@ export const StatusBar = () => {
         overflowX: 'auto',
       }}
     >
-      <span
-        className="inline-flex items-center"
-        style={{
-          gap: 5,
-          color: isConnected ? 'var(--ls-ok)' : 'var(--ls-err)',
-          fontWeight: 500,
-        }}
-      >
-        {dot(isConnected ? 'var(--ls-ok)' : 'var(--ls-err)', isConnected)}
-        {isConnected ? `${sourceCount} source${sourceCount === 1 ? '' : 's'} indexed` : 'Backend disconnected'}
-      </span>
+      {(() => {
+        // Three states: disconnected (red), connected-but-empty (gray),
+        // connected-with-data (green). The old code always showed green
+        // when the backend responded, which read as "all good" even on a
+        // fresh empty index — misleading.
+        const empty = isConnected && sourceCount === 0;
+        const color = !isConnected ? 'var(--ls-err)' : empty ? 'var(--ls-text-3)' : 'var(--ls-ok)';
+        const label = !isConnected
+          ? 'Backend disconnected'
+          : empty
+            ? 'No sources indexed'
+            : `${sourceCount} source${sourceCount === 1 ? '' : 's'} indexed`;
+        return (
+          <span
+            className="inline-flex items-center"
+            style={{ gap: 5, color, fontWeight: 500 }}
+          >
+            {dot(color, isConnected && !empty)}
+            {label}
+          </span>
+        );
+      })()}
       <Divider />
       <span>
         Events{' '}

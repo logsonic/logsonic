@@ -1,16 +1,23 @@
 import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";
 import { AIQueryDialog } from "@/components/Home/AIQueryDialog";
+import { useToast } from "@/components/ui/use-toast";
 import { useSearchLogs } from "@/hooks/useSearchLogs";
+import { getLogs } from "@/lib/api-client";
+import { calculateRelativeDateRange } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
 import { checkAIStatus } from "@/services/aiService";
 import { useLogResultStore } from "@/stores/useLogResultStore";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
-import { ArrowRight, Download, HelpCircle, Search, Sparkles, X } from "lucide-react";
+import { ArrowRight, Download, HelpCircle, Loader2, Search, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { PerformanceMetricsPopover } from "./PerformanceMetricsPopover";
 import { QueryHelperPopover } from "./QueryHelperPopover";
+
+// Cap exports so we don't churn the browser on huge result sets; the user
+// is warned via toast if matches exceed this.
+const EXPORT_MAX_ROWS = 100_000;
 
 const GhostBtn = ({
   icon,
@@ -71,16 +78,44 @@ export const LogSearch = ({
 
   // Get the store directly using the hook
   const store = useSearchQueryParamsStore();
-  
+
   const { searchLogs } = useSearchLogs(onSearchComplete);
-  const { isLoading, logData } = useLogResultStore();
+  const { isLoading } = useLogResultStore();
   const [localSearchQuery, setLocalSearchQuery] = useState(store.searchQuery);
+  const [isExporting, setIsExporting] = useState(false);
+  const { toast } = useToast();
   
   // AI query related state
   const [isAIDialogOpen, setIsAIDialogOpen] = useState(false);
   const [isAIAvailable, setIsAIAvailable] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Click-to-filter: when a cell in the log table dispatches a custom event,
+  // append `field:"value"` (or `-field:"value"`) to the search query and run
+  // the search. Kept as a window event so we don't have to thread the store
+  // through the table render path.
+  useEffect(() => {
+    const onAddFilter = (e: Event) => {
+      const ce = e as CustomEvent<{ field: string; value: string; exclude?: boolean }>;
+      const { field, value, exclude } = ce.detail || {} as any;
+      if (!field || value === undefined || value === null) return;
+      // Quote the value if it contains whitespace or special chars Bleve cares about.
+      const needsQuote = /[\s:"]/.test(String(value));
+      const formatted = `${exclude ? '-' : ''}${field}:${needsQuote ? `"${String(value).replace(/"/g, '\\"')}"` : value}`;
+      // Avoid duplicate clauses: skip if the exact token is already in the query.
+      const current = (store.searchQuery || '').trim();
+      if (current.split(/\s+/).includes(formatted)) return;
+      const next = current ? `${current} ${formatted}` : formatted;
+      setLocalSearchQuery(next);
+      store.setSearchQuery(next);
+      store.resetPagination();
+      // Defer the actual fetch so the store update lands first.
+      setTimeout(() => { searchLogs(); }, 0);
+    };
+    window.addEventListener('logsonic:add-filter', onAddFilter);
+    return () => window.removeEventListener('logsonic:add-filter', onAddFilter);
+  }, [store, searchLogs]);
 
   // Global keyboard shortcut: `/` or Cmd/Ctrl+K focuses the search input.
   // Skip when the user is already typing in an input/textarea/contenteditable.
@@ -155,40 +190,127 @@ export const LogSearch = ({
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       handleSearch();
+    } else if (e.key === "Escape") {
+      // Match the behavior of most editor-style apps: Escape releases focus.
+      inputRef.current?.blur();
     }
   }, [handleSearch]);
 
-  const handleExport = useCallback(() => {
-    const logs = logData?.logs ?? [];
-    if (logs.length === 0) return;
+  // Export all rows matching the current query (not just the visible page).
+  // The old behavior dumped only the current page silently, which was lossy.
+  const handleExport = useCallback(async () => {
+    const totalCount = store.resultCount;
+    if (totalCount === 0) {
+      toast({
+        title: 'Nothing to export',
+        description: 'Run a search that returns at least one row.',
+        variant: 'default',
+      });
+      return;
+    }
 
-    const jsonl = logs.map(log => JSON.stringify(log)).join('\n') + '\n';
-    const blob = new Blob([jsonl], { type: 'application/x-ndjson' });
-    const url = URL.createObjectURL(blob);
+    setIsExporting(true);
+    try {
+      // Resolve the active time range — mirrors useSearchLogs so relative
+      // ranges aren't snapshotted to a stale value.
+      let startDate = store.UTCTimeSince;
+      let endDate = store.UTCTimeTo;
+      if (store.isRelative) {
+        const r = calculateRelativeDateRange(
+          store.relativeValue,
+          store.customRelativeUnit,
+          store.customRelativeCount,
+        );
+        startDate = r.startDate;
+        endDate = r.endDate;
+      }
 
-    const ts = new Date().toISOString().replace(/[:.]/g, '-');
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `logsonic-export-${ts}.jsonl`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [logData]);
+      const cappedAt = Math.min(totalCount, EXPORT_MAX_ROWS);
+      const result = await getLogs({
+        query: store.searchQuery,
+        _src: store.sources.length > 0 ? store.sources.join(',') : undefined,
+        start_date: startDate.toISOString(),
+        end_date: endDate.toISOString(),
+        limit: cappedAt,
+        offset: 0,
+        sort_by: store.sortBy,
+        sort_order: store.sortOrder,
+      });
 
-  // Insert a hint snippet into the search input
+      const logs = result?.logs ?? [];
+      if (logs.length === 0) {
+        toast({
+          title: 'Export failed',
+          description: 'Backend returned no rows for this query.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const jsonl = logs.map(log => JSON.stringify(log)).join('\n') + '\n';
+      const blob = new Blob([jsonl], { type: 'application/x-ndjson' });
+      const url = URL.createObjectURL(blob);
+
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `logsonic-export-${ts}.jsonl`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      if (totalCount > EXPORT_MAX_ROWS) {
+        toast({
+          title: `Exported first ${EXPORT_MAX_ROWS.toLocaleString()} of ${totalCount.toLocaleString()} rows`,
+          description: 'Narrow the time range or query to export the remainder.',
+          variant: 'default',
+        });
+      } else {
+        toast({
+          title: `Exported ${logs.length.toLocaleString()} rows`,
+          variant: 'default',
+        });
+      }
+    } catch (err) {
+      toast({
+        title: 'Export failed',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [
+    store.resultCount,
+    store.searchQuery,
+    store.sources,
+    store.isRelative,
+    store.relativeValue,
+    store.customRelativeCount,
+    store.customRelativeUnit,
+    store.UTCTimeSince,
+    store.UTCTimeTo,
+    store.sortBy,
+    store.sortOrder,
+    toast,
+  ]);
+
+  // Insert a hint snippet into the search input and focus it so the user
+  // can keep typing without a second click.
   const handleHintInsert = useCallback((insert: string) => {
-    const cursorPos = insert.indexOf('$CURSOR$');
     const cleaned = insert.replace('$CURSOR$', '').replace('$FIELD$', '');
     const newQuery = localSearchQuery ? `${localSearchQuery.trimEnd()} ${cleaned}` : cleaned;
     setLocalSearchQuery(newQuery);
+    setTimeout(() => inputRef.current?.focus(), 0);
   }, [localSearchQuery]);
 
-  // Insert a column-based field: hint
+  // Insert a column-based field: hint and refocus the input for chained typing.
   const handleColumnHint = useCallback((column: string) => {
     const insert = `${column}:`;
     const newQuery = localSearchQuery ? `${localSearchQuery.trimEnd()} ${insert}` : insert;
     setLocalSearchQuery(newQuery);
+    setTimeout(() => inputRef.current?.focus(), 0);
   }, [localSearchQuery]);
 
   // Get columns that could be used as field hints (exclude utility/internal columns)
@@ -240,7 +362,9 @@ export const LogSearch = ({
               type="text"
               value={localSearchQuery}
               onChange={handleInputChange}
-              placeholder='Search logs… (press / or ⌘K) — try level:error or "connection timeout"'
+              placeholder={isInputFocused
+                ? 'Try level:error or "connection timeout"'
+                : 'Search logs… (/ or ⌘K)'}
               className={cn(
                 "w-full pl-10 pr-10 text-sm rounded-md shadow-sm focus-visible:ring-2 focus-visible:ring-offset-0",
                 "focus-visible:ring-[var(--ls-accent-softer)] focus-visible:border-[var(--ls-accent)]",
@@ -393,17 +517,6 @@ export const LogSearch = ({
               </Button>
             } />
 
-            {store.sources.length > 0 && (
-              <span className="flex items-center gap-1">
-                <span className="ls-meta-label">Sources:</span>
-                {store.sources.map(s => (
-                  <span key={s} className="ls-chip ls-chip-info">
-                    {s}
-                  </span>
-                ))}
-                <span className="ls-sep">·</span>
-              </span>
-            )}
             {store.searchQuery && (
               <span className="flex items-center gap-1">
                 <span className="ls-meta-label">Query:</span>
@@ -432,10 +545,10 @@ export const LogSearch = ({
 
           <div className="flex flex-shrink-0 items-center">
             <GhostBtn
-              icon={<Download size={13} />}
-              onClick={handleExport}
+              icon={isExporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+              onClick={isExporting ? undefined : handleExport}
             >
-              Export
+              {isExporting ? 'Exporting…' : 'Export'}
             </GhostBtn>
           </div>
         </div>

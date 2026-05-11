@@ -230,47 +230,65 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     columnWidths['select'] = 36;
     columnWidths['expander'] = 20;
 
-    const containerWidth = tableRef.current?.clientWidth || 0;
+    // Use the closest measured ancestor — `tableRef` wraps the table in a
+    // div whose width may briefly be 0 before layout. Fall back to the
+    // viewport so initial autofit isn't catastrophic.
+    const measured = tableRef.current?.clientWidth || tableRef.current?.parentElement?.clientWidth || 0;
+    const containerWidth = measured > 0 ? measured : Math.max(window.innerWidth - 80, 640);
 
-    // A column is "visible" iff at least one row has a populated value or
-    // the column is mandatory (timestamp, message). Empty columns are
-    // hidden via columnVisibility, so we mustn't waste autofit width on
-    // them — otherwise the visible columns end up too narrow.
-    const mandatorySet = new Set(store.mandatoryColumns);
-    const isVisible = (column: string) => {
-      if (column === 'select' || column === 'expander' || column === '_raw' || column === '_src') return false;
-      if (mandatorySet.has(column)) return true;
-      const sampleSize = Math.min(logData.logs.length, store.pageSize);
-      for (let i = 0; i < sampleSize; i++) {
-        const v = logData.logs[i][column];
-        if (v === null || v === undefined) continue;
-        if (typeof v === 'string' && v.trim() === '') continue;
-        return true;
-      }
-      return false;
-    };
+    // Width estimation is glyph-aware: monospace fields (timestamps, IPs,
+    // numbers) need fewer px per char than proportional text.
+    // 7.5 px/char ≈ 12 px monospace; 7 px/char ≈ 13 px sans.
+    const monoColumns = new Set([
+      'timestamp', '@timestamp', 'time',
+      'client_ip', 'remote_addr', 'src_ip', 'dst_ip', 'host',
+      '_id', '_ipv4_addr', 'status', 'status_code', 'http_status',
+      'bytes', 'duration', 'http_version', 'request_id',
+    ]);
 
-    const visibleDataCols = store.selectedColumns.filter(isVisible);
+    // Render every selected (non-internal) column, even if all values on
+    // this page happen to be empty. Users explicitly selected them.
+    const visibleDataCols = store.selectedColumns.filter(
+      col => col !== '_raw' && col !== '_src'
+    );
 
-    // Content-based widths for visible data columns.
     const contentBasedWidths: Record<string, number> = {};
     let totalContentWidth = columnWidths['select'] + columnWidths['expander'];
     const sampleSize = Math.min(logData.logs.length, store.pageSize);
     const sampleLogs = logData.logs.slice(0, sampleSize);
 
+    // Rendered string can differ from the raw value — most importantly the
+    // timestamp accessor reformats ISO to "YYYY-MM-DD HH:MM:SS.mmm" (23 chars
+    // vs the ~20-char raw form). Match that here so we don't size to the raw.
+    const renderedLength = (col: string, value: any): number => {
+      if (value === undefined || value === null) return 0;
+      const lc = col.toLowerCase();
+      if (lc === 'timestamp' || lc === '@timestamp' || lc === 'time') {
+        // formatTimestamp output: "2026-04-01 02:02:46.000"
+        return 23;
+      }
+      const s = typeof value === 'object' ? JSON.stringify(value) : String(value);
+      return s.length;
+    };
+
     visibleDataCols.forEach(column => {
-      let maxContentWidth = column.length * 10;
+      const mono = monoColumns.has(column.toLowerCase());
+      // Headers carry the sort caret + 6px drag handle + 12px padding.
+      const headerWidth = Math.ceil(column.length * 7) + 36;
+      let maxContentWidth = headerWidth;
       sampleLogs.forEach(log => {
-        const value = log[column];
-        if (value !== undefined && value !== null) {
-          const stringValue = typeof value === 'object'
-            ? JSON.stringify(value).length
-            : String(value).length;
-          const estimatedWidth = Math.min(stringValue * 8, 500);
-          maxContentWidth = Math.max(maxContentWidth, estimatedWidth);
-        }
+        const len = renderedLength(column, log[column]);
+        const perChar = mono ? 7.5 : 7;
+        const w = Math.ceil(len * perChar);
+        if (w > maxContentWidth) maxContentWidth = w;
       });
-      contentBasedWidths[column] = Math.max(120, Math.min(maxContentWidth, 600));
+      // Cell padding is asymmetric (`pl-[30px] pr-2`) — 30 left + 8 right + a
+      // small safety margin so the last character never clips.
+      maxContentWidth += 30 + 8 + 8;
+      // Each column has a sane min (so headers are still readable) and a
+      // generous max (so a runaway message field doesn't push everything
+      // off-screen).
+      contentBasedWidths[column] = Math.max(80, Math.min(maxContentWidth, 720));
       totalContentWidth += contentBasedWidths[column];
     });
 
@@ -284,10 +302,20 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
         columnWidths[column] = contentBasedWidths[column] + (column === lastCol ? extraSpace : 0);
       });
     } else if (totalContentWidth > containerWidth) {
-      const shrinkFactor = containerWidth / totalContentWidth;
-      visibleDataCols.forEach(column => {
-        columnWidths[column] = Math.max(120, contentBasedWidths[column] * shrinkFactor);
-      });
+      // Shrink proportionally but never below the per-column min so timestamps
+      // stay readable.
+      const minTotal = visibleDataCols.reduce((s, c) => s + Math.max(80, contentBasedWidths[c] * 0.4), 0);
+      if (minTotal >= containerWidth) {
+        // Page is too narrow; respect content widths and let the table scroll.
+        visibleDataCols.forEach(column => {
+          columnWidths[column] = contentBasedWidths[column];
+        });
+      } else {
+        const shrinkFactor = containerWidth / totalContentWidth;
+        visibleDataCols.forEach(column => {
+          columnWidths[column] = Math.max(80, Math.round(contentBasedWidths[column] * shrinkFactor));
+        });
+      }
     } else {
       visibleDataCols.forEach(column => {
         columnWidths[column] = contentBasedWidths[column];
@@ -501,6 +529,38 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
           cell: info => {
             const text = info.getValue();
             const colLower = column.toLowerCase();
+            const rawValue = String(text || '');
+            const isFilterable =
+              column !== 'timestamp' &&
+              !column.startsWith('_') &&
+              rawValue !== '' &&
+              rawValue !== '-';
+
+            // Click-to-filter — add `field:"value"` to the current query.
+            // Alt/Option-click excludes (`-field:"value"`).
+            // Right-click could exclude too but we keep that for the native
+            // context menu; alt-click is enough.
+            const onCellClick = (e: React.MouseEvent) => {
+              if (!isFilterable) return;
+              // Skip clicks that originated on row controls (checkbox, expander).
+              const target = e.target as HTMLElement;
+              if (target.closest('input[type="checkbox"], .expander-button')) return;
+              e.stopPropagation();
+              const exclude = e.altKey;
+              const ev = new CustomEvent('logsonic:add-filter', {
+                detail: { field: column, value: rawValue, exclude },
+              });
+              window.dispatchEvent(ev);
+            };
+
+            const filterableProps = isFilterable
+              ? {
+                  onClick: onCellClick,
+                  className: 'ls-filterable',
+                  title: 'Click to filter · Alt-click to exclude',
+                  style: { cursor: 'pointer' as const },
+                }
+              : {};
 
             // Level / severity column → colored badge
             if (colLower === 'level' || colLower === 'severity' || colLower === 'log_level') {
@@ -509,7 +569,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
                 const knownLvls = ['INFO', 'WARN', 'WARNING', 'ERROR', 'FATAL', 'DEBUG', 'TRACE'];
                 const cls = knownLvls.includes(lvl) ? `ls-lvl-${lvl}` : '';
                 return (
-                  <span className={`ls-lvl ${cls}`}>
+                  <span className={`ls-lvl ${cls}`} {...filterableProps}>
                     <span className="ls-lvl-dot" />
                     {lvl}
                   </span>
@@ -527,7 +587,12 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
                   num >= 300 ? 'var(--ls-info)' :
                   num >= 200 ? 'var(--ls-ok)' : 'var(--ls-text-2)';
                 return (
-                  <span style={{ color, fontWeight: 600 }}>{String(text)}</span>
+                  <span
+                    {...filterableProps}
+                    style={{ color, fontWeight: 600, ...filterableProps.style }}
+                  >
+                    {String(text)}
+                  </span>
                 );
               }
             }
@@ -535,7 +600,11 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
             // Program / service column → accent text
             if (colLower === 'program' || colLower === 'service' || colLower === 'app') {
               return (
-                <div className="truncate" style={{ color: 'var(--ls-accent-text)' }}>
+                <div
+                  {...filterableProps}
+                  className={`truncate ${filterableProps.className ?? ''}`}
+                  style={{ color: 'var(--ls-accent-text)', ...filterableProps.style }}
+                >
                   {highlightText(text, column)}
                 </div>
               );
@@ -544,13 +613,18 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
             // Host column → info color
             if (colLower === 'host' || colLower === 'hostname') {
               return (
-                <div className="truncate" style={{ color: 'var(--ls-info)' }}>
+                <div
+                  {...filterableProps}
+                  className={`truncate ${filterableProps.className ?? ''}`}
+                  style={{ color: 'var(--ls-info)', ...filterableProps.style }}
+                >
                   {highlightText(text, column)}
                 </div>
               );
             }
 
-            // Timestamp column → muted secondary
+            // Timestamp column → muted secondary (not filterable; ranges are
+            // handled via the date picker, not equality on a single instant).
             if (colLower === 'timestamp' || colLower === 'time' || colLower === '@timestamp') {
               return (
                 <div className="truncate" style={{ color: 'var(--ls-text-2)', fontVariantNumeric: 'tabular-nums' }}>
@@ -560,9 +634,23 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
             }
 
             // Default
-            return <div className="truncate">{highlightText(text, column)}</div>;
+            return (
+              <div
+                {...filterableProps}
+                className={`truncate ${filterableProps.className ?? ''}`}
+              >
+                {highlightText(text, column)}
+              </div>
+            );
           },
-          size: store.columnWidths[column] || 150,
+          // Wider default for timestamp so the full `YYYY-MM-DD HH:MM:SS.mmm`
+          // fits without truncation; everything else gets the old 150 px
+          // starting width and auto-fits from there.
+          size: store.columnWidths[column] || (
+            column === 'timestamp' || column.toLowerCase() === '@timestamp' || column.toLowerCase() === 'time'
+              ? 210
+              : 150
+          ),
           enableResizing: !store.isColumnLocked,
           enableSorting: true, // Always enable sorting for debugging
         }
@@ -574,29 +662,20 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     return [selectionColumn, expanderColumn, ...dataColumns];
   }, [store.selectedColumns, formatTimestamp, store.sortBy, store.sortOrder, expanded, store.isColumnLocked, columnHelper, store.columnWidths]);
 
-  // Compute which selected columns actually have data on the current page.
-  // Empty columns are hidden via TanStack's columnVisibility so they don't
-  // hog horizontal space when nothing in the result set populates them.
+  // The user picks the visible columns via the Column Selector, and that
+  // choice is the source of truth — even if the current page happens to be
+  // empty for a column. Earlier we auto-hid empty columns here, but the
+  // effect was that switching time ranges (or sorting to a page where the
+  // schema differs, e.g. apache-error vs nginx-access) would collapse the
+  // table to a single timestamp column and never recover.
   const columnVisibility = useMemo(() => {
-    const logs = logData?.logs ?? [];
-    const mandatory = new Set(store.mandatoryColumns);
     const visibility: Record<string, boolean> = {};
-    if (logs.length === 0) return visibility;
     for (const col of store.selectedColumns) {
       if (col === '_raw' || col === '_src') continue;
-      if (mandatory.has(col)) { visibility[col] = true; continue; }
-      let hasValue = false;
-      for (const row of logs) {
-        const v = row[col];
-        if (v === null || v === undefined) continue;
-        if (typeof v === 'string' && v.trim() === '') continue;
-        hasValue = true;
-        break;
-      }
-      visibility[col] = hasValue;
+      visibility[col] = true;
     }
     return visibility;
-  }, [logData, store.selectedColumns, store.mandatoryColumns]);
+  }, [store.selectedColumns]);
 
   // Set up DnD sensors
   const sensors = useSensors(

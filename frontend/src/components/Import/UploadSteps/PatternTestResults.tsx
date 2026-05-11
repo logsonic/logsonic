@@ -328,7 +328,16 @@ export const PatternTestResults: FC<PatternTestResultsExtendedProps> = ({
                     }}
                   >
                     <div className="grid grid-cols-2" style={{ gap: 6 }}>
-                      {Object.entries(parsed).map(([field, value]) => (
+                      {Object.entries(parsed)
+                        // Hide unmatched optional fields (`-`, '', undefined)
+                        // so the expanded view doesn't show a wall of
+                        // empty `client_ip:` style chips.
+                        .filter(([field, value]) =>
+                          field !== '_raw' && field !== '_src' &&
+                          value !== null && value !== undefined &&
+                          String(value).trim() !== '' && String(value) !== '-'
+                        )
+                        .map(([field, value]) => (
                         <div key={field} className="flex items-center" style={{ minWidth: 0 }}>
                           <span
                             className="inline-flex items-center flex-shrink-0"

@@ -104,7 +104,9 @@ const RailButton = ({ entry }: { entry: RailEntry }) => (
       entry.active ? 'rail-btn-active' : 'rail-btn'
     )}
     aria-label={entry.label}
-    title={entry.label}
+    /* Drop `title` — we already have a custom hover tooltip below, and the
+       browser's native title popup duplicates it (and sticks around on top
+       of the opened panel even after the icon is clicked). */
     style={{
       width: 36,
       height: 36,
