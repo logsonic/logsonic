@@ -640,6 +640,76 @@ func TestHandleParse_AutosuggestNoPatterns(t *testing.T) {
 	}
 }
 
+// TestHandleParse_AutosuggestSurfacesTimestampHint covers the new
+// log2grok TimestampHint path: when Discover identifies a pattern with
+// a recognised timestamp primitive (HTTPDATE in this case), /parse's
+// autosuggest result should carry the inferred field name + Go layout
+// so the wizard can pre-select the timestamp column.
+func TestHandleParse_AutosuggestSurfacesTimestampHint(t *testing.T) {
+	h, _ := setupHandler(t)
+
+	body, _ := json.Marshal(types.ParseRequest{
+		Logs: []string{
+			`192.168.1.1 - - [23/Jan/2026:14:05:01 +0000] "GET / HTTP/1.1" 200 1 "-" "ua"`,
+			`10.0.0.1 - - [23/Jan/2026:14:05:02 +0000] "GET /a HTTP/1.1" 200 2 "-" "ua"`,
+			`10.0.0.2 - - [23/Jan/2026:14:05:03 +0000] "GET /b HTTP/1.1" 200 3 "-" "ua"`,
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/parse", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	h.HandleParse(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp types.SuggestResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Results) == 0 {
+		t.Fatal("expected at least one autosuggest result")
+	}
+	r := resp.Results[0]
+	if r.TimestampField == "" {
+		t.Errorf("TimestampField empty; result=%+v", r)
+	}
+	if r.TimestampLayout == "" {
+		t.Errorf("TimestampLayout empty; result=%+v", r)
+	}
+}
+
+// TestHandleParse_AutosuggestAcceptsBlankInputLines verifies the
+// pre-filter we used to do in handlers can be safely dropped: log2grok
+// normalises blanks internally and either returns a pattern or
+// ErrEmptyInput (which we translate to an empty results slice).
+func TestHandleParse_AutosuggestAcceptsBlankInputLines(t *testing.T) {
+	h, _ := setupHandler(t)
+
+	body, _ := json.Marshal(types.ParseRequest{
+		Logs: []string{
+			"",
+			`192.168.1.1 - - [23/Jan/2026:14:05:01 +0000] "GET / HTTP/1.1" 200 1 "-" "ua"`,
+			"",
+			`10.0.0.1 - - [23/Jan/2026:14:05:02 +0000] "GET /a HTTP/1.1" 200 2 "-" "ua"`,
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/parse", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	h.HandleParse(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp types.SuggestResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Results) == 0 {
+		t.Error("expected at least one suggestion despite blank input lines")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Grok pattern persistence — verify writes hit log2grok's patterns.json
 // ---------------------------------------------------------------------------
