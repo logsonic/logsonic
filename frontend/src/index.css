@@ -321,23 +321,6 @@ html, body {
   opacity: 1 !important;
 }
 
-/* Filterable log cell — click to insert `field:value` into the search.
-   Hover affordance is subtle: a faint accent underline + accent text so the
-   row still scans visually as a data row. */
-.ls-filterable {
-  position: relative;
-  border-radius: 3px;
-  transition: background-color 80ms ease, color 80ms ease;
-}
-.ls-filterable:hover {
-  background: var(--ls-accent-softer);
-  color: var(--ls-accent-text);
-  text-decoration: underline;
-  text-decoration-color: var(--ls-accent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
-}
-
 /* Row-coloring rule cards in the sidebar use dynamic Tailwind classes
    (`bg-red-100`, `bg-yellow-100`, …) chosen by the user. In dark mode those
    light pastels look like high-glare blocks against the dark panel. Use a

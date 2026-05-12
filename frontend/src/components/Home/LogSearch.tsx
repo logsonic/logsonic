@@ -91,32 +91,6 @@ export const LogSearch = ({
   const [isInputFocused, setIsInputFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Click-to-filter: when a cell in the log table dispatches a custom event,
-  // append `field:"value"` (or `-field:"value"`) to the search query and run
-  // the search. Kept as a window event so we don't have to thread the store
-  // through the table render path.
-  useEffect(() => {
-    const onAddFilter = (e: Event) => {
-      const ce = e as CustomEvent<{ field: string; value: string; exclude?: boolean }>;
-      const { field, value, exclude } = ce.detail || {} as any;
-      if (!field || value === undefined || value === null) return;
-      // Quote the value if it contains whitespace or special chars Bleve cares about.
-      const needsQuote = /[\s:"]/.test(String(value));
-      const formatted = `${exclude ? '-' : ''}${field}:${needsQuote ? `"${String(value).replace(/"/g, '\\"')}"` : value}`;
-      // Avoid duplicate clauses: skip if the exact token is already in the query.
-      const current = (store.searchQuery || '').trim();
-      if (current.split(/\s+/).includes(formatted)) return;
-      const next = current ? `${current} ${formatted}` : formatted;
-      setLocalSearchQuery(next);
-      store.setSearchQuery(next);
-      store.resetPagination();
-      // Defer the actual fetch so the store update lands first.
-      setTimeout(() => { searchLogs(); }, 0);
-    };
-    window.addEventListener('logsonic:add-filter', onAddFilter);
-    return () => window.removeEventListener('logsonic:add-filter', onAddFilter);
-  }, [store, searchLogs]);
-
   // Global keyboard shortcut: `/` or Cmd/Ctrl+K focuses the search input.
   // Skip when the user is already typing in an input/textarea/contenteditable.
   useEffect(() => {

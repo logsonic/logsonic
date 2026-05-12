@@ -529,38 +529,6 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
           cell: info => {
             const text = info.getValue();
             const colLower = column.toLowerCase();
-            const rawValue = String(text || '');
-            const isFilterable =
-              column !== 'timestamp' &&
-              !column.startsWith('_') &&
-              rawValue !== '' &&
-              rawValue !== '-';
-
-            // Click-to-filter — add `field:"value"` to the current query.
-            // Alt/Option-click excludes (`-field:"value"`).
-            // Right-click could exclude too but we keep that for the native
-            // context menu; alt-click is enough.
-            const onCellClick = (e: React.MouseEvent) => {
-              if (!isFilterable) return;
-              // Skip clicks that originated on row controls (checkbox, expander).
-              const target = e.target as HTMLElement;
-              if (target.closest('input[type="checkbox"], .expander-button')) return;
-              e.stopPropagation();
-              const exclude = e.altKey;
-              const ev = new CustomEvent('logsonic:add-filter', {
-                detail: { field: column, value: rawValue, exclude },
-              });
-              window.dispatchEvent(ev);
-            };
-
-            const filterableProps = isFilterable
-              ? {
-                  onClick: onCellClick,
-                  className: 'ls-filterable',
-                  title: 'Click to filter · Alt-click to exclude',
-                  style: { cursor: 'pointer' as const },
-                }
-              : {};
 
             // Level / severity column → colored badge
             if (colLower === 'level' || colLower === 'severity' || colLower === 'log_level') {
@@ -569,7 +537,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
                 const knownLvls = ['INFO', 'WARN', 'WARNING', 'ERROR', 'FATAL', 'DEBUG', 'TRACE'];
                 const cls = knownLvls.includes(lvl) ? `ls-lvl-${lvl}` : '';
                 return (
-                  <span className={`ls-lvl ${cls}`} {...filterableProps}>
+                  <span className={`ls-lvl ${cls}`}>
                     <span className="ls-lvl-dot" />
                     {lvl}
                   </span>
@@ -587,12 +555,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
                   num >= 300 ? 'var(--ls-info)' :
                   num >= 200 ? 'var(--ls-ok)' : 'var(--ls-text-2)';
                 return (
-                  <span
-                    {...filterableProps}
-                    style={{ color, fontWeight: 600, ...filterableProps.style }}
-                  >
-                    {String(text)}
-                  </span>
+                  <span style={{ color, fontWeight: 600 }}>{String(text)}</span>
                 );
               }
             }
@@ -600,11 +563,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
             // Program / service column → accent text
             if (colLower === 'program' || colLower === 'service' || colLower === 'app') {
               return (
-                <div
-                  {...filterableProps}
-                  className={`truncate ${filterableProps.className ?? ''}`}
-                  style={{ color: 'var(--ls-accent-text)', ...filterableProps.style }}
-                >
+                <div className="truncate" style={{ color: 'var(--ls-accent-text)' }}>
                   {highlightText(text, column)}
                 </div>
               );
@@ -613,18 +572,13 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
             // Host column → info color
             if (colLower === 'host' || colLower === 'hostname') {
               return (
-                <div
-                  {...filterableProps}
-                  className={`truncate ${filterableProps.className ?? ''}`}
-                  style={{ color: 'var(--ls-info)', ...filterableProps.style }}
-                >
+                <div className="truncate" style={{ color: 'var(--ls-info)' }}>
                   {highlightText(text, column)}
                 </div>
               );
             }
 
-            // Timestamp column → muted secondary (not filterable; ranges are
-            // handled via the date picker, not equality on a single instant).
+            // Timestamp column → muted secondary
             if (colLower === 'timestamp' || colLower === 'time' || colLower === '@timestamp') {
               return (
                 <div className="truncate" style={{ color: 'var(--ls-text-2)', fontVariantNumeric: 'tabular-nums' }}>
@@ -634,14 +588,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
             }
 
             // Default
-            return (
-              <div
-                {...filterableProps}
-                className={`truncate ${filterableProps.className ?? ''}`}
-              >
-                {highlightText(text, column)}
-              </div>
-            );
+            return <div className="truncate">{highlightText(text, column)}</div>;
           },
           // Wider default for timestamp so the full `YYYY-MM-DD HH:MM:SS.mmm`
           // fits without truncation; everything else gets the old 150 px
