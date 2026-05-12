@@ -1,12 +1,10 @@
 import { DEFAULT_PATTERN, useImportStore } from '@/stores/useImportStore';
-import { Check, ChevronDown, ChevronRight, AlertTriangle, Cloud, File, Loader2, RefreshCw, Search } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, AlertTriangle, File, Loader2, RefreshCw, Search } from 'lucide-react';
 import { FC, useCallback, useEffect, useRef, useState } from 'react';
 import { parseLogs, suggestPatterns } from '../../../lib/api-client';
 import { GrokPatternRequest } from '@/lib/api-types';
 import type { DetectionResult, ImportFile, Pattern } from '../types';
 import { extractFields } from '../utils/patternUtils';
-import { CustomPatternSelector } from './CustomPatternSelector';
-import { LogPatternSelection } from './LogPatternSelection';
 import { PatternTestResults } from './PatternTestResults';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Textarea } from '@/components/ui/textarea';
@@ -493,28 +491,16 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
     updateFile,
     availablePatterns,
     importSource,
-    sessionOptionsFileName,
     setReadyToImportLogs,
-    // Legacy single-file state for CloudWatch
-    filePreviewBuffer,
-    selectedPattern,
-    setSelectedPattern,
-    isCreateNewPatternSelected,
-    createNewPattern,
-    setCreateNewPattern,
-    handlePatternOperation,
-    setParsedLogs,
     setTimestampInference,
     setSourceMTime,
     setFileTimestampInference,
     setActiveFileId,
-    setError: setStoreError,
   } = useImportStore();
 
   const fileService = useFileSelectionService();
 
   const isMultiFile = importSource === 'file' && files.length > 0;
-  const isCloudWatch = importSource === 'cloudwatch';
 
   // --- Multi-file pattern detection ---
 
@@ -553,8 +539,8 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
         if (parseResponse.logs && parseResponse.logs.length > 0) {
           // Per-file: stash the resolver's verdict on the file record
           // so the panel can show this file's own inference when
-          // active. Also mirror to global state for backward compat
-          // with the legacy/CloudWatch path that doesn't use files[].
+          // active. Also mirror to global state for the legacy
+          // single-file consumers that still read it.
           if (parseResponse.timestamp_inference) {
             setFileTimestampInference(file.id, parseResponse.timestamp_inference);
             setTimestampInference(parseResponse.timestamp_inference);
@@ -661,99 +647,6 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
       runAllDetections();
     }
   }, [isMultiFile]);
-
-  // --- Legacy single-file CloudWatch flow ---
-  const [isAnalyzing, setIsAnalyzing] = useState(true);
-
-  useEffect(() => {
-    if (!isCloudWatch || !filePreviewBuffer) return;
-
-    const analyzeFile = async () => {
-      try {
-        setIsAnalyzing(true);
-        setStoreError(null);
-
-        const suggestResponse = await suggestPatterns({ logs: filePreviewBuffer.lines });
-        setReadyToImportLogs(true);
-
-        if (suggestResponse.results && suggestResponse.results.length > 0) {
-          const bestMatch = suggestResponse.results[0];
-          const parseResponse = await parseLogs({
-            logs: filePreviewBuffer.lines,
-            grok_pattern: bestMatch.pattern,
-            custom_patterns: bestMatch.custom_patterns || {},
-          });
-
-          if (parseResponse.logs && parseResponse.logs.length > 0) {
-            if (parseResponse.timestamp_inference) {
-              setTimestampInference(parseResponse.timestamp_inference);
-            }
-            const matchingServerPattern = availablePatterns.find(p => p.pattern === bestMatch.pattern);
-            const suggestedPattern: Pattern = matchingServerPattern || {
-              name: bestMatch.pattern_name || 'Auto-detected',
-              pattern: bestMatch.pattern,
-              description: bestMatch.pattern_description || 'Automatically detected pattern',
-              custom_patterns: bestMatch.custom_patterns,
-              fields: extractFields(bestMatch.pattern),
-            };
-
-            setSelectedPattern(suggestedPattern);
-            setParsedLogs(parseResponse.logs);
-            onDetectionComplete({ isOngoing: false, suggestedPattern, parsedLogs: parseResponse.logs });
-          } else {
-            setCreateNewPattern(createNewPattern);
-            handleLegacyPatternChange(selectedPattern);
-            onDetectionComplete({ isOngoing: false, error: 'Auto-detected pattern failed to parse logs' });
-          }
-        } else {
-          setCreateNewPattern(DEFAULT_PATTERN);
-          handleLegacyPatternChange(DEFAULT_PATTERN);
-          onDetectionComplete({ isOngoing: false, error: 'No patterns could be automatically detected' });
-        }
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to analyze log file';
-        setStoreError(errorMessage);
-        setCreateNewPattern(DEFAULT_PATTERN);
-        handleLegacyPatternChange(DEFAULT_PATTERN);
-        onDetectionComplete({ isOngoing: false, error: errorMessage });
-      } finally {
-        setIsAnalyzing(false);
-      }
-    };
-
-    analyzeFile();
-  }, [isCloudWatch]);
-
-  const handleLegacyPatternChange = (pattern: Pattern) => {
-    setIsAnalyzing(true);
-    handlePatternOperation(
-      pattern, true,
-      (logs) => {
-        setParsedLogs(logs);
-        onDetectionComplete({ isOngoing: false, suggestedPattern: pattern, parsedLogs: logs });
-        setIsAnalyzing(false);
-      },
-      (errorMsg) => {
-        setStoreError(errorMsg);
-        setIsAnalyzing(false);
-      }
-    );
-  };
-
-  const handleLegacyPatternTest = (pattern: Pattern) => {
-    setIsAnalyzing(true);
-    handlePatternOperation(
-      pattern, true,
-      (logs) => {
-        setParsedLogs(logs);
-        setIsAnalyzing(false);
-      },
-      (errorMsg) => {
-        setStoreError(errorMsg);
-        setIsAnalyzing(false);
-      }
-    );
-  };
 
   // --- Multi-file handlers ---
 
@@ -930,83 +823,7 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
     );
   }
 
-  // CloudWatch / legacy single-file mode
-  const logSourceInfo = isCloudWatch
-    ? { icon: <Cloud size={15} style={{ color: 'var(--ls-accent)' }} />, text: `Analyzing CloudWatch logs: ${sessionOptionsFileName || 'Unknown'}` }
-    : { icon: <File size={15} style={{ color: 'var(--ls-accent)' }} />, text: `Analyzing file: ${filePreviewBuffer?.filename || 'Unknown'}` };
-
-  return (
-    <div className="space-y-5">
-      <div
-        className="flex items-center"
-        style={{
-          gap: 8,
-          padding: '10px 12px',
-          borderRadius: 6,
-          background: 'var(--ls-accent-softer)',
-          border: '1px solid var(--ls-accent-border)',
-        }}
-      >
-        {logSourceInfo.icon}
-        <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ls-accent-text)' }}>
-          {logSourceInfo.text}
-        </span>
-      </div>
-
-      {isAnalyzing ? (
-        <div className="flex flex-col items-center justify-center" style={{ padding: '32px 0' }}>
-          <Loader2 size={28} className="animate-spin" style={{ color: 'var(--ls-accent)', marginBottom: 12 }} />
-          <p style={{ fontSize: 12.5, color: 'var(--ls-text-2)' }}>Analyzing log format…</p>
-        </div>
-      ) : (
-        <div className="space-y-5">
-          {isCreateNewPatternSelected && (
-            <div
-              className="flex items-center"
-              style={{
-                gap: 10,
-                padding: '10px 12px',
-                borderRadius: 6,
-                background: 'var(--ls-warn-soft)',
-                border: '1px solid color-mix(in srgb, var(--ls-warn) 25%, transparent)',
-              }}
-            >
-              <AlertTriangle size={16} style={{ color: 'var(--ls-warn)', flexShrink: 0 }} />
-              <div>
-                <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ls-warn)' }}>
-                  Detected: Custom Pattern
-                </p>
-                <p style={{ fontSize: 11.5, color: 'var(--ls-warn)', opacity: 0.85 }}>
-                  No standard pattern matched your logs. Please define a custom pattern below.
-                </p>
-              </div>
-            </div>
-          )}
-
-          <LogPatternSelection
-            initialPattern={selectedPattern}
-            onPatternChange={handleLegacyPatternChange}
-            previewLines={filePreviewBuffer?.lines || []}
-          />
-
-          {isCreateNewPatternSelected && (
-            <CustomPatternSelector
-              previewLines={filePreviewBuffer?.lines || []}
-              onPatternTest={handleLegacyPatternTest}
-            />
-          )}
-
-          <div className="mt-6">
-            <PatternTestResults
-              pattern={selectedPattern?.pattern || ''}
-              customPatterns={selectedPattern?.custom_patterns || {}}
-              logs={filePreviewBuffer?.lines || []}
-            />
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return null;
 };
 
 export default FileAnalyzingStep;

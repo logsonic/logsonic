@@ -238,13 +238,6 @@ func NewServer(cfg Config) (*Server, error) {
 			r.Delete("/", h.HandleGrokPatterns)
 		})
 
-		// Add CloudWatch endpoints
-		r.Route("/cloudwatch", func(r chi.Router) {
-			r.Post("/log-groups", h.HandleListCloudWatchLogGroups)
-			r.Post("/log-streams", h.HandleListCloudWatchLogStreams)
-			r.Post("/log-events", h.HandleGetCloudWatchLogEvents)
-		})
-
 		// Add AI endpoints
 		r.Route("/ai", func(r chi.Router) {
 			r.Get("/status", h.HandleCheckAIStatus)

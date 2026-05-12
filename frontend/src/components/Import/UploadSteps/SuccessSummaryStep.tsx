@@ -2,7 +2,7 @@ import { getSystemInfo } from '@/lib/api-client';
 import { useImportStore } from '@/stores/useImportStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
-import { CheckCircle, Cloud, File, XCircle } from 'lucide-react';
+import { CheckCircle, File, XCircle } from 'lucide-react';
 import { FC, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -49,7 +49,6 @@ export const SuccessSummary: FC = () => {
   const {
     selectedFileName,
     importSource,
-    sessionOptionsFileName,
     selectedPattern,
     totalLines,
     reset,
@@ -244,13 +243,10 @@ export const SuccessSummary: FC = () => {
     );
   }
 
-  // Legacy single-file / CloudWatch results
-  const sourceIcon = importSource === 'cloudwatch'
-    ? <Cloud size={14} style={{ color: 'var(--ls-accent)' }} />
-    : <File size={14} style={{ color: 'var(--ls-accent)' }} />;
-
-  const fileLabel = importSource === 'cloudwatch' ? 'CloudWatch log' : 'File name';
-  const fileName = importSource === 'cloudwatch' ? sessionOptionsFileName : selectedFileName;
+  // Legacy single-file results
+  const sourceIcon = <File size={14} style={{ color: 'var(--ls-accent)' }} />;
+  const fileLabel = 'File name';
+  const fileName = selectedFileName;
 
   return (
     <div className="space-y-5 py-2">

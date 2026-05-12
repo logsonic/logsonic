@@ -968,8 +968,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
                   marginBottom: 20,
                 }}
               >
-                Your index is empty. Import a log file or stream from CloudWatch
-                to start searching.
+                Your index is empty. Import a log file to start searching.
               </p>
 
               <div className="flex items-center justify-center gap-2">
@@ -1010,7 +1009,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
                 >
                   Supported:
                 </span>
-                {['.log', '.txt', '.json', 'CloudWatch'].map((s) => (
+                {['.log', '.txt', '.json'].map((s) => (
                   <span
                     key={s}
                     className="inline-flex items-center px-2 py-0.5"

@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-LogSonic is an offline-first, desktop log analytics tool built as a single Go binary (~10 MB) that embeds a React SPA frontend. It ingests logs from local files or AWS CloudWatch, parses them with Grok patterns, indexes them in time-sharded Bleve indices, and provides full-text search with visualization. Optional AI assistance (via local Ollama) translates natural language queries into Bleve syntax, and an MCP server extension allows external AI agents to query logs programmatically.
+LogSonic is an offline-first, desktop log analytics tool built as a single Go binary (~10 MB) that embeds a React SPA frontend. It ingests logs from local files, parses them with Grok patterns, indexes them in time-sharded Bleve indices, and provides full-text search with visualization. Optional AI assistance (via local Ollama) translates natural language queries into Bleve syntax, and an MCP server extension allows external AI agents to query logs programmatically.
 
 ---
 
@@ -21,13 +21,11 @@ graph TB
         Handlers["Handler Layer"]
         Tokenizer["Grok Tokenizer"]
         Storage["Bleve Storage Engine"]
-        CW_Client["CloudWatch Client<br/>(AWS SDK v2)"]
         AI_Proxy["Ollama AI Proxy"]
     end
 
     subgraph "External Services"
         Ollama["Local Ollama Instance<br/>(gemma3:12b fine-tuned)"]
-        AWS["AWS CloudWatch Logs"]
     end
 
     subgraph "Persistence"
@@ -43,10 +41,8 @@ graph TB
     Router --> Handlers
     Handlers --> Tokenizer
     Handlers --> Storage
-    Handlers --> CW_Client
     Handlers --> AI_Proxy
 
-    CW_Client --> AWS
     AI_Proxy --> Ollama
 
     Storage --> LevelDB
@@ -83,14 +79,13 @@ graph LR
     end
 
     subgraph "Import Components"
-        SourceSel["SourceSelection<br/>(Local / CloudWatch)"]
+        SourceSel["SourceSelection<br/>(Local file source)"]
         FileSel["FileSelection<br/>(drag-drop, multi-file)"]
         PatternSel["LogPatternSelection<br/>(auto-detect + manual)"]
         CustomPat["CustomPatternSelector<br/>(Grok editor)"]
         FileAnalyze["FileAnalyzingStep<br/>(preview + test)"]
         ImportConfirm["ImportConfirmStep<br/>(batch upload)"]
         SuccessSum["SuccessSummaryStep"]
-        CWProvider["CloudWatchLogProvider<br/>(group/stream picker)"]
     end
 
     Home --> LogViewer
@@ -101,7 +96,6 @@ graph LR
     Import --> SourceSel --> FileSel
     FileSel --> PatternSel --> CustomPat
     PatternSel --> FileAnalyze --> ImportConfirm --> SuccessSum
-    SourceSel --> CWProvider
 
     Home --- SearchStore
     Home --- LogResult
@@ -137,7 +131,7 @@ sequenceDiagram
     participant Bleve as Bleve Storage
 
     Note over User,UI: Step 1 — Source Selection
-    User->>UI: Choose "Local File" or "CloudWatch"
+    User->>UI: "Local File" is the only supported source
 
     Note over User,UI: Step 2 — File Selection (Multi-File)
     User->>UI: Drag & drop or browse multiple files
@@ -307,63 +301,7 @@ grok.json
 
 ---
 
-## 6. CloudWatch Import Flow
-
-LogSonic can pull logs from AWS CloudWatch (region/profile auto-detected from local AWS CLI config).
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant UI as CloudWatchLogProvider
-    participant CWStore as useCloudWatchStore
-    participant API as Go API
-    participant CW as AWS CloudWatch SDK
-
-    User->>UI: Select "CloudWatch" source
-    User->>UI: Enter region + optional profile
-    
-    UI->>API: POST /api/v1/cloudwatch/log-groups<br/>{region, profile}
-    API->>CW: DescribeLogGroups (paginated)
-    CW-->>API: LogGroup[] {name, arn, storedBytes, retentionDays}
-    API-->>UI: List of log groups
-    
-    User->>UI: Select a log group + time range
-    UI->>API: POST /api/v1/cloudwatch/log-streams<br/>{log_group, start_time, end_time}
-    API->>CW: DescribeLogStreams (filtered by time range)
-    CW-->>API: LogStream[] {name, firstEventTime, lastEventTime}
-    API-->>UI: Available streams in time window
-    
-    User->>UI: Select log stream(s) + confirm
-    loop Per selected stream (paginated, max 10000/page)
-        UI->>API: POST /api/v1/cloudwatch/log-events<br/>{log_group, log_stream, start_time, end_time, limit, next_token}
-        API->>CW: GetLogEvents
-        CW-->>API: LogEvent[] {timestamp, message}
-        API-->>UI: Events + next_token + has_more flag
-    end
-    
-    UI->>UI: Concatenate all events into text blob
-    UI->>Store: setFileFromBlob(concatenated_text, filename)
-    Note over Store: Creates a virtual File object from blob<br/>Sets preview lines, advances to Step 2
-    
-    Note over User,UI: From here, normal pattern detection<br/>and ingestion flow continues
-```
-
-### CloudWatch Client Architecture
-
-The CloudWatch client (`pkg/cloudwatch/client.go`) wraps the AWS SDK v2:
-
-| Method | AWS API | Pagination | Notes |
-|---|---|---|---|
-| `ListLogGroups` | `DescribeLogGroups` | Token-based (all pages) | Returns all groups in account |
-| `ListLogStreams` | `DescribeLogStreams` | Token-based, time-filtered | Filters by `firstEventTime`/`lastEventTime` overlap |
-| `GetLogEvents` | `GetLogEvents` | Forward token, configurable `limit` (default 10000) | Returns `hasMore` flag based on token equality + result count |
-
-**Metadata tagging**: CloudWatch-sourced logs carry metadata fields (`aws_region`, `log_group`, `log_stream`) injected via `IngestSessionOptions.Meta`, which are indexed as regular Bleve fields for filtered search.
-
----
-
-## 7. AI Assistance Architecture
+## 6. AI Assistance Architecture
 
 LogSonic offers two independent AI integration paths:
 
@@ -527,7 +465,6 @@ graph TB
             H_Grok["grok.go — Pattern CRUD + persistence"]
             H_Logs["logs.go — Search, sort, paginate, distribution"]
             H_Info["info.go — System info + caching"]
-            H_CW["cloudwatch.go — CloudWatch proxy"]
             H_AI["ai_query.go — Ollama proxy"]
             H_Ping["ping.go — Health check"]
             H_GrokPat["grok_patterns.go — Default pattern definitions"]
@@ -543,11 +480,6 @@ graph TB
         Search_Go["search.go<br/>- Concurrent shard search<br/>- Semaphore throttling<br/>- Date iteration"]
     end
     
-    subgraph "pkg/cloudwatch"
-        CWClient["client.go — AWS SDK v2 wrapper"]
-        CWTypes["types.go — LogGroup, LogStream, LogEvent"]
-    end
-    
     subgraph "pkg/static"
         Embed["Embedded React SPA"]
     end
@@ -556,7 +488,6 @@ graph TB
     Server --> H_Handlers
     H_Handlers --> Tok
     H_Handlers --> Store
-    H_CW --> CWClient
 ```
 
 ### Middleware Stack (in order)

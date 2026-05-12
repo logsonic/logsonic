@@ -1,6 +1,6 @@
 # LogSonic
 
-LogSonic is a Desktop-First Log Analytics application which runs on Windows, Mac and Linux. It runs fully offline with no external dependencies. Installable as a single binary of approximately 10 MB, it serves a feature-rich User interface in your local browser. The log ingestion wizard supports importing local log files (single or many at once) as well as streaming from AWS CloudWatch, and automatically recognises well-known log patterns to tokenise the contents. The log search experience is blazing fast, delightful and intuitive.
+LogSonic is a Desktop-First Log Analytics application which runs on Windows, Mac and Linux. It runs fully offline with no external dependencies. Installable as a single binary of approximately 10 MB, it serves a feature-rich User interface in your local browser. The log ingestion wizard supports importing local log files (single or many at once) and automatically recognises well-known log patterns to tokenise the contents. The log search experience is blazing fast, delightful and intuitive.
 
 It also ships an MCP server extension so you can analyse logs with machine intelligence.
 
@@ -14,7 +14,6 @@ It also ships an MCP server extension so you can analyse logs with machine intel
 - **Smart timestamp resolution** — derives a real wall-clock time per line even when the format omits the year or timezone, with overrides (anchor, year strategy, forced timezone, rollover detection) surfaced in the wizard. See [Timestamp Resolution](#timestamp-resolution) below.
 - **MCP server** — the LogSonic [MCP server](/mcp/README.md) connects with Claude Desktop, Cursor, Windsurf, and any other MCP client.
 - **Optional AI query assistant** — when a [local Ollama model](#bleve-search-query-assistance) is running, a sparkles button next to the search bar translates plain English into Bleve query syntax. The button is hidden when Ollama is not detected.
-- **Cloud log import** — pulls log groups and streams from AWS CloudWatch into your local index using your existing AWS profile.
 - **Desktop-first & offline** — single binary for Windows, Mac, and Linux (or run in Docker). No telemetry, no network calls, all data stays on your machine.
 - **Advanced search** — Bleve-backed full-text search with highlighting, field-shorthand (`level:error`, `status:>400`, `_id:`), regex (`/regex/`), exclude (`-excluded`), boolean operators, and saved filter combinations.
 - **Color rules** — highlight rows by field/value or substring; default rules pre-loaded for `level:error`, `level:warning`, etc., editable in the side panel.
@@ -113,9 +112,6 @@ Since bleve query syntax may be confusing for beginners, Logsonic has a feature 
 
 LogSonic can be configured using command line flags or environment variables:
 
-### Cloudwatch log ingestions
-awscli must be configured to use cloudwatch ingestion before running logsonic binary. 
-
 ### Command Line Flags
 - `-host`: Host address to bind to (default: localhost)
 - `-port`: Port to listen on (default: 8080)
@@ -148,7 +144,7 @@ HOST=0.0.0.0 PORT=9000 STORAGE_PATH=/var/logs/storage logsonic
 
 1. Start LogSonic and open the web UI in your browser at http://localhost:8080
 2. Click the **Import** button in the left rail
-3. Choose **Upload Log File** (drop one or many `.log` / `.txt` / `.json` files) or **AWS CloudWatch Logs**
+3. Drop one or many `.log` / `.txt` / `.json` files into the **Upload Log File** picker
 4. LogSonic auto-detects the format for each file using log2grok. If detection succeeds you'll see a green **Pattern found** badge with a coverage score; otherwise you can paste a custom Grok pattern and **Test** it inline against a sample of the file
 5. Confirm the timestamp resolution (see below) and click **Import**. Files are indexed in parallel and become searchable as soon as ingestion completes
 
@@ -287,7 +283,7 @@ node e2e-comprehensive.mjs --headed
 
 LogSonic uses a client-server architecture:
 
-- **Backend**: Go server (chi router) that handles log ingestion, parsing, and indexing. Pattern detection is delegated to [log2grok](https://github.com/logsonic/log2grok) (curated library + drain clustering); search and storage are backed by [Bleve](https://github.com/blevesearch/bleve). CloudWatch ingestion uses AWS SDK v2.
+- **Backend**: Go server (chi router) that handles log ingestion, parsing, and indexing. Pattern detection is delegated to [log2grok](https://github.com/logsonic/log2grok) (curated library + drain clustering); search and storage are backed by [Bleve](https://github.com/blevesearch/bleve).
 - **Frontend**: React 18 SPA (TypeScript, Vite, Zustand, Radix UI, Tailwind, Recharts). In release builds, the compiled `dist/` is embedded into the Go binary via `go:embed` and served from the same port.
 - **Storage**: Local file-based Bleve indices under `~/.logsonic` (or `-storage` path). One index per day, with a side-file recording per-pattern timestamp resolution config.
 - **Optional integrations**: Local Ollama for the AI query assistant; LogSonic MCP server for AI clients (Claude Desktop, Cursor, Windsurf).

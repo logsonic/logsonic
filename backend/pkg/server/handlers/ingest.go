@@ -198,9 +198,8 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		ForceStartDay:   req.ForceStartDay,
 		SourceMTime:     req.SourceMTime,
 		TimestampConfig: req.TimestampConfig,
-		// Meta is freely passed through so callers (e.g. CloudWatch
-		// ingest path) can stamp every record with aws_region,
-		// log_group, log_stream, etc.
+		// Meta is freely passed through so callers can stamp every
+		// record with additional fields.
 		Meta: req.Meta,
 	}
 

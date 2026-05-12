@@ -112,10 +112,9 @@ export const DateTimeRangeButton: FC = () => {
         align="end"
         side="bottom"
         sideOffset={6}
-        // Keep the picker inside the viewport — the CloudWatch importer
-        // places the trigger near the bottom of the page so without this
-        // Radix flips the panel above the trigger and the upper "Last X
-        // minutes" rows clip off-screen.
+        // Keep the picker inside the viewport — without this Radix can
+        // flip the panel above the trigger and clip the upper "Last X
+        // minutes" rows off-screen.
         collisionPadding={12}
         avoidCollisions
         style={{

@@ -1,110 +1,5 @@
 basePath: /api/v1
 definitions:
-  cloudwatch.GetLogEventsRequest:
-    properties:
-      end_time:
-        type: integer
-      limit:
-        type: integer
-      log_group_name:
-        type: string
-      log_stream_name:
-        type: string
-      next_token:
-        type: string
-      profile:
-        type: string
-      region:
-        type: string
-      start_time:
-        type: integer
-    type: object
-  cloudwatch.GetLogEventsResponse:
-    properties:
-      has_more:
-        type: boolean
-      log_events:
-        items:
-          additionalProperties: true
-          type: object
-        type: array
-      next_token:
-        type: string
-      region:
-        type: string
-      status:
-        type: string
-    type: object
-  cloudwatch.ListLogGroupsRequest:
-    properties:
-      profile:
-        type: string
-      region:
-        type: string
-    type: object
-  cloudwatch.ListLogGroupsResponse:
-    properties:
-      log_groups:
-        items:
-          $ref: '#/definitions/cloudwatch.LogGroup'
-        type: array
-      region:
-        type: string
-      status:
-        type: string
-    type: object
-  cloudwatch.ListLogStreamsRequest:
-    properties:
-      end_time:
-        type: integer
-      log_group_name:
-        type: string
-      profile:
-        type: string
-      region:
-        type: string
-      start_time:
-        type: integer
-    type: object
-  cloudwatch.ListLogStreamsResponse:
-    properties:
-      log_streams:
-        items:
-          $ref: '#/definitions/cloudwatch.LogStream'
-        type: array
-      region:
-        type: string
-      status:
-        type: string
-    type: object
-  cloudwatch.LogGroup:
-    properties:
-      arn:
-        type: string
-      creationTime:
-        type: string
-      name:
-        type: string
-      retentionDays:
-        type: integer
-      storedBytes:
-        type: integer
-    type: object
-  cloudwatch.LogStream:
-    properties:
-      creationTime:
-        type: string
-      firstEventTime:
-        type: string
-      lastEventTime:
-        type: string
-      logGroupName:
-        type: string
-      name:
-        type: string
-      storedBytes:
-        type: integer
-    type: object
   handlers.AIQueryAPIResponse:
     properties:
       available_models:
@@ -142,8 +37,155 @@ definitions:
       status:
         type: string
     type: object
+  handlers.TimestampPreviewRequest:
+    properties:
+      custom_patterns:
+        additionalProperties:
+          type: string
+        type: object
+      grok_pattern:
+        type: string
+      logs:
+        items:
+          type: string
+        type: array
+      resolution:
+        $ref: '#/definitions/timeresolve.Resolution'
+      source_mtime:
+        type: string
+    type: object
+  handlers.TimestampPreviewResponse:
+    properties:
+      inference:
+        $ref: '#/definitions/timeresolve.Inference'
+      status:
+        type: string
+    type: object
+  timeresolve.Anchor:
+    properties:
+      kind:
+        type: string
+      value:
+        type: string
+    type: object
+  timeresolve.FieldCandidate:
+    properties:
+      format:
+        description: detected format hint (auto / unix_seconds / Go layout)
+        type: string
+      name:
+        description: capture name
+        type: string
+      parsed:
+        description: RFC3339 result when Parses
+        type: string
+      parses:
+        description: could be parsed as a timestamp
+        type: boolean
+      sample:
+        description: first observed value
+        type: string
+      score:
+        description: ranking used for auto-pick (higher = better)
+        type: integer
+    type: object
+  timeresolve.Inference:
+    properties:
+      field_candidates:
+        items:
+          $ref: '#/definitions/timeresolve.FieldCandidate'
+        type: array
+      layout:
+        $ref: '#/definitions/timeresolve.Layout'
+      preview:
+        items:
+          $ref: '#/definitions/timeresolve.PreviewRow'
+        type: array
+      resolution:
+        $ref: '#/definitions/timeresolve.Resolution'
+      status:
+        type: string
+      warnings:
+        items:
+          type: string
+        type: array
+    type: object
+  timeresolve.Layout:
+    properties:
+      components_present:
+        items:
+          type: string
+        type: array
+      has_timestamp_field:
+        type: boolean
+      inferred_format_label:
+        type: string
+      year_width:
+        description: 0=year-less, 2, or 4
+        type: integer
+    type: object
+  timeresolve.PreviewRow:
+    properties:
+      captured:
+        additionalProperties:
+          type: string
+        type: object
+      confidence:
+        type: string
+      raw:
+        type: string
+      resolved:
+        type: string
+    type: object
+  timeresolve.Resolution:
+    properties:
+      anchor:
+        $ref: '#/definitions/timeresolve.Anchor'
+      force_mode:
+        type: string
+      forced_day:
+        type: integer
+      forced_month:
+        type: integer
+      forced_year:
+        type: integer
+      rollover:
+        type: boolean
+      source_field:
+        description: |-
+          SourceField names a non-canonical capture to use as the line's
+          timestamp string. When set, the resolver reads fields[SourceField]
+          instead of probing the canonical names (timestamp/date/time/...).
+          Empty means "use canonical scan" (the legacy default).
+        type: string
+      source_format:
+        description: |-
+          SourceFormat hints how to parse SourceField's value. Empty means
+          auto-detect via dateparse + unix-epoch length heuristics. Special
+          values: "unix_seconds" / "unix_millis" / "unix_nanos". Anything
+          else is treated as a Go time layout (e.g. "2006-01-02-15.04.05.000000"
+          for the BGL supercomputer format).
+        type: string
+      timezone:
+        $ref: '#/definitions/timeresolve.TimezoneCfg'
+      year_strategy:
+        type: string
+    type: object
+  timeresolve.TimezoneCfg:
+    properties:
+      kind:
+        type: string
+      value:
+        description: IANA zone name when Kind=forced
+        type: string
+    type: object
   types.AutosuggestResult:
     properties:
+      coverage:
+        description: |-
+          Coverage is the fraction of input lines matched by this pattern (0.0–1.0).
+          Heterogeneous streams will show multiple patterns each covering a subset.
+        type: number
       custom_patterns:
         additionalProperties:
           type: string
@@ -161,6 +203,19 @@ definitions:
         type: string
       score:
         type: number
+      timestamp_field:
+        description: |-
+          TimestampField / TimestampLayout / TimestampSource carry log2grok's
+          auto-derived timestamp hint when one was inferred from the chosen
+          Grok body (HTTPDATE → "timestamp" + Go layout, TIMESTAMP_ISO8601 →
+          "ts" + ISO layout, etc.). The frontend uses them to pre-select the
+          timestamp column in step 3 of the import wizard without a second
+          /parse round-trip. Empty when log2grok could not infer one.
+        type: string
+      timestamp_layout:
+        type: string
+      timestamp_source:
+        type: string
     type: object
   types.ErrorResponse:
     description: Standardized error response structure used across all API endpoints
@@ -198,6 +253,13 @@ definitions:
       priority:
         description: Priority of the pattern (higher numbers are matched first)
         type: integer
+      timestamp_config:
+        allOf:
+        - $ref: '#/definitions/timeresolve.Resolution'
+        description: |-
+          TimestampConfig is the user's preferred resolution for this
+          pattern. Persisted in a logsonic-side file (log2grok's library
+          schema doesn't carry it) and re-applied on subsequent imports.
     type: object
   types.GrokPatternResponse:
     description: Response structure for Grok pattern operations
@@ -255,9 +317,8 @@ definitions:
       meta:
         additionalProperties: true
         description: |-
-          Meta contains additional fields to be added to each log entry
-          These fields will be directly added to the JSON output for each log
-          Example: for CloudWatch logs: {"aws_region": "us-west-2", "log_group": "my-group", "log_stream": "stream-1"}
+          Meta contains additional fields to be added to each log entry.
+          These fields are merged directly into the JSON output for each log.
         type: object
       name:
         type: string
@@ -269,6 +330,19 @@ definitions:
         type: boolean
       source:
         type: string
+      source_mtime:
+        description: |-
+          SourceMTime is the modification time of the source file when
+          known. Lets the resolver anchor year-less or 2-digit-year
+          timestamps against the file rather than wall-clock now.
+        type: string
+      timestamp_config:
+        allOf:
+        - $ref: '#/definitions/timeresolve.Resolution'
+        description: |-
+          TimestampConfig is the user-confirmed resolution from the import
+          wizard. When nil, the resolver auto-derives defaults from a
+          sample (legacy ForceStart* fields are still honoured).
     type: object
   types.LogDistributionEntry:
     properties:
@@ -371,6 +445,13 @@ definitions:
           Status of the parse operation
           @Example "success" or "error"
         type: string
+      timestamp_inference:
+        allOf:
+        - $ref: '#/definitions/timeresolve.Inference'
+        description: |-
+          TimestampInference describes how the resolver interpreted the
+          timestamps in this sample. Drives the wizard's diagnostic chip
+          and live preview. Empty when no logs were provided.
     type: object
   types.SuggestResponse:
     properties:
@@ -607,98 +688,6 @@ paths:
       summary: Manage Grok patterns
       tags:
       - grok
-  /cloudwatch/log-events:
-    post:
-      consumes:
-      - application/json
-      description: Get log events from a specific CloudWatch log stream in a time
-        range
-      parameters:
-      - description: Log stream and time range parameters
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/cloudwatch.GetLogEventsRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/cloudwatch.GetLogEventsResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/types.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/types.ErrorResponse'
-      summary: Get CloudWatch log events
-      tags:
-      - cloudwatch
-  /cloudwatch/log-groups:
-    post:
-      consumes:
-      - application/json
-      description: List all CloudWatch log groups in the specified AWS account
-      parameters:
-      - description: AWS auth and region parameters
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/cloudwatch.ListLogGroupsRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/cloudwatch.ListLogGroupsResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/types.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/types.ErrorResponse'
-      summary: List CloudWatch log groups
-      tags:
-      - cloudwatch
-  /cloudwatch/log-streams:
-    post:
-      consumes:
-      - application/json
-      description: List CloudWatch log streams in a log group for the specified time
-        range
-      parameters:
-      - description: Log group and time range parameters
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/cloudwatch.ListLogStreamsRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/cloudwatch.ListLogStreamsResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/types.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/types.ErrorResponse'
-      summary: List CloudWatch log streams
-      tags:
-      - cloudwatch
   /info:
     get:
       description: Retrieve detailed information about the system, storage, and application
@@ -967,4 +956,36 @@ paths:
       summary: Ping the API
       tags:
       - System
+  /timestamp/preview:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Re-renders the timestamp inference and preview rows for
+        a sample of log lines using the supplied Resolution.
+        Used by the import wizard's timestamp panel to show a
+        live preview as the user changes knobs (anchor, year
+        strategy, timezone, force mode, rollover) without
+        re-running the full /parse path.
+      parameters:
+      - description: Timestamp preview request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.TimestampPreviewRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.TimestampPreviewResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Preview timestamp resolution
+      tags:
+      - parsing
 swagger: "2.0"

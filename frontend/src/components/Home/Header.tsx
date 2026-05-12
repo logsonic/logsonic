@@ -37,11 +37,15 @@ export const Header = () => {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const resetLogResults = useLogResultStore(state => state.reset);
   const resetSearchParams = useSearchQueryParamsStore(state => state.resetStore);
 
-  // Handle clearing all logs
+  // Handle clearing all logs. The dialog is dismissed up-front so the user
+  // sees the toast/refresh against the empty index rather than staring at a
+  // "Deleting…" modal until the backend round-trips finish.
   const handleClearLogs = async () => {
+    setDeleteDialogOpen(false);
     try {
       await clearLogs();
       toast({
@@ -70,6 +74,7 @@ export const Header = () => {
 
   // Reset delete confirmation whenever alert dialog is closed
   const handleAlertOpenChange = (open: boolean) => {
+    setDeleteDialogOpen(open);
     if (!open) {
       setDeleteConfirmation('');
     }
@@ -154,7 +159,7 @@ export const Header = () => {
             </Tooltip>
           </TooltipProvider>
 
-          <AlertDialog onOpenChange={handleAlertOpenChange}>
+          <AlertDialog open={deleteDialogOpen} onOpenChange={handleAlertOpenChange}>
             <TooltipProvider>
               <Tooltip delayDuration={300}>
                 <TooltipTrigger asChild>

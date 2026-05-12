@@ -2,7 +2,7 @@
 
 import type { TimestampInference, TimestampResolution } from '@/lib/api-types';
 
-export type UploadStep = 1 | 2 | 3 | 4;
+export type UploadStep = 1 | 2 | 3;
 
 export interface Pattern {
   name: string;
@@ -92,7 +92,6 @@ export interface UploadProgressHookResult {
   isUploading: boolean;
   uploadProgress: number;
   approxLines: number;
-  handleUpload: (provider: LogSourceProviderService) => Promise<void>;
   handleMultiFileUpload: (files: ImportFile[], fileService: LogSourceProviderService) => Promise<ImportFile[]>;
 }
 
@@ -132,22 +131,16 @@ export interface CustomPatternEditorProps {
   onCustomPatternsChange: (patterns: Record<string, string>) => void;
 }
 
-// Interface for log source providers
+// Props passed to a log-source provider component (currently only
+// FileSelection, since CloudWatch was removed). Kept as a named type so
+// callers don't have to inline-spell the callback signatures.
 export interface LogSourceProvider {
-  id: string;
-  name: string;
-  icon: React.ComponentType<any>;
-  component: React.ForwardRefExoticComponent<any>;
-  // callbacks for notifying file selection and preview
-
-  // Notify that a file has been selected from the user
+  // Notify that a file has been selected by the user
   onFileSelect: (filename: string) => void;
   // Notify that a file preview component has been loaded
   onFilePreview: (lines: string[], filename: string) => void;
-  // Notify that the user wants to go back to the source selection after file preview
+  // Notify that the user wants to step back from preview to source selection
   onBackToSourceSelection: () => void;
-  // Notify that the wizard can proceed to file analysis
-  onFileReadyForAnalysis: (ready: boolean) => void;
 }
 
 // Interface for log provider components that implement ref functionality

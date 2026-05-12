@@ -1,71 +1,34 @@
-import { CloudWatchLogProvider } from '@/components/Import/CloudWatchImport/CloudWatchLogProvider';
 import { FileSelection } from '@/components/Import/LocalFileImport/FileSelection';
 import { useImportStore } from '@/stores/useImportStore';
-import { Cloud, FileUp } from 'lucide-react';
-import { FC } from 'react';
-import SourceSelection from './SourceSelection';
+import { FC, useEffect } from 'react';
 
 interface LogSourceSelectionStepProps {
   onSourceSelect: (source: string) => void;
-  onFileSelect: (filename: string ) => void;
+  onFileSelect: (filename: string) => void;
   onFilePreview: (lines: string[], filename: string) => void;
   onBackToSourceSelection: () => void;
 }
 
 export const LogSourceSelectionStep: FC<LogSourceSelectionStepProps> = ({
-  onSourceSelect,
   onFileSelect,
   onFilePreview,
   onBackToSourceSelection,
-
 }) => {
+  const { importSource, setImportSource } = useImportStore();
 
-  const importStore = useImportStore();
-  const { importSource } = importStore;
-
-  // When the provider ref is set and ready for analysis, save it to the store
-   
-    const logSourceProviders: any[] = [ 
-      {
-        id: 'file',
-        name: 'Upload Log File',
-        icon: FileUp,
-        component: FileSelection,
-      },
-      {
-        id: 'cloudwatch',
-        name: 'AWS CloudWatch Logs',  
-        icon: Cloud,
-        component: CloudWatchLogProvider,
-      }
-    ];
-
-  const selectedProvider = importSource 
-    ? logSourceProviders.find(p => p.id === importSource)
-    : null;
+  // Local-file is currently the only source — set it once on mount so the
+  // rest of the wizard (which still keys on importSource) stays happy.
+  useEffect(() => {
+    if (!importSource) setImportSource('file');
+  }, [importSource, setImportSource]);
 
   return (
-    <div className="space-y-6">
-     
-      <SourceSelection 
-        providers={logSourceProviders}
-        selectedSource={importSource}
-        onSelectSource={onSourceSelect} 
-      />
-      
-      {/* Render the provider component based on the import source */}
-      {selectedProvider && selectedProvider.component && (
-        <div className="mt-6">
-          <selectedProvider.component
-              onFileSelect={onFileSelect}
-              onFilePreview={onFilePreview}
-              onBackToSourceSelection={onBackToSourceSelection}
-             
-          />
-        </div>
-      )}
-    </div>
+    <FileSelection
+      onFileSelect={onFileSelect}
+      onFilePreview={onFilePreview}
+      onBackToSourceSelection={onBackToSourceSelection}
+    />
   );
 };
 
-export default LogSourceSelectionStep; 
+export default LogSourceSelectionStep;

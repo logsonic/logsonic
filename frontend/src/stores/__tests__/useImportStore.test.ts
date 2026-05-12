@@ -83,7 +83,7 @@ describe("import source", () => {
   });
 
   it("setImportSource to null", () => {
-    useImportStore.getState().setImportSource("cloudwatch");
+    useImportStore.getState().setImportSource("file");
     useImportStore.getState().setImportSource(null);
     expect(useImportStore.getState().importSource).toBeNull();
   });
@@ -588,7 +588,7 @@ describe("reset", () => {
   it("resets all state to defaults", () => {
     // Modify many fields
     useImportStore.getState().setCurrentStep(3);
-    useImportStore.getState().setImportSource("cloudwatch");
+    useImportStore.getState().setImportSource("file");
     useImportStore.getState().setIsUploading(true);
     useImportStore.getState().setUploadProgress(50);
     useImportStore.getState().setError("some error");

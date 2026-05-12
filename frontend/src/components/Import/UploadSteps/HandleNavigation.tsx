@@ -1,7 +1,6 @@
 import { ArrowRight } from "lucide-react";
 import { FC } from "react";
 import { useImportStore } from "../../../stores/useImportStore";
-import { selectedFileIdsForImport } from "./ImportConfirmStep";
 
 const HandleNavigation: FC<{
     onNext: () => void;
@@ -11,7 +10,7 @@ const HandleNavigation: FC<{
 
     const isMultiFile = importSource === 'file' && files.length > 0;
 
-    // Block step-2 → step-3 when any inference says ambiguous/missing
+    // Block step-2 → import when any inference says ambiguous/missing
     // and that file hasn't been confirmed. In single-file mode we
     // check the global slice; in multi-file mode every file must
     // independently pass.
@@ -25,7 +24,7 @@ const HandleNavigation: FC<{
             && (timestampInference.status === 'ambiguous' || timestampInference.status === 'missing')
             && !timestampConfirmed);
 
-    // Determine if Next should be enabled
+    // Determine if the primary action button should be disabled
     const isNextDisabled = () => {
         if (isUploading) return true;
 
@@ -37,38 +36,35 @@ const HandleNavigation: FC<{
                 return false;
             case 2:
                 if (isMultiFile) {
-                    // All files must have a selected pattern
-                    return files.some(f => !f.selectedPattern) ||
-                           files.some(f => f.detectionStatus === 'detecting' || f.detectionStatus === 'pending');
+                    // All files must have a selected pattern and be done detecting
+                    if (files.some(f => !f.selectedPattern)) return true;
+                    if (files.some(f => f.detectionStatus === 'detecting' || f.detectionStatus === 'pending')) return true;
                 }
                 if (timestampGated) return true;
                 return !readyToSelectPattern;
             case 3:
-                // Disable if no files are checked in multi-file mode
-                if (isMultiFile && selectedFileIdsForImport !== null && selectedFileIdsForImport.size === 0) return true;
-                return false;
-            case 4:
                 return false;
             default:
                 return true;
         }
     };
 
-    // Button label
+    // Primary action label
     const getNextLabel = () => {
-        if (currentStep === 3) {
+        if (currentStep === 2) {
+            // The "Define Log Pattern" step now triggers the actual import.
             if (isMultiFile) {
-                const count = selectedFileIdsForImport ? selectedFileIdsForImport.size : files.length;
+                const count = files.length;
                 return count > 0 ? `Import ${count} File${count !== 1 ? 's' : ''}` : 'Import';
             }
             return 'Import';
         }
-        if (currentStep === 4) return 'Home';
+        if (currentStep === 3) return 'Home';
         return 'Next';
     };
 
     const nextDisabled = isNextDisabled();
-    const isFinalAction = currentStep === 3 || currentStep === 4;
+    const isFinalAction = currentStep === 2 || currentStep === 3;
 
     return (
         <div className="flex justify-between items-center">

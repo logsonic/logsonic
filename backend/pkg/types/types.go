@@ -27,9 +27,8 @@ type IngestSessionOptions struct {
 	// wizard. When nil, the resolver auto-derives defaults from a
 	// sample (legacy ForceStart* fields are still honoured).
 	TimestampConfig *timeresolve.Resolution `json:"timestamp_config,omitempty"`
-	// Meta contains additional fields to be added to each log entry
-	// These fields will be directly added to the JSON output for each log
-	// Example: for CloudWatch logs: {"aws_region": "us-west-2", "log_group": "my-group", "log_stream": "stream-1"}
+	// Meta contains additional fields to be added to each log entry.
+	// These fields are merged directly into the JSON output for each log.
 	Meta map[string]interface{} `json:"meta,omitempty"`
 }
 

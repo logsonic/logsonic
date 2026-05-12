@@ -15,15 +15,6 @@ import {
   TimestampPreviewResponse,
 } from './api-types';
 
-import {
-  CloudWatchAuth,
-  GetLogEventsRequest,
-  GetLogEventsResponse,
-  ListLogGroupsResponse,
-  ListLogStreamsRequest,
-  ListLogStreamsResponse
-} from '@/components/Import/CloudWatchImport/types';
-
 // API base configuration
 // For local development, use port 8080
 // For production, use relative URL
@@ -162,19 +153,6 @@ export interface PingResponse {
 
 export async function pingServer(): Promise<PingResponse> {
   return apiRequest<PingResponse>('/ping', 'GET');
-}
-
-// CloudWatch API
-export async function listCloudWatchLogGroups(auth: CloudWatchAuth): Promise<ListLogGroupsResponse> {
-  return apiRequest<ListLogGroupsResponse>('/cloudwatch/log-groups', 'POST', auth);
-}
-
-export async function listCloudWatchLogStreams(request: ListLogStreamsRequest): Promise<ListLogStreamsResponse> {
-  return apiRequest<ListLogStreamsResponse>('/cloudwatch/log-streams', 'POST', request);
-}
-
-export async function getCloudWatchLogEvents(request: GetLogEventsRequest): Promise<GetLogEventsResponse> {
-  return apiRequest<GetLogEventsResponse>('/cloudwatch/log-events', 'POST', request);
 }
 
 // Delete logs by document IDs

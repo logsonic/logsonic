@@ -1,4 +1,3 @@
-import { useCloudWatchLogProviderService } from '@/components/Import/CloudWatchImport/CloudWatchLogProviderService';
 import { useFileSelectionService } from '@/components/Import/LocalFileImport/FileSelectionService';
 import HandleNavigation from '@/components/Import/UploadSteps/HandleNavigation';
 import { SavePatternDialog } from '@/components/Import/UploadSteps/SavePatternDialog';
@@ -8,7 +7,6 @@ import { ArrowLeft, FileUp } from "lucide-react";
 import { FC, Fragment, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileAnalyzingStep } from '../components/Import/UploadSteps/FileAnalyzingStep';
-import { ImportConfirmStep, selectedFileIdsForImport } from '../components/Import/UploadSteps/ImportConfirmStep';
 import { LogSourceSelectionStep } from '../components/Import/UploadSteps/LogSourceSelectionStep';
 import { SuccessSummary } from '../components/Import/UploadSteps/SuccessSummaryStep';
 import type { DetectionResult } from '../components/Import/types';
@@ -24,16 +22,13 @@ const Import: FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const {
-    selectedPattern,
     importSource,
     reset,
     currentStep,
-    readyToImportLogs,
     readyToSelectPattern,
     setReadyToSelectPattern,
     setImportSource,
     setSelectedPattern,
-    isCreateNewPatternSelected,
     setCurrentStep,
     setDetectionResult,
     setAvailablePatterns,
@@ -41,12 +36,10 @@ const Import: FC = () => {
   } = useImportStore();
 
   const {
-    handleUpload,
     handleMultiFileUpload,
   } = useUpload();
 
   const fileService = useFileSelectionService();
-  const cloudWatchService = useCloudWatchLogProviderService();
   const [showSaveDialogShown, setShowSaveDialogShown] = useState(false);
 
   const isMultiFile = importSource === 'file' && files.length > 0;
@@ -54,8 +47,7 @@ const Import: FC = () => {
   const steps = [
     { number: 1, label: "Choose Log Source" },
     { number: 2, label: "Define Log Pattern" },
-    { number: 3, label: "Confirm Import" },
-    { number: 4, label: "Summary" }
+    { number: 3, label: "Summary" }
   ];
 
   const StepIndicator = ({ number, label, isActive }: { number: number, label: string, isActive: boolean }) => {
@@ -182,8 +174,6 @@ const Import: FC = () => {
           />
         );
       case 3:
-        return <ImportConfirmStep />;
-      case 4:
         return <SuccessSummary />;
       default:
         return null;
@@ -219,136 +209,83 @@ const Import: FC = () => {
           }
           break;
 
-        case 2:
-          // For multi-file: validate all files have patterns
-          if (isMultiFile) {
-            const missingPattern = files.find(f => !f.selectedPattern);
-            if (missingPattern) {
-              toast({
-                title: "Pattern Required",
-                description: `Please select a pattern for "${missingPattern.fileName}".`,
-                variant: "destructive",
-              });
-              return;
-            }
-
-            // Show save dialog if any file uses a custom pattern
-            if (!showSaveDialogShown) {
-              const customPatternFile = files.find(f => f.isCustomPattern && f.selectedPattern);
-              if (customPatternFile && customPatternFile.selectedPattern) {
-                const store = useImportStore.getState();
-                store.setCreateNewPattern(customPatternFile.selectedPattern);
-                store.setCreateNewPatternName(customPatternFile.selectedPattern.name);
-                store.setCreateNewPatternDescription(customPatternFile.selectedPattern.description || '');
-                setShowSaveDialog(true);
-                setShowSaveDialogShown(true);
-              }
-            }
-
-            setCurrentStep(3);
-            break;
+        case 2: {
+          const missingPattern = files.find(f => !f.selectedPattern);
+          if (missingPattern) {
+            toast({
+              title: "Pattern Required",
+              description: `Please select a pattern for "${missingPattern.fileName}".`,
+              variant: "destructive",
+            });
+            return;
           }
 
-          // Legacy: sync custom pattern to selectedPattern before proceeding
-          if (isCreateNewPatternSelected) {
-            const { createNewPattern } = useImportStore.getState();
-            setSelectedPattern(createNewPattern);
-
-            if (!showSaveDialogShown) {
+          // Show save dialog if any file uses a custom pattern. Doesn't
+          // block the import — the dialog is informational.
+          if (!showSaveDialogShown) {
+            const customPatternFile = files.find(f => f.isCustomPattern && f.selectedPattern);
+            if (customPatternFile && customPatternFile.selectedPattern) {
+              const store = useImportStore.getState();
+              store.setCreateNewPattern(customPatternFile.selectedPattern);
+              store.setCreateNewPatternName(customPatternFile.selectedPattern.name);
+              store.setCreateNewPatternDescription(customPatternFile.selectedPattern.description || '');
               setShowSaveDialog(true);
               setShowSaveDialogShown(true);
             }
           }
-          if (readyToImportLogs) {
-            setCurrentStep(3);
-          }
-          break;
 
-        case 3:
           setError(null);
 
-          if (isMultiFile) {
-            // Only upload files that are checked in the confirm step
-            const checkedIds = selectedFileIdsForImport;
-            const filesToImport = checkedIds
-              ? files.filter(f => checkedIds.has(f.id))
-              : files;
-
-            if (filesToImport.length === 0) {
-              toast({
-                title: "Nothing to import",
-                description: "Please select at least one file.",
-                variant: "destructive",
-              });
-              return;
-            }
-
-            // Multi-file upload
+          if (files.length === 0) {
             toast({
-              title: "Starting import",
-              description: `Importing ${filesToImport.length} file${filesToImport.length !== 1 ? 's' : ''}...`,
+              title: "Nothing to import",
+              description: "Please add at least one file.",
+              variant: "destructive",
             });
+            return;
+          }
 
-            try {
-              await handleMultiFileUpload(filesToImport, fileService);
+          toast({
+            title: "Starting import",
+            description: `Importing ${files.length} file${files.length !== 1 ? 's' : ''}...`,
+          });
 
-              const updatedFiles = useImportStore.getState().files;
-              const successCount = updatedFiles.filter(f => f.uploadStatus === 'success').length;
-              const failedCount = updatedFiles.filter(f => f.uploadStatus === 'failed').length;
+          try {
+            await handleMultiFileUpload(files, fileService);
 
-              if (successCount > 0) {
-                toast({
-                  title: failedCount === 0 ? "Import successful" : "Import complete",
-                  description: failedCount === 0
-                    ? `All ${successCount} files imported successfully.`
-                    : `${successCount} files imported, ${failedCount} failed.`,
-                  variant: failedCount === 0 ? "default" : "destructive",
-                });
-              } else {
-                toast({
-                  title: "Import failed",
-                  description: "All files failed to import.",
-                  variant: "destructive",
-                });
-              }
+            const updatedFiles = useImportStore.getState().files;
+            const successCount = updatedFiles.filter(f => f.uploadStatus === 'success').length;
+            const failedCount = updatedFiles.filter(f => f.uploadStatus === 'failed').length;
 
-              setCurrentStep(4);
-            } catch (uploadErr) {
+            if (successCount > 0) {
+              toast({
+                title: failedCount === 0 ? "Import successful" : "Import complete",
+                description: failedCount === 0
+                  ? `All ${successCount} files imported successfully.`
+                  : `${successCount} files imported, ${failedCount} failed.`,
+                variant: failedCount === 0 ? "default" : "destructive",
+              });
+            } else {
               toast({
                 title: "Import failed",
-                description: uploadErr instanceof Error ? uploadErr.message : "Failed to import files",
+                description: "All files failed to import.",
                 variant: "destructive",
               });
-              throw uploadErr;
             }
-          } else {
-            // Legacy single-file upload
-            toast({
-              title: "Starting upload process",
-              description: "Registering log pattern with the server...",
-            });
 
-            try {
-              const provider = importSource === 'cloudwatch' ? cloudWatchService : fileService;
-              await handleUpload(provider);
-              toast({
-                title: "Upload successful",
-                description: "Your log file has been processed successfully.",
-                variant: "default",
-              });
-              setCurrentStep(4);
-            } catch (uploadErr) {
-              toast({
-                title: "Upload failed",
-                description: uploadErr instanceof Error ? uploadErr.message : "Failed to upload file",
-                variant: "destructive",
-              });
-              throw uploadErr;
-            }
+            setCurrentStep(3);
+          } catch (uploadErr) {
+            toast({
+              title: "Import failed",
+              description: uploadErr instanceof Error ? uploadErr.message : "Failed to import files",
+              variant: "destructive",
+            });
+            throw uploadErr;
           }
           break;
+        }
 
-        case 4:
+        case 3:
           reset();
           navigate('/');
           break;
@@ -368,9 +305,6 @@ const Import: FC = () => {
         setCurrentStep(1 as UploadStep);
         break;
       case 3:
-        setCurrentStep(2 as UploadStep);
-        break;
-      case 4:
         reset();
         setCurrentStep(1 as UploadStep);
         break;
@@ -479,7 +413,7 @@ const Import: FC = () => {
                 Import logs
               </h1>
               <p style={{ fontSize: 12, color: 'var(--ls-text-3)', marginTop: 2 }}>
-                Bring log files or CloudWatch streams into LogSonic. We'll auto-detect the format.
+                Bring log files into LogSonic. We'll auto-detect the format.
               </p>
             </div>
           </div>

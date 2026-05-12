@@ -30,7 +30,7 @@ export const DEFAULT_SESSION_OPTIONS: FileSessionOptions = {
 // Add a type for the provider upload handler
 export type ProviderUploadHandler = (handleImport: (chunkSize: number, callback: (lines: string[], totalLines: number, next: () => void) => Promise<void>) => Promise<void>) => Promise<void>;
 
-export type UploadStep = 1 | 2 | 3 | 4;
+export type UploadStep = 1 | 2 | 3;
 export type ImportSource = string | null;
 
 let fileIdCounter = 0;
@@ -52,7 +52,7 @@ interface ImportState {
   files: ImportFile[];
   activeFileId: string | null; // Which file is currently being configured in detail
 
-  // --- Legacy single-file state (kept for CloudWatch compatibility) ---
+  // --- Legacy single-file state ---
   selectedFileName: string | null;
   selectedFileHandle: object | null;
   filePreviewBuffer: FilePreview | null;
@@ -167,7 +167,6 @@ interface ImportState {
   setIsTestingPattern: (isTestingPattern: boolean) => void;
   setMetadata: (metadata: Record<string, string | number | boolean>) => void;
   setReadyToSelectPattern: (ready: boolean) => void;
-  setFileFromBlob: (content: string, fileName: string) => Promise<void>;
   handlePatternOperation: (pattern: Pattern, updateStore?: boolean, onSuccess?: (parsedLogs: Record<string, string>[]) => void, onError?: (error: string) => void) => Promise<void>;
   testPattern: () => Promise<void>;
   reset: () => void;
@@ -430,31 +429,6 @@ export const useImportStore = create<ImportState>((set, get) => ({
   setError: (error) => set({ error }),
   setParsedLogs: (parsedLogs) => set({ parsedLogs }),
   setIsTestingPattern: (isTestingPattern) => set({ isTestingPattern }),
-
-  setFileFromBlob: async (content, fileName) => {
-    console.log(`Setting file from blob: ${fileName}, content length: ${content.length} bytes`);
-    const file = new File([content], fileName, { type: 'text/plain' });
-
-    if (!content || content.length === 0) {
-      const error = "Empty content provided for CloudWatch logs";
-      console.error(error);
-      set({ error });
-      return;
-    }
-
-    const previewLines = content.split('\n');
-    const approxLines = previewLines.length;
-
-    set({
-      filePreviewBuffer: {
-        lines: previewLines.slice(0, 100),
-        filename: fileName,
-      },
-      approxLines,
-      sessionOptionsFileName: fileName,
-      currentStep: 2
-    });
-  },
 
   handlePatternOperation: async (pattern, updateStore = true, onSuccess, onError) => {
     const {
