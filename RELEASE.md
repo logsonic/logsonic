@@ -11,7 +11,47 @@ End-to-end plan for shipping signed `.dmg` (macOS), signed `.exe` installer (Win
 - Runtime: [backend/main.go](backend/main.go) is a CLI that binds `localhost:8080` and prints "open this URL in your browser" — no native window, no menubar item, no auto-launch.
 - Signing: none. No `.app` bundle, no `.dmg`, no Windows installer, no notarization.
 - CI: no `.github/workflows` — releases are run manually from a dev machine.
-- Distribution: GitHub Releases only. Issue [#1](https://github.com/akashgoswami/logsonic/issues/1) tracks Homebrew.
+- Distribution: GitHub Releases only. Issue [#1](https://github.com/<OWNER>/logsonic/issues/1) tracks Homebrew.
+
+### Today's manual flow
+
+This is the current end-to-end recipe. Run from a dev machine until CI takes over (§9). Produces unsigned `tar.gz` / `zip` archives attached to a GitHub Release.
+
+**Prerequisites**
+
+- [GoReleaser](https://goreleaser.com/install/) installed (`brew install goreleaser`).
+- A GitHub token with `repo` scope exported as `GITHUB_TOKEN`.
+
+**Steps**
+
+1. Build the frontend (it gets embedded into the Go binary):
+   ```bash
+   cd frontend
+   npm ci
+   npm run build
+   npm run build:copy
+   cd ..
+   ```
+
+2. Tag the release:
+   ```bash
+   git tag -a v0.X.0 -m "Release v0.X.0"
+   git push origin v0.X.0
+   ```
+
+3. Run GoReleaser from the `backend/` directory:
+   ```bash
+   cd backend
+   goreleaser release --clean
+   ```
+
+   For a dry-run (no publish):
+   ```bash
+   cd backend
+   goreleaser release --snapshot --clean
+   ```
+
+The GoReleaser config lives at [`backend/.goreleaser.yaml`](backend/.goreleaser.yaml) and builds for Linux, Windows, and macOS.
 
 ## 2. Target artifacts (per release)
 
@@ -62,7 +102,7 @@ Two GoReleaser `builds:` entries — one per entrypoint — keeps the CLI path c
 
 GoReleaser's `app_bundles:` (v2) produces an `.app` from a build target. Required pieces:
 
-- `Info.plist` with `CFBundleIdentifier = com.akashgoswami.logsonic`, `LSUIElement = true` (menubar app, no Dock icon), `LSMinimumSystemVersion = 11.0`.
+- `Info.plist` with `CFBundleIdentifier = <REVERSE_DOMAIN>.logsonic` (e.g. `io.logsonic.app`), `LSUIElement = true` (menubar app, no Dock icon), `LSMinimumSystemVersion = 11.0`.
 - App icon `.icns` (1024px source → `iconutil -c icns`).
 - Binary at `LogSonic.app/Contents/MacOS/LogSonic`.
 
@@ -70,13 +110,13 @@ GoReleaser's `app_bundles:` (v2) produces an `.app` from a build target. Require
 
 Apple Developer ID is **mandatory** for notarization. Steps:
 
-1. Enroll in Apple Developer Program ($99/yr) with the `akashgoswami@gmail.com` Apple ID (or a dedicated one).
+1. Enroll in Apple Developer Program ($99/yr) with a dedicated Apple ID.
 2. In Apple Developer portal: create a **Developer ID Application** certificate. Download and import into the macOS Keychain on the signing machine.
 3. Export the cert + private key as a `.p12` file (for CI use).
 4. Sign with hardened runtime:
    ```bash
    codesign --force --deep --options runtime \
-     --sign "Developer ID Application: Akash Goswami (TEAMID)" \
+     --sign "Developer ID Application: <YOUR_NAME> (<TEAMID>)" \
      --entitlements entitlements.plist \
      LogSonic.app
    ```
@@ -90,8 +130,8 @@ Required so Gatekeeper does not block first-launch.
 2. Build the `.dmg` first (see 4d), then:
    ```bash
    xcrun notarytool submit LogSonic-x.y.z-arm64.dmg \
-     --apple-id "akashgoswami@gmail.com" \
-     --team-id "TEAMID" \
+     --apple-id "<YOUR_APPLE_ID>" \
+     --team-id "<TEAMID>" \
      --password "$APP_SPECIFIC_PASSWORD" \
      --wait
    xcrun stapler staple LogSonic-x.y.z-arm64.dmg
@@ -175,9 +215,9 @@ Use GoReleaser's [`nfpms:`](https://goreleaser.com/customization/nfpm/) block �
 nfpms:
   - id: logsonic
     package_name: logsonic
-    vendor: Akash Goswami
-    homepage: https://github.com/akashgoswami/logsonic
-    maintainer: Akash Goswami <akashgoswami@gmail.com>
+    vendor: <YOUR_NAME>
+    homepage: https://github.com/<OWNER>/logsonic
+    maintainer: <YOUR_NAME> <<YOUR_EMAIL>>
     description: Desktop-first log analytics with full-text search and Grok parsing
     license: MIT
     formats: [deb, rpm]
@@ -228,14 +268,14 @@ Linux has no Gatekeeper/SmartScreen equivalent — package managers verify GPG s
 
 ## 7. Curl-pipe installer (`install.sh`)
 
-The standard pattern users expect: `curl -fsSL https://raw.githubusercontent.com/akashgoswami/logsonic/main/install.sh | sh`. Eventually point at a short URL (`https://logsonic.io/install.sh` or `https://get.logsonic.io`) once a domain exists.
+The standard pattern users expect: `curl -fsSL https://raw.githubusercontent.com/<OWNER>/logsonic/main/install.sh | sh`. Eventually point at a short URL (`https://logsonic.io/install.sh` or `https://get.logsonic.io`) once a domain exists.
 
 The script lives at the repo root as `install.sh` and supports macOS + Linux.
 
 ### 7a. Behavior
 
 1. Detect OS (`darwin`/`linux`) and arch (`amd64`/`arm64`/`386`) via `uname`.
-2. Fetch latest release tag from GitHub API (`/repos/akashgoswami/logsonic/releases/latest`), or honor `LOGSONIC_VERSION=vX.Y.Z` from env.
+2. Fetch latest release tag from GitHub API (`/repos/<OWNER>/logsonic/releases/latest`), or honor `LOGSONIC_VERSION=vX.Y.Z` from env.
 3. Download the matching `.tar.gz` from GitHub Releases.
 4. Download `checksums.txt` and verify SHA-256 with `shasum -a 256` / `sha256sum`.
 5. Optionally verify cosign signature on the checksum file if `cosign` is available (best-effort, not required).
@@ -252,7 +292,7 @@ Save as `install.sh` at repo root. POSIX `sh` (not bash-only), runs on stock mac
 #!/bin/sh
 set -eu
 
-REPO="akashgoswami/logsonic"
+REPO="<OWNER>/logsonic"
 INSTALL_DIR="${LOGSONIC_INSTALL_DIR:-}"
 VERSION="${LOGSONIC_VERSION:-latest}"
 
@@ -346,7 +386,7 @@ printf 'Uninstall: rm %s/logsonic\n' "$INSTALL_DIR"
 
 ### 7d. Windows equivalent (`install.ps1`)
 
-For symmetry, a PowerShell one-liner: `irm https://raw.githubusercontent.com/akashgoswami/logsonic/main/install.ps1 | iex`. Same logic — detect arch, download `.zip` (not the NSIS installer, which is for GUI users), verify SHA-256, drop into `$env:LOCALAPPDATA\Programs\LogSonic`, add to PATH. Optional, low priority; most Windows users will use the signed `.exe` installer.
+For symmetry, a PowerShell one-liner: `irm https://raw.githubusercontent.com/<OWNER>/logsonic/main/install.ps1 | iex`. Same logic — detect arch, download `.zip` (not the NSIS installer, which is for GUI users), verify SHA-256, drop into `$env:LOCALAPPDATA\Programs\LogSonic`, add to PATH. Optional, low priority; most Windows users will use the signed `.exe` installer.
 
 ---
 
@@ -358,17 +398,17 @@ Two artifacts make sense:
 
 For users who want the headless CLI (`logsonic -port 8080`). GoReleaser's [`brews:`](https://goreleaser.com/customization/homebrew/) writes this automatically from a darwin/linux build into a tap repo.
 
-Repo to create: **`akashgoswami/homebrew-logsonic`** (the `homebrew-` prefix is required for `brew tap` to work).
+Repo to create: **`<OWNER>/homebrew-logsonic`** (the `homebrew-` prefix is required for `brew tap` to work).
 
 Config snippet to add to `.goreleaser.yaml`:
 ```yaml
 brews:
   - name: logsonic
     repository:
-      owner: akashgoswami
+      owner: <OWNER>
       name: homebrew-logsonic
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    homepage: "https://github.com/akashgoswami/logsonic"
+    homepage: "https://github.com/<OWNER>/logsonic"
     description: "Desktop-first log analytics with full-text search and Grok parsing"
     license: "MIT"
     test: |
@@ -377,7 +417,7 @@ brews:
       bin.install "logsonic"
 ```
 
-Install path for users: `brew tap akashgoswami/logsonic && brew install logsonic`.
+Install path for users: `brew tap <OWNER>/logsonic && brew install logsonic`.
 
 ### 8b. Cask (`Casks/logsonic.rb`)
 
@@ -387,11 +427,11 @@ For users who want the menubar `.app`. Casks point at the signed, notarized `.dm
 homebrew_casks:
   - name: logsonic
     repository:
-      owner: akashgoswami
+      owner: <OWNER>
       name: homebrew-logsonic
     binary: LogSonic
     app: LogSonic.app
-    homepage: "https://github.com/akashgoswami/logsonic"
+    homepage: "https://github.com/<OWNER>/logsonic"
     description: "LogSonic desktop app"
 ```
 
@@ -465,7 +505,7 @@ Switch from manual `git tag` to a checklist-driven flow:
 - [ ] `git tag -a vX.Y.Z -m "Release vX.Y.Z" && git push origin vX.Y.Z`.
 - [ ] Watch the GitHub Action; verify all artifacts uploaded, Homebrew tap PR auto-created/merged.
 - [ ] Download the `.dmg` and `.exe` on a clean machine — no Gatekeeper/SmartScreen warning.
-- [ ] `brew tap akashgoswami/logsonic && brew install --cask logsonic` on a clean macOS — confirm app launches.
+- [ ] `brew tap <OWNER>/logsonic && brew install --cask logsonic` on a clean macOS — confirm app launches.
 - [ ] Close issue #1 once Homebrew install path is live.
 
 ---
