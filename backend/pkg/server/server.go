@@ -238,12 +238,6 @@ func NewServer(cfg Config) (*Server, error) {
 			r.Delete("/", h.HandleGrokPatterns)
 		})
 
-		// Add AI endpoints
-		r.Route("/ai", func(r chi.Router) {
-			r.Get("/status", h.HandleCheckAIStatus)
-			r.Post("/translate-query", h.HandleQueryTranslation)
-		})
-
 	})
 
 	return &Server{

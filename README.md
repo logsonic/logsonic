@@ -12,8 +12,7 @@ It also ships an MCP server extension so you can analyse logs with machine intel
 - **log2grok auto-detection** — the import wizard runs the [log2grok](https://github.com/logsonic/log2grok) library across two stages (curated library of 100+ known patterns, then drain-based clustering for unknown formats) and surfaces the best match with a coverage score before you import. Custom patterns are saved to disk and re-used on later imports.
 - **Multi-file import** — drop multiple files at once; LogSonic detects each format independently, lets you confirm or override per-file, then imports them in one batch.
 - **Smart timestamp resolution** — derives a real wall-clock time per line even when the format omits the year or timezone, with overrides (anchor, year strategy, forced timezone, rollover detection) surfaced in the wizard. See [Timestamp Resolution](#timestamp-resolution) below.
-- **MCP server** — the LogSonic [MCP server](/mcp/README.md) connects with Claude Desktop, Cursor, Windsurf, and any other MCP client.
-- **Optional AI query assistant** — when a [local Ollama model](#bleve-search-query-assistance) is running, a sparkles button next to the search bar translates plain English into Bleve query syntax. The button is hidden when Ollama is not detected.
+- **MCP server** — the LogSonic [MCP server](/mcp/README.md) connects with Claude Desktop, Cursor, Windsurf, and any other MCP client. Agent guidance lives in [mcp/SKILLS.md](/mcp/SKILLS.md).
 - **Desktop-first & offline** — single binary for Windows, Mac, and Linux (or run in Docker). No telemetry, no network calls, all data stays on your machine.
 - **Advanced search** — Bleve-backed full-text search with highlighting, field-shorthand (`level:error`, `status:>400`, `_id:`), regex (`/regex/`), exclude (`-excluded`), boolean operators, and saved filter combinations.
 - **Color rules** — highlight rows by field/value or substring; default rules pre-loaded for `level:error`, `level:warning`, etc., editable in the side panel.
@@ -51,15 +50,9 @@ If the port 8080 is not available in your system, you could choose another port 
 Looking for some sample logs to try? [LogHub](https://github.com/logpai/loghub/) repository has some great collection such as this [Apache log](https://github.com/logpai/loghub/blob/master/Apache/Apache_2k.log)
 Download the log to you local computer and import using Import File menu. 
 
-### Enabling AI Assistance
+### MCP server for AI clients
 
-Logsonic supports Model Context Protocol. To install Logsonic MCP server, use the instructions in  [MCP server](/mcp/README.md)
-
-### Bleve Search Query assistance
-
-<img src="ollama/assistant.png" alt="LogSonic AI Assitant" width="400" />
-
-Since bleve query syntax may be confusing for beginners, Logsonic has a feature which converts simple english queries to bleve search syntax. This is available in the release 0.5 onwards. Logsonic will automatically detect and enable AI assistance features if a local Ollama instance is running with the predefined logsonic image. Follow the [instructions](https://github.com/logsonic/logsonic/blob/main/ollama/README.md) to build your local [Modelfile](https://github.com/logsonic/logsonic/blob/main/ollama/Modelfile)
+LogSonic ships with an MCP (Model Context Protocol) server that lets Claude Desktop, Cursor, Windsurf, and any other MCP-capable client query your logs directly. Setup steps are in [mcp/README.md](/mcp/README.md); the agent-facing playbook (query patterns, workflow, examples) lives in [mcp/SKILLS.md](/mcp/SKILLS.md) — point your client at it so the model knows how to use the tools effectively.
 
 ### Build from Source
 
@@ -286,7 +279,7 @@ LogSonic uses a client-server architecture:
 - **Backend**: Go server (chi router) that handles log ingestion, parsing, and indexing. Pattern detection is delegated to [log2grok](https://github.com/logsonic/log2grok) (curated library + drain clustering); search and storage are backed by [Bleve](https://github.com/blevesearch/bleve).
 - **Frontend**: React 18 SPA (TypeScript, Vite, Zustand, Radix UI, Tailwind, Recharts). In release builds, the compiled `dist/` is embedded into the Go binary via `go:embed` and served from the same port.
 - **Storage**: Local file-based Bleve indices under `~/.logsonic` (or `-storage` path). One index per day, with a side-file recording per-pattern timestamp resolution config.
-- **Optional integrations**: Local Ollama for the AI query assistant; LogSonic MCP server for AI clients (Claude Desktop, Cursor, Windsurf).
+- **AI integration**: LogSonic MCP server for AI clients (Claude Desktop, Cursor, Windsurf, and other MCP-capable tools).
 
 See [Architecture Documentation](docs/Architecture.md) for more details.
 

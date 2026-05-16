@@ -1,14 +1,12 @@
 import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";
-import { AIQueryDialog } from "@/components/Home/AIQueryDialog";
 import { useToast } from "@/components/ui/use-toast";
 import { useSearchLogs } from "@/hooks/useSearchLogs";
 import { getLogs } from "@/lib/api-client";
 import { calculateRelativeDateRange } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
-import { checkAIStatus } from "@/services/aiService";
 import { useLogResultStore } from "@/stores/useLogResultStore";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
-import { ArrowRight, Download, HelpCircle, Loader2, Search, Sparkles, X } from "lucide-react";
+import { ArrowRight, Download, HelpCircle, Loader2, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -85,9 +83,6 @@ export const LogSearch = ({
   const [isExporting, setIsExporting] = useState(false);
   const { toast } = useToast();
   
-  // AI query related state
-  const [isAIDialogOpen, setIsAIDialogOpen] = useState(false);
-  const [isAIAvailable, setIsAIAvailable] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -116,27 +111,7 @@ export const LogSearch = ({
   }, []);
 
 
-  // Check if AI/Ollama is running
   useEffect(() => {
-    const checkAI = async () => {
-      const status = await checkAIStatus();
-      // Check if Ollama is running and any logsonic-related model is available
-      // This will match "logsonic", "logsonic:latest", "logsonic-search", etc.
-      const hasLogsonicModel = status.ollama_running && 
-        status.models_available.some(model => 
-          model.toLowerCase().includes('logsonic')
-        );
-      
-      setIsAIAvailable(hasLogsonicModel);
-    };
-    
-    // Check AI status once on component mount
-    checkAI();
-    
-    // No interval checking - only check when component loads
-  }, []);
-
-  useEffect(() => { 
     setLocalSearchQuery(store.searchQuery);
   }, [store.searchQuery]);
 
@@ -308,27 +283,7 @@ export const LogSearch = ({
           {/* Search input with clear button */}
           <div className="relative flex-grow">
             <div className="absolute inset-y-0 left-0 flex items-center pl-3">
-              {isAIAvailable ? (
-                <button
-                  type="button"
-                  onClick={() => setIsAIDialogOpen(true)}
-                  className="focus:outline-none"
-                  aria-label="Use AI to build query"
-                  title="Use AI to build query"
-                >
-                  <Sparkles
-                    size={16}
-                    className="cursor-pointer"
-                    style={{
-                      color: 'var(--ls-accent)',
-                      filter: 'drop-shadow(0 0 4px rgba(107, 77, 242, 0.5))',
-                      animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                    }}
-                  />
-                </button>
-              ) : (
-                <Search size={16} style={{ color: 'var(--ls-text-3)' }} className="pointer-events-none" />
-              )}
+              <Search size={16} style={{ color: 'var(--ls-text-3)' }} className="pointer-events-none" />
             </div>
 
             <Input
@@ -527,13 +482,6 @@ export const LogSearch = ({
           </div>
         </div>
       </div>
-
-      {/* AI Query Dialog */}
-      <AIQueryDialog 
-        open={isAIDialogOpen}
-        onOpenChange={setIsAIDialogOpen}
-
-      />
     </div>
   );
 };
