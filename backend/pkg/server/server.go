@@ -65,13 +65,6 @@ func NewServer(cfg Config) (*Server, error) {
 	if err := l2g.LoadConfig("", os.Stderr); err != nil {
 		return nil, fmt.Errorf("failed to initialize log2grok config: %w", err)
 	}
-	// One-shot migration of any pre-existing <storagePath>/grok.json
-	// into the log2grok library. The legacy file is renamed afterwards
-	// so this is idempotent across restarts.
-	if err := handlers.MigrateLegacyGrokJSON(cfg.StoragePath); err != nil {
-		fmt.Fprintf(os.Stderr, "logsonic: legacy grok.json migration warning: %v\n", err)
-	}
-
 	// Initialize router with middleware
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
