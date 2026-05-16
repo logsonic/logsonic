@@ -1,11 +1,33 @@
+import { execSync } from "child_process";
 import path from "path";
 
 import react from "@vitejs/plugin-react-swc";
 import { visualizer } from "rollup-plugin-visualizer";
 import { defineConfig } from "vite";
 
+// Resolve build version at config time. Order: APP_VERSION env (CI
+// release builds inject this), `git describe`, then "dev". Synchronous
+// because Vite config runs once at startup.
+const resolveAppVersion = (): string => {
+  if (process.env.APP_VERSION) return process.env.APP_VERSION;
+  try {
+    return execSync("git describe --tags --always --dirty", {
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+  } catch {
+    return "dev";
+  }
+};
+
+const APP_VERSION = resolveAppVersion();
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
   server: {
     host: "::",
     port: process.env['PORT'] ? Number(process.env['PORT']) : 8080,

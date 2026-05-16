@@ -24,7 +24,10 @@ const Divider = () => (
   />
 );
 
-const APP_VERSION = 'v2';
+// Injected at build time by Vite (see vite.config.ts). Falls back to
+// "dev" when not defined, e.g. unit-test runners that don't apply the
+// vite `define` plugin.
+const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev';
 
 export const StatusBar = () => {
   const { isConnected } = useBackendStatus(5000);

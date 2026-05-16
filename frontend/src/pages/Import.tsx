@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { FileAnalyzingStep } from '../components/Import/UploadSteps/FileAnalyzingStep';
 import { LogSourceSelectionStep } from '../components/Import/UploadSteps/LogSourceSelectionStep';
 import { SuccessSummary } from '../components/Import/UploadSteps/SuccessSummaryStep';
+import { UploadingStep } from '../components/Import/UploadSteps/UploadingStep';
 import type { DetectionResult } from '../components/Import/types';
 import { extractFields } from '../components/Import/utils/patternUtils';
 import { useToast } from "../components/ui/use-toast";
@@ -33,6 +34,7 @@ const Import: FC = () => {
     setDetectionResult,
     setAvailablePatterns,
     files,
+    isUploading,
   } = useImportStore();
 
   const {
@@ -168,6 +170,9 @@ const Import: FC = () => {
           />
         );
       case 2:
+        if (isUploading) {
+          return <UploadingStep />;
+        }
         return (
           <FileAnalyzingStep
             onDetectionComplete={handleDetectionComplete}

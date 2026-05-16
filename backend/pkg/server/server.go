@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -245,10 +246,17 @@ func NewServer(cfg Config) (*Server, error) {
 // drain timeout before closing all storage indices.
 func (s *Server) Start() error {
 	addr := s.config.Host + s.config.Port
-	fmt.Printf("Server starting on %s\n", addr)
+
+	// Bind synchronously so port-in-use errors surface before any
+	// "server started / open this URL" message is printed.
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", addr, err)
+	}
+
+	fmt.Printf("Server listening on http://%s\n", addr)
 
 	httpServer := &http.Server{
-		Addr:    addr,
 		Handler: s.router,
 	}
 
@@ -262,7 +270,7 @@ func (s *Server) Start() error {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
 			serverErr <- err
 		}
 	}()

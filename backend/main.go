@@ -81,22 +81,23 @@ func main() {
 		Timeout:     60 * time.Second,
 	}
 
-	fmt.Println("Please open the following URL in your browser: http://" + host + port)
 	// Try to create the server
 	srv, err := server.NewServer(cfg)
 	if err != nil {
 		log.Fatalf("Failed to initialize server: %v", err)
 	}
 
-	// Try to start the server, handle binding errors gracefully
+	// Try to start the server, handle binding errors gracefully.
+	// Start() binds synchronously and returns the bind error before
+	// any "server started" message, so port-in-use is loud and fatal.
 	if err := srv.Start(); err != nil {
-		// Check if it's an address binding error
-		if strings.Contains(err.Error(), "bind:") || strings.Contains(err.Error(), "listen:") {
-			log.Printf("Failed to bind to address %s: %v", host+port, err)
-			log.Println("Please check if the port is already in use or if you have permission to bind to this address")
+		if strings.Contains(err.Error(), "bind:") ||
+			strings.Contains(err.Error(), "listen:") ||
+			strings.Contains(err.Error(), "address already in use") {
+			fmt.Fprintf(os.Stderr, "\nERROR: Cannot bind to %s — %v\n", host+port, err)
+			fmt.Fprintln(os.Stderr, "Port is already in use. Stop the other process or pick a different port with -port <N> (or PORT env var).")
 			os.Exit(1)
 		}
-		// Other server errors
 		log.Fatalf("Server failed: %v", err)
 	}
 }

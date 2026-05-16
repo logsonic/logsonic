@@ -14,7 +14,6 @@ import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { useClearLogs } from '@/hooks/useApi';
-import { useBackendStatus } from '@/hooks/useBackendStatus';
 import { getSystemInfo } from '@/lib/api-client';
 import { formatBytes } from "@/lib/utils";
 import { useLogResultStore } from '@/stores/useLogResultStore';
@@ -33,7 +32,6 @@ export const Header = () => {
   const { toast } = useToast();
   const [systemInfoOpen, setSystemInfoOpen] = useState(false);
   const { systemInfo, setSystemInfo } = useSystemInfoStore();
-  const { isConnected } = useBackendStatus(5000); // Check every 5 seconds
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
@@ -216,41 +214,6 @@ export const Header = () => {
             </AlertDialogContent>
           </AlertDialog>
 
-          <span aria-hidden style={{ width: 1, height: 18, background: 'var(--ls-border)', margin: '0 4px' }} />
-
-          {/* Status chip */}
-          <TooltipProvider>
-            <Tooltip delayDuration={300}>
-              <TooltipTrigger asChild>
-                <div
-                  className="inline-flex items-center gap-1.5 rounded-full"
-                  style={{
-                    height: 22,
-                    padding: '0 8px',
-                    background: 'var(--ls-bg-2)',
-                    border: '1px solid var(--ls-border)',
-                    color: 'var(--ls-text-2)',
-                    fontFamily: 'var(--ls-font-mono)',
-                    fontSize: 11,
-                  }}
-                  aria-label="Backend status"
-                >
-                  <span
-                    style={{
-                      width: 7,
-                      height: 7,
-                      borderRadius: '50%',
-                      background: isConnected ? 'var(--ls-ok)' : 'var(--ls-err)',
-                    }}
-                  />
-                  v2
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">
-                <p>{isConnected ? 'Backend connected' : 'Backend disconnected'}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
         </div>
       </div>
 
