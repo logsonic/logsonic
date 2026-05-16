@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -9,8 +8,22 @@ import { cn } from "@/lib/utils";
 import { ColorRule, useColorRuleStore } from "@/stores/useColorRuleStore";
 import { useLogResultStore } from "@/stores/useLogResultStore";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
-import { Check, Plus, Trash2 } from "lucide-react";
+import { Check, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
+
+const FieldLabel = ({ htmlFor, children }: { htmlFor?: string; children: React.ReactNode }) => (
+  <label
+    htmlFor={htmlFor}
+    className="block text-[10.5px] font-medium leading-none"
+    style={{ color: 'var(--ls-text-2)' }}
+  >
+    {children}
+  </label>
+);
+
+const COMPACT_INPUT_CLS = "!h-7 !text-[11px] !px-2 !py-0 md:!text-[11px]";
+const COMPACT_TRIGGER_CLS = "!h-7 !text-[11px] !px-2 !py-0";
+const COMPACT_BUTTON_CLS = "!h-7 !text-[11px] !px-2.5";
 
 // Palette for rule highlight colors. Each entry pairs the light Tailwind
 // background used to highlight matching log rows with the darker text token
@@ -113,10 +126,12 @@ const RuleCard = ({
   rule,
   onToggle,
   onDelete,
+  onEdit,
 }: {
   rule: ColorRule;
   onToggle: () => void;
   onDelete: () => void;
+  onEdit: () => void;
 }) => {
   const titleColor = titleColorFromBg(rule.color);
   const disabled = !rule.enabled;
@@ -124,22 +139,33 @@ const RuleCard = ({
   return (
     <div
       className={cn(
-        'rounded-md border px-2.5 py-1.5 transition-all',
+        'group rounded-md border px-2.5 py-1.5 transition-all',
         // ls-rule-card hook lets dark mode dim the user-chosen pastel bg.
         !disabled && 'ls-rule-card',
         disabled ? 'bg-[var(--ls-bg-2)] border-[var(--ls-border)]' : cn(rule.color, 'border-transparent')
       )}
     >
       <div className="flex items-center gap-1.5">
-        <span
+        <button
+          type="button"
+          onClick={onEdit}
           className={cn(
-            'flex-1 min-w-0 truncate text-[12px] font-semibold tracking-tight leading-tight',
+            'flex-1 min-w-0 truncate text-left text-[12px] font-semibold tracking-tight leading-tight hover:underline',
             disabled ? 'text-[var(--ls-text-3)]' : titleColor
           )}
-          title={ruleTitle(rule)}
+          title={`Edit rule: ${ruleTitle(rule)}`}
         >
           {ruleTitle(rule)}
-        </span>
+        </button>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="h-5 w-5 grid place-items-center rounded text-[var(--ls-text-3)] hover:text-[var(--ls-text)] hover:bg-[var(--ls-bg-2)] transition-colors opacity-0 group-hover:opacity-100"
+          aria-label="Edit rule"
+          title="Edit rule"
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
         <Switch
           checked={rule.enabled}
           onCheckedChange={onToggle}
@@ -169,87 +195,85 @@ const RuleCard = ({
   );
 };
 
-const AddRuleForm = ({
+const RuleForm = ({
   draft,
   setDraft,
   availableFields,
   onSave,
   onCancel,
+  mode,
 }: {
   draft: DraftRule;
   setDraft: (d: DraftRule) => void;
   availableFields: string[];
   onSave: () => void;
   onCancel: () => void;
+  mode: 'add' | 'edit';
 }) => {
   const saveDisabled = !draft.field || (draft.operator !== 'exists' && !draft.value);
 
   return (
     <div
       className={cn(
-        'rounded-md border p-2 space-y-2',
+        'rounded-md border p-2 space-y-1.5',
         draft.color,
         'border-[var(--ls-border)]'
       )}
     >
       <div className="grid grid-cols-2 gap-1.5">
-        <div className="space-y-0.5">
-          <Label htmlFor="rule-field" className="text-[10.5px] font-medium text-[var(--ls-text-2)]">
-            Field
-          </Label>
+        <div className="space-y-1">
+          <FieldLabel htmlFor="rule-field">Field</FieldLabel>
           <Select
             value={draft.field}
             onValueChange={(value) => setDraft({ ...draft, field: value })}
           >
             <SelectTrigger
               id="rule-field"
-              className="text-[11px] h-6"
+              className={COMPACT_TRIGGER_CLS}
               disabled={!availableFields.length}
             >
               <SelectValue placeholder="Select field" />
             </SelectTrigger>
             <SelectContent>
               {availableFields.map((field) => (
-                <SelectItem key={field} value={field}>
+                <SelectItem key={field} value={field} className="text-[11px]">
                   {field}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-0.5">
-          <Label htmlFor="rule-operator" className="text-[10.5px] font-medium text-[var(--ls-text-2)]">
-            Operator
-          </Label>
+        <div className="space-y-1">
+          <FieldLabel htmlFor="rule-operator">Operator</FieldLabel>
           <Select
             value={draft.operator}
             onValueChange={(value) =>
               setDraft({ ...draft, operator: value as ColorRule['operator'] })
             }
           >
-            <SelectTrigger id="rule-operator" className="text-[11px] h-6">
+            <SelectTrigger id="rule-operator" className={COMPACT_TRIGGER_CLS}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="eq">Equals (=)</SelectItem>
-              <SelectItem value="neq">Not equals (≠)</SelectItem>
-              <SelectItem value="contains">Contains</SelectItem>
-              <SelectItem value="exists">Exists</SelectItem>
-              <SelectItem value="regex">Regex</SelectItem>
+              <SelectItem value="eq" className="text-[11px]">Equals (=)</SelectItem>
+              <SelectItem value="neq" className="text-[11px]">Not equals (≠)</SelectItem>
+              <SelectItem value="contains" className="text-[11px]">Contains</SelectItem>
+              <SelectItem value="exists" className="text-[11px]">Exists</SelectItem>
+              <SelectItem value="regex" className="text-[11px]">Regex</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      <div className="space-y-0.5">
-        <Label htmlFor="rule-value" className="text-[10.5px] font-medium text-[var(--ls-text-2)]">
+      <div className="space-y-1">
+        <FieldLabel htmlFor="rule-value">
           {draft.operator === 'exists' ? 'Value (not needed)' : 'Value'}
-        </Label>
+        </FieldLabel>
         <Input
           id="rule-value"
           value={draft.value}
           onChange={(e) => setDraft({ ...draft, value: e.target.value })}
-          className="h-6 text-[11px] px-2"
+          className={COMPACT_INPUT_CLS}
           placeholder={
             draft.operator === 'exists'
               ? 'No value needed'
@@ -261,14 +285,14 @@ const AddRuleForm = ({
         />
       </div>
 
-      <div className="space-y-0.5">
-        <Label className="text-[10.5px] font-medium text-[var(--ls-text-2)]">Color</Label>
+      <div className="space-y-1">
+        <FieldLabel>Color</FieldLabel>
         <Popover>
           <PopoverTrigger asChild>
             <button
               type="button"
               className={cn(
-                'h-6 w-full flex items-center gap-1.5 rounded-md border px-2 text-[11px] transition-colors',
+                'h-7 w-full flex items-center gap-1.5 rounded-md border px-2 text-[11px] transition-colors',
                 draft.color
               )}
               style={{ borderColor: 'var(--ls-border)' }}
@@ -289,18 +313,18 @@ const AddRuleForm = ({
         </Popover>
       </div>
 
-      <div className="flex justify-end gap-1.5 pt-0.5">
-        <Button size="sm" variant="outline" className="h-6 text-[11px] px-2.5" onClick={onCancel}>
+      <div className="flex justify-end gap-1.5 pt-1">
+        <Button size="sm" variant="outline" className={COMPACT_BUTTON_CLS} onClick={onCancel}>
           Cancel
         </Button>
         <Button
           size="sm"
-          className="h-6 text-[11px] px-2.5"
+          className={COMPACT_BUTTON_CLS}
           style={{ background: 'var(--ls-accent)', color: 'white' }}
           onClick={onSave}
           disabled={saveDisabled}
         >
-          Save
+          {mode === 'edit' ? 'Update' : 'Save'}
         </Button>
       </div>
     </div>
@@ -308,11 +332,12 @@ const AddRuleForm = ({
 };
 
 export const ColorRulesPanel = () => {
-  const { colorRules, addRule, deleteRule, toggleRule } = useColorRuleStore();
+  const { colorRules, addRule, updateRule, deleteRule, toggleRule } = useColorRuleStore();
   const { logData } = useLogResultStore();
   const { selectedColumns } = useSearchQueryParamsStore();
 
   const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftRule>(blankDraft);
 
   const availableFields = logData?.logs && logData.logs.length > 0
@@ -323,12 +348,33 @@ export const ColorRulesPanel = () => {
   const enabledCount = colorRules.filter((r) => r.enabled).length;
   const totalCount = colorRules.length;
 
+  const resetForm = () => {
+    setIsAdding(false);
+    setEditingId(null);
+    setDraft(blankDraft());
+  };
+
+  const handleEdit = (rule: ColorRule) => {
+    setIsAdding(false);
+    setEditingId(rule.id);
+    setDraft({
+      field: rule.field,
+      operator: rule.operator,
+      value: rule.value,
+      color: rule.color,
+      enabled: rule.enabled,
+    });
+  };
+
   const handleSave = () => {
     if (!draft.field || (draft.operator !== 'exists' && !draft.value)) return;
-    const ruleToAdd: DraftRule = draft.operator === 'exists' ? { ...draft, value: '' } : draft;
-    addRule(ruleToAdd);
-    setDraft(blankDraft());
-    setIsAdding(false);
+    const payload: DraftRule = draft.operator === 'exists' ? { ...draft, value: '' } : draft;
+    if (editingId) {
+      updateRule(editingId, payload);
+    } else {
+      addRule(payload);
+    }
+    resetForm();
     triggerColorReapply();
   };
 
@@ -353,37 +399,53 @@ export const ColorRulesPanel = () => {
         </div>
 
         <div className="space-y-2">
-          {colorRules.map((rule) => (
-            <RuleCard
-              key={rule.id}
-              rule={rule}
-              onToggle={() => {
-                toggleRule(rule.id);
-                triggerColorReapply();
-              }}
-              onDelete={() => {
-                deleteRule(rule.id);
-                triggerColorReapply();
-              }}
-            />
-          ))}
+          {colorRules.map((rule) =>
+            editingId === rule.id ? (
+              <RuleForm
+                key={rule.id}
+                draft={draft}
+                setDraft={setDraft}
+                availableFields={availableFields}
+                onSave={handleSave}
+                onCancel={resetForm}
+                mode="edit"
+              />
+            ) : (
+              <RuleCard
+                key={rule.id}
+                rule={rule}
+                onToggle={() => {
+                  toggleRule(rule.id);
+                  triggerColorReapply();
+                }}
+                onDelete={() => {
+                  if (editingId === rule.id) resetForm();
+                  deleteRule(rule.id);
+                  triggerColorReapply();
+                }}
+                onEdit={() => handleEdit(rule)}
+              />
+            )
+          )}
         </div>
 
         {isAdding ? (
-          <AddRuleForm
+          <RuleForm
             draft={draft}
             setDraft={setDraft}
             availableFields={availableFields}
             onSave={handleSave}
-            onCancel={() => {
-              setIsAdding(false);
-              setDraft(blankDraft());
-            }}
+            onCancel={resetForm}
+            mode="add"
           />
         ) : (
           <button
             type="button"
-            onClick={() => setIsAdding(true)}
+            onClick={() => {
+              setEditingId(null);
+              setDraft(blankDraft());
+              setIsAdding(true);
+            }}
             className="w-full flex items-center justify-center gap-1.5 rounded-md py-1.5 text-[11.5px] font-medium transition-colors"
             style={{
               border: '1px dashed var(--ls-border-strong)',
