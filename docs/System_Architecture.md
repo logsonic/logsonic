@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-LogSonic is an offline-first, desktop log analytics tool built as a single Go binary (~10 MB) that embeds a React SPA frontend. It ingests logs from local files, parses them with Grok patterns, indexes them in time-sharded Bleve indices, and provides full-text search with visualization. Optional AI assistance (via local Ollama) translates natural language queries into Bleve syntax, and an MCP server extension allows external AI agents to query logs programmatically.
+LogSonic is an offline-first, desktop log analytics tool built as a single self-contained Go binary that embeds a React SPA frontend. It ingests logs from local files, parses them with Grok patterns, indexes them in time-sharded Bleve indices, and provides full-text search with visualization. Optional AI assistance (via local Ollama) translates natural language queries into Bleve syntax, and an MCP server extension allows external AI agents to query logs programmatically.
 
 ---
 

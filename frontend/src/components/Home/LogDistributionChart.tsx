@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useFitRangeToData } from '@/hooks/useFitRangeToData';
 import { LogResponse } from '@/lib/api-types';
 import { cn } from '@/lib/utils';
@@ -19,6 +20,9 @@ import {
   XAxis,
   YAxis
 } from 'recharts';
+
+// Max sources to show inline in the legend before collapsing into a "+N more" pill
+const MAX_VISIBLE_LEGEND_SOURCES = 8;
 
 // Source color palette — purple-leaning, designed for the new tokens
 const SOURCE_COLORS = [
@@ -126,6 +130,112 @@ function getColorIndexForSource(source: string): number {
   return Math.abs(hash) % SOURCE_COLORS.length;
 }
 
+// Single-row legend that sorts sources by event count, shows the top N inline,
+// and tucks the remainder behind a "+N more" popover so a long list of files
+// never eats into the chart area.
+function CompactSourceLegend({
+  sortedSources,
+  sourceColorMap,
+}: {
+  sortedSources: string[];
+  sourceColorMap: Map<string, number>;
+}) {
+  if (sortedSources.length === 0) return null;
+
+  const visible = sortedSources.slice(0, MAX_VISIBLE_LEGEND_SOURCES);
+  const overflow = sortedSources.slice(MAX_VISIBLE_LEGEND_SOURCES);
+
+  const renderItem = (source: string) => {
+    const colorIndex = sourceColorMap.get(source) ?? 0;
+    const color = SOURCE_COLORS[colorIndex][0];
+    return (
+      <div
+        key={source}
+        className="flex items-center"
+        style={{ gap: 4, fontSize: 10, color: 'var(--ls-text-2)', minWidth: 0 }}
+        title={source}
+      >
+        <span
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: color,
+            display: 'inline-block',
+            flexShrink: 0,
+          }}
+        />
+        <span
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: 140,
+          }}
+        >
+          {source}
+        </span>
+      </div>
+    );
+  };
+
+  return (
+    <div
+      className="flex items-center"
+      style={{
+        gap: 12,
+        paddingLeft: 25,
+        paddingRight: 8,
+        flexWrap: 'nowrap',
+        overflow: 'hidden',
+      }}
+    >
+      {visible.map(renderItem)}
+      {overflow.length > 0 && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="rounded-full transition-colors"
+              style={{
+                fontSize: 10,
+                padding: '1px 8px',
+                background: 'var(--ls-bg-2)',
+                color: 'var(--ls-text-2)',
+                border: '1px solid var(--ls-border)',
+                cursor: 'pointer',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              +{overflow.length} more
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="p-2 w-64">
+            <div
+              style={{
+                fontSize: 10,
+                color: 'var(--ls-text-3)',
+                marginBottom: 6,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }}
+            >
+              All sources ({sortedSources.length})
+            </div>
+            <div
+              className="flex flex-col"
+              style={{ gap: 4, maxHeight: 240, overflowY: 'auto' }}
+            >
+              {sortedSources.map(renderItem)}
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
+    </div>
+  );
+}
+
 export default function LogDistributionChart() {
   const [error, setError] = useState<string | null>(null);
   const [chartData, setChartData] = useState<any[]>([]);
@@ -214,13 +324,28 @@ export default function LogDistributionChart() {
   // Create a stable source-to-color mapping for the current data
   const sourceColorMap = useMemo(() => {
     const map = new Map<string, number>();
-    
+
     sources.forEach(source => {
       map.set(source, getColorIndexForSource(source));
     });
-    
+
     return map;
   }, [sources]);
+
+  // Sort sources by total event count (descending) so the most prominent
+  // ones appear first in the legend
+  const sortedSources = useMemo(() => {
+    if (sources.length === 0) return [];
+    const totals = new Map<string, number>();
+    sources.forEach(s => totals.set(s, 0));
+    chartData.forEach(item => {
+      sources.forEach(s => {
+        const v = item[s];
+        if (typeof v === 'number') totals.set(s, (totals.get(s) || 0) + v);
+      });
+    });
+    return [...sources].sort((a, b) => (totals.get(b) || 0) - (totals.get(a) || 0));
+  }, [sources, chartData]);
   
   // Transform API data for chart display
   const transformData = (data: LogResponse | null) => {
@@ -590,11 +715,16 @@ export default function LogDistributionChart() {
                     tickFormatter={formatYAxisTick}
                   />
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend 
-                    wrapperStyle={{ fontSize: '10px', bottom: 0 }} 
-                    iconSize={8} 
-                    iconType="circle"
+                  <Legend
+                    wrapperStyle={{ fontSize: '10px', bottom: 0, left: 0, right: 0 }}
+                    content={() => (
+                      <CompactSourceLegend
+                        sortedSources={sortedSources}
+                        sourceColorMap={sourceColorMap}
+                      />
+                    )}
                   />
+
                   
                   {/* Generate bars for each source */}
                   {sources.map((source) => {

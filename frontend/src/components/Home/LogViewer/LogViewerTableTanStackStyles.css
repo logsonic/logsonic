@@ -29,8 +29,6 @@
   font-family: var(--ls-font-sans) !important;
   font-weight: 600 !important;
   font-size: 11px !important;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   border-bottom: 1px solid var(--ls-border) !important;
   padding: 6px 10px !important;
   white-space: nowrap;
