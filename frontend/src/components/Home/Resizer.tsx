@@ -17,7 +17,7 @@ export const Resizer: React.FC<ResizerProps> = ({ columnId }) => {
   // Mouse down handler to start resizing
   const handleMouseDown = (e: React.MouseEvent) => {
     if (store.isColumnLocked) return;
-    
+
     // Stop event propagation so it doesn't trigger sorting
     e.preventDefault();
     e.stopPropagation();
@@ -42,7 +42,7 @@ export const Resizer: React.FC<ResizerProps> = ({ columnId }) => {
 
       const delta = e.clientX - startX;
       const newWidth = Math.max(100, startWidth + delta);
-      
+
       // Update column width in the store
       const newWidths = { ...store.columnWidths };
       newWidths[columnId] = newWidth;
@@ -66,7 +66,7 @@ export const Resizer: React.FC<ResizerProps> = ({ columnId }) => {
 
       // Get table width
       const tableWidth = table.getBoundingClientRect().width;
-      
+
       // Set the last column width to fill remaining space
       const lastColumnId = visibleColumns[visibleColumns.length - 1];
       if (lastColumnId) {
@@ -91,29 +91,22 @@ export const Resizer: React.FC<ResizerProps> = ({ columnId }) => {
 
   return (
     <>
-      {/* Resizer handle */}
+      {/* Resize handle — absolutely pinned to the column's right edge */}
       <div
-        className={`h-full w-4 cursor-col-resize group/resizer flex items-center justify-center ${isResizing ? 'z-10' : ''}`}
+        className={`absolute top-0 right-0 h-full cursor-col-resize group/resizer ${isResizing ? 'z-10' : ''}`}
         onMouseDown={handleMouseDown}
-        style={{ marginRight: '4px' }}
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: 6 }}
       >
-        <svg 
-          width="18" 
-          height="18" 
-          viewBox="0 0 15 15" 
-          fill="none" 
-          xmlns="http://www.w3.org/2000/svg"
-          className={`opacity-30 group-hover/header:opacity-100 group-hover/resizer:opacity-100 transition-opacity duration-200 ${isResizing ? 'opacity-100' : ''}`}
-        >
-          <path
-            fillRule="evenodd"
-            clipRule="evenodd"
-            d="M8.00012 1.5C8.00012 1.22386 7.77626 1 7.50012 1C7.22398 1 7.00012 1.22386 7.00012 1.5V13.5C7.00012 13.7761 7.22398 14 7.50012 14C7.77626 14 8.00012 13.7761 8.00012 13.5V1.5ZM3.31812 5.818C3.49386 5.64227 3.49386 5.35734 3.31812 5.18161C3.14239 5.00587 2.85746 5.00587 2.68173 5.18161L0.681729 7.18161C0.505993 7.35734 0.505993 7.64227 0.681729 7.818L2.68173 9.818C2.85746 9.99374 3.14239 9.99374 3.31812 9.818C3.49386 9.64227 3.49386 9.35734 3.31812 9.18161L2.08632 7.9498H5.50017C5.7487 7.9498 5.95017 7.74833 5.95017 7.4998C5.95017 7.25128 5.7487 7.0498 5.50017 7.0498H2.08632L3.31812 5.818ZM12.3181 5.18161C12.1424 5.00587 11.8575 5.00587 11.6817 5.18161C11.506 5.35734 11.506 5.64227 11.6817 5.818L12.9135 7.0498H9.50017C9.25164 7.0498 9.05017 7.25128 9.05017 7.4998C9.05017 7.74833 9.25164 7.9498 9.50017 7.9498H12.9135L11.6817 9.18161C11.506 9.35734 11.506 9.64227 11.6817 9.818C11.8575 9.99374 12.1424 9.99374 12.3181 9.818L14.3181 7.818C14.4939 7.64227 14.4939 7.35734 14.3181 7.18161L12.3181 5.18161Z"
-            fill={isResizing ? "#3b82f6" : "#6b7280"}
-            stroke={isResizing ? "#3b82f6" : "#6b7280"}
-            strokeWidth="0.2"
-          />
-        </svg>
+        <span
+          aria-hidden
+          className={`block h-full transition-colors ${isResizing ? '' : 'opacity-0 group-hover/resizer:opacity-100'}`}
+          style={{
+            width: 2,
+            marginLeft: 2,
+            background: isResizing ? 'var(--ls-accent)' : 'var(--ls-border-strong)',
+          }}
+        />
       </div>
 
       {/* Overlay when resizing */}
@@ -122,4 +115,4 @@ export const Resizer: React.FC<ResizerProps> = ({ columnId }) => {
       )}
     </>
   );
-}; 
+};

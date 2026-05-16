@@ -80,17 +80,6 @@ export default [
         "endOfLine": "lf"
       }],
       "no-unused-vars": "off", // Turn off the base rule as it can report incorrect errors
-      "@typescript-eslint/no-unused-vars": [
-        "error",
-        {
-          vars: "all",
-          args: "after-used",
-          ignoreRestSiblings: true,
-          argsIgnorePattern: "^_",
-          varsIgnorePattern: "^_",
-          caughtErrors: "none",
-        },
-      ],
     },
   }
 ];

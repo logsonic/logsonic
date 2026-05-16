@@ -79,13 +79,18 @@ export const highlightLogLine = (
     return <span>{rawLine}</span>;
   }
   
-  // Sort fields by their position in the raw line
+  // Sort fields by their position in the raw line.
+  // Filter empty values: `rawLine.indexOf('')` returns 0, so unmatched
+  // optional fields (e.g. nginx access logs where client_ip is "-") would
+  // otherwise stack zero-width chips at the start of the line and clutter
+  // both the visible output and the accessibility tree.
   const sortedFields = Object.entries(displayFields)
+    .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '' && String(value) !== '-')
     .map(([field, value]) => {
-      const position = rawLine.indexOf(value);
-      return { field, value, position };
+      const position = rawLine.indexOf(String(value));
+      return { field, value: String(value), position };
     })
-    .filter(item => item.position !== -1)
+    .filter(item => item.position !== -1 && item.value.length > 0)
     .sort((a, b) => a.position - b.position);
   
   if (sortedFields.length === 0) {

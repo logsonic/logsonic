@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
 import { useSystemInfoStore } from "@/stores/useSystemInfoStore";
-import { CheckSquare2, FilterX, Loader2, Palette, Square } from "lucide-react";
+import { CheckSquare2, Eye, FilterX, Loader2, Square } from "lucide-react";
 import { useEffect } from "react";
 import { VerticalTab } from "./Sidebar/CollapsiblePanel";
 import { ColorRulesPanel } from "./Sidebar/ColorRulesPanel";
@@ -68,24 +68,28 @@ export const SidebarPanel = () => {
       ) : (
         <>
           {/* Select All header */}
-          <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-100">
+          <div
+            className="flex items-center justify-between mb-2 pb-2"
+            style={{ borderBottom: '1px solid var(--ls-border-subtle)' }}
+          >
             <button
-              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors"
+              className="flex items-center gap-1.5 text-xs transition-colors"
+              style={{ color: allSelected ? 'var(--ls-accent-text)' : 'var(--ls-text-2)' }}
               onClick={handleSelectAll}
               title={allSelected ? "Deselect all" : "Select all"}
             >
               {allSelected ? (
-                <CheckSquare2 className="h-3.5 w-3.5 text-blue-500" />
+                <CheckSquare2 className="h-3.5 w-3.5" style={{ color: 'var(--ls-accent)' }} />
               ) : someSelected ? (
-                <CheckSquare2 className="h-3.5 w-3.5 text-slate-400" />
+                <CheckSquare2 className="h-3.5 w-3.5" style={{ color: 'var(--ls-text-3)' }} />
               ) : (
-                <Square className="h-3.5 w-3.5 text-slate-400" />
+                <Square className="h-3.5 w-3.5" style={{ color: 'var(--ls-text-3)' }} />
               )}
-              <span className={cn("font-medium", allSelected ? "text-blue-600" : "")}>
+              <span className="font-medium">
                 {allSelected ? "Deselect All" : "Select All"}
               </span>
             </button>
-            <span className="text-[10px] text-slate-400">
+            <span style={{ fontSize: 10, color: 'var(--ls-text-3)' }}>
               {sources.length}/{allSourceNames.length} selected
             </span>
           </div>
@@ -97,30 +101,40 @@ export const SidebarPanel = () => {
                 return (
                   <div
                     key={sourceName}
-                    className={cn(
-                      "flex items-center gap-2 py-1.5 px-2 rounded-md cursor-pointer transition-colors",
-                      isChecked ? "bg-blue-50/60 hover:bg-blue-50" : "hover:bg-slate-50"
-                    )}
+                    className="flex items-center gap-2 py-1.5 px-2 rounded-md cursor-pointer transition-colors"
+                    style={{
+                      background: isChecked ? 'var(--ls-accent-softer)' : 'transparent',
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background = isChecked ? 'var(--ls-accent-soft)' : 'var(--ls-bg-2)')
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background = isChecked ? 'var(--ls-accent-softer)' : 'transparent')
+                    }
                     onClick={() => handleSourceChange(sourceName, !isChecked)}
                   >
                     <Checkbox
                       id={`source-${sourceName}`}
                       checked={isChecked}
                       onCheckedChange={(checked) => handleSourceChange(sourceName, checked === true)}
-                      className="data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500 pointer-events-none"
+                      className={cn(
+                        "pointer-events-none",
+                        "data-[state=checked]:bg-[var(--ls-accent)] data-[state=checked]:border-[var(--ls-accent)]"
+                      )}
                     />
                     <Label
                       htmlFor={`source-${sourceName}`}
-                      className={cn(
-                        "text-xs cursor-pointer truncate flex-1",
-                        isChecked ? "text-blue-700 font-medium" : "text-slate-600"
-                      )}
+                      className={cn("text-xs cursor-pointer truncate flex-1", isChecked && "font-medium")}
+                      style={{ color: isChecked ? 'var(--ls-accent-text)' : 'var(--ls-text-2)' }}
                       title={sourceName}
                     >
                       {sourceName}
                     </Label>
                     {isChecked && (
-                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                      <div
+                        className="rounded-full flex-shrink-0"
+                        style={{ width: 6, height: 6, background: 'var(--ls-accent)' }}
+                      />
                     )}
                   </div>
                 );
@@ -145,10 +159,19 @@ export const SidebarPanel = () => {
   // Create styling tab content
   const stylingContent = (
     <div className="pt-1">
-      <div>
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Log Coloring</p>
-        <ColorRulesPanel />
+      <div
+        className="flex items-center gap-1.5 pb-2 mb-2"
+        style={{ borderBottom: '1px solid var(--ls-border-subtle)' }}
+      >
+        <Eye className="h-3.5 w-3.5" style={{ color: 'var(--ls-text-2)' }} />
+        <span
+          className="flex-1 text-[12px] font-semibold tracking-tight"
+          style={{ color: 'var(--ls-text)' }}
+        >
+          Row coloring
+        </span>
       </div>
+      <ColorRulesPanel />
     </div>
   );
 
@@ -163,8 +186,8 @@ export const SidebarPanel = () => {
     },
     {
       id: 'styling',
-      icon: <Palette className="h-4 w-4" />,
-      label: 'Styling',
+      icon: <Eye className="h-4 w-4" />,
+      label: 'Logs',
       content: stylingContent
     }
   ];

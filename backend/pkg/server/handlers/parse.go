@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"logsonic/pkg/types"
 
@@ -116,26 +115,20 @@ func (h *Services) HandleParse(w http.ResponseWriter, r *http.Request) {
 
 // autosuggestPatterns delegates pattern discovery to log2grok. Returns a
 // single-element slice (or empty when no pattern is detected) describing
-// the source family detected, the Grok expression, custom patterns, and
-// the coverage observed against the input lines.
+// the source family detected, the Grok expression, custom patterns, the
+// coverage observed against the input lines, and — when log2grok could
+// infer one — a TimestampField/TimestampLayout pair the frontend can
+// use to pre-select the timestamp column in the wizard.
+//
+// We pass the raw logs through; log2grok normalises blanks internally
+// and returns ErrEmptyInput when nothing parseable remains.
 func (h *Services) autosuggestPatterns(logs []string) ([]types.AutosuggestResult, error) {
 	results := []types.AutosuggestResult{}
 	if len(logs) == 0 {
 		return results, nil
 	}
 
-	// log2grok.Discover rejects all-empty input — pre-filter blanks.
-	nonEmpty := make([]string, 0, len(logs))
-	for _, line := range logs {
-		if strings.TrimSpace(line) != "" {
-			nonEmpty = append(nonEmpty, line)
-		}
-	}
-	if len(nonEmpty) == 0 {
-		return results, nil
-	}
-
-	dp, err := l2g.Discover(nonEmpty, l2g.Options{})
+	dp, err := l2g.Discover(logs, l2g.Options{})
 	if err != nil {
 		if errors.Is(err, l2g.ErrEmptyInput) {
 			return results, nil
@@ -163,6 +156,9 @@ func (h *Services) autosuggestPatterns(logs []string) ([]types.AutosuggestResult
 		Coverage:           dp.Coverage,
 		ParsedLogs:         []map[string]interface{}{},
 		CustomPatterns:     dp.CustomPatterns,
+		TimestampField:     dp.TimestampHint.Field,
+		TimestampLayout:    dp.TimestampHint.Layout,
+		TimestampSource:    dp.TimestampHint.Source,
 	})
 
 	return results, nil

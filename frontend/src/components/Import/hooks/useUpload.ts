@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 
 import { useIngestEnd, useIngestLogs, useIngestStart } from '@/hooks/useApi';
 import { IngestSessionOptions } from '@/lib/api-types';
@@ -8,41 +8,13 @@ import { LogSourceProviderService } from '../types';
 
 export const useUpload = (): UploadProgressHookResult => {
   const {
-    selectedFileName,
-    selectedFileHandle,
-    selectedPattern,
     sessionID,
-    metadata,
-    setSessionID,
     isUploading,
     uploadProgress,
     approxLines,
     setIsUploading,
-    setUploadProgress,
-    setApproxLines,
-    setTotalLines,
-    sessionOptionsSmartDecoder,
-    sessionOptionsTimezone,
-    sessionOptionsYear,
-    sessionOptionsMonth,
-    sessionOptionsDay,
-    timestampInference,
-    timestampOverrides,
-    sourceMTime,
-    files,
     updateFile,
   } = useImportStore();
-
-  // Effective timestamp config sent to /ingest/start = sniffed
-  // resolution overlaid with the user's overrides. Returns undefined
-  // when no inference exists yet (e.g. CloudWatch path) so the
-  // backend falls through to legacy ForceStart* handling.
-  const effectiveTimestampConfig = () => {
-    if (!timestampInference) return undefined;
-    return { ...timestampInference.resolution, ...timestampOverrides };
-  };
-
-  const progressRef = useRef(0);
 
   const ingestStartApi = useIngestStart();
   const ingestLogsApi = useIngestLogs();
@@ -142,86 +114,10 @@ export const useUpload = (): UploadProgressHookResult => {
     return results;
   }, [updateFile, setIsUploading, ingestStartApi, ingestLogsApi, ingestEndApi, sessionID]);
 
-  // --- Legacy single-file upload ---
-  const handleUpload = useCallback(async (provider: LogSourceProviderService) => {
-    try {
-      setIsUploading(true);
-      progressRef.current = 0;
-      setUploadProgress(0);
-
-      const ingestSessionOptions: IngestSessionOptions = {
-        pattern: selectedPattern.pattern,
-        name: selectedPattern.name,
-        custom_patterns: selectedPattern.custom_patterns,
-        priority: selectedPattern.priority,
-        source: selectedFileName,
-        smart_decoder: sessionOptionsSmartDecoder,
-        force_timezone: sessionOptionsTimezone,
-        force_start_year: sessionOptionsYear,
-        force_start_month: sessionOptionsMonth,
-        force_start_day: sessionOptionsDay,
-        source_mtime: sourceMTime || undefined,
-        timestamp_config: effectiveTimestampConfig(),
-        meta: metadata
-      };
-
-      const startResponse = await ingestStartApi.execute(ingestSessionOptions);
-      if (startResponse.status !== 'success' || !startResponse.session_id) {
-        throw new Error('Failed to start ingestion session');
-      }
-
-      const currentSessionID = startResponse.session_id;
-      setSessionID(currentSessionID);
-
-      progressRef.current = 0;
-      setUploadProgress(0);
-
-      let handledLines = 0;
-      let i = 0;
-
-      await provider.handleFileImport(selectedFileHandle, 10000, async (lines, totalLines, next) => {
-        setApproxLines(totalLines);
-        const requestBody = {
-          logs: lines,
-          session_id: currentSessionID
-        };
-        i++;
-        const response = await ingestLogsApi.execute(requestBody);
-
-        if (response.status !== 'success') {
-          throw new Error(`Failed to ingest chunk ${i + 1}`);
-        }
-        handledLines += lines.length;
-        setUploadProgress(Math.ceil(handledLines / totalLines * 100));
-        setTotalLines(handledLines);
-        next();
-      });
-
-      await ingestEndApi.execute(currentSessionID);
-      setTotalLines(handledLines);
-
-      progressRef.current = 100;
-      setUploadProgress(100);
-    } catch (error) {
-      console.error('Upload failed:', error);
-      try {
-        if (sessionID) {
-          await ingestEndApi.execute(sessionID);
-        }
-      } catch (endError) {
-        console.error('Failed to end ingestion session:', endError);
-      }
-      throw error;
-    } finally {
-      setIsUploading(false);
-    }
-  }, [isUploading, selectedFileHandle, selectedFileName, selectedPattern, sessionOptionsSmartDecoder, sessionOptionsTimezone, sessionOptionsYear, sessionOptionsMonth, sessionOptionsDay, metadata]);
-
   return {
     isUploading,
     uploadProgress,
     approxLines,
-    handleUpload: (provider: LogSourceProviderService) => handleUpload(provider),
     handleMultiFileUpload,
   };
 };

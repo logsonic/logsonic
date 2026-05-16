@@ -1,7 +1,6 @@
+import { ArrowRight } from "lucide-react";
 import { FC } from "react";
 import { useImportStore } from "../../../stores/useImportStore";
-import { selectedFileIdsForImport } from "./ImportConfirmStep";
-import { Button } from "../../ui/button";
 
 const HandleNavigation: FC<{
     onNext: () => void;
@@ -11,7 +10,7 @@ const HandleNavigation: FC<{
 
     const isMultiFile = importSource === 'file' && files.length > 0;
 
-    // Block step-2 → step-3 when any inference says ambiguous/missing
+    // Block step-2 → import when any inference says ambiguous/missing
     // and that file hasn't been confirmed. In single-file mode we
     // check the global slice; in multi-file mode every file must
     // independently pass.
@@ -25,7 +24,7 @@ const HandleNavigation: FC<{
             && (timestampInference.status === 'ambiguous' || timestampInference.status === 'missing')
             && !timestampConfirmed);
 
-    // Determine if Next should be enabled
+    // Determine if the primary action button should be disabled
     const isNextDisabled = () => {
         if (isUploading) return true;
 
@@ -37,53 +36,100 @@ const HandleNavigation: FC<{
                 return false;
             case 2:
                 if (isMultiFile) {
-                    // All files must have a selected pattern
-                    return files.some(f => !f.selectedPattern) ||
-                           files.some(f => f.detectionStatus === 'detecting' || f.detectionStatus === 'pending');
+                    // All files must have a selected pattern and be done detecting
+                    if (files.some(f => !f.selectedPattern)) return true;
+                    if (files.some(f => f.detectionStatus === 'detecting' || f.detectionStatus === 'pending')) return true;
                 }
                 if (timestampGated) return true;
                 return !readyToSelectPattern;
             case 3:
-                // Disable if no files are checked in multi-file mode
-                if (isMultiFile && selectedFileIdsForImport !== null && selectedFileIdsForImport.size === 0) return true;
-                return false;
-            case 4:
                 return false;
             default:
                 return true;
         }
     };
 
-    // Button label
+    // Primary action label
     const getNextLabel = () => {
-        if (currentStep === 3) {
+        if (currentStep === 2) {
+            // The "Define Log Pattern" step now triggers the actual import.
             if (isMultiFile) {
-                const count = selectedFileIdsForImport ? selectedFileIdsForImport.size : files.length;
+                const count = files.length;
                 return count > 0 ? `Import ${count} File${count !== 1 ? 's' : ''}` : 'Import';
             }
             return 'Import';
         }
-        if (currentStep === 4) return 'Home';
+        if (currentStep === 3) return 'Home';
         return 'Next';
     };
 
+    const nextDisabled = isNextDisabled();
+    const isFinalAction = currentStep === 2 || currentStep === 3;
+
     return (
-        <div className="flex justify-between pt-4">
-            <Button
-                variant="outline"
+        <div className="flex justify-between items-center">
+            <button
+                type="button"
                 onClick={onBack}
                 disabled={isUploading}
+                className="inline-flex items-center transition-colors"
+                style={{
+                    height: 32,
+                    padding: '0 12px',
+                    borderRadius: 6,
+                    border: '1px solid var(--ls-border-strong)',
+                    background: 'var(--ls-panel)',
+                    color: 'var(--ls-text-2)',
+                    fontSize: 12.5,
+                    fontWeight: 500,
+                    cursor: isUploading ? 'not-allowed' : 'pointer',
+                    opacity: isUploading ? 0.5 : 1,
+                }}
+                onMouseEnter={(e) => {
+                    if (!isUploading) {
+                        e.currentTarget.style.background = 'var(--ls-bg-2)';
+                        e.currentTarget.style.color = 'var(--ls-text)';
+                    }
+                }}
+                onMouseLeave={(e) => {
+                    if (!isUploading) {
+                        e.currentTarget.style.background = 'var(--ls-panel)';
+                        e.currentTarget.style.color = 'var(--ls-text-2)';
+                    }
+                }}
             >
                 {currentStep === 1 ? 'Cancel' : 'Back'}
-            </Button>
+            </button>
 
-            <Button
+            <button
+                type="button"
                 onClick={onNext}
-                disabled={isNextDisabled()}
-                className="bg-blue-600 hover:bg-blue-700"
+                disabled={nextDisabled}
+                className="inline-flex items-center text-white transition-colors"
+                style={{
+                    gap: 6,
+                    height: 32,
+                    padding: '0 16px',
+                    borderRadius: 6,
+                    border: 'none',
+                    background: 'var(--ls-accent)',
+                    color: '#fff',
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.18)',
+                    cursor: nextDisabled ? 'not-allowed' : 'pointer',
+                    opacity: nextDisabled ? 0.5 : 1,
+                }}
+                onMouseEnter={(e) => {
+                    if (!nextDisabled) e.currentTarget.style.background = 'var(--ls-accent-hover)';
+                }}
+                onMouseLeave={(e) => {
+                    if (!nextDisabled) e.currentTarget.style.background = 'var(--ls-accent)';
+                }}
             >
-                {getNextLabel()}
-            </Button>
+                <span>{getNextLabel()}</span>
+                {!isFinalAction && <ArrowRight size={13} />}
+            </button>
         </div>
     );
 };

@@ -27,9 +27,8 @@ type IngestSessionOptions struct {
 	// wizard. When nil, the resolver auto-derives defaults from a
 	// sample (legacy ForceStart* fields are still honoured).
 	TimestampConfig *timeresolve.Resolution `json:"timestamp_config,omitempty"`
-	// Meta contains additional fields to be added to each log entry
-	// These fields will be directly added to the JSON output for each log
-	// Example: for CloudWatch logs: {"aws_region": "us-west-2", "log_group": "my-group", "log_stream": "stream-1"}
+	// Meta contains additional fields to be added to each log entry.
+	// These fields are merged directly into the JSON output for each log.
 	Meta map[string]interface{} `json:"meta,omitempty"`
 }
 
@@ -210,6 +209,15 @@ type AutosuggestResult struct {
 	Coverage           float64                  `json:"coverage"`
 	ParsedLogs         []map[string]interface{} `json:"parsed_logs"`
 	CustomPatterns     map[string]string        `json:"custom_patterns,omitempty"`
+	// TimestampField / TimestampLayout / TimestampSource carry log2grok's
+	// auto-derived timestamp hint when one was inferred from the chosen
+	// Grok body (HTTPDATE → "timestamp" + Go layout, TIMESTAMP_ISO8601 →
+	// "ts" + ISO layout, etc.). The frontend uses them to pre-select the
+	// timestamp column in step 3 of the import wizard without a second
+	// /parse round-trip. Empty when log2grok could not infer one.
+	TimestampField  string `json:"timestamp_field,omitempty"`
+	TimestampLayout string `json:"timestamp_layout,omitempty"`
+	TimestampSource string `json:"timestamp_source,omitempty"`
 }
 
 // SuggestResponse represents the response from the suggest endpoint

@@ -59,6 +59,14 @@ export type LeftPanelContentProps = {
   tabs?: VerticalTab[];
   sidebarWidth?: number;
   onSidebarWidthChange?: (width: number) => void;
+  /** Pixels to offset the panel from the left edge (e.g. for a rail) */
+  leftOffset?: number;
+  /** Pixels to offset the panel from the top (e.g. for a topbar) */
+  topOffset?: number;
+  /** Controlled active tab id */
+  activeTabId?: string;
+  /** Notifies when active tab changes (controlled mode) */
+  onActiveTabChange?: (id: string) => void;
 };
 
 /**
@@ -71,8 +79,17 @@ export const LeftPanelContent = ({
   tabs = [],
   sidebarWidth,
   onSidebarWidthChange,
+  leftOffset = 0,
+  topOffset = 0,
+  activeTabId,
+  onActiveTabChange,
 }: LeftPanelContentProps) => {
-  const [activeTab, setActiveTab] = useState<string>(tabs.length > 0 ? tabs[0].id : '');
+  const [internalActiveTab, setInternalActiveTab] = useState<string>(tabs.length > 0 ? tabs[0].id : '');
+  const activeTab = activeTabId ?? internalActiveTab;
+  const setActiveTab = (id: string) => {
+    if (activeTabId === undefined) setInternalActiveTab(id);
+    onActiveTabChange?.(id);
+  };
 
   // Default tabs if none provided
   const defaultTabs: VerticalTab[] = [
@@ -145,32 +162,61 @@ export const LeftPanelContent = ({
 
   const currentWidth = isCollapsed ? SIDEBAR_WIDTHS.COLLAPSED : effectiveExpandedWidth;
 
+  // When a rail provides the toggle, render nothing while collapsed —
+  // the rail covers expand/coloring actions, so a separate icon column would duplicate it.
+  if (leftOffset > 0 && isCollapsed) {
+    return null;
+  }
+
   return (
     <div
       className={cn(
-        "h-full bg-white border-r border-slate-200 shadow-sm fixed left-0 top-0 bottom-0 z-50 transition-[width] duration-300",
+        "fixed bottom-0 z-50 transition-[width] duration-300",
         isCollapsed ? SIDEBAR_WIDTH_CLASSES.COLLAPSED : undefined
       )}
-      style={!isCollapsed ? { width: `${effectiveExpandedWidth}px` } : undefined}
+      style={{
+        top: `${topOffset}px`,
+        left: `${leftOffset}px`,
+        width: isCollapsed ? `${SIDEBAR_WIDTHS.COLLAPSED}px` : `${effectiveExpandedWidth}px`,
+        background: 'var(--ls-panel)',
+        borderRight: '1px solid var(--ls-border)',
+        boxShadow: 'var(--ls-shadow-sm)',
+      }}
     >
       <div className="h-full flex flex-col">
-        {/* Header area */}
-        <div className="h-12 flex items-center justify-between px-3 border-b border-slate-200 bg-white flex-shrink-0">
+        {/* Section header — sticky title for the active panel (matches design's .facets-header) */}
+        <div
+          className="flex items-center justify-between px-3 flex-shrink-0"
+          style={{
+            height: 36,
+            borderBottom: '1px solid var(--ls-border)',
+            background: 'var(--ls-panel)',
+          }}
+        >
           {isCollapsed && (
             <Button
               variant="ghost"
               size="icon"
               onClick={onToggleCollapse}
-              className="h-8 w-8 border border-slate-200 rounded-md text-slate-700 hover:text-slate-900 hover:bg-slate-100 mx-auto"
+              className="h-6 w-6 mx-auto"
+              style={{ color: 'var(--ls-text-2)' }}
               aria-label="Expand sidebar"
               title="Expand sidebar"
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-3.5 w-3.5" />
             </Button>
           )}
 
           {!isCollapsed && (
-            <span className="text-sm font-semibold text-slate-700 flex-1 truncate">
+            <span
+              className="font-semibold flex-1 truncate"
+              style={{
+                fontSize: 11,
+                color: 'var(--ls-text-2)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+              }}
+            >
               {tabsToUse.find(tab => tab.id === activeTab)?.label}
             </span>
           )}
@@ -180,48 +226,66 @@ export const LeftPanelContent = ({
               variant="ghost"
               size="icon"
               onClick={onToggleCollapse}
-              className="h-8 w-8 border border-slate-200 rounded-md text-slate-700 hover:text-slate-900 hover:bg-slate-100 flex-shrink-0"
+              className="h-6 w-6 flex-shrink-0"
+              style={{ color: 'var(--ls-text-2)' }}
               aria-label="Collapse"
               title="Collapse sidebar"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-3.5 w-3.5" />
             </Button>
           )}
         </div>
 
         {/* Tab navigation area */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Vertical tab navigation */}
-          <div className={cn(
-            "pt-3 flex flex-col items-center bg-white flex-shrink-0",
-            isCollapsed ? "w-full" : "w-14 border-r border-slate-100"
-          )}>
-            {tabsToUse.map((tab) => (
-              <Button
-                key={tab.id}
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-9 w-9 mb-2 relative rounded-lg transition-all",
-                  activeTab === tab.id
-                    ? "bg-blue-50 text-blue-600 shadow-sm"
-                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                )}
-                onClick={() => handleTabClick(tab.id)}
-                aria-label={tab.label}
-                title={tab.label}
-              >
-                {tab.icon}
-                {activeTab === tab.id && !isCollapsed && (
-                  <div className="absolute right-0 top-[20%] bottom-[20%] w-0.5 bg-blue-500 rounded-full" />
-                )}
-              </Button>
-            ))}
-          </div>
+          {/* Vertical tab navigation - hide when leftOffset is set (rail provides nav) */}
+          {(isCollapsed || leftOffset === 0) && (
+            <div
+              className={cn(
+                "pt-3 flex flex-col items-center flex-shrink-0",
+                isCollapsed ? "w-full" : "w-14"
+              )}
+              style={{
+                background: 'var(--ls-panel)',
+                borderRight: !isCollapsed ? '1px solid var(--ls-border-subtle)' : undefined,
+              }}
+            >
+              {tabsToUse.map((tab) => (
+                <Button
+                  key={tab.id}
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 mb-2 relative rounded-lg transition-all"
+                  style={
+                    activeTab === tab.id
+                      ? {
+                          background: 'var(--ls-accent-soft)',
+                          color: 'var(--ls-accent-text)',
+                        }
+                      : { color: 'var(--ls-text-3)' }
+                  }
+                  onClick={() => handleTabClick(tab.id)}
+                  aria-label={tab.label}
+                  title={tab.label}
+                >
+                  {tab.icon}
+                  {activeTab === tab.id && !isCollapsed && (
+                    <div
+                      className="absolute right-0 top-[20%] bottom-[20%] rounded-full"
+                      style={{ width: 2, background: 'var(--ls-accent)' }}
+                    />
+                  )}
+                </Button>
+              ))}
+            </div>
+          )}
 
           {/* Tab content */}
           {!isCollapsed && (
-            <div className="flex-1 p-3 overflow-auto bg-white min-w-0">
+            <div
+              className="flex-1 p-3 overflow-auto min-w-0"
+              style={{ background: 'var(--ls-panel)' }}
+            >
               {tabsToUse.map((tab) => (
                 activeTab === tab.id && (
                   <div key={tab.id} className="h-full">
@@ -237,11 +301,17 @@ export const LeftPanelContent = ({
       {/* Resize drag handle - only visible when expanded */}
       {!isCollapsed && onSidebarWidthChange && (
         <div
-          className="absolute top-0 right-0 bottom-0 w-1 cursor-col-resize group hover:bg-blue-400/30 transition-colors z-10"
+          className="absolute top-0 right-0 bottom-0 w-1 cursor-col-resize group transition-colors z-10"
           onMouseDown={handleResizeMouseDown}
           title="Drag to resize sidebar"
+          style={{ background: 'transparent' }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--ls-accent-softer)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
         >
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-0.5 h-12 bg-slate-300 group-hover:bg-blue-400 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div
+            className="absolute right-0 top-1/2 -translate-y-1/2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ width: 2, height: 48, background: 'var(--ls-accent)' }}
+          />
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-/* Styles for TanStack Table */
+/* Styles for TanStack Table — re-skinned for the LogSonic redesign */
 
 /* Container styles */
 .tanstack-table-container {
@@ -6,6 +6,8 @@
   overflow: auto;
   width: 100%;
   height: 100%;
+  background: var(--ls-bg-1);
+  font-family: var(--ls-font-mono);
 }
 
 /* Style for when table is locked */
@@ -15,34 +17,63 @@
 }
 
 /* Table header styles */
-thead {
+.log-table thead {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 3;
 }
 
-/* Column resizer styles */
+.log-table thead th {
+  background: var(--ls-bg-2) !important;
+  color: var(--ls-text-2) !important;
+  font-family: var(--ls-font-sans) !important;
+  font-weight: 600 !important;
+  font-size: 11px !important;
+  border-bottom: 1px solid var(--ls-border) !important;
+  padding: 6px 10px !important;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.log-table thead th:hover {
+  background: var(--ls-bg-3) !important;
+  color: var(--ls-text) !important;
+}
+
+.log-table tbody tr {
+  border-bottom: 1px solid var(--ls-border-subtle);
+}
+
+.log-table tbody td {
+  font-family: var(--ls-font-mono);
+  font-size: 12px;
+  color: var(--ls-text);
+  vertical-align: middle;
+  background: transparent;
+}
+
+/* Column resizer */
 .resizer {
   position: absolute;
   right: 0;
   top: 0;
   height: 100%;
-  width: 5px;
-  background: rgba(0, 0, 0, 0.05);
+  width: 4px;
+  background: transparent;
   cursor: col-resize;
   user-select: none;
   touch-action: none;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity 0.15s, background 0.15s;
 }
 
 .resizer:hover,
 .resizer.isResizing {
   opacity: 1;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--ls-accent);
 }
 
-/* Drag handle styles */
+/* Drag handle */
 .drag-handle {
   display: inline-flex;
   align-items: center;
@@ -50,75 +81,79 @@ thead {
   cursor: grab;
   opacity: 0.5;
   transition: opacity 0.2s;
+  color: var(--ls-text-3);
 }
 
 .drag-handle:hover {
   opacity: 1;
+  color: var(--ls-text-2);
 }
 
 .drag-handle:active {
   cursor: grabbing;
 }
 
-/* Ensure text doesn't wrap in headers */
+/* Header text */
 th span {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Style for expandable rows */
+/* Expandable rows */
 tr.expanded {
-  background-color: #f8fafc !important; /* slate-50 equivalent */
+  background-color: var(--ls-accent-softer) !important;
 }
 
-/* Style for the expanded content */
 td[colspan] {
   padding: 0 !important;
 }
 
-/* Style for expander button */
+/* Expander button */
 .expander-button {
   display: flex;
   align-items: center;
   justify-content: center;
   background-color: transparent;
-  border-radius: 4px;
-  transition: background-color 0.2s ease-in-out;
-
+  border-radius: 3px;
+  transition: background-color 0.15s ease-in-out;
+  color: var(--ls-text-3);
   margin: 0 auto;
 }
 
 .expander-button:hover {
-  background-color: #f1f5f9;
+  background-color: var(--ls-bg-3);
+  color: var(--ls-text);
 }
 
-/* Style for checkbox */
+/* Checkboxes */
 input[type="checkbox"] {
-  width: 16px !important;
-  height: 16px !important;
+  width: 13px !important;
+  height: 13px !important;
   cursor: pointer !important;
   border-radius: 3px !important;
-  border: 1px solid #cbd5e1 !important;
+  border: 1px solid var(--ls-border-strong) !important;
+  accent-color: var(--ls-accent);
 }
 
-/* Ensure consistent padding for all cells */
-.tanstack-table-container th, .tanstack-table-container td {
-  padding: 8px 12px !important;
+/* Header cell padding override (table cells keep their per-cell classnames) */
+.log-table th {
+  padding: 4px 10px !important;
 }
 
-/* Fix data alignment with headers */
 td {
-  font-size: 0.875rem !important;
+  font-size: 12px !important;
 }
 
-/* Style for selected row indicator */
+/* Selected row chip — bottom-right indicator */
 .fixed.bottom-4.right-4 {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e2e8f0;
+  box-shadow: var(--ls-shadow-md);
+  border: 1px solid var(--ls-border);
+  background: var(--ls-panel) !important;
+  color: var(--ls-text);
 }
 
-/* Truncate long text in cells */
+/* Truncate */
 .truncate {
   white-space: nowrap;
   overflow: hidden;
@@ -126,152 +161,102 @@ td {
   max-width: 100%;
 }
 
-/* Ensure the table takes up the full width of its container */
+/* Table layout */
 table {
   table-layout: fixed;
   border-collapse: collapse;
+  width: 100%;
 }
 
-/* Fix for header alignment */
+/* Header alignment */
 th {
   text-align: left;
   font-weight: 600;
 }
 
-/* Custom log row styles */
+/* Row visuals */
 .log-table .log-row {
-  transition: background-color 0.08s ease, box-shadow 0.08s ease;
+  transition: background-color 0.08s ease;
   position: relative;
 }
 
-/* Hover effect: subtle background shift + left accent border */
 .log-table .log-row:hover {
-  background-color: rgba(248, 250, 252, 0.95) !important;
-  box-shadow: inset 3px 0 0 0 #93c5fd;
+  background-color: var(--ls-bg-2) !important;
 }
 
-/* Row stripe for non-colored rows */
+/* Strip even-row striping for the dense look */
 .log-table .log-row:nth-child(even):not([class*="bg-"]) {
-  background-color: rgba(249, 250, 251, 0.5);
+  background-color: transparent;
 }
 
-/* Selected row styling - make it extremely visible */
+/* Selected row — subtle accent tint with a thin left stripe */
 .log-table .selected-row {
+  background-color: var(--ls-accent-softer) !important;
+}
+
+.log-table .selected-row td:first-child {
+  box-shadow: inset 2px 0 0 var(--ls-accent);
+}
+
+.log-table .selected-row:hover {
+  background-color: var(--ls-accent-soft) !important;
+}
+
+/* Header relative for resizer (resize handle is absolutely positioned) */
+.log-table th {
   position: relative;
-  outline: 3px solid #3b82f6 !important; /* Bold blue outline */
-  outline-offset: -3px !important;
-  z-index: 1; /* Ensure the outline appears above other elements */
-  /* Add subtle highlight effect */
-  box-shadow: inset 0 0 0 2000px rgba(59, 130, 246, 0.1) !important; /* Light blue overlay */
+  padding-right: 8px !important;
 }
 
-/* Add a visual indicator with a pattern on the left side */
-.log-table .selected-row::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 5px;
-  background-color: #3b82f6; /* Same blue as outline */
-  background-image: repeating-linear-gradient(
-    45deg,
-    #3b82f6,
-    #3b82f6 5px,
-    #60a5fa 5px,
-    #60a5fa 10px
-  );
-}
-
-/* Add a visual indicator to the right side as well */
-.log-table .selected-row::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 5px;
-  background-color: #3b82f6; /* Same blue as outline */
-}
-
-/* Ensure table cells have relative positioning for the resizer */
-.tanstack-table-container th {
-  position: relative;
-}
-
-/* Ensure the header group has proper hover state for the resizer */
-.tanstack-table-container th:hover .group-hover\/header\:opacity-100 {
-  opacity: 1;
-}
-
-/* Ensure the resizer handle is properly positioned */
-.group\/resizer {
-  position: absolute;
-  right: 0;
-  top: 0;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* Add right margin to create space between the icon and column edge */
-  right: 4px;
-}
-
-/* Add padding to the header cells to accommodate the resizer */
-.tanstack-table-container th {
-  padding-right: 16px !important;
-}
-
-/* Special styling for utility columns (select and expander) */
-.tanstack-table-container th[data-column-id="select"],
-.tanstack-table-container th[data-column-id="expander"] {
-  padding: 8px !important;
+/* Utility columns: select / expander — tighter than data columns */
+.log-table th[data-column-id="select"] {
+  padding: 4px !important;
   text-align: center !important;
-  width: 40px !important;
-  min-width: 40px !important;
-  max-width: 40px !important;
+  width: 36px !important;
+  min-width: 36px !important;
+  max-width: 36px !important;
+}
+.log-table th[data-column-id="expander"] {
+  padding: 0 !important;
+  text-align: center !important;
+  width: 20px !important;
+  min-width: 20px !important;
+  max-width: 20px !important;
 }
 
-/* Ensure checkboxes are visible and properly sized */
-.tanstack-table-container input[type="checkbox"] {
-  width: 16px !important;
-  height: 16px !important;
+.log-table input[type="checkbox"] {
   cursor: pointer !important;
   opacity: 1 !important;
   visibility: visible !important;
   display: inline-block !important;
 }
 
-/* Ensure the overlay has proper z-index */
 .fixed.inset-0.z-50 {
   z-index: 50;
 }
 
-/* Ensure table cells have proper z-index to stay above selection indicators */
 .log-table td {
   position: relative;
   z-index: 2;
 }
 
-/* Add styling for search term highlights */
+/* Search-term highlight */
 .bg-yellow-300 {
-  background-color: #fde047; /* Bright yellow */
-  color: #000 !important;
+  background-color: #fff3a3;
+  color: var(--ls-text) !important;
   padding: 0 2px;
   border-radius: 2px;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
   font-weight: 500;
   display: inline;
   position: relative;
-  z-index: 1; /* Ensure highlights appear above row colors */
+  z-index: 1;
 }
 
-/* Ensure highlights are visible on all row colors */
+[data-theme="dark"] .bg-yellow-300 {
+  background-color: #6b5a00;
+  color: #fff3a3 !important;
+}
+
 .log-row:hover .bg-yellow-300 {
-  background-color: #facc15; /* Slightly darker yellow on hover */
+  background-color: #ffe45c;
 }
-
-/* Ensure highlights work with row coloring */
-.selected-row .bg-yellow-300 {
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
-} 

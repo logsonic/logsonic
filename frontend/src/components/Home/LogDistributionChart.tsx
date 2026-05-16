@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useFitRangeToData } from '@/hooks/useFitRangeToData';
 import { LogResponse } from '@/lib/api-types';
 import { cn } from '@/lib/utils';
@@ -20,21 +21,21 @@ import {
   YAxis
 } from 'recharts';
 
-// Define a color palette for sources
+// Max sources to show inline in the legend before collapsing into a "+N more" pill
+const MAX_VISIBLE_LEGEND_SOURCES = 8;
+
+// Source color palette — purple-leaning, designed for the new tokens
 const SOURCE_COLORS = [
-  ['#2563eb', '#1d4ed8'], // blue
-  ['#16a34a', '#15803d'], // green
-  ['#9333ea', '#7e22ce'], // purple
-  ['#ea580c', '#c2410c'], // orange
-  ['#0891b2', '#0e7490'], // cyan
-  ['#4f46e5', '#4338ca'], // indigo
-  ['#be123c', '#9f1239'], // rose
-  ['#854d0e', '#713f12'], // amber
-  ['#dc2626', '#b91c1c'], // red
-  ['#059669', '#047857'], // emerald
-  ['#7c3aed', '#6d28d9'], // violet
-  ['#0284c7', '#0369a1'], // sky
-  ['#db2777', '#be185d'], // pink
+  ['#9b82ff', '#6b4df2'], // accent purple
+  ['#5eead4', '#0d9488'], // teal
+  ['#fb923c', '#ea580c'], // orange
+  ['#60a5fa', '#1d4ed8'], // blue
+  ['#f472b6', '#be185d'], // pink
+  ['#34d399', '#15803d'], // green
+  ['#facc15', '#ca8a04'], // amber
+  ['#f87171', '#b91c1c'], // red
+  ['#a78bfa', '#7c3aed'], // violet
+  ['#22d3ee', '#0891b2'], // cyan
 ];
 
 // Custom tooltip component for the chart
@@ -52,27 +53,61 @@ const CustomTooltip = ({ active, payload, label }: any) => {
       const formattedEndDate = formatInTimeZone(endDate, timeZone, 'MMM dd, yyyy HH:mm:ss');
       
       return (
-        <div className="bg-white p-3 border border-slate-200 shadow-md rounded-md">
-          <p className="text-xs font-medium text-slate-600">
-            <span className="font-bold">Start: </span> {formattedStartDate} {formatInTimeZone(startDate, timeZone, 'z')}
-          </p>
-          <p className="text-xs font-medium text-slate-600">
-            <span className="font-bold">End: </span> {formattedEndDate} {formatInTimeZone(endDate, timeZone, 'z')}
-          </p>
-          <div className="mt-2">
-            {payload.map((entry: any, index: number) => (
-              <p 
-                key={`tooltip-${index}`} 
-                className="text-xs" 
-                style={{ color: entry.color }}
-              >
-                <span className="font-medium">{entry.name}: </span>
-                <span>{entry.value}</span>
-              </p>
-            ))}
-            <p className="text-xs font-medium mt-1 text-slate-600">
-              Total: {payload.reduce((sum: number, entry: any) => sum + entry.value, 0)}
-            </p>
+        <div
+          className="rounded-md"
+          style={{
+            background: 'var(--ls-text)',
+            color: 'var(--ls-bg)',
+            padding: '8px 10px',
+            boxShadow: 'var(--ls-shadow-lg)',
+            fontSize: 11,
+            minWidth: 180,
+          }}
+        >
+          <div
+            style={{
+              fontFamily: 'var(--ls-font-mono)',
+              fontSize: 10.5,
+              opacity: 0.7,
+              marginBottom: 4,
+            }}
+          >
+            {formattedStartDate} → {formattedEndDate}
+          </div>
+          {payload.map((entry: any, index: number) => (
+            <div
+              key={`tooltip-${index}`}
+              className="flex items-center"
+              style={{ gap: 6, fontSize: 11 }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: 1,
+                  background: entry.color,
+                  display: 'inline-block',
+                }}
+              />
+              <span style={{ flex: 1 }}>{entry.name}</span>
+              <span style={{ fontFamily: 'var(--ls-font-mono)', fontWeight: 600 }}>
+                {entry.value.toLocaleString()}
+              </span>
+            </div>
+          ))}
+          <div
+            style={{
+              marginTop: 4,
+              paddingTop: 4,
+              borderTop: '1px solid rgba(255,255,255,0.1)',
+              display: 'flex',
+              fontSize: 11,
+            }}
+          >
+            <span style={{ flex: 1, opacity: 0.7 }}>Total</span>
+            <span style={{ fontFamily: 'var(--ls-font-mono)', fontWeight: 700 }}>
+              {payload.reduce((sum: number, entry: any) => sum + entry.value, 0).toLocaleString()}
+            </span>
           </div>
         </div>
       );
@@ -93,6 +128,112 @@ function getColorIndexForSource(source: string): number {
   }
   // Make sure hash is positive and map to available colors
   return Math.abs(hash) % SOURCE_COLORS.length;
+}
+
+// Single-row legend that sorts sources by event count, shows the top N inline,
+// and tucks the remainder behind a "+N more" popover so a long list of files
+// never eats into the chart area.
+function CompactSourceLegend({
+  sortedSources,
+  sourceColorMap,
+}: {
+  sortedSources: string[];
+  sourceColorMap: Map<string, number>;
+}) {
+  if (sortedSources.length === 0) return null;
+
+  const visible = sortedSources.slice(0, MAX_VISIBLE_LEGEND_SOURCES);
+  const overflow = sortedSources.slice(MAX_VISIBLE_LEGEND_SOURCES);
+
+  const renderItem = (source: string) => {
+    const colorIndex = sourceColorMap.get(source) ?? 0;
+    const color = SOURCE_COLORS[colorIndex][0];
+    return (
+      <div
+        key={source}
+        className="flex items-center"
+        style={{ gap: 4, fontSize: 10, color: 'var(--ls-text-2)', minWidth: 0 }}
+        title={source}
+      >
+        <span
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: color,
+            display: 'inline-block',
+            flexShrink: 0,
+          }}
+        />
+        <span
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: 140,
+          }}
+        >
+          {source}
+        </span>
+      </div>
+    );
+  };
+
+  return (
+    <div
+      className="flex items-center"
+      style={{
+        gap: 12,
+        paddingLeft: 25,
+        paddingRight: 8,
+        flexWrap: 'nowrap',
+        overflow: 'hidden',
+      }}
+    >
+      {visible.map(renderItem)}
+      {overflow.length > 0 && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="rounded-full transition-colors"
+              style={{
+                fontSize: 10,
+                padding: '1px 8px',
+                background: 'var(--ls-bg-2)',
+                color: 'var(--ls-text-2)',
+                border: '1px solid var(--ls-border)',
+                cursor: 'pointer',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              +{overflow.length} more
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="p-2 w-64">
+            <div
+              style={{
+                fontSize: 10,
+                color: 'var(--ls-text-3)',
+                marginBottom: 6,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }}
+            >
+              All sources ({sortedSources.length})
+            </div>
+            <div
+              className="flex flex-col"
+              style={{ gap: 4, maxHeight: 240, overflowY: 'auto' }}
+            >
+              {sortedSources.map(renderItem)}
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
+    </div>
+  );
 }
 
 export default function LogDistributionChart() {
@@ -183,13 +324,28 @@ export default function LogDistributionChart() {
   // Create a stable source-to-color mapping for the current data
   const sourceColorMap = useMemo(() => {
     const map = new Map<string, number>();
-    
+
     sources.forEach(source => {
       map.set(source, getColorIndexForSource(source));
     });
-    
+
     return map;
   }, [sources]);
+
+  // Sort sources by total event count (descending) so the most prominent
+  // ones appear first in the legend
+  const sortedSources = useMemo(() => {
+    if (sources.length === 0) return [];
+    const totals = new Map<string, number>();
+    sources.forEach(s => totals.set(s, 0));
+    chartData.forEach(item => {
+      sources.forEach(s => {
+        const v = item[s];
+        if (typeof v === 'number') totals.set(s, (totals.get(s) || 0) + v);
+      });
+    });
+    return [...sources].sort((a, b) => (totals.get(b) || 0) - (totals.get(a) || 0));
+  }, [sources, chartData]);
   
   // Transform API data for chart display
   const transformData = (data: LogResponse | null) => {
@@ -409,13 +565,21 @@ export default function LogDistributionChart() {
   
   if (!isVisible) {
     return (
-      <div className="flex items-center justify-between px-3 py-1 border-b border-slate-100 bg-white">
-        <span className="text-xs text-slate-400 italic">Chart hidden</span>
+      <div
+        className="flex items-center justify-between px-3 py-1"
+        style={{ background: 'var(--ls-panel)', borderBottom: '1px solid var(--ls-border)' }}
+      >
+        <span style={{ fontSize: 11, color: 'var(--ls-text-3)', fontStyle: 'italic' }}>
+          Chart hidden
+        </span>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setIsVisible(true)}
-          className="text-xs text-slate-400 hover:text-blue-600 h-6 px-2"
+          className="text-xs h-6 px-2"
+          style={{ color: 'var(--ls-text-3)' }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--ls-accent)')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ls-text-3)')}
         >
           Show Chart
         </Button>
@@ -424,41 +588,58 @@ export default function LogDistributionChart() {
   }
 
   return (
-    <div className="bg-white border-b border-slate-100">
-      <div className="flex justify-between items-center px-3 py-1">
-        <div className="flex items-center gap-1">
+    <div
+      style={{
+        background: 'var(--ls-panel)',
+        borderBottom: '1px solid var(--ls-border)',
+      }}
+    >
+      <div className="flex justify-between items-center px-3" style={{ height: 28 }}>
+        <div className="flex items-center" style={{ gap: 4 }}>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="h-6 w-6 p-0 text-slate-400 hover:text-slate-600"
+            className="h-5 w-5 p-0"
+            style={{ color: 'var(--ls-text-3)' }}
           >
-            {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+            {isCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
           </Button>
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Log Distribution</h3>
-          {isLoading && <Loader2 className="ml-1 h-3 w-3 animate-spin text-slate-400" />}
+          <h3
+            className="font-semibold uppercase tracking-wider"
+            style={{ fontSize: 11, color: 'var(--ls-text-2)', margin: 0 }}
+          >
+            Event distribution
+          </h3>
+          {isLoading && (
+            <Loader2 className="ml-1 h-3 w-3 animate-spin" style={{ color: 'var(--ls-text-3)' }} />
+          )}
           {!isCollapsed && (
-            <span className="text-[10px] text-slate-400 ml-1">· drag to zoom</span>
+            <span style={{ fontSize: 11, color: 'var(--ls-text-3)', marginLeft: 6 }}>
+              · drag to zoom
+            </span>
           )}
         </div>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center" style={{ gap: 2 }}>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => searchStore.triggerSearch()}
-            className="h-6 w-6 p-0 text-slate-400 hover:text-slate-600"
+            className="h-5 w-5 p-0"
+            style={{ color: 'var(--ls-text-3)' }}
             title="Refresh chart"
           >
-            <RefreshCw size={12} />
+            <RefreshCw size={11} />
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setIsVisible(false)}
-            className="h-6 w-6 p-0 text-slate-400 hover:text-slate-600"
+            className="h-5 w-5 p-0"
+            style={{ color: 'var(--ls-text-3)' }}
             title="Hide chart"
           >
-            <X size={12} />
+            <X size={11} />
           </Button>
         </div>
       </div>
@@ -466,9 +647,12 @@ export default function LogDistributionChart() {
       {!isCollapsed && (
         <div className={cn("px-3 transition-all duration-300", isLoading ? "opacity-70" : "")}>
           {error ? (
-            <div className="py-3 text-center text-sm text-red-500">{error}</div>
+            <div className="py-3 text-center text-sm" style={{ color: 'var(--ls-err)' }}>{error}</div>
           ) : chartData.length === 0 ? (
-            <div className="py-3 text-center text-sm text-slate-500 flex flex-col items-center gap-2">
+            <div
+              className="py-3 text-center flex flex-col items-center gap-2"
+              style={{ fontSize: 12, color: 'var(--ls-text-3)' }}
+            >
               {isLoading ? (
                 <span>Loading chart data...</span>
               ) : (
@@ -480,6 +664,11 @@ export default function LogDistributionChart() {
                       size="sm"
                       onClick={fitRangeToData}
                       className="gap-1.5"
+                      style={{
+                        borderColor: 'var(--ls-border-strong)',
+                        background: 'var(--ls-panel)',
+                        color: 'var(--ls-text-2)',
+                      }}
                       title="Snap the time range to the span of indexed log data"
                     >
                       <Maximize2 className="h-3.5 w-3.5" />
@@ -490,16 +679,16 @@ export default function LogDistributionChart() {
               )}
             </div>
           ) : (
-            <div 
-              className="pb-3 pt-1" 
-              style={{ 
-                height: '140px',
+            <div
+              className="pb-2 pt-1"
+              style={{
+                height: '108px',
                 userSelect: 'none',
                 WebkitUserSelect: 'none',
                 MozUserSelect: 'none',
                 msUserSelect: 'none',
                 touchAction: 'none'
-              }} 
+              }}
               ref={chartContainerRef}
             >
               <ResponsiveContainer width="100%" height="100%">
@@ -526,11 +715,16 @@ export default function LogDistributionChart() {
                     tickFormatter={formatYAxisTick}
                   />
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend 
-                    wrapperStyle={{ fontSize: '10px', bottom: 0 }} 
-                    iconSize={8} 
-                    iconType="circle"
+                  <Legend
+                    wrapperStyle={{ fontSize: '10px', bottom: 0, left: 0, right: 0 }}
+                    content={() => (
+                      <CompactSourceLegend
+                        sortedSources={sortedSources}
+                        sourceColorMap={sourceColorMap}
+                      />
+                    )}
                   />
+
                   
                   {/* Generate bars for each source */}
                   {sources.map((source) => {
@@ -554,9 +748,10 @@ export default function LogDistributionChart() {
                     <ReferenceArea
                       x1={refAreaLeft}
                       x2={refAreaRight}
-                      strokeOpacity={0.3}
-                      fill="#2563eb"
-                      fillOpacity={0.3}
+                      stroke="#6b4df2"
+                      strokeOpacity={0.5}
+                      fill="#6b4df2"
+                      fillOpacity={0.18}
                     />
                   )}
                   

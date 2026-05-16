@@ -92,7 +92,12 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := sessionDecoder.Decode(req.Logs)
+	// DecodeConcurrent fans the regex work across NumCPU goroutines for
+	// large batches and transparently falls back to serial Decode below
+	// its internal threshold (~512 lines). The Decoder is goroutine-safe
+	// and output order is preserved, so this is a drop-in replacement
+	// for Decode that scales ingest throughput on multi-core boxes.
+	results := sessionDecoder.DecodeConcurrent(req.Logs, 0)
 	jsonOutput, successCount, failedCount, _ := postProcess(results, sessionOptions)
 
 	if err := h.storage.Store(jsonOutput, sessionOptions.Source); err != nil {
@@ -193,9 +198,8 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		ForceStartDay:   req.ForceStartDay,
 		SourceMTime:     req.SourceMTime,
 		TimestampConfig: req.TimestampConfig,
-		// Meta is freely passed through so callers (e.g. CloudWatch
-		// ingest path) can stamp every record with aws_region,
-		// log_group, log_stream, etc.
+		// Meta is freely passed through so callers can stamp every
+		// record with additional fields.
 		Meta: req.Meta,
 	}
 

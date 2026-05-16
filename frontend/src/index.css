@@ -1,6 +1,212 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ---------- LogSonic redesign tokens ---------- */
+:root {
+  --ls-bg: #ffffff;
+  --ls-bg-1: #fafaf9;
+  --ls-bg-2: #f5f5f4;
+  --ls-bg-3: #ececeb;
+  --ls-panel: #ffffff;
+  --ls-border: #e8e8e6;
+  --ls-border-strong: #d8d8d5;
+  --ls-border-subtle: #f0f0ee;
+
+  --ls-text: #18181b;
+  --ls-text-2: #52525b;
+  --ls-text-3: #8a8a92;
+  --ls-text-4: #b4b4bb;
+
+  --ls-accent: #6b4df2;
+  --ls-accent-hover: #5a3be0;
+  --ls-accent-soft: #eee9ff;
+  --ls-accent-softer: #f6f3ff;
+  --ls-accent-border: #d8cdff;
+  --ls-accent-text: #4c2fb8;
+
+  --ls-ok: #15803d;
+  --ls-ok-soft: #dcfce7;
+  --ls-warn: #b45309;
+  --ls-warn-soft: #fef3c7;
+  --ls-err: #b91c1c;
+  --ls-err-soft: #fee2e2;
+  --ls-info: #1d4ed8;
+  --ls-info-soft: #dbeafe;
+  --ls-debug: #6b7280;
+  --ls-debug-soft: #f3f4f6;
+  --ls-trace: #7c3aed;
+  --ls-trace-soft: #ede9fe;
+
+  --ls-hl-green: #ecfdf5;
+  --ls-hl-blue:  #eff6ff;
+  --ls-hl-amber: #fffbeb;
+  --ls-hl-red:   #fef2f2;
+
+  --ls-radius: 6px;
+  --ls-radius-lg: 10px;
+  --ls-shadow-sm: 0 1px 0 rgba(24,24,27,0.04), 0 1px 2px rgba(24,24,27,0.04);
+  --ls-shadow-md: 0 4px 12px -2px rgba(24,24,27,0.08), 0 2px 4px rgba(24,24,27,0.04);
+  --ls-shadow-lg: 0 12px 32px -6px rgba(24,24,27,0.16), 0 4px 8px rgba(24,24,27,0.06);
+
+  --ls-font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ls-font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --ls-topbar-h: 44px;
+  --ls-rail-w: 56px;
+  --ls-statusbar-h: 26px;
+}
+
+[data-theme="dark"] {
+  --ls-bg: #0a0a0b;
+  --ls-bg-1: #101012;
+  --ls-bg-2: #16161a;
+  --ls-bg-3: #1f1f24;
+  --ls-panel: #121215;
+  --ls-border: #26262c;
+  --ls-border-strong: #34343c;
+  --ls-border-subtle: #1b1b20;
+
+  --ls-text: #f4f4f5;
+  --ls-text-2: #a1a1aa;
+  --ls-text-3: #71717a;
+  --ls-text-4: #52525b;
+
+  --ls-accent: #9b82ff;
+  --ls-accent-hover: #ad96ff;
+  --ls-accent-soft: #251d4a;
+  --ls-accent-softer: #1a1530;
+  --ls-accent-border: #3a2e7a;
+  --ls-accent-text: #c4b5fd;
+
+  --ls-ok: #4ade80;
+  --ls-ok-soft: #10281a;
+  --ls-warn: #fbbf24;
+  --ls-warn-soft: #2b1f05;
+  --ls-err: #f87171;
+  --ls-err-soft: #2a1010;
+  --ls-info: #60a5fa;
+  --ls-info-soft: #0f1e3a;
+  --ls-debug: #a1a1aa;
+  --ls-debug-soft: #1e1e22;
+  --ls-trace: #c4b5fd;
+  --ls-trace-soft: #231a40;
+
+  --ls-hl-green: #0c1f16;
+  --ls-hl-blue:  #0c162a;
+  --ls-hl-amber: #221805;
+  --ls-hl-red:   #220c0c;
+
+  --ls-shadow-sm: 0 1px 0 rgba(0,0,0,0.4);
+  --ls-shadow-md: 0 4px 12px -2px rgba(0,0,0,0.5);
+  --ls-shadow-lg: 0 12px 32px -6px rgba(0,0,0,0.6);
+}
+
+/* Bridge: when [data-theme="dark"] is set on <html>, also activate shadcn .dark vars */
+[data-theme="dark"] {
+  --background: 240 6% 6%;
+  --foreground: 0 0% 96%;
+  --card: 240 6% 8%;
+  --card-foreground: 0 0% 96%;
+  --popover: 240 6% 8%;
+  --popover-foreground: 0 0% 96%;
+  --primary: 252 100% 75%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 240 5% 15%;
+  --secondary-foreground: 0 0% 96%;
+  --muted: 240 5% 12%;
+  --muted-foreground: 240 5% 65%;
+  --accent: 240 5% 15%;
+  --accent-foreground: 0 0% 96%;
+  --destructive: 0 80% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 240 4% 17%;
+  --input: 240 4% 17%;
+  --ring: 252 100% 75%;
+}
+
+html, body {
+  font-family: var(--ls-font-sans);
+  font-feature-settings: "cv11", "ss01", "ss03";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Search-metadata chips (sources / query / range). Token-based so they
+   work across light + dark themes without per-class overrides. */
+.ls-meta-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ls-text-3);
+}
+.ls-sep {
+  color: var(--ls-text-4);
+  margin: 0 2px;
+}
+.ls-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  line-height: 1.4;
+}
+.ls-chip-mono { font-family: var(--ls-font-mono); }
+.ls-chip-info {
+  background: var(--ls-info-soft);
+  color: var(--ls-info);
+  border-color: color-mix(in srgb, var(--ls-info) 25%, transparent);
+}
+.ls-chip-warn {
+  background: var(--ls-warn-soft);
+  color: var(--ls-warn);
+  border-color: color-mix(in srgb, var(--ls-warn) 25%, transparent);
+}
+.ls-chip-neutral {
+  background: var(--ls-bg-2);
+  color: var(--ls-text-2);
+  border-color: var(--ls-border);
+}
+.ls-chip-sub { color: var(--ls-text-3); }
+
+/* Inline toolbar button (used in LogViewerHeader). Tokenised so hover
+   works in light + dark themes — replaces hardcoded slate-/gray- classes. */
+.ls-toolbar-btn {
+  color: var(--ls-text-2) !important;
+  background: transparent !important;
+  transition: background 120ms ease, color 120ms ease;
+}
+.ls-toolbar-btn:hover:not(:disabled) {
+  background: var(--ls-bg-2) !important;
+  color: var(--ls-text) !important;
+}
+.ls-toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ls-col-row { transition: background 100ms ease; }
+.ls-col-row:hover { background: var(--ls-bg-2); }
+
+/* Danger affordances — token-based so the hover wash adapts to dark mode
+   instead of staying as Tailwind's bg-red-50 (which is unreadable on dark). */
+.ls-danger-btn { transition: background 120ms ease, color 120ms ease; }
+.ls-danger-btn:hover {
+  background: var(--ls-err-soft) !important;
+  color: var(--ls-err) !important;
+}
+.ls-danger-action {
+  background: var(--ls-err) !important;
+  border: 1px solid var(--ls-err) !important;
+}
+.ls-danger-action:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
 
 @layer base {
   :root {
@@ -104,6 +310,138 @@
 .transition-width {
   transition-property: width;
 }
+
+/* Left rail button hover */
+.rail-btn:hover {
+  background: var(--ls-bg-2) !important;
+  color: var(--ls-text) !important;
+}
+.rail-btn:hover .rail-tooltip,
+.rail-btn-active:hover .rail-tooltip {
+  opacity: 1 !important;
+}
+
+/* Row-coloring rule cards in the sidebar use dynamic Tailwind classes
+   (`bg-red-100`, `bg-yellow-100`, …) chosen by the user. In dark mode those
+   light pastels look like high-glare blocks against the dark panel. Use a
+   semi-transparent overlay so the underlying panel color tints the chip,
+   and keep text fully legible. The same trick is applied to log rows that
+   inherit the same Tailwind bg classes via the colorClass row style. */
+[data-theme='dark'] .ls-rule-card[class*="bg-"],
+[data-theme='dark'] tr.log-row[class*="bg-"] > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 85%, currentColor 4%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-red-100,
+[data-theme='dark'] tr.log-row.bg-red-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #dc2626 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-yellow-100,
+[data-theme='dark'] tr.log-row.bg-yellow-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 72%, #ca8a04 14%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-amber-100,
+[data-theme='dark'] tr.log-row.bg-amber-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 72%, #d97706 14%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-green-100,
+[data-theme='dark'] tr.log-row.bg-green-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #16a34a 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-blue-100,
+[data-theme='dark'] tr.log-row.bg-blue-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #2563eb 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-pink-100,
+[data-theme='dark'] tr.log-row.bg-pink-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #db2777 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-purple-100,
+[data-theme='dark'] tr.log-row.bg-purple-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #9333ea 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-indigo-100,
+[data-theme='dark'] tr.log-row.bg-indigo-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #4f46e5 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-teal-100,
+[data-theme='dark'] tr.log-row.bg-teal-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #0d9488 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-sky-100,
+[data-theme='dark'] tr.log-row.bg-sky-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #0284c7 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-violet-100,
+[data-theme='dark'] tr.log-row.bg-violet-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #7c3aed 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-rose-100,
+[data-theme='dark'] tr.log-row.bg-rose-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 75%, #e11d48 12%) !important;
+}
+[data-theme='dark'] .ls-rule-card.bg-slate-100,
+[data-theme='dark'] tr.log-row.bg-slate-100 > td {
+  background-color: color-mix(in srgb, var(--ls-panel) 80%, #64748b 10%) !important;
+}
+/* And keep title text legible — Tailwind `text-red-700` is fine on the
+   pastel light-mode chip but too dark against the muted dark-mode chip. */
+[data-theme='dark'] .ls-rule-card .text-red-700,
+[data-theme='dark'] .ls-rule-card .text-rose-700,
+[data-theme='dark'] .ls-rule-card .text-pink-700 { color: #fca5a5 !important; }
+[data-theme='dark'] .ls-rule-card .text-amber-700,
+[data-theme='dark'] .ls-rule-card .text-yellow-700 { color: #fcd34d !important; }
+[data-theme='dark'] .ls-rule-card .text-green-700,
+[data-theme='dark'] .ls-rule-card .text-emerald-700,
+[data-theme='dark'] .ls-rule-card .text-teal-700 { color: #86efac !important; }
+[data-theme='dark'] .ls-rule-card .text-blue-700,
+[data-theme='dark'] .ls-rule-card .text-sky-700 { color: #93c5fd !important; }
+[data-theme='dark'] .ls-rule-card .text-indigo-700,
+[data-theme='dark'] .ls-rule-card .text-violet-700,
+[data-theme='dark'] .ls-rule-card .text-purple-700 { color: #c4b5fd !important; }
+[data-theme='dark'] .ls-rule-card .text-slate-700 { color: #cbd5e1 !important; }
+
+/* Pulse animation for live indicators */
+@keyframes ls-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(21,128,61,0.45); }
+  70%  { box-shadow: 0 0 0 7px rgba(21,128,61,0); }
+  100% { box-shadow: 0 0 0 0 rgba(21,128,61,0); }
+}
+.ls-pulse {
+  animation: ls-pulse 1.4s infinite;
+}
+
+/* Level badges — used inline by the log table cell renderer */
+.ls-lvl {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-family: var(--ls-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.ls-lvl-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.ls-lvl-INFO    { background: var(--ls-info-soft);  color: var(--ls-info); }
+.ls-lvl-INFO    .ls-lvl-dot { background: var(--ls-info); }
+.ls-lvl-WARN    { background: var(--ls-warn-soft);  color: var(--ls-warn); }
+.ls-lvl-WARN    .ls-lvl-dot { background: var(--ls-warn); }
+.ls-lvl-WARNING { background: var(--ls-warn-soft);  color: var(--ls-warn); }
+.ls-lvl-WARNING .ls-lvl-dot { background: var(--ls-warn); }
+.ls-lvl-ERROR   { background: var(--ls-err-soft);   color: var(--ls-err); }
+.ls-lvl-ERROR   .ls-lvl-dot { background: var(--ls-err); }
+.ls-lvl-FATAL   { background: var(--ls-err-soft);   color: var(--ls-err); }
+.ls-lvl-FATAL   .ls-lvl-dot { background: var(--ls-err); }
+.ls-lvl-DEBUG   { background: var(--ls-debug-soft); color: var(--ls-debug); }
+.ls-lvl-DEBUG   .ls-lvl-dot { background: var(--ls-debug); }
+.ls-lvl-TRACE   { background: var(--ls-trace-soft); color: var(--ls-trace); }
+.ls-lvl-TRACE   .ls-lvl-dot { background: var(--ls-trace); }
 
 @keyframes oscillate {
   0% {

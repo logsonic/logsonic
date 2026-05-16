@@ -15,69 +15,6 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/api/v1/ai/status": {
-            "get": {
-                "description": "Checks if the Ollama service is running and the required models are available",
-                "produces": [
-                    "application/json"
-                ],
-                "summary": "Check AI service status",
-                "operationId": "check-ai-status",
-                "responses": {
-                    "200": {
-                        "description": "AI service status information",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/ai/translate-query": {
-            "post": {
-                "description": "Converts natural language description into Logsonic query syntax using AI",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "summary": "Translate natural language to Logsonic query",
-                "operationId": "translate-query",
-                "parameters": [
-                    {
-                        "description": "Natural language query and sample logs",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.AIQueryRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Translated query with confidence score",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.AIQueryAPIResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request due to invalid parameters",
-                        "schema": {
-                            "$ref": "#/definitions/types.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/types.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/grok": {
             "get": {
                 "description": "Create, read, update, and delete Grok patterns for log parsing",
@@ -259,144 +196,6 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/types.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/cloudwatch/log-events": {
-            "post": {
-                "description": "Get log events from a specific CloudWatch log stream in a time range",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "cloudwatch"
-                ],
-                "summary": "Get CloudWatch log events",
-                "parameters": [
-                    {
-                        "description": "Log stream and time range parameters",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/cloudwatch.GetLogEventsRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/cloudwatch.GetLogEventsResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/types.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/types.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/cloudwatch/log-groups": {
-            "post": {
-                "description": "List all CloudWatch log groups in the specified AWS account",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "cloudwatch"
-                ],
-                "summary": "List CloudWatch log groups",
-                "parameters": [
-                    {
-                        "description": "AWS auth and region parameters",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/cloudwatch.ListLogGroupsRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/cloudwatch.ListLogGroupsResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/types.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/types.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/cloudwatch/log-streams": {
-            "post": {
-                "description": "List CloudWatch log streams in a log group for the specified time range",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "cloudwatch"
-                ],
-                "summary": "List CloudWatch log streams",
-                "parameters": [
-                    {
-                        "description": "Log group and time range parameters",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/cloudwatch.ListLogStreamsRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/cloudwatch.ListLogStreamsResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/types.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/types.ErrorResponse"
                         }
@@ -801,208 +600,49 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/timestamp/preview": {
+            "post": {
+                "description": "Re-renders the timestamp inference and preview rows for\na sample of log lines using the supplied Resolution.\nUsed by the import wizard's timestamp panel to show a\nlive preview as the user changes knobs (anchor, year\nstrategy, timezone, force mode, rollover) without\nre-running the full /parse path.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "parsing"
+                ],
+                "summary": "Preview timestamp resolution",
+                "parameters": [
+                    {
+                        "description": "Timestamp preview request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.TimestampPreviewRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.TimestampPreviewResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
-        "cloudwatch.GetLogEventsRequest": {
-            "type": "object",
-            "properties": {
-                "end_time": {
-                    "type": "integer"
-                },
-                "limit": {
-                    "type": "integer"
-                },
-                "log_group_name": {
-                    "type": "string"
-                },
-                "log_stream_name": {
-                    "type": "string"
-                },
-                "next_token": {
-                    "type": "string"
-                },
-                "profile": {
-                    "type": "string"
-                },
-                "region": {
-                    "type": "string"
-                },
-                "start_time": {
-                    "type": "integer"
-                }
-            }
-        },
-        "cloudwatch.GetLogEventsResponse": {
-            "type": "object",
-            "properties": {
-                "has_more": {
-                    "type": "boolean"
-                },
-                "log_events": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "additionalProperties": true
-                    }
-                },
-                "next_token": {
-                    "type": "string"
-                },
-                "region": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
-                }
-            }
-        },
-        "cloudwatch.ListLogGroupsRequest": {
-            "type": "object",
-            "properties": {
-                "profile": {
-                    "type": "string"
-                },
-                "region": {
-                    "type": "string"
-                }
-            }
-        },
-        "cloudwatch.ListLogGroupsResponse": {
-            "type": "object",
-            "properties": {
-                "log_groups": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/cloudwatch.LogGroup"
-                    }
-                },
-                "region": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
-                }
-            }
-        },
-        "cloudwatch.ListLogStreamsRequest": {
-            "type": "object",
-            "properties": {
-                "end_time": {
-                    "type": "integer"
-                },
-                "log_group_name": {
-                    "type": "string"
-                },
-                "profile": {
-                    "type": "string"
-                },
-                "region": {
-                    "type": "string"
-                },
-                "start_time": {
-                    "type": "integer"
-                }
-            }
-        },
-        "cloudwatch.ListLogStreamsResponse": {
-            "type": "object",
-            "properties": {
-                "log_streams": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/cloudwatch.LogStream"
-                    }
-                },
-                "region": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
-                }
-            }
-        },
-        "cloudwatch.LogGroup": {
-            "type": "object",
-            "properties": {
-                "arn": {
-                    "type": "string"
-                },
-                "creationTime": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "retentionDays": {
-                    "type": "integer"
-                },
-                "storedBytes": {
-                    "type": "integer"
-                }
-            }
-        },
-        "cloudwatch.LogStream": {
-            "type": "object",
-            "properties": {
-                "creationTime": {
-                    "type": "string"
-                },
-                "firstEventTime": {
-                    "type": "string"
-                },
-                "lastEventTime": {
-                    "type": "string"
-                },
-                "logGroupName": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "storedBytes": {
-                    "type": "integer"
-                }
-            }
-        },
-        "handlers.AIQueryAPIResponse": {
-            "type": "object",
-            "properties": {
-                "available_models": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "bleve_query": {
-                    "type": "string"
-                },
-                "confidence": {
-                    "type": "number"
-                },
-                "error": {
-                    "type": "string"
-                },
-                "model_used": {
-                    "type": "string"
-                },
-                "success": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "handlers.AIQueryRequest": {
-            "type": "object",
-            "properties": {
-                "logs": {
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "query": {
-                    "type": "string"
-                }
-            }
-        },
         "handlers.DeleteLogsByIdsRequest": {
             "type": "object",
             "properties": {
@@ -1022,9 +662,212 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.TimestampPreviewRequest": {
+            "type": "object",
+            "properties": {
+                "custom_patterns": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "grok_pattern": {
+                    "type": "string"
+                },
+                "logs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "resolution": {
+                    "$ref": "#/definitions/timeresolve.Resolution"
+                },
+                "source_mtime": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.TimestampPreviewResponse": {
+            "type": "object",
+            "properties": {
+                "inference": {
+                    "$ref": "#/definitions/timeresolve.Inference"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "timeresolve.Anchor": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "timeresolve.FieldCandidate": {
+            "type": "object",
+            "properties": {
+                "format": {
+                    "description": "detected format hint (auto / unix_seconds / Go layout)",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "capture name",
+                    "type": "string"
+                },
+                "parsed": {
+                    "description": "RFC3339 result when Parses",
+                    "type": "string"
+                },
+                "parses": {
+                    "description": "could be parsed as a timestamp",
+                    "type": "boolean"
+                },
+                "sample": {
+                    "description": "first observed value",
+                    "type": "string"
+                },
+                "score": {
+                    "description": "ranking used for auto-pick (higher = better)",
+                    "type": "integer"
+                }
+            }
+        },
+        "timeresolve.Inference": {
+            "type": "object",
+            "properties": {
+                "field_candidates": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/timeresolve.FieldCandidate"
+                    }
+                },
+                "layout": {
+                    "$ref": "#/definitions/timeresolve.Layout"
+                },
+                "preview": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/timeresolve.PreviewRow"
+                    }
+                },
+                "resolution": {
+                    "$ref": "#/definitions/timeresolve.Resolution"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "timeresolve.Layout": {
+            "type": "object",
+            "properties": {
+                "components_present": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "has_timestamp_field": {
+                    "type": "boolean"
+                },
+                "inferred_format_label": {
+                    "type": "string"
+                },
+                "year_width": {
+                    "description": "0=year-less, 2, or 4",
+                    "type": "integer"
+                }
+            }
+        },
+        "timeresolve.PreviewRow": {
+            "type": "object",
+            "properties": {
+                "captured": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "confidence": {
+                    "type": "string"
+                },
+                "raw": {
+                    "type": "string"
+                },
+                "resolved": {
+                    "type": "string"
+                }
+            }
+        },
+        "timeresolve.Resolution": {
+            "type": "object",
+            "properties": {
+                "anchor": {
+                    "$ref": "#/definitions/timeresolve.Anchor"
+                },
+                "force_mode": {
+                    "type": "string"
+                },
+                "forced_day": {
+                    "type": "integer"
+                },
+                "forced_month": {
+                    "type": "integer"
+                },
+                "forced_year": {
+                    "type": "integer"
+                },
+                "rollover": {
+                    "type": "boolean"
+                },
+                "source_field": {
+                    "description": "SourceField names a non-canonical capture to use as the line's\ntimestamp string. When set, the resolver reads fields[SourceField]\ninstead of probing the canonical names (timestamp/date/time/...).\nEmpty means \"use canonical scan\" (the legacy default).",
+                    "type": "string"
+                },
+                "source_format": {
+                    "description": "SourceFormat hints how to parse SourceField's value. Empty means\nauto-detect via dateparse + unix-epoch length heuristics. Special\nvalues: \"unix_seconds\" / \"unix_millis\" / \"unix_nanos\". Anything\nelse is treated as a Go time layout (e.g. \"2006-01-02-15.04.05.000000\"\nfor the BGL supercomputer format).",
+                    "type": "string"
+                },
+                "timezone": {
+                    "$ref": "#/definitions/timeresolve.TimezoneCfg"
+                },
+                "year_strategy": {
+                    "type": "string"
+                }
+            }
+        },
+        "timeresolve.TimezoneCfg": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string"
+                },
+                "value": {
+                    "description": "IANA zone name when Kind=forced",
+                    "type": "string"
+                }
+            }
+        },
         "types.AutosuggestResult": {
             "type": "object",
             "properties": {
+                "coverage": {
+                    "description": "Coverage is the fraction of input lines matched by this pattern (0.0–1.0).\nHeterogeneous streams will show multiple patterns each covering a subset.",
+                    "type": "number"
+                },
                 "custom_patterns": {
                     "type": "object",
                     "additionalProperties": {
@@ -1049,6 +892,16 @@ const docTemplate = `{
                 },
                 "score": {
                     "type": "number"
+                },
+                "timestamp_field": {
+                    "description": "TimestampField / TimestampLayout / TimestampSource carry log2grok's\nauto-derived timestamp hint when one was inferred from the chosen\nGrok body (HTTPDATE → \"timestamp\" + Go layout, TIMESTAMP_ISO8601 →\n\"ts\" + ISO layout, etc.). The frontend uses them to pre-select the\ntimestamp column in step 3 of the import wizard without a second\n/parse round-trip. Empty when log2grok could not infer one.",
+                    "type": "string"
+                },
+                "timestamp_layout": {
+                    "type": "string"
+                },
+                "timestamp_source": {
+                    "type": "string"
                 }
             }
         },
@@ -1100,6 +953,14 @@ const docTemplate = `{
                 "priority": {
                     "description": "Priority of the pattern (higher numbers are matched first)",
                     "type": "integer"
+                },
+                "timestamp_config": {
+                    "description": "TimestampConfig is the user's preferred resolution for this\npattern. Persisted in a logsonic-side file (log2grok's library\nschema doesn't carry it) and re-applied on subsequent imports.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/timeresolve.Resolution"
+                        }
+                    ]
                 }
             }
         },
@@ -1183,7 +1044,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "meta": {
-                    "description": "Meta contains additional fields to be added to each log entry\nThese fields will be directly added to the JSON output for each log\nExample: for CloudWatch logs: {\"aws_region\": \"us-west-2\", \"log_group\": \"my-group\", \"log_stream\": \"stream-1\"}",
+                    "description": "Meta contains additional fields to be added to each log entry.\nThese fields are merged directly into the JSON output for each log.",
                     "type": "object",
                     "additionalProperties": true
                 },
@@ -1201,6 +1062,18 @@ const docTemplate = `{
                 },
                 "source": {
                     "type": "string"
+                },
+                "source_mtime": {
+                    "description": "SourceMTime is the modification time of the source file when\nknown. Lets the resolver anchor year-less or 2-digit-year\ntimestamps against the file rather than wall-clock now.",
+                    "type": "string"
+                },
+                "timestamp_config": {
+                    "description": "TimestampConfig is the user-confirmed resolution from the import\nwizard. When nil, the resolver auto-derives defaults from a\nsample (legacy ForceStart* fields are still honoured).",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/timeresolve.Resolution"
+                        }
+                    ]
                 }
             }
         },
@@ -1345,6 +1218,14 @@ const docTemplate = `{
                 "status": {
                     "description": "Status of the parse operation\n@Example \"success\" or \"error\"",
                     "type": "string"
+                },
+                "timestamp_inference": {
+                    "description": "TimestampInference describes how the resolver interpreted the\ntimestamps in this sample. Drives the wizard's diagnostic chip\nand live preview. Empty when no logs were provided.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/timeresolve.Inference"
+                        }
+                    ]
                 }
             }
         },

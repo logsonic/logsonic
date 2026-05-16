@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-LogSonic is an offline-first, desktop log analytics tool built as a single Go binary (~10 MB) that embeds a React SPA frontend. It ingests logs from local files or AWS CloudWatch, parses them with Grok patterns, indexes them in time-sharded Bleve indices, and provides full-text search with visualization. Optional AI assistance (via local Ollama) translates natural language queries into Bleve syntax, and an MCP server extension allows external AI agents to query logs programmatically.
+LogSonic is an offline-first, desktop log analytics tool built as a single self-contained Go binary that embeds a React SPA frontend. It ingests logs from local files, parses them with Grok patterns, indexes them in time-sharded Bleve indices, and provides full-text search with visualization. An MCP server extension allows external AI agents (Claude Desktop, Cursor, Windsurf) to query logs programmatically.
 
 ---
 
@@ -21,13 +21,6 @@ graph TB
         Handlers["Handler Layer"]
         Tokenizer["Grok Tokenizer"]
         Storage["Bleve Storage Engine"]
-        CW_Client["CloudWatch Client<br/>(AWS SDK v2)"]
-        AI_Proxy["Ollama AI Proxy"]
-    end
-
-    subgraph "External Services"
-        Ollama["Local Ollama Instance<br/>(gemma3:12b fine-tuned)"]
-        AWS["AWS CloudWatch Logs"]
     end
 
     subgraph "Persistence"
@@ -43,11 +36,6 @@ graph TB
     Router --> Handlers
     Handlers --> Tokenizer
     Handlers --> Storage
-    Handlers --> CW_Client
-    Handlers --> AI_Proxy
-
-    CW_Client --> AWS
-    AI_Proxy --> Ollama
 
     Storage --> LevelDB
     Handlers --> GrokJSON
@@ -83,14 +71,13 @@ graph LR
     end
 
     subgraph "Import Components"
-        SourceSel["SourceSelection<br/>(Local / CloudWatch)"]
+        SourceSel["SourceSelection<br/>(Local file source)"]
         FileSel["FileSelection<br/>(drag-drop, multi-file)"]
         PatternSel["LogPatternSelection<br/>(auto-detect + manual)"]
         CustomPat["CustomPatternSelector<br/>(Grok editor)"]
         FileAnalyze["FileAnalyzingStep<br/>(preview + test)"]
         ImportConfirm["ImportConfirmStep<br/>(batch upload)"]
         SuccessSum["SuccessSummaryStep"]
-        CWProvider["CloudWatchLogProvider<br/>(group/stream picker)"]
     end
 
     Home --> LogViewer
@@ -101,7 +88,6 @@ graph LR
     Import --> SourceSel --> FileSel
     FileSel --> PatternSel --> CustomPat
     PatternSel --> FileAnalyze --> ImportConfirm --> SuccessSum
-    SourceSel --> CWProvider
 
     Home --- SearchStore
     Home --- LogResult
@@ -137,7 +123,7 @@ sequenceDiagram
     participant Bleve as Bleve Storage
 
     Note over User,UI: Step 1 — Source Selection
-    User->>UI: Choose "Local File" or "CloudWatch"
+    User->>UI: "Local File" is the only supported source
 
     Note over User,UI: Step 2 — File Selection (Multi-File)
     User->>UI: Drag & drop or browse multiple files
@@ -307,115 +293,11 @@ grok.json
 
 ---
 
-## 6. CloudWatch Import Flow
+## 6. AI Assistance Architecture
 
-LogSonic can pull logs from AWS CloudWatch (region/profile auto-detected from local AWS CLI config).
+LogSonic integrates with external AI agents through the Model Context Protocol (MCP). The inline Ollama-based query translator that previously shipped in the UI has been removed in favor of a single, agent-driven integration point.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant UI as CloudWatchLogProvider
-    participant CWStore as useCloudWatchStore
-    participant API as Go API
-    participant CW as AWS CloudWatch SDK
-
-    User->>UI: Select "CloudWatch" source
-    User->>UI: Enter region + optional profile
-    
-    UI->>API: POST /api/v1/cloudwatch/log-groups<br/>{region, profile}
-    API->>CW: DescribeLogGroups (paginated)
-    CW-->>API: LogGroup[] {name, arn, storedBytes, retentionDays}
-    API-->>UI: List of log groups
-    
-    User->>UI: Select a log group + time range
-    UI->>API: POST /api/v1/cloudwatch/log-streams<br/>{log_group, start_time, end_time}
-    API->>CW: DescribeLogStreams (filtered by time range)
-    CW-->>API: LogStream[] {name, firstEventTime, lastEventTime}
-    API-->>UI: Available streams in time window
-    
-    User->>UI: Select log stream(s) + confirm
-    loop Per selected stream (paginated, max 10000/page)
-        UI->>API: POST /api/v1/cloudwatch/log-events<br/>{log_group, log_stream, start_time, end_time, limit, next_token}
-        API->>CW: GetLogEvents
-        CW-->>API: LogEvent[] {timestamp, message}
-        API-->>UI: Events + next_token + has_more flag
-    end
-    
-    UI->>UI: Concatenate all events into text blob
-    UI->>Store: setFileFromBlob(concatenated_text, filename)
-    Note over Store: Creates a virtual File object from blob<br/>Sets preview lines, advances to Step 2
-    
-    Note over User,UI: From here, normal pattern detection<br/>and ingestion flow continues
-```
-
-### CloudWatch Client Architecture
-
-The CloudWatch client (`pkg/cloudwatch/client.go`) wraps the AWS SDK v2:
-
-| Method | AWS API | Pagination | Notes |
-|---|---|---|---|
-| `ListLogGroups` | `DescribeLogGroups` | Token-based (all pages) | Returns all groups in account |
-| `ListLogStreams` | `DescribeLogStreams` | Token-based, time-filtered | Filters by `firstEventTime`/`lastEventTime` overlap |
-| `GetLogEvents` | `GetLogEvents` | Forward token, configurable `limit` (default 10000) | Returns `hasMore` flag based on token equality + result count |
-
-**Metadata tagging**: CloudWatch-sourced logs carry metadata fields (`aws_region`, `log_group`, `log_stream`) injected via `IngestSessionOptions.Meta`, which are indexed as regular Bleve fields for filtered search.
-
----
-
-## 7. AI Assistance Architecture
-
-LogSonic offers two independent AI integration paths:
-
-### 7a. Ollama Query Translation (Inline)
-
-Built into the search UI for users who find Bleve query syntax difficult.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant UI as AIQueryDialog
-    participant API as Go API (/ai/*)
-    participant Ollama as Local Ollama<br/>(logsonic model)
-
-    Note over UI,API: Startup: check AI availability
-    UI->>API: GET /api/v1/ai/status
-    API->>Ollama: GET http://localhost:11434/api/tags
-    
-    alt Ollama running + logsonic model found
-        Ollama-->>API: {models: ["logsonic:latest", ...]}
-        API-->>UI: {ollama_running: true, models_available: [...]}
-        UI->>UI: Show AI assistant button in search bar
-    else Ollama not available
-        API-->>UI: {ollama_running: false}
-        UI->>UI: Hide AI features gracefully
-    end
-    
-    User->>UI: Click AI button → type "show me all errors from the API service"
-    UI->>API: POST /api/v1/ai/translate-query<br/>{query: "...", logs: {sample_log_fields}}
-    
-    API->>API: findLogsonicModel(available_models)<br/>Priority: "logsonic" > "logsonic:latest" > *logsonic*
-    API->>Ollama: POST http://localhost:11434/api/generate<br/>{model: "logsonic", prompt: JSON(request), stream: false}
-    
-    Note over Ollama: Fine-tuned gemma3:12b model<br/>with Bleve syntax examples<br/>(temperature: 0.1 for determinism)
-    
-    Ollama-->>API: {response: "+level:error +service:api"}
-    API-->>UI: {bleve_query: "+level:error +service:api", success: true}
-    
-    UI->>UI: Populate search bar with translated query
-    User->>UI: Execute search
-```
-
-#### Ollama Model Design
-
-The custom Ollama model (`ollama/Modelfile`) is built on `gemma3:12b` with:
-- **System prompt**: Detailed Bleve syntax rules (boolean operators, wildcards, regex, escaping, numeric ranges)
-- **Few-shot examples**: 20+ training pairs mapping natural language → Bleve queries
-- **Low temperature** (0.1): Minimizes creativity, maximizes syntax precision
-- **Model selection**: `findLogsonicModel()` searches available models for name containing "logsonic"
-
-### 7b. MCP Server (External Agent Integration)
+### MCP Server (External Agent Integration)
 
 A standalone Node.js process using the `FastMCP` framework, communicating over `stdio`.
 
@@ -527,8 +409,6 @@ graph TB
             H_Grok["grok.go — Pattern CRUD + persistence"]
             H_Logs["logs.go — Search, sort, paginate, distribution"]
             H_Info["info.go — System info + caching"]
-            H_CW["cloudwatch.go — CloudWatch proxy"]
-            H_AI["ai_query.go — Ollama proxy"]
             H_Ping["ping.go — Health check"]
             H_GrokPat["grok_patterns.go — Default pattern definitions"]
         end
@@ -543,11 +423,6 @@ graph TB
         Search_Go["search.go<br/>- Concurrent shard search<br/>- Semaphore throttling<br/>- Date iteration"]
     end
     
-    subgraph "pkg/cloudwatch"
-        CWClient["client.go — AWS SDK v2 wrapper"]
-        CWTypes["types.go — LogGroup, LogStream, LogEvent"]
-    end
-    
     subgraph "pkg/static"
         Embed["Embedded React SPA"]
     end
@@ -556,7 +431,6 @@ graph TB
     Server --> H_Handlers
     H_Handlers --> Tok
     H_Handlers --> Store
-    H_CW --> CWClient
 ```
 
 ### Middleware Stack (in order)
@@ -680,4 +554,4 @@ The production Go binary embeds the entire React build output via `embed.FS`. Th
 The current REST ingestion parses logs synchronously on the HTTP goroutine. This simplifies the architecture but couples HTTP request latency with CPU-bound Grok parsing, placing backpressure directly on the client.
 
 ### Offline-First AI
-The Ollama integration is designed to degrade gracefully. The status check at startup determines feature availability, and its absence is Never an error — the AI button simply doesn't appear.
+AI assistance is delivered exclusively through the MCP server, which is started by the user's MCP client (Claude Desktop, Cursor, etc.) rather than by LogSonic itself. The core binary has no external network dependencies; all data and queries stay local.

@@ -92,9 +92,12 @@ const SortableHeader: React.FC<SortableHeaderProps> = ({ header, isLocked, handl
     <th
       ref={setNodeRef}
       data-column-id={header.id}
-      className={`relative border-b border-slate-200 bg-slate-50/80 px-2 py-1.5 text-left font-semibold text-slate-600 text-xs ${
-        header.column.getCanSort() ? 'cursor-pointer select-none hover:bg-slate-100 hover:text-slate-800' : ''
-      } ${isUtilityColumn ? `w-[40px] min-w-[40px] max-w-[40px] text-center` : ''}`}
+      className={`relative px-2 py-1.5 text-left font-semibold text-xs ${
+        header.column.getCanSort() ? 'cursor-pointer select-none' : ''
+      } ${
+        header.id === 'select' ? 'w-[36px] min-w-[36px] max-w-[36px] text-center' :
+        header.id === 'expander' ? 'w-[20px] min-w-[20px] max-w-[20px] text-center' : ''
+      }`}
       style={style}
       onClick={
         header.column.getCanSort()
@@ -109,27 +112,28 @@ const SortableHeader: React.FC<SortableHeaderProps> = ({ header, isLocked, handl
         // For utility columns (select/expander), render directly without the flex container
         flexRender(header.column.columnDef.header, header.getContext())
       ) : (
-        // For regular data columns, use the flex container with resizer
-        <div className="flex items-center group/header pr-6">
-          {!isLocked && (
-            <span
-              {...attributes}
-              {...listeners}
-              className="drag-handle mr-2 cursor-grab"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <GripVertical className="h-4 w-4 text-slate-400" />
-            </span>
-          )}
+        <>
+          <div className="flex items-center group/header min-w-0">
+            {!isLocked && (
+              <span
+                {...attributes}
+                {...listeners}
+                className="drag-handle mr-1.5 cursor-grab"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <GripVertical className="h-3.5 w-3.5" style={{ color: 'var(--ls-text-4)' }} />
+              </span>
+            )}
 
-          <div className="flex-1 truncate">
-            {header.isPlaceholder
-              ? null
-              : flexRender(header.column.columnDef.header, header.getContext())}
+            <div className="flex-1 truncate">
+              {header.isPlaceholder
+                ? null
+                : flexRender(header.column.columnDef.header, header.getContext())}
+            </div>
           </div>
 
           {header.column.getCanResize() && <Resizer columnId={header.id} />}
-        </div>
+        </>
       )}
     </th>
   );
@@ -216,101 +220,118 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
   const fitRangeToData = useFitRangeToData();
 
   const autofitColumns = useCallback(() => {
-    
+
     if (store.selectedColumns.length === 0) return;
-    if ( !logData || !logData.logs || logData.logs.length === 0) return;
-    
-    // Calculate optimal width for each column based on content
+    if (!logData || !logData.logs || logData.logs.length === 0) return;
+
     const columnWidths: Record<string, number> = {};
-    
-    // Set fixed widths for utility columns - these should never be adjusted
-    columnWidths['select'] = 40;
-    columnWidths['expander'] = 40;
-    
-    // Get the container width
-    const containerWidth = tableRef.current?.clientWidth || 0;
-    
-    // First pass: calculate content-based widths
+
+    // Fixed widths for utility columns.
+    columnWidths['select'] = 36;
+    columnWidths['expander'] = 20;
+
+    // Use the closest measured ancestor — `tableRef` wraps the table in a
+    // div whose width may briefly be 0 before layout. Fall back to the
+    // viewport so initial autofit isn't catastrophic.
+    const measured = tableRef.current?.clientWidth || tableRef.current?.parentElement?.clientWidth || 0;
+    const containerWidth = measured > 0 ? measured : Math.max(window.innerWidth - 80, 640);
+
+    // Width estimation is glyph-aware: monospace fields (timestamps, IPs,
+    // numbers) need fewer px per char than proportional text.
+    // 7.5 px/char ≈ 12 px monospace; 7 px/char ≈ 13 px sans.
+    const monoColumns = new Set([
+      'timestamp', '@timestamp', 'time',
+      'client_ip', 'remote_addr', 'src_ip', 'dst_ip', 'host',
+      '_id', '_ipv4_addr', 'status', 'status_code', 'http_status',
+      'bytes', 'duration', 'http_version', 'request_id',
+    ]);
+
+    // Render every selected (non-internal) column, even if all values on
+    // this page happen to be empty. Users explicitly selected them.
+    const visibleDataCols = store.selectedColumns.filter(
+      col => col !== '_raw' && col !== '_src'
+    );
+
     const contentBasedWidths: Record<string, number> = {};
-    let totalContentWidth = 0;
-    
-    // Process each selected column (excluding utility columns)
-    store.selectedColumns.forEach(column => {
-      // Skip utility columns as they have fixed widths
-      if (column === 'select' || column === 'expander' || column === '_raw' || column === '_src') return;
-      
-      // Start with column name length (plus some padding)
-      let maxContentWidth = column.length * 10;
-      
-      // Sample up to 100 logs to avoid performance issues with large datasets
-      const sampleSize = Math.min(logData.logs.length, store.pageSize);
-      const sampleLogs = logData.logs.slice(0, sampleSize);
-      
-      // Find the maximum content width
+    let totalContentWidth = columnWidths['select'] + columnWidths['expander'];
+    const sampleSize = Math.min(logData.logs.length, store.pageSize);
+    const sampleLogs = logData.logs.slice(0, sampleSize);
+
+    // Rendered string can differ from the raw value — most importantly the
+    // timestamp accessor reformats ISO to "YYYY-MM-DD HH:MM:SS.mmm" (23 chars
+    // vs the ~20-char raw form). Match that here so we don't size to the raw.
+    const renderedLength = (col: string, value: any): number => {
+      if (value === undefined || value === null) return 0;
+      const lc = col.toLowerCase();
+      if (lc === 'timestamp' || lc === '@timestamp' || lc === 'time') {
+        // formatTimestamp output: "2026-04-01 02:02:46.000"
+        return 23;
+      }
+      const s = typeof value === 'object' ? JSON.stringify(value) : String(value);
+      return s.length;
+    };
+
+    visibleDataCols.forEach(column => {
+      const mono = monoColumns.has(column.toLowerCase());
+      // Headers carry the sort caret + 6px drag handle + 12px padding.
+      const headerWidth = Math.ceil(column.length * 7) + 36;
+      let maxContentWidth = headerWidth;
       sampleLogs.forEach(log => {
-        const value = log[column];
-        if (value !== undefined && value !== null) {
-          const stringValue = typeof value === 'object' 
-            ? JSON.stringify(value).length 
-            : String(value).length;
-          
-          // Use character count as a proxy for width (with some multiplier)
-          const estimatedWidth = Math.min(stringValue * 8, 500); // Cap at 500px
-          
-          maxContentWidth = Math.max(maxContentWidth, estimatedWidth);
-        }
+        const len = renderedLength(column, log[column]);
+        const perChar = mono ? 7.5 : 7;
+        const w = Math.ceil(len * perChar);
+        if (w > maxContentWidth) maxContentWidth = w;
       });
-      
-      // Set a reasonable width with min/max constraints
-      contentBasedWidths[column] = Math.max(120, Math.min(maxContentWidth, 600));
+      // Cell padding is asymmetric (`pl-[30px] pr-2`) — 30 left + 8 right + a
+      // small safety margin so the last character never clips.
+      maxContentWidth += 30 + 8 + 8;
+      // Each column has a sane min (so headers are still readable) and a
+      // generous max (so a runaway message field doesn't push everything
+      // off-screen).
+      contentBasedWidths[column] = Math.max(80, Math.min(maxContentWidth, 720));
       totalContentWidth += contentBasedWidths[column];
     });
-    
-    // Add utility column widths to total
-    const utilityColumnsWidth = columnWidths['select'] + columnWidths['expander'];
-    totalContentWidth += utilityColumnsWidth;
-    
-    // Second pass: distribute space proportionally based on container width
-    const availableWidth = containerWidth;
-    
-    // If calculated widths are too small for the container, expand them proportionally
-    if (totalContentWidth < availableWidth) {
-      // Determine how much extra space we have
-      const extraSpace = availableWidth - totalContentWidth;
-      
-      // Calculate expansion factor for each data column
-      const dataColumnsCount = Object.keys(contentBasedWidths).length;
-      if (dataColumnsCount > 0) {
-        const expansionPerColumn = extraSpace / dataColumnsCount;
-        
-        // Expand each non-utility column
-        Object.keys(contentBasedWidths).forEach(column => {
-          columnWidths[column] = contentBasedWidths[column] + expansionPerColumn;
+
+    if (totalContentWidth < containerWidth && visibleDataCols.length > 0) {
+      // Give the leftover space to the last visible data column (typically
+      // `message`). This matches Splunk/Kibana — narrow columns stay
+      // narrow, the wide content column fills the screen.
+      const extraSpace = containerWidth - totalContentWidth;
+      const lastCol = visibleDataCols[visibleDataCols.length - 1];
+      visibleDataCols.forEach(column => {
+        columnWidths[column] = contentBasedWidths[column] + (column === lastCol ? extraSpace : 0);
+      });
+    } else if (totalContentWidth > containerWidth) {
+      // Shrink proportionally but never below the per-column min so timestamps
+      // stay readable.
+      const minTotal = visibleDataCols.reduce((s, c) => s + Math.max(80, contentBasedWidths[c] * 0.4), 0);
+      if (minTotal >= containerWidth) {
+        // Page is too narrow; respect content widths and let the table scroll.
+        visibleDataCols.forEach(column => {
+          columnWidths[column] = contentBasedWidths[column];
+        });
+      } else {
+        const shrinkFactor = containerWidth / totalContentWidth;
+        visibleDataCols.forEach(column => {
+          columnWidths[column] = Math.max(80, Math.round(contentBasedWidths[column] * shrinkFactor));
         });
       }
-    } 
-    // If calculated widths exceed container, reduce them proportionally
-    else if (totalContentWidth > availableWidth) {
-      // Calculate shrink factor
-      const shrinkFactor = availableWidth / totalContentWidth;
-      
-      // Apply shrink factor to each data column
-      Object.keys(contentBasedWidths).forEach(column => {
-        // Apply shrink factor but maintain minimum width
-        columnWidths[column] = Math.max(120, contentBasedWidths[column] * shrinkFactor);
-      });
-    } 
-    // If perfect fit, use the content-based widths directly
-    else {
-      Object.keys(contentBasedWidths).forEach(column => {
+    } else {
+      visibleDataCols.forEach(column => {
         columnWidths[column] = contentBasedWidths[column];
       });
     }
-    
-    // Update column widths in the store
+
+    // Preserve any persisted widths for currently-hidden columns so that
+    // turning them back on later doesn't reset their size.
+    store.selectedColumns.forEach(col => {
+      if (columnWidths[col] === undefined && store.columnWidths[col] !== undefined) {
+        columnWidths[col] = store.columnWidths[col];
+      }
+    });
+
     store.setColumnWidths(columnWidths);
-    
-  }, [logData, store.selectedColumns, store.pageSize]);
+  }, [logData, store.selectedColumns, store.mandatoryColumns, store.pageSize]);
 
   // Expose the autofitColumns function through the ref
   React.useImperativeHandle(ref, () => ({
@@ -333,7 +354,25 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
 
   useEffect(() => {
     autofitColumns();
-  }, [store.selectedColumns]);
+    // Re-fit on new search results too — the visible-column set is derived
+    // from log content, so widths must be recalculated when content changes.
+  }, [store.selectedColumns, logData]);
+
+  // Refit on viewport resize so the table never gets stuck wider/narrower
+  // than the available space when the user adjusts the window or sidebar.
+  useEffect(() => {
+    let raf = 0;
+    const onResize = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => autofitColumns());
+    };
+    const ro = new ResizeObserver(onResize);
+    if (tableRef.current) ro.observe(tableRef.current);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, [autofitColumns]);
 
   // State for column resizing
   const [columnResizeMode, setColumnResizeMode] = useState<ColumnResizeMode>('onChange');
@@ -364,29 +403,35 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     setSorting([{ id: store.sortBy || 'timestamp', desc: store.sortOrder === 'desc' }]);
   }, [store.sortBy, store.sortOrder]);
 
-  // Format timestamp for display
+  // Format timestamp for display.
+  // Compact, sortable, monospace-aligned: "2026-04-01 17:40:54.123".
+  // Timezone is intentionally omitted from the row — it's shown once in the
+  // search-metadata row above the table to avoid per-row visual clutter.
   const formatTimestamp = useCallback((timestamp: string) => {
     if (!timestamp) return '';
-    //Timestamp is in UTC format
     try {
       const date = new Date(timestamp);
+      if (Number.isNaN(date.getTime())) return timestamp;
 
-      // Use a more compatible approach for formatting with timezone
-      const formattedDate = new Intl.DateTimeFormat("default", {
+      const parts = new Intl.DateTimeFormat('en-CA', {
         year: 'numeric',
-        month: 'short',
-        day: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
+        hour12: false,
         timeZone: store.timeZone,
-        timeZoneName: "short"
+      }).formatToParts(date);
 
-      }).format(date);
-
-      return formattedDate;
+      const lookup: Record<string, string> = {};
+      for (const p of parts) lookup[p.type] = p.value;
+      const ms = String(date.getUTCMilliseconds()).padStart(3, '0');
+      // en-CA uses 24h "24" for midnight; normalize to "00".
+      const hour = lookup.hour === '24' ? '00' : lookup.hour;
+      return `${lookup.year}-${lookup.month}-${lookup.day} ${hour}:${lookup.minute}:${lookup.second}.${ms}`;
     } catch (e) {
-      console.error("Error formatting timestamp:", e);
+      console.error('Error formatting timestamp:', e);
       return timestamp;
     }
   }, [store.timeZone]);
@@ -419,9 +464,9 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
           />
         </div>
       ),
-      size: 40, // Fixed size for checkbox column
-      minSize: 40, // Minimum size
-      maxSize: 40, // Maximum size
+      size: 36, // Fixed size for checkbox column
+      minSize: 36, // Minimum size
+      maxSize: 36, // Maximum size
       enableResizing: false,
     });
 
@@ -455,7 +500,8 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     // Data columns
     const dataColumns = store.selectedColumns
       .filter(column => column !== '_raw' && column !== '_src') // Exclude _raw and _src fields from columns
-      .map(column => 
+      .map(column =>
+
       columnHelper.accessor(
         (row) => {
           const value = row[column];
@@ -482,10 +528,76 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
           ),
           cell: info => {
             const text = info.getValue();
-            // Use the highlight function to highlight search matches
+            const colLower = column.toLowerCase();
+
+            // Level / severity column → colored badge
+            if (colLower === 'level' || colLower === 'severity' || colLower === 'log_level') {
+              const lvl = String(text || '').toUpperCase().trim();
+              if (lvl) {
+                const knownLvls = ['INFO', 'WARN', 'WARNING', 'ERROR', 'FATAL', 'DEBUG', 'TRACE'];
+                const cls = knownLvls.includes(lvl) ? `ls-lvl-${lvl}` : '';
+                return (
+                  <span className={`ls-lvl ${cls}`}>
+                    <span className="ls-lvl-dot" />
+                    {lvl}
+                  </span>
+                );
+              }
+            }
+
+            // Status code column → color by class (2xx ok, 3xx info, 4xx warn, 5xx err)
+            if (colLower === 'status' || colLower === 'status_code' || colLower === 'response_status' || colLower === 'http_status') {
+              const num = Number(text);
+              if (Number.isFinite(num) && num >= 100) {
+                const color =
+                  num >= 500 ? 'var(--ls-err)' :
+                  num >= 400 ? 'var(--ls-warn)' :
+                  num >= 300 ? 'var(--ls-info)' :
+                  num >= 200 ? 'var(--ls-ok)' : 'var(--ls-text-2)';
+                return (
+                  <span style={{ color, fontWeight: 600 }}>{String(text)}</span>
+                );
+              }
+            }
+
+            // Program / service column → accent text
+            if (colLower === 'program' || colLower === 'service' || colLower === 'app') {
+              return (
+                <div className="truncate" style={{ color: 'var(--ls-accent-text)' }}>
+                  {highlightText(text, column)}
+                </div>
+              );
+            }
+
+            // Host column → info color
+            if (colLower === 'host' || colLower === 'hostname') {
+              return (
+                <div className="truncate" style={{ color: 'var(--ls-info)' }}>
+                  {highlightText(text, column)}
+                </div>
+              );
+            }
+
+            // Timestamp column → muted secondary
+            if (colLower === 'timestamp' || colLower === 'time' || colLower === '@timestamp') {
+              return (
+                <div className="truncate" style={{ color: 'var(--ls-text-2)', fontVariantNumeric: 'tabular-nums' }}>
+                  {highlightText(text, column)}
+                </div>
+              );
+            }
+
+            // Default
             return <div className="truncate">{highlightText(text, column)}</div>;
           },
-          size: store.columnWidths[column] || 150,
+          // Wider default for timestamp so the full `YYYY-MM-DD HH:MM:SS.mmm`
+          // fits without truncation; everything else gets the old 150 px
+          // starting width and auto-fits from there.
+          size: store.columnWidths[column] || (
+            column === 'timestamp' || column.toLowerCase() === '@timestamp' || column.toLowerCase() === 'time'
+              ? 210
+              : 150
+          ),
           enableResizing: !store.isColumnLocked,
           enableSorting: true, // Always enable sorting for debugging
         }
@@ -496,6 +608,21 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
 
     return [selectionColumn, expanderColumn, ...dataColumns];
   }, [store.selectedColumns, formatTimestamp, store.sortBy, store.sortOrder, expanded, store.isColumnLocked, columnHelper, store.columnWidths]);
+
+  // The user picks the visible columns via the Column Selector, and that
+  // choice is the source of truth — even if the current page happens to be
+  // empty for a column. Earlier we auto-hid empty columns here, but the
+  // effect was that switching time ranges (or sorting to a page where the
+  // schema differs, e.g. apache-error vs nginx-access) would collapse the
+  // table to a single timestamp column and never recover.
+  const columnVisibility = useMemo(() => {
+    const visibility: Record<string, boolean> = {};
+    for (const col of store.selectedColumns) {
+      if (col === '_raw' || col === '_src') continue;
+      visibility[col] = true;
+    }
+    return visibility;
+  }, [store.selectedColumns]);
 
   // Set up DnD sensors
   const sensors = useSensors(
@@ -544,6 +671,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
       sorting,
       rowSelection,
       columnOrder,
+      columnVisibility,
     },
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
@@ -661,8 +789,12 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
         const columnId = column.id;
         
         // Ensure utility columns maintain their fixed size
-        if (fixedColumns.includes(columnId)) {
-          column.columnDef.size = 40;
+        if (columnId === 'select') {
+          column.columnDef.size = 36;
+          return;
+        }
+        if (columnId === 'expander') {
+          column.columnDef.size = 20;
           return;
         }
         
@@ -735,8 +867,8 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     }
     
     // Create base result object with selection class if needed
-    let result = { 
-      className: isSelected ? 'selected-row bg-blue-50' : '',
+    let result = {
+      className: isSelected ? 'selected-row' : '',
       colorClass: '',
       title: '',
     };
@@ -795,25 +927,108 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     if (logs.length === 0) {
 
       if (noLogsInSystem){
-        return (<div className="flex flex-col items-center justify-center text-slate-500 h-full" style={{marginTop: '-10vh'}}>
-        <div className="max-w-lg text-center">
-          <div className="mb-6 relative">
-            <FileUp className="h-16 w-16 text-blue-500 mx-auto animate-bounce" />
-            <div className="absolute w-8 h-8 rounded-full bg-blue-100 -z-10 top-4 left-1/2 transform -translate-x-1/2 animate-ping" />
-          </div>
-          <h3 className="text-2xl font-medium text-slate-800 mb-3">No logs found!</h3>
-          <p className="text-lg mb-6 text-slate-600">
-            Looks like your log storage is as empty as a developer's coffee cup on Monday morning!
-          </p>
-          <Button 
-            onClick={() =>  navigate('/import')} 
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
+        return (
+          <div
+            className="flex flex-col items-center justify-center h-full"
+            style={{ marginTop: '-6vh' }}
           >
-            <Upload className="h-4 w-4" />
-            <span>Import Some Logs</span>
-          </Button>
-        </div>
-      </div>)
+            <div className="max-w-md text-center">
+              {/* Icon tile — uses accent token, matches the badge/chip aesthetic in the rest of the app */}
+              <div
+                className="mx-auto mb-5 inline-flex items-center justify-center"
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 12,
+                  background: 'var(--ls-accent-soft)',
+                  border: '1px solid var(--ls-accent-border)',
+                  boxShadow: 'var(--ls-shadow-sm)',
+                }}
+              >
+                <FileUp size={26} style={{ color: 'var(--ls-accent)' }} />
+              </div>
+
+              <h3
+                style={{
+                  fontFamily: 'var(--ls-font-sans)',
+                  fontSize: 18,
+                  fontWeight: 600,
+                  color: 'var(--ls-text)',
+                  letterSpacing: '-0.01em',
+                  marginBottom: 8,
+                }}
+              >
+                No logs yet
+              </h3>
+              <p
+                style={{
+                  fontSize: 13,
+                  color: 'var(--ls-text-2)',
+                  lineHeight: 1.5,
+                  marginBottom: 20,
+                }}
+              >
+                Your index is empty. Import a log file to start searching.
+              </p>
+
+              <div className="flex items-center justify-center gap-2">
+                <Button
+                  onClick={() => navigate('/import')}
+                  className="inline-flex items-center text-white"
+                  style={{
+                    height: 32,
+                    padding: '0 14px',
+                    borderRadius: 6,
+                    background: 'var(--ls-accent)',
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.18)',
+                    gap: 6,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--ls-accent-hover)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--ls-accent)')}
+                >
+                  <Upload size={13} />
+                  <span>Import logs</span>
+                </Button>
+              </div>
+
+              {/* Quick hint row, mirrors the syntax-hint chips on LogSearch */}
+              <div
+                className="flex flex-wrap items-center justify-center gap-1.5 mt-5"
+                style={{ fontSize: 11 }}
+              >
+                <span
+                  style={{
+                    color: 'var(--ls-text-3)',
+                    fontSize: 10,
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                  }}
+                >
+                  Supported:
+                </span>
+                {['.log', '.txt', '.json'].map((s) => (
+                  <span
+                    key={s}
+                    className="inline-flex items-center px-2 py-0.5"
+                    style={{
+                      borderRadius: 4,
+                      border: '1px solid var(--ls-border)',
+                      background: 'var(--ls-bg-1)',
+                      fontFamily: 'var(--ls-font-mono)',
+                      fontSize: 11,
+                      color: 'var(--ls-text-2)',
+                    }}
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
         }
     
       const totalIndexed = systemInfo?.storage_info?.total_log_entries ?? 0;
@@ -845,7 +1060,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
           onDragEnd={handleDragEnd}
           modifiers={[restrictToHorizontalAxis]}
         >
-          <table 
+          <table
             className="w-full border-collapse"
             style={{ width: table.getCenterTotalSize() }}
           >
@@ -880,11 +1095,11 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
                       title={rowStyleInfo.title}
                     >
                       {row.getVisibleCells().map(cell => (
-                        <td 
+                        <td
                           key={cell.id}
                           className={`${
-                            cell.column.id === 'select' ? 'w-[40px] min-w-[40px] max-w-[40px] text-center px-2 py-2' :
-                            cell.column.id === 'expander' ? 'w-[20px] min-w-[20px] max-w-[20px] text-center' : 'pl-6 py-2'
+                            cell.column.id === 'select' ? 'w-[36px] min-w-[36px] max-w-[36px] text-center px-2 py-2' :
+                            cell.column.id === 'expander' ? 'w-[20px] min-w-[20px] max-w-[20px] text-center px-0 py-2' : 'pl-[30px] pr-2 py-2'
                           }`}
                           data-column-id={cell.column.id}
                           style={{

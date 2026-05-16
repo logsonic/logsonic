@@ -353,6 +353,7 @@ interface KnobsProps {
 const truncate = (s: string, n = 40) => (s.length <= n ? s : s.slice(0, n - 1) + '…');
 
 const Knobs: FC<KnobsProps> = ({ eff, patch, sourceMTime, candidates }) => {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   if (!eff) return null;
   const anchorIso = eff.anchor.value ? new Date(eff.anchor.value).toISOString().slice(0, 10) : '';
   const sourceFieldValue = eff.source_field?.trim() ? eff.source_field : SOURCE_AUTO;
@@ -364,7 +365,6 @@ const Knobs: FC<KnobsProps> = ({ eff, patch, sourceMTime, candidates }) => {
   })();
   const customLayout = sourceFormatValue === FORMAT_CUSTOM ? (eff.source_format ?? '') : '';
   const isNonCanonicalSource = sourceFieldValue !== SOURCE_AUTO;
-  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   return (
     <div className="space-y-3">

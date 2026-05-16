@@ -134,30 +134,49 @@ const SystemInfoModal: React.FC<SystemInfoModalProps> = ({ open, onOpenChange })
                 </Card>
               </div>
 
+              {/* Memory split — a 58/42 ratio doesn't need a 300 px pie.
+                  Inline bar communicates the same info in 24 px and leaves
+                  room for what the user actually came here to see. */}
               <Card>
-                <CardHeader>
-                  <CardTitle>Memory Usage</CardTitle>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Memory Usage</CardTitle>
                 </CardHeader>
-                <CardContent className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={getMemoryChartData()}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                        outerRadius={100}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {getMemoryChartData().map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value) => formatBytes(value as number)} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                <CardContent>
+                  {(() => {
+                    const data = getMemoryChartData();
+                    const total = data.reduce((s, d) => s + d.value, 0) || 1;
+                    return (
+                      <div className="space-y-2">
+                        <div className="flex h-2.5 overflow-hidden rounded-full" style={{ background: 'var(--ls-bg-2)' }}>
+                          {data.map((d, i) => (
+                            <div
+                              key={d.name}
+                              style={{
+                                width: `${(d.value / total) * 100}%`,
+                                background: COLORS[i % COLORS.length],
+                              }}
+                              title={`${d.name}: ${formatBytes(d.value)}`}
+                            />
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: 'var(--ls-text-2)' }}>
+                          {data.map((d, i) => (
+                            <div key={d.name} className="flex items-center gap-1.5">
+                              <span
+                                className="inline-block rounded-sm"
+                                style={{ width: 8, height: 8, background: COLORS[i % COLORS.length] }}
+                              />
+                              <span className="font-medium">{d.name}</span>
+                              <span className="font-mono tabular-nums">{formatBytes(d.value)}</span>
+                              <span style={{ color: 'var(--ls-text-3)' }}>
+                                ({((d.value / total) * 100).toFixed(0)}%)
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -169,16 +188,24 @@ const SystemInfoModal: React.FC<SystemInfoModalProps> = ({ open, onOpenChange })
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
+                    {/* Two columns with min-w-0 so the long storage path
+                        wraps inside its cell instead of overflowing into the
+                        adjacent "Total Indices" value (the old bug rendered
+                        "logsoni" + "3" stacked as "logsoni3c"). */}
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4">
+                      <div className="min-w-0">
                         <h4 className="text-sm font-medium mb-1">Storage Directory</h4>
-                        <p className="text-sm font-mono bg-gray-100 p-2 rounded">
+                        <p
+                          className="text-sm font-mono bg-gray-100 p-2 rounded break-all"
+                          style={{ wordBreak: 'break-all' }}
+                          title={systemInfo.storage_info.storage_directory}
+                        >
                           {systemInfo.storage_info.storage_directory}
                         </p>
                       </div>
                       <div>
                         <h4 className="text-sm font-medium mb-1">Total Indices</h4>
-                        <p className="text-2xl font-bold">
+                        <p className="text-2xl font-bold tabular-nums">
                           {systemInfo.storage_info.total_indices}
                         </p>
                       </div>
@@ -246,26 +273,38 @@ const SystemInfoModal: React.FC<SystemInfoModalProps> = ({ open, onOpenChange })
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Memory Usage</CardTitle>
+                    <CardTitle>Memory</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
                       <div className="grid grid-cols-2 gap-2">
-                        <div className="font-medium">Allocated:</div>
+                        <div className="font-medium">In use:</div>
                         <div>{formatBytes(systemInfo.system_info.memory_usage.alloc_bytes)}</div>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <div className="font-medium">Total Allocated:</div>
-                        <div>{formatBytes(systemInfo.system_info.memory_usage.total_alloc_bytes)}</div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="font-medium">System:</div>
+                        <div className="font-medium">Reserved from OS:</div>
                         <div>{formatBytes(systemInfo.system_info.memory_usage.sys_bytes)}</div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="font-medium">GC Cycles:</div>
-                        <div>{systemInfo.system_info.memory_usage.num_gc}</div>
-                      </div>
+                      {/* Go-runtime internals hidden by default — useful for
+                          diagnostics but noise for everyday users. */}
+                      <details className="pt-1">
+                        <summary
+                          className="cursor-pointer text-xs"
+                          style={{ color: 'var(--ls-text-3)' }}
+                        >
+                          Runtime details
+                        </summary>
+                        <div className="mt-1.5 space-y-1 text-xs" style={{ color: 'var(--ls-text-2)' }}>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>Cumulative allocated:</div>
+                            <div>{formatBytes(systemInfo.system_info.memory_usage.total_alloc_bytes)}</div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>GC cycles:</div>
+                            <div>{systemInfo.system_info.memory_usage.num_gc}</div>
+                          </div>
+                        </div>
+                      </details>
                     </div>
                   </CardContent>
                 </Card>

@@ -11,7 +11,7 @@ import (
 
 // Sniff inspects a sample of decoded captures and returns layout +
 // default Resolution. fileMTime is optional; pass nil when the ingest
-// path doesn't have a source mtime (e.g. CloudWatch streaming).
+// path doesn't have a source mtime.
 //
 // Sniff does not produce preview rows — call Analyze for that, or
 // invoke a Resolver against the same sample after Sniff.

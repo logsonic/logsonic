@@ -1,4 +1,3 @@
-import { useCloudWatchLogProviderService } from '@/components/Import/CloudWatchImport/CloudWatchLogProviderService';
 import { useFileSelectionService } from '@/components/Import/LocalFileImport/FileSelectionService';
 import HandleNavigation from '@/components/Import/UploadSteps/HandleNavigation';
 import { SavePatternDialog } from '@/components/Import/UploadSteps/SavePatternDialog';
@@ -8,13 +7,10 @@ import { ArrowLeft, FileUp } from "lucide-react";
 import { FC, Fragment, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileAnalyzingStep } from '../components/Import/UploadSteps/FileAnalyzingStep';
-import { ImportConfirmStep, selectedFileIdsForImport } from '../components/Import/UploadSteps/ImportConfirmStep';
 import { LogSourceSelectionStep } from '../components/Import/UploadSteps/LogSourceSelectionStep';
 import { SuccessSummary } from '../components/Import/UploadSteps/SuccessSummaryStep';
 import type { DetectionResult } from '../components/Import/types';
 import { extractFields } from '../components/Import/utils/patternUtils';
-import { Button } from "../components/ui/button";
-import { Card } from "../components/ui/card";
 import { useToast } from "../components/ui/use-toast";
 import { getGrokPatterns } from '../lib/api-client';
 import { UploadStep, useImportStore } from '../stores/useImportStore';
@@ -26,16 +22,13 @@ const Import: FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const {
-    selectedPattern,
     importSource,
     reset,
     currentStep,
-    readyToImportLogs,
     readyToSelectPattern,
     setReadyToSelectPattern,
     setImportSource,
     setSelectedPattern,
-    isCreateNewPatternSelected,
     setCurrentStep,
     setDetectionResult,
     setAvailablePatterns,
@@ -43,12 +36,10 @@ const Import: FC = () => {
   } = useImportStore();
 
   const {
-    handleUpload,
     handleMultiFileUpload,
   } = useUpload();
 
   const fileService = useFileSelectionService();
-  const cloudWatchService = useCloudWatchLogProviderService();
   const [showSaveDialogShown, setShowSaveDialogShown] = useState(false);
 
   const isMultiFile = importSource === 'file' && files.length > 0;
@@ -56,20 +47,54 @@ const Import: FC = () => {
   const steps = [
     { number: 1, label: "Choose Log Source" },
     { number: 2, label: "Define Log Pattern" },
-    { number: 3, label: "Confirm Import" },
-    { number: 4, label: "Summary" }
+    { number: 3, label: "Summary" }
   ];
 
   const StepIndicator = ({ number, label, isActive }: { number: number, label: string, isActive: boolean }) => {
     const isCurrentStep = number === currentStep;
+    const isComplete = isActive && !isCurrentStep;
     return (
-      <div className="flex items-center p-4 rounded-lg">
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-xl font-bold ${
-          isActive ? 'bg-blue-600' : 'bg-gray-300'
-        } ${isCurrentStep ? 'ring-4 ring-blue-200' : ''}`}>
+      <div className="flex items-center" style={{ padding: '8px 4px', gap: 10 }}>
+        <div
+          className="flex items-center justify-center"
+          style={{
+            width: 26,
+            height: 26,
+            borderRadius: '50%',
+            fontSize: 12,
+            fontWeight: 600,
+            fontFamily: 'var(--ls-font-mono)',
+            background: isCurrentStep
+              ? 'var(--ls-accent)'
+              : isComplete
+                ? 'var(--ls-accent-soft)'
+                : 'var(--ls-bg-2)',
+            color: isCurrentStep
+              ? '#fff'
+              : isComplete
+                ? 'var(--ls-accent-text)'
+                : 'var(--ls-text-3)',
+            border: `1px solid ${isCurrentStep ? 'var(--ls-accent)' : isComplete ? 'var(--ls-accent-border)' : 'var(--ls-border)'}`,
+            boxShadow: isCurrentStep ? '0 0 0 4px var(--ls-accent-softer)' : undefined,
+            transition: 'all 150ms ease',
+          }}
+        >
           {number}
         </div>
-        <span className={`ml-2 text-md font-medium ${isCurrentStep ? 'text-blue-700' : ''}`}>{label}</span>
+        <span
+          style={{
+            fontSize: 12.5,
+            fontWeight: isCurrentStep ? 600 : 500,
+            color: isCurrentStep
+              ? 'var(--ls-text)'
+              : isComplete
+                ? 'var(--ls-text-2)'
+                : 'var(--ls-text-3)',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {label}
+        </span>
       </div>
     );
   };
@@ -149,8 +174,6 @@ const Import: FC = () => {
           />
         );
       case 3:
-        return <ImportConfirmStep />;
-      case 4:
         return <SuccessSummary />;
       default:
         return null;
@@ -186,136 +209,83 @@ const Import: FC = () => {
           }
           break;
 
-        case 2:
-          // For multi-file: validate all files have patterns
-          if (isMultiFile) {
-            const missingPattern = files.find(f => !f.selectedPattern);
-            if (missingPattern) {
-              toast({
-                title: "Pattern Required",
-                description: `Please select a pattern for "${missingPattern.fileName}".`,
-                variant: "destructive",
-              });
-              return;
-            }
-
-            // Show save dialog if any file uses a custom pattern
-            if (!showSaveDialogShown) {
-              const customPatternFile = files.find(f => f.isCustomPattern && f.selectedPattern);
-              if (customPatternFile && customPatternFile.selectedPattern) {
-                const store = useImportStore.getState();
-                store.setCreateNewPattern(customPatternFile.selectedPattern);
-                store.setCreateNewPatternName(customPatternFile.selectedPattern.name);
-                store.setCreateNewPatternDescription(customPatternFile.selectedPattern.description || '');
-                setShowSaveDialog(true);
-                setShowSaveDialogShown(true);
-              }
-            }
-
-            setCurrentStep(3);
-            break;
+        case 2: {
+          const missingPattern = files.find(f => !f.selectedPattern);
+          if (missingPattern) {
+            toast({
+              title: "Pattern Required",
+              description: `Please select a pattern for "${missingPattern.fileName}".`,
+              variant: "destructive",
+            });
+            return;
           }
 
-          // Legacy: sync custom pattern to selectedPattern before proceeding
-          if (isCreateNewPatternSelected) {
-            const { createNewPattern } = useImportStore.getState();
-            setSelectedPattern(createNewPattern);
-
-            if (!showSaveDialogShown) {
+          // Show save dialog if any file uses a custom pattern. Doesn't
+          // block the import — the dialog is informational.
+          if (!showSaveDialogShown) {
+            const customPatternFile = files.find(f => f.isCustomPattern && f.selectedPattern);
+            if (customPatternFile && customPatternFile.selectedPattern) {
+              const store = useImportStore.getState();
+              store.setCreateNewPattern(customPatternFile.selectedPattern);
+              store.setCreateNewPatternName(customPatternFile.selectedPattern.name);
+              store.setCreateNewPatternDescription(customPatternFile.selectedPattern.description || '');
               setShowSaveDialog(true);
               setShowSaveDialogShown(true);
             }
           }
-          if (readyToImportLogs) {
-            setCurrentStep(3);
-          }
-          break;
 
-        case 3:
           setError(null);
 
-          if (isMultiFile) {
-            // Only upload files that are checked in the confirm step
-            const checkedIds = selectedFileIdsForImport;
-            const filesToImport = checkedIds
-              ? files.filter(f => checkedIds.has(f.id))
-              : files;
-
-            if (filesToImport.length === 0) {
-              toast({
-                title: "Nothing to import",
-                description: "Please select at least one file.",
-                variant: "destructive",
-              });
-              return;
-            }
-
-            // Multi-file upload
+          if (files.length === 0) {
             toast({
-              title: "Starting import",
-              description: `Importing ${filesToImport.length} file${filesToImport.length !== 1 ? 's' : ''}...`,
+              title: "Nothing to import",
+              description: "Please add at least one file.",
+              variant: "destructive",
             });
+            return;
+          }
 
-            try {
-              await handleMultiFileUpload(filesToImport, fileService);
+          toast({
+            title: "Starting import",
+            description: `Importing ${files.length} file${files.length !== 1 ? 's' : ''}...`,
+          });
 
-              const updatedFiles = useImportStore.getState().files;
-              const successCount = updatedFiles.filter(f => f.uploadStatus === 'success').length;
-              const failedCount = updatedFiles.filter(f => f.uploadStatus === 'failed').length;
+          try {
+            await handleMultiFileUpload(files, fileService);
 
-              if (successCount > 0) {
-                toast({
-                  title: failedCount === 0 ? "Import successful" : "Import complete",
-                  description: failedCount === 0
-                    ? `All ${successCount} files imported successfully.`
-                    : `${successCount} files imported, ${failedCount} failed.`,
-                  variant: failedCount === 0 ? "default" : "destructive",
-                });
-              } else {
-                toast({
-                  title: "Import failed",
-                  description: "All files failed to import.",
-                  variant: "destructive",
-                });
-              }
+            const updatedFiles = useImportStore.getState().files;
+            const successCount = updatedFiles.filter(f => f.uploadStatus === 'success').length;
+            const failedCount = updatedFiles.filter(f => f.uploadStatus === 'failed').length;
 
-              setCurrentStep(4);
-            } catch (uploadErr) {
+            if (successCount > 0) {
+              toast({
+                title: failedCount === 0 ? "Import successful" : "Import complete",
+                description: failedCount === 0
+                  ? `All ${successCount} files imported successfully.`
+                  : `${successCount} files imported, ${failedCount} failed.`,
+                variant: failedCount === 0 ? "default" : "destructive",
+              });
+            } else {
               toast({
                 title: "Import failed",
-                description: uploadErr instanceof Error ? uploadErr.message : "Failed to import files",
+                description: "All files failed to import.",
                 variant: "destructive",
               });
-              throw uploadErr;
             }
-          } else {
-            // Legacy single-file upload
-            toast({
-              title: "Starting upload process",
-              description: "Registering log pattern with the server...",
-            });
 
-            try {
-              const provider = importSource === 'cloudwatch' ? cloudWatchService : fileService;
-              await handleUpload(provider);
-              toast({
-                title: "Upload successful",
-                description: "Your log file has been processed successfully.",
-                variant: "default",
-              });
-              setCurrentStep(4);
-            } catch (uploadErr) {
-              toast({
-                title: "Upload failed",
-                description: uploadErr instanceof Error ? uploadErr.message : "Failed to upload file",
-                variant: "destructive",
-              });
-              throw uploadErr;
-            }
+            setCurrentStep(3);
+          } catch (uploadErr) {
+            toast({
+              title: "Import failed",
+              description: uploadErr instanceof Error ? uploadErr.message : "Failed to import files",
+              variant: "destructive",
+            });
+            throw uploadErr;
           }
           break;
+        }
 
-        case 4:
+        case 3:
           reset();
           navigate('/');
           break;
@@ -335,9 +305,6 @@ const Import: FC = () => {
         setCurrentStep(1 as UploadStep);
         break;
       case 3:
-        setCurrentStep(2 as UploadStep);
-        break;
-      case 4:
         reset();
         setCurrentStep(1 as UploadStep);
         break;
@@ -346,47 +313,157 @@ const Import: FC = () => {
 
   return (
     <ErrorBoundary fallback={<div>Error loading import wizard</div>}>
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-        <div className="w-full mx-auto px-10 py-10">
-          {/* Page Header */}
-          <div className="flex justify-between items-center mb-8 px-2">
-            <div className="flex items-center">
-              <FileUp className="h-8 text-blue-600 mr-3" />
-              <h1 className="text-xl font-bold text-gray-800">Import Log Wizard</h1>
-              {isMultiFile && files.length > 0 && currentStep > 1 && (
-                <span className="ml-3 text-sm text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                  {files.length} file{files.length !== 1 ? 's' : ''}
-                </span>
-              )}
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => navigate('/')}
-              className="flex items-center"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Home
-            </Button>
+      <div
+        className="min-h-screen"
+        style={{ background: 'var(--ls-bg-1)', color: 'var(--ls-text)' }}
+      >
+        {/* Top bar — mirrors the home Header */}
+        <div
+          className="flex items-center justify-between"
+          style={{
+            height: 'var(--ls-topbar-h)',
+            padding: '0 14px',
+            background: 'var(--ls-panel)',
+            borderBottom: '1px solid var(--ls-border)',
+          }}
+        >
+          <div
+            className="flex items-center"
+            style={{ gap: 6, fontSize: 13, fontWeight: 500 }}
+          >
+            <span style={{ color: 'var(--ls-text-3)' }}>LogSonic</span>
+            <span style={{ color: 'var(--ls-text-4)', margin: '0 6px' }}>/</span>
+            <span style={{ color: 'var(--ls-text)' }}>Import</span>
+            {isMultiFile && files.length > 0 && currentStep > 1 && (
+              <span
+                className="inline-flex items-center"
+                style={{
+                  marginLeft: 8,
+                  height: 20,
+                  padding: '0 8px',
+                  borderRadius: 10,
+                  background: 'var(--ls-bg-2)',
+                  color: 'var(--ls-text-2)',
+                  border: '1px solid var(--ls-border)',
+                  fontSize: 11,
+                  fontFamily: 'var(--ls-font-mono)',
+                }}
+              >
+                {files.length} file{files.length !== 1 ? 's' : ''}
+              </span>
+            )}
           </div>
 
-          <Card className="p-10 shadow-md">
-            <div className="space-y-6 pb-10">
-              {/* Step Indicator */}
-              <div className="flex items-center justify-between">
-                {steps.map((step, index) => (
-                  <Fragment key={step.number}>
-                    <StepIndicator
-                      number={step.number}
-                      label={step.label}
-                      isActive={currentStep >= step.number}
-                    />
-                    {index < steps.length - 1 && (
-                      <div className="h-px bg-gray-300 flex-grow mx-2"></div>
-                    )}
-                  </Fragment>
-                ))}
-              </div>
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="inline-flex items-center transition-colors"
+            style={{
+              gap: 6,
+              height: 28,
+              padding: '0 10px',
+              borderRadius: 6,
+              background: 'transparent',
+              border: '1px solid var(--ls-border)',
+              color: 'var(--ls-text-2)',
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--ls-bg-2)';
+              e.currentTarget.style.color = 'var(--ls-text)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = 'var(--ls-text-2)';
+            }}
+            aria-label="Back to Home"
+          >
+            <ArrowLeft size={13} />
+            <span>Back to home</span>
+          </button>
+        </div>
 
+        {/* Page header */}
+        <div className="w-full mx-auto" style={{ maxWidth: 960, padding: '28px 24px 20px' }}>
+          <div className="flex items-center" style={{ gap: 12, marginBottom: 4 }}>
+            <div
+              className="inline-flex items-center justify-center"
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                background: 'var(--ls-accent-soft)',
+                border: '1px solid var(--ls-accent-border)',
+              }}
+            >
+              <FileUp size={18} style={{ color: 'var(--ls-accent)' }} />
+            </div>
+            <div>
+              <h1
+                style={{
+                  fontSize: 18,
+                  fontWeight: 600,
+                  color: 'var(--ls-text)',
+                  letterSpacing: '-0.01em',
+                  lineHeight: 1.2,
+                }}
+              >
+                Import logs
+              </h1>
+              <p style={{ fontSize: 12, color: 'var(--ls-text-3)', marginTop: 2 }}>
+                Bring log files into LogSonic. We'll auto-detect the format.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Wizard panel */}
+        <div className="w-full mx-auto" style={{ maxWidth: 960, padding: '0 24px 32px' }}>
+          <div
+            style={{
+              background: 'var(--ls-panel)',
+              border: '1px solid var(--ls-border)',
+              borderRadius: 'var(--ls-radius-lg)',
+              boxShadow: 'var(--ls-shadow-sm)',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Step Indicator strip */}
+            <div
+              className="flex items-center"
+              style={{
+                padding: '14px 20px',
+                background: 'var(--ls-bg-1)',
+                borderBottom: '1px solid var(--ls-border)',
+              }}
+            >
+              {steps.map((step, index) => (
+                <Fragment key={step.number}>
+                  <StepIndicator
+                    number={step.number}
+                    label={step.label}
+                    isActive={currentStep >= step.number}
+                  />
+                  {index < steps.length - 1 && (
+                    <div
+                      style={{
+                        height: 1,
+                        flexGrow: 1,
+                        margin: '0 12px',
+                        background:
+                          currentStep > step.number
+                            ? 'var(--ls-accent-border)'
+                            : 'var(--ls-border)',
+                      }}
+                    />
+                  )}
+                </Fragment>
+              ))}
+            </div>
+
+            <div style={{ padding: '24px 24px 8px' }}>
               {showSaveDialog && (
                 <SavePatternDialog
                   open={showSaveDialog}
@@ -397,14 +474,33 @@ const Import: FC = () => {
               {renderCurrentStep()}
 
               {error && (
-                <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">
+                <div
+                  className="mt-4"
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 6,
+                    background: 'var(--ls-err-soft)',
+                    border: '1px solid color-mix(in srgb, var(--ls-err) 25%, transparent)',
+                    color: 'var(--ls-err)',
+                    fontSize: 12.5,
+                  }}
+                >
                   {error}
                 </div>
               )}
+            </div>
 
+            {/* Footer nav strip */}
+            <div
+              style={{
+                padding: '12px 20px',
+                borderTop: '1px solid var(--ls-border)',
+                background: 'var(--ls-bg-1)',
+              }}
+            >
               <HandleNavigation onNext={handleNext} onBack={handleBack} />
             </div>
-          </Card>
+          </div>
         </div>
       </div>
     </ErrorBoundary>

@@ -1,23 +1,23 @@
 # LogSonic
 
-LogSonic is a Desktop-First Log Analytics application which runs on Windows, Mac and Linux. It runs fully offline with no external dependencies. Installable as a single binary of approximately 10 MB,  it serves a feature-rich User interface in your local browser. The log ingestion wizard of logsonic supports ingesting local log file as well as fetching AWS cloudwatch logs and automatically recognizes well known log patterns to properly tokenize the log contents. The log search experience is blazing fast, delightful and intuitive. 
+LogSonic is a Desktop-First Log Analytics application which runs on Windows, Mac and Linux. It runs fully offline with no external dependencies. It installs as a single self-contained binary that serves a feature-rich User interface in your local browser. The log ingestion wizard supports importing local log files (single or many at once) and automatically recognises well-known log patterns to tokenise the contents. The log search experience is blazing fast, delightful and intuitive.
 
-It also has an MCP server extension so that you could analyze logs with machine intelligence. 
+It also ships an MCP server extension so you can analyse logs with machine intelligence.
 
 <img src="docs/screenshot.png" alt="LogSonic Screenshot" width="1200" />
 
 ## Features
-- **New! MCP Server**: Logsonic [MCP server](/mcp/README.md) can now connect with your favorite MCP client such as Claude Desktop/Cursor/Windsurf. 
-- **Assisted server query**:Logsonic now allows user to run a [local Ollama model](/#enabling-ai-assistance) which helps in writing bleve search query. 
-- **Desktop-First**: Designed specifically for local log analysis
-- **Minimal**: Single binary installation for Windows, Mac, and Linux. Run inside Docker, if you wish to. 
-- **Supports Cloud Logs import**: Pulls logs from cloudwatch to your desktop. More Ingestion options incoming. 
-- **Offline**: No internet dependency, all data stays on your machine, debug while you travel.
-- **Multiple Log Formats**: Automatic recognition and ingestion of logs from various formats (Syslog, Apache, Nginx) based on grok pattern. 
-- **Customizable**: Ability to filter and color log lines based on cotents, choose fields to display. 
-- **Advanced Search**: Comprehensive search capabilities through the web UI. Search highlighting, Complex queries with AND OR NOT logical operations etc. 
-- **Visualization**: Built-in visualization for log distribution patterns
-- **Extensible**: Well documented [OpenAPI interface](#api-documentation) to ingest logs from your own scripts or tools. 
+
+- **v2 redesigned UI** — left-rail navigation, dark/light themes, resizable panels, sticky source tabs, in-row field extraction, and a status bar that reports source count, events, last-query latency, and storage in real time.
+- **log2grok auto-detection** — the import wizard runs the [log2grok](https://github.com/logsonic/log2grok) library across two stages (curated library of 100+ known patterns, then drain-based clustering for unknown formats) and surfaces the best match with a coverage score before you import. Custom patterns are saved to disk and re-used on later imports.
+- **Multi-file import** — drop multiple files at once; LogSonic detects each format independently, lets you confirm or override per-file, then imports them in one batch.
+- **Smart timestamp resolution** — derives a real wall-clock time per line even when the format omits the year or timezone, with overrides (anchor, year strategy, forced timezone, rollover detection) surfaced in the wizard. See [Timestamp Resolution](#timestamp-resolution) below.
+- **MCP server** — the LogSonic [MCP server](/mcp/README.md) connects with Claude Desktop, Cursor, Windsurf, and any other MCP client. Agent guidance lives in [mcp/SKILLS.md](/mcp/SKILLS.md).
+- **Desktop-first & offline** — single binary for Windows, Mac, and Linux (or run in Docker). No telemetry, no network calls, all data stays on your machine.
+- **Advanced search** — Bleve-backed full-text search with highlighting, field-shorthand (`level:error`, `status:>400`, `_id:`), regex (`/regex/`), exclude (`-excluded`), boolean operators, and saved filter combinations.
+- **Color rules** — highlight rows by field/value or substring; default rules pre-loaded for `level:error`, `level:warning`, etc., editable in the side panel.
+- **Event distribution chart** — drag-to-zoom histogram of events over time, broken down by source.
+- **Extensible** — documented [OpenAPI interface](#api-documentation) for ingesting from your own scripts or tools.
 
 ## Installation
 
@@ -50,20 +50,14 @@ If the port 8080 is not available in your system, you could choose another port 
 Looking for some sample logs to try? [LogHub](https://github.com/logpai/loghub/) repository has some great collection such as this [Apache log](https://github.com/logpai/loghub/blob/master/Apache/Apache_2k.log)
 Download the log to you local computer and import using Import File menu. 
 
-### Enabling AI Assistance
+### MCP server for AI clients
 
-Logsonic supports Model Context Protocol. To install Logsonic MCP server, use the instructions in  [MCP server](/mcp/README.md)
-
-### Bleve Search Query assistance
-
-<img src="ollama/assistant.png" alt="LogSonic AI Assitant" width="400" />
-
-Since bleve query syntax may be confusing for beginners, Logsonic has a feature which converts simple english queries to bleve search syntax. This is available in the release 0.5 onwards. Logsonic will automatically detect and enable AI assistance features if a local Ollama instance is running with the predefined logsonic image. Follow the [instructions](https://github.com/logsonic/logsonic/blob/main/ollama/README.md) to build your local [Modelfile](https://github.com/logsonic/logsonic/blob/main/ollama/Modelfile)
+LogSonic ships with an MCP (Model Context Protocol) server that lets Claude Desktop, Cursor, Windsurf, and any other MCP-capable client query your logs directly. Setup steps are in [mcp/README.md](/mcp/README.md); the agent-facing playbook (query patterns, workflow, examples) lives in [mcp/SKILLS.md](/mcp/SKILLS.md) — point your client at it so the model knows how to use the tools effectively.
 
 ### Build from Source
 
 #### Prerequisites
-- Go 1.23.6 or later
+- Go 1.25.7 or later
 - Node.js 20 or later
 - npm
 
@@ -74,7 +68,7 @@ Since bleve query syntax may be confusing for beginners, Logsonic has a feature 
    cd logsonic
    ```
 
-2. Build the frontend:
+2. Build the frontend (the resulting `dist/` is embedded into the Go binary):
    ```bash
    cd frontend
    npm ci
@@ -111,9 +105,6 @@ Since bleve query syntax may be confusing for beginners, Logsonic has a feature 
 
 LogSonic can be configured using command line flags or environment variables:
 
-### Cloudwatch log ingestions
-awscli must be configured to use cloudwatch ingestion before running logsonic binary. 
-
 ### Command Line Flags
 - `-host`: Host address to bind to (default: localhost)
 - `-port`: Port to listen on (default: 8080)
@@ -145,10 +136,10 @@ HOST=0.0.0.0 PORT=9000 STORAGE_PATH=/var/logs/storage logsonic
 ### Log Ingestion
 
 1. Start LogSonic and open the web UI in your browser at http://localhost:8080
-2. Click on "Import Log File" button in the UI
-3. Select your log file and choose the appropriate format
-4. If your log format is not automatically detected, you can specify a custom Grok pattern
-5. Once imported, the log file will be indexed and available for searching
+2. Click the **Import** button in the left rail
+3. Drop one or many `.log` / `.txt` / `.json` files into the **Upload Log File** picker
+4. LogSonic auto-detects the format for each file using log2grok. If detection succeeds you'll see a green **Pattern found** badge with a coverage score; otherwise you can paste a custom Grok pattern and **Test** it inline against a sample of the file
+5. Confirm the timestamp resolution (see below) and click **Import**. Files are indexed in parallel and become searchable as soon as ingestion completes
 
 ### Timestamp Resolution
 
@@ -205,11 +196,27 @@ Without either, the resolver derives sensible defaults from the sample. The lega
 
 ## Development Environment
 
-### Frontend
+For development and testing always run the backend and frontend as **separate** processes — the embedded build (`build:copy` + single binary) is only meant for releases. The frontend in dev mode talks to the backend at `http://localhost:8080` directly via CORS.
 
-The frontend is built with React, TypeScript, and Vite:
+### Backend (port 8080)
 
-In development setup, we run the UI on port 8081 while the backend is running on 8080
+Go 1.25.7+. If you don't have air installed, you can install it for hot reload:
+```bash
+go install github.com/air-verse/air@latest
+```
+
+```bash
+cd backend
+# Hot-reloading dev (uses air)
+./scripts/dev.sh
+
+# Or standard Go run
+go run main.go -port 8080
+```
+
+### Frontend (port 8081)
+
+React 18 + TypeScript + Vite + Zustand + Radix UI + Tailwind. Vite defaults to 8080, so override the port to keep the backend port free:
 
 ```bash
 cd frontend
@@ -217,24 +224,7 @@ npm ci
 PORT=8081 npm run dev
 ```
 
-### Backend
-
-The backend is written in Go:
-
-If you don't have air installed, you can install it using:
-```bash
-go install github.com/air-verse/air@latest
-```
-
-```bash
-cd backend
-# If using air for hot reloading
-./scripts/dev.sh
-
-# Or standard Go run
-go run main.go
-```
-Open http://localhost:8081 in your browser for local development 
+Open http://localhost:8081 in your browser. The frontend hot-reloads on change.
 
 ### Running Tests
 
@@ -286,9 +276,10 @@ node e2e-comprehensive.mjs --headed
 
 LogSonic uses a client-server architecture:
 
-- **Backend**: Go server that handles log ingestion, parsing, and indexing
-- **Frontend**: React SPA that provides the user interface
-- **Storage**: Local file-based storage for indices and metadata
+- **Backend**: Go server (chi router) that handles log ingestion, parsing, and indexing. Pattern detection is delegated to [log2grok](https://github.com/logsonic/log2grok) (curated library + drain clustering); search and storage are backed by [Bleve](https://github.com/blevesearch/bleve).
+- **Frontend**: React 18 SPA (TypeScript, Vite, Zustand, Radix UI, Tailwind, Recharts). In release builds, the compiled `dist/` is embedded into the Go binary via `go:embed` and served from the same port.
+- **Storage**: Local file-based Bleve indices under `~/.logsonic` (or `-storage` path). One index per day, with a side-file recording per-pattern timestamp resolution config.
+- **AI integration**: LogSonic MCP server for AI clients (Claude Desktop, Cursor, Windsurf, and other MCP-capable tools).
 
 See [Architecture Documentation](docs/Architecture.md) for more details.
 

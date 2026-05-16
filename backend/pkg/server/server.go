@@ -65,13 +65,6 @@ func NewServer(cfg Config) (*Server, error) {
 	if err := l2g.LoadConfig("", os.Stderr); err != nil {
 		return nil, fmt.Errorf("failed to initialize log2grok config: %w", err)
 	}
-	// One-shot migration of any pre-existing <storagePath>/grok.json
-	// into the log2grok library. The legacy file is renamed afterwards
-	// so this is idempotent across restarts.
-	if err := handlers.MigrateLegacyGrokJSON(cfg.StoragePath); err != nil {
-		fmt.Fprintf(os.Stderr, "logsonic: legacy grok.json migration warning: %v\n", err)
-	}
-
 	// Initialize router with middleware
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -236,19 +229,6 @@ func NewServer(cfg Config) (*Server, error) {
 			r.Get("/", h.HandleGrokPatterns)
 			r.Put("/", h.HandleGrokPatterns)
 			r.Delete("/", h.HandleGrokPatterns)
-		})
-
-		// Add CloudWatch endpoints
-		r.Route("/cloudwatch", func(r chi.Router) {
-			r.Post("/log-groups", h.HandleListCloudWatchLogGroups)
-			r.Post("/log-streams", h.HandleListCloudWatchLogStreams)
-			r.Post("/log-events", h.HandleGetCloudWatchLogEvents)
-		})
-
-		// Add AI endpoints
-		r.Route("/ai", func(r chi.Router) {
-			r.Get("/status", h.HandleCheckAIStatus)
-			r.Post("/translate-query", h.HandleQueryTranslation)
 		})
 
 	})

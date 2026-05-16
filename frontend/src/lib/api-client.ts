@@ -15,15 +15,6 @@ import {
   TimestampPreviewResponse,
 } from './api-types';
 
-import {
-  CloudWatchAuth,
-  GetLogEventsRequest,
-  GetLogEventsResponse,
-  ListLogGroupsResponse,
-  ListLogStreamsRequest,
-  ListLogStreamsResponse
-} from '@/components/Import/CloudWatchImport/types';
-
 // API base configuration
 // For local development, use port 8080
 // For production, use relative URL
@@ -164,57 +155,8 @@ export async function pingServer(): Promise<PingResponse> {
   return apiRequest<PingResponse>('/ping', 'GET');
 }
 
-// CloudWatch API
-export async function listCloudWatchLogGroups(auth: CloudWatchAuth): Promise<ListLogGroupsResponse> {
-  return apiRequest<ListLogGroupsResponse>('/cloudwatch/log-groups', 'POST', auth);
-}
-
-export async function listCloudWatchLogStreams(request: ListLogStreamsRequest): Promise<ListLogStreamsResponse> {
-  return apiRequest<ListLogStreamsResponse>('/cloudwatch/log-streams', 'POST', request);
-}
-
-export async function getCloudWatchLogEvents(request: GetLogEventsRequest): Promise<GetLogEventsResponse> {
-  return apiRequest<GetLogEventsResponse>('/cloudwatch/log-events', 'POST', request);
-}
-
 // Delete logs by document IDs
 export async function deleteLogsById(ids: string[]): Promise<any> {
   return apiRequest<any>('/logs/ids', 'DELETE', { ids });
 }
 
-// AI API
-export interface AIStatusResponse {
-  ollama_running: boolean;
-  models_available: string[];
-}
-
-export interface AIQueryRequest {
-  logs: Record<string, any>;
-  query: string;
-}
-
-export interface AIQueryResponse {
-  bleve_query: string;
-  confidence: number;
-  available_models: string[];
-  model_used: string;
-  success: boolean;
-  error?: string;
-}
-
-export async function checkAIStatus(): Promise<AIStatusResponse> {
-  try {
-    return await apiRequest<AIStatusResponse>('/ai/status', 'GET');
-  } catch (error) {
-    console.error('Error checking AI status:', error);
-    // Return a default response when the service is unavailable
-    return {
-      ollama_running: false,
-      models_available: [],
-    };
-  }
-}
-
-export async function translateAIQuery(request: AIQueryRequest): Promise<AIQueryResponse> {
-  return apiRequest<AIQueryResponse>('/ai/translate-query', 'POST', request);
-} 

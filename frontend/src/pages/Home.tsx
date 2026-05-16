@@ -4,19 +4,49 @@ import { LogSearch } from '@/components/Home/LogSearch';
 import { LogViewer } from '@/components/Home/LogViewer/LogViewer';
 import { LeftPanelContent, SIDEBAR_WIDTHS } from '@/components/Home/Sidebar/CollapsiblePanel';
 import { SidebarPanel } from '@/components/Home/SidebarPanel';
+import { LeftRail } from '@/components/Shell/LeftRail';
+import { StatusBar } from '@/components/Shell/StatusBar';
 import { useCollapsiblePanel } from '@/hooks/useCollapsiblePanel';
 import useSearchQueryParamsStore from '@/stores/useSearchQueryParams';
 import { useCallback, useEffect, useState } from 'react';
 
 const SIDEBAR_WIDTH_STORAGE_KEY = 'logsonic-sidebar-width';
+const RAIL_W = 56;
+const TOPBAR_H = 44;
+
+const BrandMark = () => (
+  <div
+    aria-hidden
+    className="grid place-items-center rounded-[7px]"
+    style={{
+      width: 26,
+      height: 26,
+      background: 'linear-gradient(135deg, #7c5cff 0%, #5a3be0 100%)',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25), 0 1px 2px rgba(107,77,242,0.4)',
+      color: 'white',
+      fontFamily: 'var(--ls-font-mono)',
+      fontSize: 13,
+      fontWeight: 700,
+      letterSpacing: '-0.02em',
+    }}
+  >
+    L
+  </div>
+);
 
 /**
- * Home page component with sidebar and main content
+ * Home page using the redesign shell:
+ *   "brand  topbar"
+ *   "nav    main"
+ * Brand sits in the top-left 56×44 cell. The topbar spans the rest of the
+ * top row, and the nav rail / main content sit below.
  */
 const Home = () => {
   const { isCollapsed, toggleCollapse: togglePanelCollapse } = useCollapsiblePanel(true);
   const { tabs } = SidebarPanel();
   const { firstLoad, setFirstLoad, triggerSearch } = useSearchQueryParamsStore();
+
+  const [activeTabId, setActiveTabId] = useState<string>('filter');
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const saved = localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
@@ -35,47 +65,134 @@ const Home = () => {
     }
   }, [firstLoad, setFirstLoad, triggerSearch]);
 
-  const marginLeft = isCollapsed ? SIDEBAR_WIDTHS.COLLAPSED : sidebarWidth;
+  const sidebarTotalWidth = isCollapsed ? 0 : sidebarWidth;
+  const marginLeft = RAIL_W + sidebarTotalWidth;
+
+  const toggleFilter = useCallback(() => {
+    if (activeTabId === 'filter' && !isCollapsed) {
+      togglePanelCollapse();
+    } else {
+      setActiveTabId('filter');
+      if (isCollapsed) togglePanelCollapse();
+    }
+  }, [activeTabId, isCollapsed, togglePanelCollapse]);
+
+  const toggleColoring = useCallback(() => {
+    if (activeTabId === 'styling' && !isCollapsed) {
+      togglePanelCollapse();
+    } else {
+      setActiveTabId('styling');
+      if (isCollapsed) togglePanelCollapse();
+    }
+  }, [activeTabId, isCollapsed, togglePanelCollapse]);
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50">
-      {/* Sidebar */}
+    <div
+      className="h-screen overflow-hidden"
+      style={{ background: 'var(--ls-bg-1)', color: 'var(--ls-text)' }}
+    >
+      {/* Brand cell — top-left 56×44, with right + bottom borders */}
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: RAIL_W,
+          height: TOPBAR_H,
+          borderRight: '1px solid var(--ls-border)',
+          borderBottom: '1px solid var(--ls-border)',
+          background: 'var(--ls-panel)',
+          display: 'grid',
+          placeItems: 'center',
+          zIndex: 70,
+        }}
+      >
+        <BrandMark />
+      </div>
+
+      {/* Topbar — spans the row right of the brand */}
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: RAIL_W,
+          right: 0,
+          height: TOPBAR_H,
+          background: 'var(--ls-panel)',
+          borderBottom: '1px solid var(--ls-border)',
+          zIndex: 60,
+        }}
+      >
+        <Header />
+      </div>
+
+      {/* Nav rail — below the brand */}
+      <div
+        style={{
+          position: 'fixed',
+          top: TOPBAR_H,
+          left: 0,
+          bottom: 0,
+          width: RAIL_W,
+          zIndex: 60,
+        }}
+      >
+        <LeftRail
+          filterOpen={!isCollapsed && activeTabId === 'filter'}
+          coloringOpen={!isCollapsed && activeTabId === 'styling'}
+          onToggleFilter={toggleFilter}
+          onToggleColoring={toggleColoring}
+        />
+      </div>
+
+      {/* Filter / styling panel — starts below the topbar */}
       <LeftPanelContent
         isCollapsed={isCollapsed}
         onToggleCollapse={togglePanelCollapse}
         tabs={tabs}
         sidebarWidth={sidebarWidth}
         onSidebarWidthChange={handleSidebarWidthChange}
+        leftOffset={RAIL_W}
+        topOffset={TOPBAR_H}
+        activeTabId={activeTabId}
+        onActiveTabChange={setActiveTabId}
       />
 
-      {/* Main content with margin to accommodate sidebar */}
+      {/* Main content — offset for rail + sidebar on the left, topbar above */}
       <div
-        className="flex-1"
+        className="flex flex-col"
         style={{
           marginLeft: `${marginLeft}px`,
+          marginTop: `${TOPBAR_H}px`,
+          height: `calc(100vh - ${TOPBAR_H}px)`,
           transition: isCollapsed ? 'margin-left 0.3s' : undefined,
         }}
       >
-        <div className="flex flex-col h-full">
-          {/* Header */}
-          <Header />
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <div
+            className="px-3 py-2"
+            style={{
+              background: 'var(--ls-panel)',
+              borderBottom: '1px solid var(--ls-border)',
+            }}
+          >
+            <LogSearch />
+          </div>
 
-          {/* Main content */}
-          <div className="flex-1 overflow-hidden flex flex-col">
-            {/* Search bar */}
-            <div className="py-2 px-3 bg-white border-b border-slate-100">
-              <LogSearch />
-            </div>
+          <LogDistributionChart />
 
-            {/* Chart */}
-            <LogDistributionChart />
-
-            {/* Log viewer */}
-            <div className="flex-1 bg-white mx-3 mb-3 rounded-lg flex flex-col border border-slate-200 shadow-sm overflow-hidden">
-              <LogViewer />
-            </div>
+          <div
+            className="flex-1 flex flex-col overflow-hidden"
+            style={{
+              background: 'var(--ls-panel)',
+              borderTop: '1px solid var(--ls-border)',
+            }}
+          >
+            <LogViewer />
           </div>
         </div>
+
+        <StatusBar />
       </div>
     </div>
   );

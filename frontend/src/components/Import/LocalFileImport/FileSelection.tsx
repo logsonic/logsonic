@@ -140,21 +140,38 @@ export const FileSelection: FC<LogSourceProvider> = ({
     fileInputRef.current?.click();
   };
 
+  const dropZoneBorder = isDragOver
+    ? 'var(--ls-accent)'
+    : 'var(--ls-border-strong)';
+  const dropZoneBg = isDragOver
+    ? 'var(--ls-accent-softer)'
+    : 'var(--ls-bg-1)';
+
   return (
-    <div className="space-y-4 pt-6 pb-6">
-      <h2 className="text-xl font-semibold text-center text-gray-800">
-        {files.length === 0 ? 'Import Log Files' : 'Selected Files'}
+    <div className="space-y-3 pt-2">
+      <h2
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: 'var(--ls-text)',
+          letterSpacing: '-0.005em',
+        }}
+      >
+        {files.length === 0 ? 'Add log files' : 'Selected files'}
       </h2>
 
       {/* Drop zone */}
       <div
-        className={`mx-auto w-3/4 border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 cursor-pointer
-          ${isDragOver
-            ? 'border-blue-500 bg-blue-50 scale-[1.01] shadow-lg'
-            : files.length > 0
-              ? 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'
-              : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50 shadow-sm hover:shadow-md'
-          }`}
+        className="cursor-pointer transition-all"
+        style={{
+          padding: files.length === 0 ? 28 : 14,
+          borderRadius: 10,
+          border: `1.5px dashed ${dropZoneBorder}`,
+          background: dropZoneBg,
+          textAlign: 'center',
+          boxShadow: isDragOver ? '0 0 0 4px var(--ls-accent-softer)' : 'none',
+          transform: isDragOver ? 'scale(1.005)' : 'none',
+        }}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -170,73 +187,201 @@ export const FileSelection: FC<LogSourceProvider> = ({
         />
 
         {files.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-4">
-            <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mb-4">
-              <Upload className="h-8 w-8 text-blue-600" />
+          <div className="flex flex-col items-center justify-center" style={{ padding: '8px 0' }}>
+            <div
+              className="flex items-center justify-center"
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 12,
+                background: 'var(--ls-accent-soft)',
+                border: '1px solid var(--ls-accent-border)',
+                marginBottom: 14,
+              }}
+            >
+              <Upload size={22} style={{ color: 'var(--ls-accent)' }} />
             </div>
-            <span className="text-base font-medium text-gray-700">
-              Drop your log files here, or click to browse
+            <span
+              style={{
+                fontSize: 13.5,
+                fontWeight: 600,
+                color: 'var(--ls-text)',
+              }}
+            >
+              Drop log files here, or click to browse
             </span>
-            <span className="mt-2 text-sm text-gray-500">
-              Select one or multiple files (.log, .txt, .json)
+            <span style={{ marginTop: 6, fontSize: 12, color: 'var(--ls-text-2)' }}>
+              <span
+                style={{
+                  fontFamily: 'var(--ls-font-mono)',
+                  background: 'var(--ls-bg-2)',
+                  border: '1px solid var(--ls-border)',
+                  padding: '1px 6px',
+                  borderRadius: 4,
+                  marginRight: 6,
+                }}
+              >
+                .log
+              </span>
+              <span
+                style={{
+                  fontFamily: 'var(--ls-font-mono)',
+                  background: 'var(--ls-bg-2)',
+                  border: '1px solid var(--ls-border)',
+                  padding: '1px 6px',
+                  borderRadius: 4,
+                  marginRight: 6,
+                }}
+              >
+                .txt
+              </span>
+              <span
+                style={{
+                  fontFamily: 'var(--ls-font-mono)',
+                  background: 'var(--ls-bg-2)',
+                  border: '1px solid var(--ls-border)',
+                  padding: '1px 6px',
+                  borderRadius: 4,
+                  marginRight: 6,
+                }}
+              >
+                .json
+              </span>
+              <span style={{ color: 'var(--ls-text-3)' }}>· up to 500 MB each</span>
             </span>
-            <span className="mt-1 text-sm text-gray-400">
-              LogSonic will auto-detect the best matching pattern for each file
+            <span style={{ marginTop: 8, fontSize: 11.5, color: 'var(--ls-text-3)' }}>
+              LogSonic auto-detects the best Grok pattern for each file.
             </span>
           </div>
         ) : (
-          <div className="flex items-center justify-center py-2 text-blue-600">
-            <Plus className="h-5 w-5 mr-2" />
-            <span className="text-sm font-medium">Add more files</span>
+          <div
+            className="inline-flex items-center"
+            style={{
+              gap: 6,
+              fontSize: 12.5,
+              fontWeight: 500,
+              color: 'var(--ls-accent)',
+            }}
+          >
+            <Plus size={15} />
+            <span>Add more files</span>
           </div>
         )}
       </div>
 
       {/* File list */}
       {files.length > 0 && (
-        <div className="mx-auto w-3/4 space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-sm font-medium text-gray-600">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between" style={{ padding: '0 2px' }}>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: 'var(--ls-text-3)',
+              }}
+            >
               {files.length} file{files.length !== 1 ? 's' : ''} selected
             </span>
             <button
+              type="button"
               onClick={handleAddMoreClick}
-              className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center"
+              className="inline-flex items-center transition-colors"
+              style={{
+                gap: 4,
+                fontSize: 12,
+                fontWeight: 500,
+                color: 'var(--ls-accent)',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--ls-accent-hover)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ls-accent)')}
             >
-              <Plus className="h-4 w-4 mr-1" />
+              <Plus size={13} />
               Add more
             </button>
           </div>
 
-          <div className="border rounded-lg overflow-hidden divide-y bg-white shadow-sm">
+          <div
+            style={{
+              borderRadius: 8,
+              border: '1px solid var(--ls-border)',
+              background: 'var(--ls-panel)',
+              overflow: 'hidden',
+            }}
+          >
             {files.map((importFile, index) => (
               <div
                 key={importFile.id}
-                className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors group animate-in fade-in slide-in-from-top-1 duration-200"
-                style={{ animationDelay: `${index * 50}ms` }}
+                className="flex items-center justify-between transition-colors group animate-in fade-in slide-in-from-top-1 duration-200"
+                style={{
+                  padding: '10px 14px',
+                  borderBottom:
+                    index < files.length - 1
+                      ? '1px solid var(--ls-border-subtle)'
+                      : 'none',
+                  animationDelay: `${index * 40}ms`,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--ls-bg-1)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
-                <div className="flex items-center min-w-0 flex-1">
-                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center mr-3 flex-shrink-0">
-                    <FileIcon className="h-4 w-4 text-blue-600" />
+                <div className="flex items-center min-w-0 flex-1" style={{ gap: 10 }}>
+                  <div
+                    className="flex items-center justify-center flex-shrink-0"
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 6,
+                      background: 'var(--ls-accent-soft)',
+                      border: '1px solid var(--ls-accent-border)',
+                    }}
+                  >
+                    <FileIcon size={13} style={{ color: 'var(--ls-accent)' }} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-800 truncate">
+                    <p
+                      className="truncate"
+                      style={{
+                        fontSize: 12.5,
+                        fontWeight: 500,
+                        color: 'var(--ls-text)',
+                      }}
+                    >
                       {importFile.fileName}
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p
+                      style={{
+                        fontSize: 11,
+                        color: 'var(--ls-text-3)',
+                        fontFamily: 'var(--ls-font-mono)',
+                      }}
+                    >
                       {formatFileSize(importFile.fileSize)}
                     </p>
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleRemoveFile(importFile.id);
                   }}
-                  className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all ml-2"
+                  className="ls-danger-btn flex items-center justify-center transition-all"
+                  style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 6,
+                    color: 'var(--ls-text-3)',
+                    background: 'transparent',
+                    border: '1px solid transparent',
+                    cursor: 'pointer',
+                  }}
                   title="Remove file"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 size={13} />
                 </button>
               </div>
             ))}
@@ -246,10 +391,21 @@ export const FileSelection: FC<LogSourceProvider> = ({
 
       {/* File validation errors */}
       {fileErrors.length > 0 && (
-        <div className="mx-auto w-3/4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <div
+          style={{
+            padding: '10px 12px',
+            borderRadius: 6,
+            background: 'var(--ls-warn-soft)',
+            border: '1px solid color-mix(in srgb, var(--ls-warn) 25%, transparent)',
+          }}
+        >
           {fileErrors.map((err, i) => (
-            <p key={i} className="text-sm text-amber-700 flex items-start">
-              <span className="mr-2 mt-0.5 flex-shrink-0">&#x26A0;</span>
+            <p
+              key={i}
+              className="flex items-start"
+              style={{ fontSize: 12, color: 'var(--ls-warn)', lineHeight: 1.5 }}
+            >
+              <span style={{ marginRight: 6, flexShrink: 0 }}>&#x26A0;</span>
               {err}
             </p>
           ))}
@@ -258,8 +414,16 @@ export const FileSelection: FC<LogSourceProvider> = ({
 
       {/* Global error */}
       {error && (
-        <div className="mx-auto w-3/4 bg-red-50 border border-red-200 rounded-lg p-4 text-center">
-          <span className="text-sm text-red-600">{error}</span>
+        <div
+          style={{
+            padding: '10px 12px',
+            borderRadius: 6,
+            background: 'var(--ls-err-soft)',
+            border: '1px solid color-mix(in srgb, var(--ls-err) 25%, transparent)',
+            textAlign: 'center',
+          }}
+        >
+          <span style={{ fontSize: 12, color: 'var(--ls-err)' }}>{error}</span>
         </div>
       )}
     </div>

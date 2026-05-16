@@ -47,14 +47,19 @@ export const LIGHT_COLORS = [
   { name: 'Rose', value: 'bg-rose-50' },
 ];
 
-// Default color rules for common log analysis scenarios
+// Default color rules for common log analysis scenarios.
+// Dropped the third `error: exists` rule — it overlapped with the first
+// `message contains error` and gave users two ERROR cards with identical
+// behavior in the sidebar.
 const DEFAULT_COLOR_RULES: Omit<ColorRule, 'id'>[] = [
- 
-  // Common error patterns in message field
+  // level/severity field — most structured logs have one and it's the
+  // single best signal for "this row is interesting".
+  { field: 'level', operator: 'eq', value: 'ERROR', color: 'bg-red-100', enabled: true },
+  { field: 'level', operator: 'eq', value: 'WARN', color: 'bg-yellow-100', enabled: true },
+  // Fallback for plain-text logs where level isn't extracted: scan the
+  // message field for the common keywords.
   { field: 'message', operator: 'contains', value: 'error', color: 'bg-red-100', enabled: true },
   { field: 'message', operator: 'contains', value: 'warning', color: 'bg-yellow-100', enabled: true },
-  { field: 'error', operator: 'exists', value: '', color: 'bg-red-100', enabled: true },
-  
 ];
 
 // Create the store with persistence

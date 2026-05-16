@@ -1,10 +1,6 @@
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -12,133 +8,356 @@ import { cn } from "@/lib/utils";
 import { ColorRule, useColorRuleStore } from "@/stores/useColorRuleStore";
 import { useLogResultStore } from "@/stores/useLogResultStore";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
-import { AlertCircle, Check, Palette, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 
-// Enhanced colors with better distinction and proper names
-const ENHANCED_COLORS = [
-  // Light colors
-  { name: 'Blue', value: 'bg-blue-100', textColor: 'text-blue-800' },
-  { name: 'Green', value: 'bg-green-100', textColor: 'text-green-800' },
-  { name: 'Yellow', value: 'bg-yellow-100', textColor: 'text-yellow-800' },
-  { name: 'Red', value: 'bg-red-100', textColor: 'text-red-800' },
-  { name: 'Purple', value: 'bg-purple-100', textColor: 'text-purple-800' },
-  { name: 'Pink', value: 'bg-pink-100', textColor: 'text-pink-800' },
-  { name: 'Indigo', value: 'bg-indigo-100', textColor: 'text-indigo-800' },
-  { name: 'Amber', value: 'bg-amber-100', textColor: 'text-amber-800' },
-  { name: 'Lime', value: 'bg-lime-100', textColor: 'text-lime-800' },
-  { name: 'Teal', value: 'bg-teal-100', textColor: 'text-teal-800' },
-  { name: 'Cyan', value: 'bg-cyan-100', textColor: 'text-cyan-800' },
-  { name: 'Orange', value: 'bg-orange-100', textColor: 'text-orange-800' },
-  // Medium colors
-  { name: 'Blue Mid', value: 'bg-blue-200', textColor: 'text-blue-800' },
-  { name: 'Green Mid', value: 'bg-green-200', textColor: 'text-green-800' },
-  { name: 'Yellow Mid', value: 'bg-yellow-200', textColor: 'text-yellow-800' },
-  { name: 'Red Mid', value: 'bg-red-200', textColor: 'text-red-800' },
-  { name: 'Purple Mid', value: 'bg-purple-200', textColor: 'text-purple-800' },
-  { name: 'Pink Mid', value: 'bg-pink-200', textColor: 'text-pink-800' },
-  // Grayscale colors
-  { name: 'Stone', value: 'bg-stone-100', textColor: 'text-stone-800' },
-  { name: 'Zinc', value: 'bg-zinc-100', textColor: 'text-zinc-800' },
-  { name: 'Slate', value: 'bg-slate-100', textColor: 'text-slate-800' },
-  { name: 'Gray', value: 'bg-gray-100', textColor: 'text-gray-800' },
-  // Vibrant colors
-  { name: 'Fuchsia', value: 'bg-fuchsia-100', textColor: 'text-fuchsia-800' },
-  { name: 'Rose', value: 'bg-rose-100', textColor: 'text-rose-800' },
-  { name: 'Sky', value: 'bg-sky-100', textColor: 'text-sky-800' },
-  { name: 'Emerald', value: 'bg-emerald-100', textColor: 'text-emerald-800' },
-  { name: 'Violet', value: 'bg-violet-100', textColor: 'text-violet-800' },
-];
+const FieldLabel = ({ htmlFor, children }: { htmlFor?: string; children: React.ReactNode }) => (
+  <label
+    htmlFor={htmlFor}
+    className="block text-[10.5px] font-medium leading-none"
+    style={{ color: 'var(--ls-text-2)' }}
+  >
+    {children}
+  </label>
+);
 
-// Color picker component for reuse
-const ColorPicker = ({ selectedColor, onColorSelect }) => (
-  <div className="grid grid-cols-4 gap-1.5 p-1">
-    {ENHANCED_COLORS.map((color, index) => (
-      <Tooltip key={`${color.value}-${index}`}>
+const COMPACT_INPUT_CLS = "!h-7 !text-[11px] !px-2 !py-0 md:!text-[11px]";
+const COMPACT_TRIGGER_CLS = "!h-7 !text-[11px] !px-2 !py-0";
+const COMPACT_BUTTON_CLS = "!h-7 !text-[11px] !px-2.5";
+
+// Palette for rule highlight colors. Each entry pairs the light Tailwind
+// background used to highlight matching log rows with the darker text token
+// used for the rule's title in the sidebar.
+const HIGHLIGHT_COLORS = [
+  { name: 'Red',     bg: 'bg-red-100',     text: 'text-red-700' },
+  { name: 'Amber',   bg: 'bg-amber-100',   text: 'text-amber-700' },
+  { name: 'Yellow',  bg: 'bg-yellow-100',  text: 'text-yellow-700' },
+  { name: 'Green',   bg: 'bg-green-100',   text: 'text-green-700' },
+  { name: 'Teal',    bg: 'bg-teal-100',    text: 'text-teal-700' },
+  { name: 'Sky',     bg: 'bg-sky-100',     text: 'text-sky-700' },
+  { name: 'Blue',    bg: 'bg-blue-100',    text: 'text-blue-700' },
+  { name: 'Indigo',  bg: 'bg-indigo-100',  text: 'text-indigo-700' },
+  { name: 'Violet',  bg: 'bg-violet-100',  text: 'text-violet-700' },
+  { name: 'Purple',  bg: 'bg-purple-100',  text: 'text-purple-700' },
+  { name: 'Pink',    bg: 'bg-pink-100',    text: 'text-pink-700' },
+  { name: 'Rose',    bg: 'bg-rose-100',    text: 'text-rose-700' },
+  { name: 'Slate',   bg: 'bg-slate-100',   text: 'text-slate-700' },
+] as const;
+
+const DEFAULT_COLOR = HIGHLIGHT_COLORS[0].bg;
+
+const titleColorFromBg = (bg: string): string => {
+  const entry = HIGHLIGHT_COLORS.find(c => c.bg === bg);
+  return entry?.text ?? 'text-slate-700';
+};
+
+// Build a short title for the rule. Prefer the value (uppercased) since it's
+// usually the most distinctive part ("ERROR", "WARN"); fall back to the field
+// name for value-less operators like `exists`.
+const ruleTitle = (rule: ColorRule): string => {
+  if (rule.operator === 'exists' || !rule.value) return rule.field.toUpperCase();
+  return rule.value.toUpperCase();
+};
+
+const ruleQuery = (rule: ColorRule): string => {
+  switch (rule.operator) {
+    case 'eq':       return `${rule.field}:${rule.value}`;
+    case 'neq':      return `-${rule.field}:${rule.value}`;
+    case 'contains': return `${rule.field}:*${rule.value}*`;
+    case 'regex':    return `${rule.field}:/${rule.value}/`;
+    case 'exists':   return `${rule.field}:*`;
+    default:         return `${rule.field}:${rule.value}`;
+  }
+};
+
+const triggerColorReapply = () => {
+  // Re-set the same log data to nudge LogViewerTable into recomputing styles.
+  setTimeout(() => {
+    const logStore = useLogResultStore.getState();
+    if (logStore.logData) logStore.setLogData({ ...logStore.logData });
+  }, 0);
+};
+
+const ColorSwatchPicker = ({
+  selected,
+  onSelect,
+}: {
+  selected: string;
+  onSelect: (bg: string) => void;
+}) => (
+  <div className="grid grid-cols-7 gap-1.5">
+    {HIGHLIGHT_COLORS.map((c) => (
+      <Tooltip key={c.bg}>
         <TooltipTrigger asChild>
           <button
             type="button"
+            onClick={() => onSelect(c.bg)}
             className={cn(
-              "w-6 h-6 rounded-sm border transition-all flex items-center justify-center",
-              color.value,
-              selectedColor === color.value 
-                ? "ring-2 ring-primary ring-offset-1 scale-110" 
-                : "hover:scale-105 hover:ring-1 hover:ring-slate-300"
+              'h-6 w-6 rounded-md border transition-all flex items-center justify-center',
+              c.bg,
+              selected === c.bg
+                ? 'ring-2 ring-offset-1 ring-[var(--ls-accent)] scale-105 border-transparent'
+                : 'border-[var(--ls-border)] hover:scale-105'
             )}
-            onClick={() => onColorSelect(color.value)}
+            aria-label={c.name}
           >
-            {selectedColor === color.value && (
-              <Check className={cn("h-3 w-3", color.textColor)} />
-            )}
+            {selected === c.bg && <Check className={cn('h-3 w-3', c.text)} />}
           </button>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="py-1 px-2 text-xs">
-          {color.name}
+          {c.name}
         </TooltipContent>
       </Tooltip>
     ))}
   </div>
 );
 
-export const ColorRulesPanel = () => {
-  const [isAddPanelOpen, setIsAddPanelOpen] = useState(false);
-  const [newRule, setNewRule] = useState<Omit<ColorRule, "id">>({
-    field: "",
-    operator: "eq",
-    value: "",
-    color: ENHANCED_COLORS[0].value,
-    enabled: true,
-  });
-  
-  // Track the rule being edited
-  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
-  const [editingRule, setEditingRule] = useState<Omit<ColorRule, "id">>({
-    field: "",
-    operator: "eq",
-    value: "",
-    color: ENHANCED_COLORS[0].value,
-    enabled: true,
-  });
+type DraftRule = Omit<ColorRule, 'id'>;
 
+const blankDraft = (): DraftRule => ({
+  field: '',
+  operator: 'eq',
+  value: '',
+  color: DEFAULT_COLOR,
+  enabled: true,
+});
+
+const RuleCard = ({
+  rule,
+  onToggle,
+  onDelete,
+  onEdit,
+}: {
+  rule: ColorRule;
+  onToggle: () => void;
+  onDelete: () => void;
+  onEdit: () => void;
+}) => {
+  const titleColor = titleColorFromBg(rule.color);
+  const disabled = !rule.enabled;
+
+  return (
+    <div
+      className={cn(
+        'group rounded-md border px-2.5 py-1.5 transition-all',
+        // ls-rule-card hook lets dark mode dim the user-chosen pastel bg.
+        !disabled && 'ls-rule-card',
+        disabled ? 'bg-[var(--ls-bg-2)] border-[var(--ls-border)]' : cn(rule.color, 'border-transparent')
+      )}
+    >
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onEdit}
+          className={cn(
+            'flex-1 min-w-0 truncate text-left text-[12px] font-semibold tracking-tight leading-tight hover:underline',
+            disabled ? 'text-[var(--ls-text-3)]' : titleColor
+          )}
+          title={`Edit rule: ${ruleTitle(rule)}`}
+        >
+          {ruleTitle(rule)}
+        </button>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="h-5 w-5 grid place-items-center rounded text-[var(--ls-text-3)] hover:text-[var(--ls-text)] hover:bg-[var(--ls-bg-2)] transition-colors opacity-0 group-hover:opacity-100"
+          aria-label="Edit rule"
+          title="Edit rule"
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
+        <Switch
+          checked={rule.enabled}
+          onCheckedChange={onToggle}
+          className="h-3.5 w-7 data-[state=checked]:bg-[var(--ls-accent)] [&>span]:h-2.5 [&>span]:w-2.5 [&>span]:data-[state=checked]:translate-x-3.5"
+        />
+        <button
+          type="button"
+          onClick={onDelete}
+          className="h-5 w-5 grid place-items-center rounded text-[var(--ls-text-3)] hover:text-[var(--ls-text)] hover:bg-[var(--ls-bg-2)] transition-colors"
+          aria-label="Delete rule"
+          title="Delete rule"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+      <div
+        className={cn(
+          'mt-0.5 truncate text-[10.5px] leading-snug',
+          disabled ? 'text-[var(--ls-text-3)]' : 'text-[var(--ls-text-2)]'
+        )}
+        style={{ fontFamily: 'var(--ls-font-mono)' }}
+        title={ruleQuery(rule)}
+      >
+        {ruleQuery(rule)}
+      </div>
+    </div>
+  );
+};
+
+const RuleForm = ({
+  draft,
+  setDraft,
+  availableFields,
+  onSave,
+  onCancel,
+  mode,
+}: {
+  draft: DraftRule;
+  setDraft: (d: DraftRule) => void;
+  availableFields: string[];
+  onSave: () => void;
+  onCancel: () => void;
+  mode: 'add' | 'edit';
+}) => {
+  const saveDisabled = !draft.field || (draft.operator !== 'exists' && !draft.value);
+
+  return (
+    <div
+      className={cn(
+        'rounded-md border p-2 space-y-1.5',
+        draft.color,
+        'border-[var(--ls-border)]'
+      )}
+    >
+      <div className="grid grid-cols-2 gap-1.5">
+        <div className="space-y-1">
+          <FieldLabel htmlFor="rule-field">Field</FieldLabel>
+          <Select
+            value={draft.field}
+            onValueChange={(value) => setDraft({ ...draft, field: value })}
+          >
+            <SelectTrigger
+              id="rule-field"
+              className={COMPACT_TRIGGER_CLS}
+              disabled={!availableFields.length}
+            >
+              <SelectValue placeholder="Select field" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableFields.map((field) => (
+                <SelectItem key={field} value={field} className="text-[11px]">
+                  {field}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <FieldLabel htmlFor="rule-operator">Operator</FieldLabel>
+          <Select
+            value={draft.operator}
+            onValueChange={(value) =>
+              setDraft({ ...draft, operator: value as ColorRule['operator'] })
+            }
+          >
+            <SelectTrigger id="rule-operator" className={COMPACT_TRIGGER_CLS}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="eq" className="text-[11px]">Equals (=)</SelectItem>
+              <SelectItem value="neq" className="text-[11px]">Not equals (≠)</SelectItem>
+              <SelectItem value="contains" className="text-[11px]">Contains</SelectItem>
+              <SelectItem value="exists" className="text-[11px]">Exists</SelectItem>
+              <SelectItem value="regex" className="text-[11px]">Regex</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <FieldLabel htmlFor="rule-value">
+          {draft.operator === 'exists' ? 'Value (not needed)' : 'Value'}
+        </FieldLabel>
+        <Input
+          id="rule-value"
+          value={draft.value}
+          onChange={(e) => setDraft({ ...draft, value: e.target.value })}
+          className={COMPACT_INPUT_CLS}
+          placeholder={
+            draft.operator === 'exists'
+              ? 'No value needed'
+              : draft.operator === 'regex'
+              ? 'error|warning'
+              : 'Value to match'
+          }
+          disabled={draft.operator === 'exists'}
+        />
+      </div>
+
+      <div className="space-y-1">
+        <FieldLabel>Color</FieldLabel>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                'h-7 w-full flex items-center gap-1.5 rounded-md border px-2 text-[11px] transition-colors',
+                draft.color
+              )}
+              style={{ borderColor: 'var(--ls-border)' }}
+              title="Choose highlight color"
+            >
+              <span className={cn('inline-block h-2.5 w-2.5 rounded-sm border', draft.color)} style={{ borderColor: 'var(--ls-border)' }} />
+              <span className={titleColorFromBg(draft.color)}>
+                {HIGHLIGHT_COLORS.find((c) => c.bg === draft.color)?.name ?? 'Color'}
+              </span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[260px] p-2" side="right" align="start">
+            <ColorSwatchPicker
+              selected={draft.color}
+              onSelect={(bg) => setDraft({ ...draft, color: bg })}
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      <div className="flex justify-end gap-1.5 pt-1">
+        <Button size="sm" variant="outline" className={COMPACT_BUTTON_CLS} onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          size="sm"
+          className={COMPACT_BUTTON_CLS}
+          style={{ background: 'var(--ls-accent)', color: 'white' }}
+          onClick={onSave}
+          disabled={saveDisabled}
+        >
+          {mode === 'edit' ? 'Update' : 'Save'}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+export const ColorRulesPanel = () => {
   const { colorRules, addRule, updateRule, deleteRule, toggleRule } = useColorRuleStore();
   const { logData } = useLogResultStore();
   const { selectedColumns } = useSearchQueryParamsStore();
 
-  // Combine selected columns and any additional fields from log data
-  const availableFields = logData?.logs && logData.logs.length > 0 
+  const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<DraftRule>(blankDraft);
+
+  const availableFields = logData?.logs && logData.logs.length > 0
     ? [...new Set([...selectedColumns, ...Object.keys(logData.logs[0])])]
-      .filter(field => field !== '_raw') // Exclude _raw as it's not useful for coloring
+        .filter((f) => f !== '_raw')
     : selectedColumns;
 
-  const handleAddRule = () => {
-    if (!newRule.field || (newRule.operator !== 'exists' && !newRule.value)) return;
-    
-    handleRuleAction(() => {
-      // For 'exists' operator, we don't need a value
-      const ruleToAdd = newRule.operator === 'exists' 
-        ? { ...newRule, value: '' } 
-        : newRule;
-        
-      addRule(ruleToAdd);
-      
-      // Reset form
-      setNewRule({
-        field: "",
-        operator: "eq",
-        value: "",
-        color: ENHANCED_COLORS[0].value,
-        enabled: true,
-      });
-      
-      // Close add panel
-      setIsAddPanelOpen(false);
-    });
+  const enabledCount = colorRules.filter((r) => r.enabled).length;
+  const totalCount = colorRules.length;
+
+  const resetForm = () => {
+    setIsAdding(false);
+    setEditingId(null);
+    setDraft(blankDraft());
   };
-  
-  // Start editing a rule
-  const handleStartEditRule = (rule: ColorRule) => {
-    setEditingRuleId(rule.id);
-    setEditingRule({
+
+  const handleEdit = (rule: ColorRule) => {
+    setIsAdding(false);
+    setEditingId(rule.id);
+    setDraft({
       field: rule.field,
       operator: rule.operator,
       value: rule.value,
@@ -146,452 +365,107 @@ export const ColorRulesPanel = () => {
       enabled: rule.enabled,
     });
   };
-  
-  // Save edits to a rule
-  const handleSaveEditRule = (id: string) => {
-    if (!editingRule.field || (editingRule.operator !== 'exists' && !editingRule.value)) return;
-    
-    handleRuleAction(() => {
-      // For 'exists' operator, we don't need a value
-      const ruleToUpdate = editingRule.operator === 'exists'
-        ? { ...editingRule, value: '' }
-        : editingRule;
-        
-      updateRule(id, ruleToUpdate);
-      setEditingRuleId(null);
-      
-      // Force immediate re-render of log elements with new color
-      applyColorRulesToLogs();
-    });
-  };
-  
-  // Cancel editing
-  const handleCancelEdit = () => {
-    setEditingRuleId(null);
-  };
 
-  // Immediately apply color rules when actions occur
-  const handleRuleAction = (action: () => void) => {
-    // Execute the action first
-    action();
-    
-    // Apply the coloring rules immediately
-    applyColorRulesToLogs();
-  };
-
-  // Apply color rules to logs
-  const applyColorRulesToLogs = () => {
-    // Find log table elements and apply styling
-    setTimeout(() => {
-      try {
-        // Force re-render by triggering a small state update
-        const logStore = useLogResultStore.getState();
-        if (logStore.logData) {
-          // Re-set the same data to trigger a re-render
-          logStore.setLogData({...logStore.logData});
-        }
-      } catch (err) {
-        console.error('Error applying color rules:', err);
-      }
-    }, 0);
-  };
-
-  // Find color name by value
-  const getColorName = (colorValue) => {
-    const color = ENHANCED_COLORS.find(c => c.value === colorValue);
-    return color ? color.name : 'Color';
-  };
-  
-  // Handle color selection with live preview for new rule
-  const handleNewRuleColorSelect = (color) => {
-    setNewRule({ ...newRule, color });
-    // For immediate preview in card background
-    handleRuleAction(() => {
-      // The rule card background gets updated automatically
-      // with the newRule.color change above
-    });
-  };
-  
-  // Handle color selection with live preview for editing rule
-  const handleEditRuleColorSelect = (color) => {
-    setEditingRule({ ...editingRule, color });
-    
-    // For immediate preview in logs and card background
-    handleRuleAction(() => {
-      // The card background gets updated automatically from state
-      // Don't update the actual rule until the user clicks Save
-      // Just trigger a re-render for any components using these rules
-    });
+  const handleSave = () => {
+    if (!draft.field || (draft.operator !== 'exists' && !draft.value)) return;
+    const payload: DraftRule = draft.operator === 'exists' ? { ...draft, value: '' } : draft;
+    if (editingId) {
+      updateRule(editingId, payload);
+    } else {
+      addRule(payload);
+    }
+    resetForm();
+    triggerColorReapply();
   };
 
   return (
     <TooltipProvider>
-      
-        <span className="">
-          {/* Add Rule Section - Collapsible */}
-          <Collapsible 
-            open={isAddPanelOpen} 
-            onOpenChange={setIsAddPanelOpen}
-            className="mb-4"  
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span
+            className="text-[10.5px] font-semibold uppercase tracking-[0.08em]"
+            style={{ color: 'var(--ls-text-3)' }}
           >
-            <div className="flex items-center justify-between pb-2">
-              <h4 className="text-xs font-medium text-slate-500">Rules</h4>
-              <CollapsibleTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="h-8 text-xs px-2 bg-blue-600 text-primary-foreground hover:bg-blue-700"
-                >
-                  { isAddPanelOpen ? <X className="h-3 w-3 mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
-                  {isAddPanelOpen ? "Cancel" : "Add"}
-                </Button>
-              </CollapsibleTrigger>
-            </div>
-            
-            <CollapsibleContent className="pt-4">
-              <div className={cn("rounded-md border p-3 space-y-2", newRule.color, "bg-opacity-20")}>
-                <div className="space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label htmlFor="field" className="text-xs font-medium">Field</Label>
-                      <Select
-                        value={newRule.field}
-                        onValueChange={(value) => setNewRule({ ...newRule, field: value })}
-                      >
-                        <SelectTrigger 
-                          id="field" 
-                          className="text-xs h-7"
-                          disabled={!availableFields.length}
-                        >
-                          <SelectValue placeholder="Select field" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableFields.map((field) => (
-                            <SelectItem key={field} value={field}>
-                              {field}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div className="space-y-1">
-                      <Label htmlFor="operator" className="text-xs font-medium">Operator</Label>
-                      <Select
-                        value={newRule.operator}
-                        onValueChange={(value) => setNewRule({ ...newRule, operator: value as ColorRule['operator'] })}
-                      >
-                        <SelectTrigger id="operator" className="text-xs h-7">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="eq">Equals (=)</SelectItem>
-                          <SelectItem value="neq">Not Equals (≠)</SelectItem>
-                          <SelectItem value="contains">Contains</SelectItem>
-                          <SelectItem value="exists">Exists</SelectItem>
-                          <SelectItem value="regex">Regex</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-[1fr,auto] gap-2 items-end">
-                    <div className="space-y-1">
-                      <Label htmlFor="value" className="text-xs font-medium">
-                        {newRule.operator === 'exists' ? 'Value (not needed)' : 'Value'}
-                      </Label>
-                      <Input
-                        id="value"
-                        value={newRule.value}
-                        onChange={(e) => setNewRule({ ...newRule, value: e.target.value })}
-                        className={cn("h-7 text-xs", 
-                          newRule.operator === 'exists' ? "bg-slate-50 text-slate-400" : ""
-                        )}
-                        placeholder={
-                          newRule.operator === 'exists' ? 'No value needed' : 
-                          newRule.operator === 'regex' ? 'Regular expression (e.g. error|warning)' : 
-                          'Value to match'
-                        }
-                        disabled={newRule.operator === 'exists'}
-                      />
-                      {newRule.operator === 'regex' && (
-                        <p className="text-[10px] text-slate-500 italic">
-                          Use JavaScript RegExp syntax, e.g. error|warning, [0-9]+, etc.
-                        </p>
-                      )}
-                    </div>
-                    
-                    <div>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button 
-                            variant="outline" 
-                            className={cn(
-                              "h-7 flex items-center gap-1.5 border-slate-200 px-2", 
-                              newRule.color
-                            )}
-                            title="Choose highlight color"
-                          >
-                            <Palette className="h-3.5 w-3.5 text-slate-600" />
-                            <span className="text-xs">Choose Color</span>
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[280px] p-2" side="right" align="start">
-                          <div className="flex items-center justify-between mb-2 pb-1 border-b">
-                            <span className="text-xs font-medium">Select Highlight Color</span>
-                            <div className="flex items-center gap-1.5">
-                              <div className={cn("w-3 h-3 rounded-sm border", newRule.color)} />
-                              <span className="text-xs font-medium">{getColorName(newRule.color)}</span>
-                            </div>
-                          </div>
-                          <ColorPicker 
-                            selectedColor={newRule.color} 
-                            onColorSelect={handleNewRuleColorSelect} 
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="pt-1 flex justify-end">
-                  <Button
-                    size="sm"
-                    className="h-6 text-xs px-2 bg-primary hover:bg-primary/90"
-                    onClick={handleAddRule}
-                    disabled={!newRule.field || (newRule.operator !== 'exists' && !newRule.value)}
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    Save
-                  </Button>
-                </div>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-          
-          {/* Existing rules */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-medium text-slate-500 mb-2">Current Rules</h4>
-            
-            {colorRules.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-4 px-3 bg-slate-50 rounded-md border border-dashed border-slate-200">
-                <AlertCircle className="h-4 w-4 text-slate-400 mb-1" />
-                <span className="text-xs text-slate-500">No coloring rules defined yet</span>
-              </div>
+            Highlight rules
+          </span>
+          {totalCount > 0 && (
+            <span
+              className="text-[11px] font-medium"
+              style={{ color: 'var(--ls-text-3)' }}
+            >
+              {enabledCount}/{totalCount} on
+            </span>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          {colorRules.map((rule) =>
+            editingId === rule.id ? (
+              <RuleForm
+                key={rule.id}
+                draft={draft}
+                setDraft={setDraft}
+                availableFields={availableFields}
+                onSave={handleSave}
+                onCancel={resetForm}
+                mode="edit"
+              />
             ) : (
-              <ScrollArea className="pr-4">
-                <div className="space-y-2">
-                  {colorRules.map((rule) => (
-                    <div 
-                      key={rule.id} 
-                      className={cn(
-                        "rounded-md border p-3 text-sm transition-all",
-                        editingRuleId === rule.id 
-                          ? "bg-blue-50 border-blue-200" 
-                          : rule.color,
-                        editingRuleId !== rule.id && "bg-opacity-20",
-                        !rule.enabled && "opacity-60"
-                      )}
-                    >
-                      {editingRuleId === rule.id ? (
-                        // Editing mode
-                        <div className="space-y-2">
-                          <div className="flex justify-between">
-                            <span className="text-xs font-medium text-blue-600">Edit Rule</span>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-5 w-5 text-slate-400 hover:text-slate-600"
-                              onClick={handleCancelEdit}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="space-y-1">
-                              <Label htmlFor={`edit-field-${rule.id}`} className="text-xs font-medium">Field</Label>
-                              <Select
-                                value={editingRule.field}
-                                onValueChange={(value) => setEditingRule({ ...editingRule, field: value })}
-                              >
-                                <SelectTrigger id={`edit-field-${rule.id}`} className="text-xs h-7">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {availableFields.map((field) => (
-                                    <SelectItem key={field} value={field}>
-                                      {field}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            
-                            <div className="space-y-1">
-                              <Label htmlFor={`edit-operator-${rule.id}`} className="text-xs font-medium">Operator</Label>
-                              <Select
-                                value={editingRule.operator}
-                                onValueChange={(value) => setEditingRule({ ...editingRule, operator: value as ColorRule['operator'] })}
-                              >
-                                <SelectTrigger id={`edit-operator-${rule.id}`} className="text-xs h-7">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="eq">Equals (=)</SelectItem>
-                                  <SelectItem value="neq">Not Equals (≠)</SelectItem>
-                                  <SelectItem value="contains">Contains</SelectItem>
-                                  <SelectItem value="exists">Exists</SelectItem>
-                                  <SelectItem value="regex">Regex</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-[1fr,auto] gap-2 items-end">
-                            <div className="space-y-1">
-                              <Label htmlFor={`edit-value-${rule.id}`} className="text-xs font-medium">
-                                {editingRule.operator === 'exists' ? 'Value (not needed)' : 'Value'}
-                              </Label>
-                              <Input
-                                id={`edit-value-${rule.id}`}
-                                value={editingRule.value}
-                                onChange={(e) => setEditingRule({ ...editingRule, value: e.target.value })}
-                                className={cn("h-7 text-xs",
-                                  editingRule.operator === 'exists' ? "bg-slate-50 text-slate-400" : ""
-                                )}
-                                placeholder={
-                                  editingRule.operator === 'exists' ? 'No value needed' : 
-                                  editingRule.operator === 'regex' ? 'Regular expression (e.g. error|warning)' : 
-                                  'Value'
-                                }
-                                disabled={editingRule.operator === 'exists'}
-                              />
-                              {editingRule.operator === 'regex' && (
-                                <p className="text-[10px] text-slate-500 italic">
-                                  Use JavaScript RegExp syntax, e.g. error|warning, [0-9]+, etc.
-                                </p>
-                              )}
-                            </div>
-                            
-                            <div>
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                 
-                                  <Button 
-                                    variant="outline" 
-                                    className={cn(
-                                      "h-7 flex items-center gap-1.5 border-slate-200 px-2", 
-                                      editingRule.color
-                                    )}
-                                    title="Choose highlight color"
-                                  >
-                                    <Palette className="h-3.5 w-3.5 text-slate-600" />
-                                    <span className="text-xs">Choose Color</span>
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[280px] p-2" side="right" align="start">
-                                  <div className="flex items-center justify-between mb-2 pb-1 border-b">
-                                    <span className="text-xs font-medium">Select Highlight Color</span>
-                                    <div className="flex items-center gap-1.5">
-                                      <div className={cn("w-3 h-3 rounded-sm border", editingRule.color)} />
-                                      <span className="text-xs font-medium">{getColorName(editingRule.color)}</span>
-                                    </div>
-                                  </div>
-                                  <ColorPicker 
-                                    selectedColor={editingRule.color} 
-                                    onColorSelect={handleEditRuleColorSelect} 
-                                  />
-                                </PopoverContent>
-                              </Popover>
-                            </div>
-                          </div>
-                          
-                          <div className="flex justify-end space-x-2 pt-1 mt-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-6 text-xs px-2"
-                              onClick={handleCancelEdit}
-                            >
-                              Cancel
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="default"
-                              className="h-6 text-xs px-2 bg-blue-600 hover:bg-blue-700"
-                              onClick={() => handleSaveEditRule(rule.id)}
-                              disabled={!editingRule.field || (editingRule.operator !== 'exists' && !editingRule.value)}
-                            >
-                              <Check className="h-3 w-3 mr-1" />
-                              Save
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        // Display mode
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex flex-wrap items-center gap-1.5 max-w-[70%]">
-                              <div className={cn("w-3 h-3 rounded-sm flex-shrink-0", rule.color)} />
-                              <Badge 
-                                variant="outline" 
-                                className="px-1.5 py-0 h-5 text-xs font-normal border-slate-200 truncate max-w-[90px]"
-                              >
-                                {rule.field}
-                              </Badge>
-                              <span className="text-xs text-slate-500 flex-shrink-0">
-                                {rule.operator === 'eq' ? '=' : 
-                                 rule.operator === 'neq' ? '≠' : 
-                                 rule.operator === 'contains' ? 'contains' :
-                                 rule.operator === 'exists' ? 'exists' :
-                                 rule.operator === 'regex' ? 'regex' : ''}
-                              </span>
-                              <Badge 
-                                variant="secondary" 
-                                className="px-1.5 py-0 h-5 text-xs font-normal bg-slate-100 truncate max-w-[90px]"
-                                title={rule.value}
-                              >
-                                {rule.value}
-                              </Badge>
-                            </div>
-                            
-                            <div className="flex items-center space-x-1">
-                              <Switch
-                                checked={rule.enabled}
-                                onCheckedChange={() => handleRuleAction(() => toggleRule(rule.id))}
-                                className="data-[state=checked]:bg-primary"
-                              />
-                              
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-6 w-6 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
-                                onClick={() => handleStartEditRule(rule)}
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </Button>
-                              
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-6 w-6 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                                onClick={() => handleRuleAction(() => deleteRule(rule.id))}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            )}
-          </div>
-        </span>
-     
+              <RuleCard
+                key={rule.id}
+                rule={rule}
+                onToggle={() => {
+                  toggleRule(rule.id);
+                  triggerColorReapply();
+                }}
+                onDelete={() => {
+                  if (editingId === rule.id) resetForm();
+                  deleteRule(rule.id);
+                  triggerColorReapply();
+                }}
+                onEdit={() => handleEdit(rule)}
+              />
+            )
+          )}
+        </div>
+
+        {isAdding ? (
+          <RuleForm
+            draft={draft}
+            setDraft={setDraft}
+            availableFields={availableFields}
+            onSave={handleSave}
+            onCancel={resetForm}
+            mode="add"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setEditingId(null);
+              setDraft(blankDraft());
+              setIsAdding(true);
+            }}
+            className="w-full flex items-center justify-center gap-1.5 rounded-md py-1.5 text-[11.5px] font-medium transition-colors"
+            style={{
+              border: '1px dashed var(--ls-border-strong)',
+              color: 'var(--ls-text-2)',
+              background: 'transparent',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--ls-bg-2)';
+              e.currentTarget.style.color = 'var(--ls-text)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = 'var(--ls-text-2)';
+            }}
+          >
+            <Plus className="h-3 w-3" />
+            Add rule
+          </button>
+        )}
+      </div>
     </TooltipProvider>
   );
-}; 
+};

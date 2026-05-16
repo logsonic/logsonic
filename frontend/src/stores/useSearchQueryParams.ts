@@ -74,7 +74,7 @@ export interface SearchQueryParamsStoreState {
   setSortOrder: (sortOrder: string) => void;
   setPageSize: (pageSize: number) => void;
   setCurrentPage: (currentPage: number) => void;
-  setAvailableColumns: (availableColumns: string[]) => void;
+  setAvailableColumns: (availableColumns: string[], logs?: Array<Record<string, unknown>>) => void;
   setSelectedColumns: (selectedColumns: string[]) => void;
   setColumnWidths: (columnWidths: Record<string, number>) => void;
   setColumnLocked: (columnLocked: boolean) => void;
@@ -367,28 +367,76 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
             set({ currentPage });
           }
         },  
-        setAvailableColumns: (availableColumns) => {
+        setAvailableColumns: (availableColumns, logs) => {
           const currentState = get();
           //dedup the available columns
-          const dedupedAvailableColumns = availableColumns.filter((value, index, self) => 
+          const dedupedAvailableColumns = availableColumns.filter((value, index, self) =>
             self.indexOf(value) === index
           );
 
           // Initialize selected columns if they're empty
           if (currentState.selectedColumns.length === 0 && dedupedAvailableColumns.length > 0) {
             const mandatoryColumns = currentState.mandatoryColumns;
-            
+
             // Filter out columns starting with underscore for initial selection
             const visibleColumns = dedupedAvailableColumns.filter(col => !col.startsWith('_'));
-            
+
+            // Populated columns first — empty fields aren't useful as defaults.
+            const populationCount = (col: string) => {
+              if (!logs || logs.length === 0) return 1;
+              let count = 0;
+              for (const row of logs) {
+                const v = row[col];
+                if (v === null || v === undefined) continue;
+                if (typeof v === 'string' && (v.trim() === '' || v === '-')) continue;
+                count++;
+              }
+              return count;
+            };
+
+            // Rank columns by usefulness to a human reading a log table.
+            // Higher priority = shown first / more likely included by default.
+            // The previous default leaned on `slice(0,5)` over an alphabetised
+            // list, which surfaced `auth`/`ident` (almost always "-") and hid
+            // the columns the user actually wants (`status`, `method`, `url`).
+            const priority = (col: string): number => {
+              const lc = col.toLowerCase();
+              if (lc === 'message' || lc === 'msg') return 100;
+              if (lc === 'level' || lc === 'severity' || lc === 'log_level') return 95;
+              if (lc === 'status' || lc === 'status_code' || lc === 'http_status' || lc === 'response_status') return 90;
+              if (lc === 'method' || lc === 'verb' || lc === 'http_method') return 85;
+              if (lc === 'url' || lc === 'path' || lc === 'request' || lc === 'uri') return 80;
+              if (lc === 'host' || lc === 'hostname') return 75;
+              if (lc === 'service' || lc === 'program' || lc === 'app' || lc === 'component') return 70;
+              if (lc === 'client_ip' || lc === 'remote_addr' || lc === 'src_ip') return 65;
+              if (lc === 'user_agent' || lc === 'agent') return 60;
+              if (lc === 'user' || lc === 'user_id' || lc === 'username') return 55;
+              if (lc === 'duration' || lc === 'latency' || lc === 'response_time' || lc === 'elapsed') return 50;
+              if (lc === 'bytes' || lc === 'size' || lc === 'content_length') return 45;
+              if (lc === 'referrer' || lc === 'referer') return 40;
+              if (lc === 'auth' || lc === 'ident') return 5; // mostly "-" in apache/nginx logs
+              return 30; // generic extracted field
+            };
+
+            const ranked = [...visibleColumns]
+              .filter(col => !mandatoryColumns.includes(col))
+              .map(col => ({ col, score: priority(col), populated: populationCount(col) }))
+              // populated columns first, then by score
+              .sort((a, b) => {
+                const aHas = a.populated > 0 ? 1 : 0;
+                const bHas = b.populated > 0 ? 1 : 0;
+                if (aHas !== bHas) return bHas - aHas;
+                if (b.score !== a.score) return b.score - a.score;
+                return a.col.localeCompare(b.col);
+              })
+              .map(x => x.col);
+
             const initialSelectedColumns = [
               ...mandatoryColumns,
-              ...visibleColumns
-                .filter(col => !mandatoryColumns.includes(col))
-                .slice(0, 5)
+              ...ranked.slice(0, 6),
             ];
-            
-            set({ 
+
+            set({
               availableColumns: dedupedAvailableColumns,
               selectedColumns: initialSelectedColumns
             });
@@ -676,11 +724,41 @@ if (typeof window !== 'undefined') {
     }, 0);
   } else {
     // If URL parameters exist, make sure they're properly applied to the store
-    // This ensures the search UI components reflect the URL state
+    // This ensures the search UI components reflect the URL state.
+    // BUT: a stale `q` from a previous session can show "Query: error" next to
+    // an empty index and look like a broken page. We strip it once on the
+    // landing route (`#?…` only, before any sub-route) — that's the cold-load
+    // case where we know the user just opened the app fresh.
+    const isLandingHash =
+      typeof window.location.hash === 'string' &&
+      window.location.hash.startsWith('#?');
     setTimeout(() => {
       const store = useSearchQueryParamsStore.getState();
+      if (isLandingHash && initialUrlParams.q) {
+        // Defer the clear until after the system info comes back so we don't
+        // wipe a perfectly valid pre-filled query on a populated index. The
+        // StatusBar listens to systemInfo independently; we just need to know
+        // whether storage is empty *at load*.
+        import('@/lib/api-client').then(({ getSystemInfo }) => {
+          getSystemInfo(true).then(info => {
+            const empty = (info?.storage_info?.total_log_entries ?? 0) === 0;
+            if (empty) {
+              const s = useSearchQueryParamsStore.getState();
+              if (s.searchQuery) s.clearSearchQuery();
+            } else {
+              store.syncWithUrlParams();
+              store.triggerSearch();
+            }
+          }).catch(() => {
+            // If system info fails, fall back to old behavior — don't strip.
+            store.syncWithUrlParams();
+            if (initialUrlParams.q) store.triggerSearch();
+          });
+        });
+        return;
+      }
       store.syncWithUrlParams();
-      
+
       // After syncing, trigger a search if there's a query
       if (initialUrlParams.q) {
         store.triggerSearch();

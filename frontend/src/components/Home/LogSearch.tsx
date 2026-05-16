@@ -1,16 +1,60 @@
 import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";
-import { AIQueryDialog } from "@/components/Home/AIQueryDialog";
+import { useToast } from "@/components/ui/use-toast";
 import { useSearchLogs } from "@/hooks/useSearchLogs";
+import { getLogs } from "@/lib/api-client";
+import { calculateRelativeDateRange } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
-import { checkAIStatus } from "@/services/aiService";
 import { useLogResultStore } from "@/stores/useLogResultStore";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
-import { ArrowRight, HelpCircle, Search, Sparkles, X } from "lucide-react";
+import { ArrowRight, Download, HelpCircle, Loader2, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { PerformanceMetricsPopover } from "./PerformanceMetricsPopover";
 import { QueryHelperPopover } from "./QueryHelperPopover";
+
+// Cap exports so we don't churn the browser on huge result sets; the user
+// is warned via toast if matches exceed this.
+const EXPORT_MAX_ROWS = 100_000;
+
+const GhostBtn = ({
+  icon,
+  children,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  onClick?: () => void;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="inline-flex items-center transition-colors"
+    style={{
+      gap: 6,
+      height: 24,
+      padding: '0 8px',
+      borderRadius: 5,
+      fontSize: 12,
+      fontWeight: 500,
+      background: 'transparent',
+      color: 'var(--ls-text-2)',
+      border: '1px solid transparent',
+      cursor: 'pointer',
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.background = 'var(--ls-bg-2)';
+      e.currentTarget.style.color = 'var(--ls-text)';
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.background = 'transparent';
+      e.currentTarget.style.color = 'var(--ls-text-2)';
+    }}
+  >
+    {icon}
+    <span>{children}</span>
+  </button>
+);
 
 // Syntax hint chips shown below the search bar when focused
 const SYNTAX_HINTS = [
@@ -32,14 +76,13 @@ export const LogSearch = ({
 
   // Get the store directly using the hook
   const store = useSearchQueryParamsStore();
-  
+
   const { searchLogs } = useSearchLogs(onSearchComplete);
   const { isLoading } = useLogResultStore();
   const [localSearchQuery, setLocalSearchQuery] = useState(store.searchQuery);
+  const [isExporting, setIsExporting] = useState(false);
+  const { toast } = useToast();
   
-  // AI query related state
-  const [isAIDialogOpen, setIsAIDialogOpen] = useState(false);
-  const [isAIAvailable, setIsAIAvailable] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -68,27 +111,7 @@ export const LogSearch = ({
   }, []);
 
 
-  // Check if AI/Ollama is running
   useEffect(() => {
-    const checkAI = async () => {
-      const status = await checkAIStatus();
-      // Check if Ollama is running and any logsonic-related model is available
-      // This will match "logsonic", "logsonic:latest", "logsonic-search", etc.
-      const hasLogsonicModel = status.ollama_running && 
-        status.models_available.some(model => 
-          model.toLowerCase().includes('logsonic')
-        );
-      
-      setIsAIAvailable(hasLogsonicModel);
-    };
-    
-    // Check AI status once on component mount
-    checkAI();
-    
-    // No interval checking - only check when component loads
-  }, []);
-
-  useEffect(() => { 
     setLocalSearchQuery(store.searchQuery);
   }, [store.searchQuery]);
 
@@ -116,22 +139,127 @@ export const LogSearch = ({
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       handleSearch();
+    } else if (e.key === "Escape") {
+      // Match the behavior of most editor-style apps: Escape releases focus.
+      inputRef.current?.blur();
     }
   }, [handleSearch]);
 
-  // Insert a hint snippet into the search input
+  // Export all rows matching the current query (not just the visible page).
+  // The old behavior dumped only the current page silently, which was lossy.
+  const handleExport = useCallback(async () => {
+    const totalCount = store.resultCount;
+    if (totalCount === 0) {
+      toast({
+        title: 'Nothing to export',
+        description: 'Run a search that returns at least one row.',
+        variant: 'default',
+      });
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      // Resolve the active time range — mirrors useSearchLogs so relative
+      // ranges aren't snapshotted to a stale value.
+      let startDate = store.UTCTimeSince;
+      let endDate = store.UTCTimeTo;
+      if (store.isRelative) {
+        const r = calculateRelativeDateRange(
+          store.relativeValue,
+          store.customRelativeUnit,
+          store.customRelativeCount,
+        );
+        startDate = r.startDate;
+        endDate = r.endDate;
+      }
+
+      const cappedAt = Math.min(totalCount, EXPORT_MAX_ROWS);
+      const result = await getLogs({
+        query: store.searchQuery,
+        _src: store.sources.length > 0 ? store.sources.join(',') : undefined,
+        start_date: startDate.toISOString(),
+        end_date: endDate.toISOString(),
+        limit: cappedAt,
+        offset: 0,
+        sort_by: store.sortBy,
+        sort_order: store.sortOrder,
+      });
+
+      const logs = result?.logs ?? [];
+      if (logs.length === 0) {
+        toast({
+          title: 'Export failed',
+          description: 'Backend returned no rows for this query.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const jsonl = logs.map(log => JSON.stringify(log)).join('\n') + '\n';
+      const blob = new Blob([jsonl], { type: 'application/x-ndjson' });
+      const url = URL.createObjectURL(blob);
+
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `logsonic-export-${ts}.jsonl`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      if (totalCount > EXPORT_MAX_ROWS) {
+        toast({
+          title: `Exported first ${EXPORT_MAX_ROWS.toLocaleString()} of ${totalCount.toLocaleString()} rows`,
+          description: 'Narrow the time range or query to export the remainder.',
+          variant: 'default',
+        });
+      } else {
+        toast({
+          title: `Exported ${logs.length.toLocaleString()} rows`,
+          variant: 'default',
+        });
+      }
+    } catch (err) {
+      toast({
+        title: 'Export failed',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [
+    store.resultCount,
+    store.searchQuery,
+    store.sources,
+    store.isRelative,
+    store.relativeValue,
+    store.customRelativeCount,
+    store.customRelativeUnit,
+    store.UTCTimeSince,
+    store.UTCTimeTo,
+    store.sortBy,
+    store.sortOrder,
+    toast,
+  ]);
+
+  // Insert a hint snippet into the search input and focus it so the user
+  // can keep typing without a second click.
   const handleHintInsert = useCallback((insert: string) => {
-    const cursorPos = insert.indexOf('$CURSOR$');
     const cleaned = insert.replace('$CURSOR$', '').replace('$FIELD$', '');
     const newQuery = localSearchQuery ? `${localSearchQuery.trimEnd()} ${cleaned}` : cleaned;
     setLocalSearchQuery(newQuery);
+    setTimeout(() => inputRef.current?.focus(), 0);
   }, [localSearchQuery]);
 
-  // Insert a column-based field: hint
+  // Insert a column-based field: hint and refocus the input for chained typing.
   const handleColumnHint = useCallback((column: string) => {
     const insert = `${column}:`;
     const newQuery = localSearchQuery ? `${localSearchQuery.trimEnd()} ${insert}` : insert;
     setLocalSearchQuery(newQuery);
+    setTimeout(() => inputRef.current?.focus(), 0);
   }, [localSearchQuery]);
 
   // Get columns that could be used as field hints (exclude utility/internal columns)
@@ -155,39 +283,30 @@ export const LogSearch = ({
           {/* Search input with clear button */}
           <div className="relative flex-grow">
             <div className="absolute inset-y-0 left-0 flex items-center pl-3">
-              {isAIAvailable ? (
-                <button
-                  type="button"
-                  onClick={() => setIsAIDialogOpen(true)}
-                  className="focus:outline-none"
-                  aria-label="Use AI to build query"
-                  title="Use AI to build query"
-                >
-                  <Sparkles 
-                    size={18} 
-                    className="text-blue-500 hover:text-blue-600 cursor-pointer"
-                    style={{
-                      filter: 'drop-shadow(0 0 4px rgba(139, 92, 246, 0.5))',
-                      animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
-                    }}
-                  />
-                </button>
-              ) : (
-                <Search size={18} className="text-gray-400 pointer-events-none" />
-              )}
+              <Search size={16} style={{ color: 'var(--ls-text-3)' }} className="pointer-events-none" />
             </div>
-            
+
             <Input
               ref={inputRef}
               type="text"
               value={localSearchQuery}
               onChange={handleInputChange}
-              placeholder='Search logs… (press / or ⌘K) — try level:error or "connection timeout"'
+              placeholder={isInputFocused
+                ? 'Try level:error or "connection timeout"'
+                : 'Search logs… (/ or ⌘K)'}
               className={cn(
-                "w-full pl-10 pr-10 py-5 text-sm rounded-lg border border-gray-300 shadow-sm focus-visible:ring-2",
-                "focus-visible:ring-offset-0 focus-visible:ring-blue-500/40 focus-visible:border-blue-500",
-                isInputFocused && "border-blue-400"
+                "w-full pl-10 pr-10 text-sm rounded-md shadow-sm focus-visible:ring-2 focus-visible:ring-offset-0",
+                "focus-visible:ring-[var(--ls-accent-softer)] focus-visible:border-[var(--ls-accent)]",
+                isInputFocused && "border-[var(--ls-accent)]"
               )}
+              style={{
+                height: 36,
+                fontFamily: 'var(--ls-font-mono)',
+                fontSize: 12.5,
+                background: 'var(--ls-bg-1)',
+                borderColor: 'var(--ls-border-strong)',
+                color: 'var(--ls-text)',
+              }}
               onKeyDown={handleKeyDown}
               onFocus={() => setIsInputFocused(true)}
               onBlur={() => setTimeout(() => setIsInputFocused(false), 150)}
@@ -211,16 +330,32 @@ export const LogSearch = ({
           
           {/* Merged date range and search panel button */}
           <div className="flex-shrink-0">
-            <div className="flex h-[50px] rounded-lg overflow-hidden border border-gray-300 shadow-sm">
+            <div
+              className="flex h-[36px] rounded-md overflow-hidden"
+              style={{
+                border: '1px solid var(--ls-border-strong)',
+                background: 'var(--ls-bg-1)',
+              }}
+            >
               <DateTimeRangeButton />
-              
-              <Button 
+
+              <span aria-hidden style={{ width: 1, background: 'var(--ls-border-strong)' }} />
+
+              <Button
                 onClick={() => handleSearch(true)}
-                className="h-full px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-none"
+                className="h-full px-4 rounded-none text-white"
+                style={{
+                  background: 'var(--ls-accent)',
+                  fontWeight: 600,
+                  fontSize: 12.5,
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.18)',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--ls-accent-hover)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--ls-accent)')}
                 disabled={isLoading}
               >
-                <span className="hidden sm:inline mr-1">{isLoading ? 'Searching...' : 'Search'}</span>
-                <ArrowRight size={16} />
+                <span className="hidden sm:inline mr-1.5">{isLoading ? 'Searching…' : 'Search'}</span>
+                <ArrowRight size={14} />
               </Button>
             </div>
           </div>
@@ -229,29 +364,63 @@ export const LogSearch = ({
         {/* Inline syntax hints - appear when input is focused */}
         {showHints && (
           <div className="flex flex-wrap items-center gap-1.5 px-1 animate-in fade-in duration-150">
-            <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide mr-0.5">Syntax:</span>
+            <span
+              className="text-[10px] font-semibold uppercase tracking-wider mr-0.5"
+              style={{ color: 'var(--ls-text-3)' }}
+            >
+              Syntax:
+            </span>
             {SYNTAX_HINTS.map((hint) => (
               <button
                 key={hint.label}
                 type="button"
                 onClick={() => handleHintInsert(hint.insert)}
                 title={hint.description}
-                className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-[11px] font-mono text-slate-600 border border-slate-200 hover:border-blue-200 transition-colors"
+                className="inline-flex items-center px-2 py-0.5 transition-colors"
+                style={{
+                  borderRadius: 4,
+                  border: '1px solid var(--ls-border)',
+                  background: 'var(--ls-bg-1)',
+                  fontFamily: 'var(--ls-font-mono)',
+                  fontSize: 11,
+                  color: 'var(--ls-text-2)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--ls-accent)';
+                  e.currentTarget.style.color = 'var(--ls-accent-text)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--ls-border)';
+                  e.currentTarget.style.color = 'var(--ls-text-2)';
+                }}
               >
                 {hint.label}
               </button>
             ))}
             {columnHints.length > 0 && (
               <>
-                <span className="text-[10px] text-slate-300 mx-0.5">|</span>
-                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide mr-0.5">Fields:</span>
+                <span style={{ color: 'var(--ls-text-4)' }} className="mx-0.5">|</span>
+                <span
+                  className="text-[10px] font-semibold uppercase tracking-wider mr-0.5"
+                  style={{ color: 'var(--ls-text-3)' }}
+                >
+                  Fields:
+                </span>
                 {columnHints.map((col) => (
                   <button
                     key={col}
                     type="button"
                     onClick={() => handleColumnHint(col)}
                     title={`Search in field: ${col}`}
-                    className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-100 text-[11px] font-mono text-blue-600 border border-blue-100 hover:border-blue-300 transition-colors"
+                    className="inline-flex items-center px-2 py-0.5 transition-colors"
+                    style={{
+                      borderRadius: 4,
+                      border: '1px solid var(--ls-accent-border)',
+                      background: 'var(--ls-accent-softer)',
+                      fontFamily: 'var(--ls-font-mono)',
+                      fontSize: 11,
+                      color: 'var(--ls-accent-text)',
+                    }}
                   >
                     {col}:
                   </button>
@@ -262,58 +431,57 @@ export const LogSearch = ({
         )}
 
         {/* Search metadata display */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground px-1">
-          <QueryHelperPopover trigger={
-            <Button variant="link" className="text-slate-400 hover:text-blue-600 text-xs h-auto p-0 gap-1">
-              <HelpCircle className="h-3 w-3" />
-              Search Help
-            </Button>
-          } />
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground px-1">
+          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+            <QueryHelperPopover trigger={
+              <Button
+                variant="link"
+                className="text-xs h-auto p-0 gap-1"
+                style={{ color: 'var(--ls-text-3)' }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--ls-accent)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ls-text-3)')}
+              >
+                <HelpCircle className="h-3 w-3" />
+                Search Help
+              </Button>
+            } />
 
-          {store.sources.length > 0 && (
-            <span className="flex items-center gap-1">
-              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Sources:</span>
-              {store.sources.map(s => (
-                <span key={s} className="bg-blue-50 text-blue-700 border border-blue-100 px-1.5 py-0.5 rounded text-[11px] font-medium">
-                  {s}
+            {store.searchQuery && (
+              <span className="flex items-center gap-1">
+                <span className="ls-meta-label">Query:</span>
+                <span className="ls-chip ls-chip-warn ls-chip-mono">
+                  {store.searchQuery}
                 </span>
-              ))}
-              <span className="text-slate-300 mx-0.5">·</span>
-            </span>
-          )}
-          {store.searchQuery && (
-            <span className="flex items-center gap-1">
-              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Query:</span>
-              <span className="bg-amber-50 text-amber-800 border border-amber-100 px-1.5 py-0.5 rounded text-[11px] font-mono">
-                {store.searchQuery}
+                <span className="ls-sep">·</span>
               </span>
-              <span className="text-slate-300 mx-0.5">·</span>
-            </span>
-          )}
+            )}
 
-          {store.lastSearchStart && store.lastSearchEnd && (
-            <span className="flex items-center gap-1">
-              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Range:</span>
-              <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[11px]">
-                {store.lastSearchStart.toLocaleString()} – {store.lastSearchEnd.toLocaleString()}
-                <span className="text-slate-400 ml-1">({store.timeZone})</span>
+            {store.lastSearchStart && store.lastSearchEnd && (
+              <span className="flex items-center gap-1">
+                <span className="ls-meta-label">Range:</span>
+                <span className="ls-chip ls-chip-neutral">
+                  {store.lastSearchStart.toLocaleString()} – {store.lastSearchEnd.toLocaleString()}
+                  <span className="ls-chip-sub ml-1">({store.timeZone})</span>
+                </span>
               </span>
-            </span>
-          )}
+            )}
 
             {/* Performance metrics popover */}
-            <PerformanceMetricsPopover 
-              apiExecutionTime={apiExecutionTime} 
+            <PerformanceMetricsPopover
+              apiExecutionTime={apiExecutionTime}
             />
+          </div>
+
+          <div className="flex flex-shrink-0 items-center">
+            <GhostBtn
+              icon={isExporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+              onClick={isExporting ? undefined : handleExport}
+            >
+              {isExporting ? 'Exporting…' : 'Export'}
+            </GhostBtn>
+          </div>
         </div>
       </div>
-
-      {/* AI Query Dialog */}
-      <AIQueryDialog 
-        open={isAIDialogOpen}
-        onOpenChange={setIsAIDialogOpen}
-
-      />
     </div>
   );
 };
