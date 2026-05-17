@@ -24,10 +24,21 @@ import { ExternalLink, HardDrive, Moon, Sun, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import SystemInfoModal from './SystemInfoModal';
 
+type ActiveSection = 'filter' | 'styling' | null;
+
+interface HeaderProps {
+  activeSection?: ActiveSection;
+}
+
+const SECTION_LABEL: Record<Exclude<ActiveSection, null>, string> = {
+  filter: 'Filter',
+  styling: 'Coloring',
+};
+
 /**
  * Application header component with navigation and action buttons using Radix navigation menu
  */
-export const Header = () => {
+export const Header = ({ activeSection = null }: HeaderProps = {}) => {
   const { execute: clearLogs, isLoading } = useClearLogs();
   const { toast } = useToast();
   const [systemInfoOpen, setSystemInfoOpen] = useState(false);
@@ -90,7 +101,7 @@ export const Header = () => {
         >
           <span style={{ color: 'var(--ls-text-3)' }}>LogSonic</span>
           <span style={{ color: 'var(--ls-text-4)', margin: '0 6px' }}>/</span>
-          <span>Search</span>
+          <span>{activeSection ? SECTION_LABEL[activeSection] : 'Home'}</span>
         </div>
 
         {/* Action Buttons */}

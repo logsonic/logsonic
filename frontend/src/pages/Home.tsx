@@ -15,23 +15,24 @@ const RAIL_W = 56;
 const TOPBAR_H = 44;
 
 const BrandMark = () => (
-  <div
+  <svg
     aria-hidden
-    className="grid place-items-center rounded-[7px]"
-    style={{
-      width: 26,
-      height: 26,
-      background: 'linear-gradient(135deg, #7c5cff 0%, #5a3be0 100%)',
-      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25), 0 1px 2px rgba(107,77,242,0.4)',
-      color: 'white',
-      fontFamily: 'var(--ls-font-mono)',
-      fontSize: 13,
-      fontWeight: 700,
-      letterSpacing: '-0.02em',
-    }}
+    width={26}
+    height={26}
+    viewBox="0 0 100 100"
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ display: 'block' }}
   >
-    L
-  </div>
+    <rect width="100" height="100" rx="19" ry="19" fill="#6d5dfc" />
+    <path
+      d="M44.59,15.72h22.44s-13.71,27.99-13.71,27.99l1,.26,21.09-.04c1.63.52.87,1.24.14,2.06-7.01,7.94-15.19,15.94-22.6,23.69-4.5,4.71-9.06,9.39-13.53,14.12-1.93,1.48-3.65-.86-2.98-2.46l9.45-26.21.02-.06h-21.29c-.54-.07-.93-.39-1-.86-.07-.44,1.42-2.96,1.74-3.56,6.24-11.71,13.03-23.22,19.24-34.94Z"
+      fill="none"
+      stroke="#fff"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={5}
+    />
+  </svg>
 );
 
 /**
@@ -123,7 +124,7 @@ const Home = () => {
           zIndex: 60,
         }}
       >
-        <Header />
+        <Header activeSection={isCollapsed ? null : (activeTabId as 'filter' | 'styling')} />
       </div>
 
       {/* Nav rail — below the brand */}
