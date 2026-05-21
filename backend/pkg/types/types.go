@@ -54,6 +54,13 @@ type ParseRequest struct {
 	GrokPattern          string               `json:"grok_pattern,omitempty"`
 	CustomPatterns       map[string]string    `json:"custom_patterns,omitempty"`
 	IngestSessionOptions IngestSessionOptions `json:"session_options,omitempty"`
+	// Multi requests heterogeneous-stream detection: when true and no
+	// GrokPattern is supplied, autosuggest runs log2grok's DiscoverMulti
+	// and returns an ordered set of standalone patterns (results[0] is the
+	// dominant one) that together cover the input. When false (default)
+	// autosuggest runs the single-pattern Discover, preserving the
+	// historical one-result behaviour.
+	Multi bool `json:"multi,omitempty"`
 }
 
 // IngestFileRequest represents the structure of the file-based ingest API request
@@ -225,6 +232,12 @@ type SuggestResponse struct {
 	Status  string              `json:"status"`
 	Type    string              `json:"type"`
 	Results []AutosuggestResult `json:"results"`
+	// CombinedCoverage is the fraction of input lines covered by the union
+	// of all returned patterns (0.0–1.0). It only differs from
+	// Results[0].Coverage when a multi-pattern set was requested (Multi)
+	// and more than one pattern was returned. Omitted for single-pattern
+	// responses.
+	CombinedCoverage float64 `json:"combined_coverage,omitempty"`
 }
 
 // LogDistributionResponse represents the response for log distribution retrieval

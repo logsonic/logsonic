@@ -50,7 +50,16 @@ func (h *Services) HandleParse(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.GrokPattern == "" {
-		autosuggestResults, err := h.autosuggestPatterns(req.Logs)
+		var (
+			autosuggestResults []types.AutosuggestResult
+			combinedCoverage   float64
+			err                error
+		)
+		if req.Multi {
+			autosuggestResults, combinedCoverage, err = h.autosuggestMultiplePatterns(req.Logs)
+		} else {
+			autosuggestResults, err = h.autosuggestPatterns(req.Logs)
+		}
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(types.ErrorResponse{
@@ -63,9 +72,10 @@ func (h *Services) HandleParse(w http.ResponseWriter, r *http.Request) {
 		}
 
 		json.NewEncoder(w).Encode(types.SuggestResponse{
-			Status:  "success",
-			Type:    "autosuggest",
-			Results: autosuggestResults,
+			Status:           "success",
+			Type:             "autosuggest",
+			Results:          autosuggestResults,
+			CombinedCoverage: combinedCoverage,
 		})
 		return
 	}
@@ -139,6 +149,60 @@ func (h *Services) autosuggestPatterns(logs []string) ([]types.AutosuggestResult
 		return results, nil
 	}
 
+	results = append(results, discoveredToResult(dp))
+	return results, nil
+}
+
+// autosuggestMultiplePatterns delegates to log2grok's DiscoverMulti to
+// handle heterogeneous streams — a single file mixing, say, app, access,
+// and syslog lines — that no single Grok pattern can cover. It returns an
+// ordered set of standalone patterns (Results[0] is the dominant one, each
+// subsequent one explaining the most of what remained) plus the combined
+// coverage of their union.
+//
+// DiscoverMulti deliberately excludes the library's generic catchall tier
+// from its candidate pool, so a genuinely single-format file (or one whose
+// only fit is a catchall) can come back with zero patterns. To never
+// regress below the single-pattern path, we fall back to Discover in that
+// case and report a one-element set.
+func (h *Services) autosuggestMultiplePatterns(logs []string) ([]types.AutosuggestResult, float64, error) {
+	results := []types.AutosuggestResult{}
+	if len(logs) == 0 {
+		return results, 0, nil
+	}
+
+	mp, err := l2g.DiscoverMulti(logs, l2g.Options{})
+	if err != nil && !errors.Is(err, l2g.ErrEmptyInput) {
+		return nil, 0, err
+	}
+	if err != nil || mp == nil || len(mp.Patterns) == 0 {
+		// Single-format (or catchall-only) input: fall back so callers
+		// asking for multi never get fewer suggestions than single mode.
+		single, ferr := h.autosuggestPatterns(logs)
+		if ferr != nil {
+			return nil, 0, ferr
+		}
+		var cov float64
+		if len(single) > 0 {
+			cov = single[0].Coverage
+		}
+		return single, cov, nil
+	}
+
+	for _, dp := range mp.Patterns {
+		if dp == nil || dp.Grok == "" {
+			continue
+		}
+		results = append(results, discoveredToResult(dp))
+	}
+	return results, mp.CombinedCoverage, nil
+}
+
+// discoveredToResult maps a log2grok DiscoveredPattern onto the wire shape
+// the frontend consumes. Shared by the single- and multi-pattern paths so
+// per-pattern fields (coverage, timestamp hint, custom patterns) stay
+// identical regardless of which discovery call produced it.
+func discoveredToResult(dp *l2g.DiscoveredPattern) types.AutosuggestResult {
 	name := dp.Source
 	if name == "" {
 		name = "Auto-detected"
@@ -148,7 +212,7 @@ func (h *Services) autosuggestPatterns(logs []string) ([]types.AutosuggestResult
 		description = fmt.Sprintf("Detected by log2grok (source: %s)", dp.Source)
 	}
 
-	results = append(results, types.AutosuggestResult{
+	return types.AutosuggestResult{
 		PatternName:        name,
 		PatternDescription: description,
 		Pattern:            dp.Grok,
@@ -159,7 +223,5 @@ func (h *Services) autosuggestPatterns(logs []string) ([]types.AutosuggestResult
 		TimestampField:     dp.TimestampHint.Field,
 		TimestampLayout:    dp.TimestampHint.Layout,
 		TimestampSource:    dp.TimestampHint.Source,
-	})
-
-	return results, nil
+	}
 }

@@ -710,6 +710,83 @@ func TestHandleParse_AutosuggestAcceptsBlankInputLines(t *testing.T) {
 	}
 }
 
+// Multi-pattern autosuggest: a heterogeneous stream (Apache access lines
+// interleaved with RFC3164 syslog lines) has no single covering pattern,
+// so /parse with Multi:true should return more than one standalone
+// pattern and a combined coverage that reaches across the whole input.
+func TestHandleParse_AutosuggestMultiReturnsPatternSet(t *testing.T) {
+	h, _ := setupHandler(t)
+
+	logs := []string{
+		`192.168.1.1 - - [23/Jan/2026:14:05:01 +0000] "GET / HTTP/1.1" 200 1 "-" "ua"`,
+		`10.0.0.1 - - [23/Jan/2026:14:05:02 +0000] "GET /a HTTP/1.1" 200 2 "-" "ua"`,
+		`10.0.0.2 - - [23/Jan/2026:14:05:03 +0000] "GET /b HTTP/1.1" 200 3 "-" "ua"`,
+		`Jan 23 14:05:04 host sshd[111]: Accepted password for root from 10.0.0.3 port 22 ssh2`,
+		`Jan 23 14:05:05 host sshd[112]: Failed password for invalid user x from 10.0.0.4 port 22 ssh2`,
+		`Jan 23 14:05:06 host cron[113]: (root) CMD (run-parts /etc/cron.hourly)`,
+	}
+	body, _ := json.Marshal(types.ParseRequest{Logs: logs, Multi: true})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/parse", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	h.HandleParse(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp types.SuggestResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Results) < 2 {
+		t.Fatalf("expected a multi-pattern set (>=2), got %d: %+v", len(resp.Results), resp.Results)
+	}
+	if resp.CombinedCoverage <= resp.Results[0].Coverage {
+		t.Errorf("combined coverage %v should exceed the dominant pattern's %v for a mixed stream",
+			resp.CombinedCoverage, resp.Results[0].Coverage)
+	}
+	// Results are ordered by contribution: the dominant pattern is first.
+	for i := 1; i < len(resp.Results); i++ {
+		if resp.Results[i].Coverage > resp.Results[0].Coverage {
+			t.Errorf("result %d coverage %v exceeds dominant %v; set is not contribution-ordered",
+				i, resp.Results[i].Coverage, resp.Results[0].Coverage)
+		}
+	}
+}
+
+// Multi:true on a single-format file must never return fewer suggestions
+// than single mode: DiscoverMulti excludes the catchall tier and can come
+// back empty, so the handler falls back to Discover and still yields the
+// one covering pattern with CombinedCoverage mirroring it.
+func TestHandleParse_AutosuggestMultiFallsBackForSingleFormat(t *testing.T) {
+	h, _ := setupHandler(t)
+
+	logs := []string{
+		`192.168.1.1 - - [23/Jan/2026:14:05:01 +0000] "GET / HTTP/1.1" 200 1 "-" "ua"`,
+		`10.0.0.1 - - [23/Jan/2026:14:05:02 +0000] "GET /a HTTP/1.1" 200 2 "-" "ua"`,
+		`10.0.0.2 - - [23/Jan/2026:14:05:03 +0000] "GET /b HTTP/1.1" 200 3 "-" "ua"`,
+	}
+	body, _ := json.Marshal(types.ParseRequest{Logs: logs, Multi: true})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/parse", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	h.HandleParse(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp types.SuggestResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Results) == 0 {
+		t.Fatal("expected at least one suggestion for a single-format file in multi mode")
+	}
+	if resp.Results[0].Pattern == "" {
+		t.Errorf("dominant pattern should be non-empty; got %+v", resp.Results[0])
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Grok pattern persistence — verify writes hit log2grok's patterns.json
 // ---------------------------------------------------------------------------
