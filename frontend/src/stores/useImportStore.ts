@@ -126,6 +126,7 @@ interface ImportState {
   // the navigation gate after a user knob change.
   setFileTimestampInference: (fileId: string, inference: TimestampInference | null) => void;
   patchFileTimestampOverride: (fileId: string, patch: Partial<TimestampResolution>) => void;
+  setFileTimestampOverrides: (fileId: string, overrides: Partial<TimestampResolution>) => void;
   setFileTimestampConfirmed: (fileId: string, confirmed: boolean) => void;
   setFileSourceMTime: (fileId: string, mtime: string | null) => void;
   applyTimestampToAllFiles: (sourceFileId: string) => void;
@@ -328,6 +329,14 @@ export const useImportStore = create<ImportState>((set, get) => ({
             // to re-look at the preview before proceeding.
             timestampConfirmed: false,
           }
+        : f),
+    }));
+  },
+
+  setFileTimestampOverrides: (fileId, timestampOverrides) => {
+    set(state => ({
+      files: state.files.map(f => f.id === fileId
+        ? { ...f, timestampOverrides, timestampConfirmed: false }
         : f),
     }));
   },
