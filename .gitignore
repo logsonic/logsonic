@@ -4,3 +4,4 @@ node_modules
 .playwright-mcp/**
 .DS_Store
 **/.DS_Store
+backend/.release.env
