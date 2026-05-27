@@ -1,31 +1,108 @@
-# This is an example .goreleaser.yml file with some sensible defaults.
-# Make sure to check the documentation at https://goreleaser.com
-
-# The lines below are called `modelines`. See `:help modeline`
-# Feel free to remove those if you don't want/need to use them.
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 # vim: set ts=2 sw=2 tw=0 fo=cnqoj
 
 version: 2
 
+project_name: logsonic
+
 before:
   hooks:
-    # You may remove this if you don't use go modules.
     - go mod tidy
-    # you may remove this if you don't need go generate
     - go generate ./...
+    # Stage LICENSE + README inside backend/ so archives can include them
+    # (goreleaser refuses src: paths outside its working dir).
+    - cp ../LICENSE LICENSE
+    - cp ../README.md README.md
 
 builds:
-  - env:
+  - id: logsonic
+    main: ./
+    binary: logsonic
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
       - windows
       - darwin
+    goarch:
+      - amd64
+      - arm64
     ldflags:
       - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
     flags:
       - -trimpath
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
+universal_binaries:
+  - id: logsonic-universal
+    ids: [logsonic]
+    replace: false
+    name_template: logsonic
+
+archives:
+  - id: default
+    ids: [logsonic, logsonic-universal]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_
+      {{- if eq .Os "darwin" }}darwin_
+        {{- if eq .Arch "all" }}universal
+        {{- else }}{{ .Arch }}{{ end }}
+      {{- else }}{{ .Os }}_{{ .Arch }}{{ end }}
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+# Signing + notarization for macOS binaries.
+# Disabled unless MACOS_SIGN_P12 (path to .p12) is set, so snapshot builds work locally
+# without credentials. See backend/scripts/SIGNING.md for setup.
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids: [logsonic, logsonic-universal]
+      sign:
+        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
+        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
+      notarize:
+        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
+        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
+        key: "{{ .Env.MACOS_NOTARY_KEY }}"
+        wait: true
+
+# `brews:` is deprecated in goreleaser ≥ 2.10 (favors homebrew_casks), but
+# homebrew_casks is macOS-only — formulas work for Linuxbrew too. Revisit if
+# we add a .app cask later (RELEASE.md §3).
+brews:
+  - name: logsonic
+    ids: [default]
+    repository:
+      owner: logsonic
+      name: homebrew-logsonic
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/logsonic/logsonic"
+    description: "Desktop-first log analytics with full-text search and Grok parsing"
+    license: "MIT"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    install: |
+      bin.install "logsonic"
+    test: |
+      assert_match "LogSonic", shell_output("#{bin}/logsonic -help")
+    skip_upload: auto
 
 changelog:
   sort: asc
@@ -33,10 +110,19 @@ changelog:
     exclude:
       - "^docs:"
       - "^test:"
+      - "^chore:"
+      - "Merge pull request"
 
 release:
+  github:
+    owner: logsonic
+    name: logsonic
+  draft: false
+  prerelease: auto
   footer: >-
 
     ---
+
+    **Installing on macOS** (signed + notarized): download the `.tar.gz` for your arch, or `brew install logsonic/logsonic/logsonic`.
 
     Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
