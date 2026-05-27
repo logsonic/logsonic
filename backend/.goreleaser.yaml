@@ -41,6 +41,9 @@ universal_binaries:
     ids: [logsonic]
     replace: false
     name_template: logsonic
+    # lipo strips per-arch signatures when merging — re-sign the fat binary.
+    hooks:
+      post: 'codesign --force --options=runtime --sign "Developer ID Application: Akash Goswami (CW36P52426)" --timestamp "{{ .Path }}"'
 
 archives:
   - id: default
@@ -64,9 +67,9 @@ checksum:
   algorithm: sha256
 
 # Code signing for macOS binaries using Keychain identity.
-# Works locally with Keychain; for CI, import cert from .p12 first.
-# Notarization is optional (tar.gz with signed binary is sufficient for distribution).
-signs:
+# binary_signs runs before archives, so the signed binary is what gets packaged.
+# (signs: runs post-archive and is for signing the archives/checksums themselves.)
+binary_signs:
   - id: logsonic-sign
     ids: [logsonic, logsonic-universal]
     cmd: codesign
@@ -78,7 +81,6 @@ signs:
       - "Developer ID Application: Akash Goswami (CW36P52426)"
       - "--timestamp"
       - "${artifact}"
-    artifacts: binary
 
 # `brews:` is deprecated in goreleaser ≥ 2.10 (favors homebrew_casks), but
 # homebrew_casks is macOS-only — formulas work for Linuxbrew too. Revisit if

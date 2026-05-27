@@ -53,4 +53,38 @@ info "running goreleaser ($MODE)"
 cd "$BACKEND"
 goreleaser release --clean "${EXTRA_ARGS[@]}"
 
+# Notarize the signed darwin binaries with Apple. notarytool accepts .zip/.pkg/.dmg,
+# so we zip each signed binary, submit, and let Apple register the binary's CD hash
+# with its online ticket service — the existing .tar.gz archives become Gatekeeper-valid
+# without re-archiving or stapling (stapling only works on .pkg/.dmg/.app bundles).
+# Skipped on snapshot and when notary creds aren't present.
+notarize_darwin() {
+  if [ "$MODE" = "snapshot" ]; then
+    info "skipping notarization (snapshot mode)"
+    return
+  fi
+  if [ -z "${MACOS_NOTARY_ISSUER_ID:-}" ] || [ -z "${MACOS_NOTARY_KEY_ID:-}" ] || [ -z "${MACOS_NOTARY_KEY:-}" ]; then
+    info "skipping notarization (MACOS_NOTARY_* env vars not set)"
+    return
+  fi
+  command -v xcrun >/dev/null || { info "skipping notarization (xcrun not available)"; return; }
+
+  local tmp; tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' RETURN
+
+  for bin in dist/logsonic_darwin_amd64_v1/logsonic dist/logsonic_darwin_arm64_v8.0/logsonic dist/logsonic-universal_darwin_all/logsonic; do
+    [ -f "$bin" ] || { info "notarize: missing $bin, skipping"; continue; }
+    info "notarizing $bin"
+    local zip="$tmp/$(basename "$(dirname "$bin")").zip"
+    /usr/bin/ditto -c -k --keepParent "$bin" "$zip"
+    xcrun notarytool submit "$zip" \
+      --key "$MACOS_NOTARY_KEY" \
+      --key-id "$MACOS_NOTARY_KEY_ID" \
+      --issuer "$MACOS_NOTARY_ISSUER_ID" \
+      --wait
+  done
+}
+
+notarize_darwin
+
 info "done. Artifacts in $BACKEND/dist/"
