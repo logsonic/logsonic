@@ -2,11 +2,12 @@
 # Local release driver for LogSonic.
 #
 # Usage:
-#   backend/scripts/release.sh                 # full signed release (requires tag + env)
-#   backend/scripts/release.sh --snapshot      # dry-run, no signing, no publish
+#   backend/scripts/release.sh                 # full release (requires tag + env)
+#   backend/scripts/release.sh --snapshot      # dry-run, no publish
 #   backend/scripts/release.sh --skip-publish  # signed build, no GitHub upload
 #
-# Env vars loaded from backend/.release.env (gitignored). See SIGNING.md.
+# Env vars loaded from backend/.release.env (gitignored). See backend/scripts/SIGNING.md.
+# Note: Local signing uses Keychain identity (no P12 needed). Notarization is optional.
 
 set -euo pipefail
 
@@ -38,16 +39,8 @@ if [ "$MODE" = "release" ]; then
   # shellcheck disable=SC1090
   set -a; source "$ENV_FILE"; set +a
 
-  : "${MACOS_SIGN_P12:?MACOS_SIGN_P12 not set}"
-  : "${MACOS_SIGN_PASSWORD:?MACOS_SIGN_PASSWORD not set}"
-  : "${MACOS_NOTARY_ISSUER_ID:?MACOS_NOTARY_ISSUER_ID not set}"
-  : "${MACOS_NOTARY_KEY_ID:?MACOS_NOTARY_KEY_ID not set}"
-  : "${MACOS_NOTARY_KEY:?MACOS_NOTARY_KEY not set (path to AuthKey_*.p8)}"
   : "${GITHUB_TOKEN:?GITHUB_TOKEN not set}"
   : "${HOMEBREW_TAP_TOKEN:?HOMEBREW_TAP_TOKEN not set}"
-
-  [ -f "$MACOS_SIGN_P12" ]   || err "MACOS_SIGN_P12 path does not exist: $MACOS_SIGN_P12"
-  [ -f "$MACOS_NOTARY_KEY" ] || err "MACOS_NOTARY_KEY path does not exist: $MACOS_NOTARY_KEY"
 fi
 
 info "building frontend"

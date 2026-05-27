@@ -63,21 +63,22 @@ checksum:
   name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
   algorithm: sha256
 
-# Signing + notarization for macOS binaries.
-# Disabled unless MACOS_SIGN_P12 (path to .p12) is set, so snapshot builds work locally
-# without credentials. See backend/scripts/SIGNING.md for setup.
-notarize:
-  macos:
-    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
-      ids: [logsonic, logsonic-universal]
-      sign:
-        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
-        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
-      notarize:
-        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
-        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
-        key: "{{ .Env.MACOS_NOTARY_KEY }}"
-        wait: true
+# Code signing for macOS binaries using Keychain identity.
+# Works locally with Keychain; for CI, import cert from .p12 first.
+# Notarization is optional (tar.gz with signed binary is sufficient for distribution).
+signs:
+  - id: logsonic-sign
+    ids: [logsonic, logsonic-universal]
+    cmd: codesign
+    signature: ""
+    args:
+      - "--force"
+      - "--options=runtime"
+      - "--sign"
+      - "Developer ID Application: Akash Goswami (CW36P52426)"
+      - "--timestamp"
+      - "${artifact}"
+    artifacts: binary
 
 # `brews:` is deprecated in goreleaser ≥ 2.10 (favors homebrew_casks), but
 # homebrew_casks is macOS-only — formulas work for Linuxbrew too. Revisit if
