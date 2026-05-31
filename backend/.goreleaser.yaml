@@ -70,12 +70,13 @@ checksum:
 
 # Code signing for macOS binaries using Keychain identity.
 # binary_signs runs before archives, so the signed binary is what gets packaged.
-# (signs: runs post-archive and is for signing the archives/checksums themselves.)
+# artifacts: none prevents creating uploadable artifacts (we only want the signed binary in archives).
 binary_signs:
   - id: logsonic-sign
     ids: [logsonic, logsonic-universal]
     cmd: codesign
     signature: ""
+    artifacts: none
     args:
       - "--force"
       - "--options=runtime"
