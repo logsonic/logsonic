@@ -20,7 +20,7 @@ Install and verify on your Mac (`security find-identity -v -p codesigning` shoul
 
 ## 2. Local signing (Keychain)
 
-Local releases sign directly from your Keychain using `codesign`. GoReleaser's `signs:` block calls `codesign` with the Developer ID identity, which accesses the private key in your login Keychain.
+Local releases sign directly from your Keychain using `codesign`. GoReleaser's `binary_signs` block invokes [`scripts/sign-macos.sh`](sign-macos.sh), which calls `codesign` with the Developer ID identity (accessing the private key in your login Keychain) on the Mach-O binaries only.
 
 For **local releases** (your machine), this is it — no `.p12` needed.
 
@@ -133,6 +133,6 @@ brew install logsonic/logsonic/logsonic
 
 - **`codesign: The specified item could not be found in the keychain`** — the Developer ID cert or key is missing from login keychain. Reimport the `.cer` (double-click in Finder).
 - **`find-identity` shows the cert but 0 valid identities** — missing Apple intermediate CA. Download and import `DeveloperIDG2CA.cer` from <https://www.apple.com/certificateauthority/>.
-- **Notarization returns "Invalid" status** — usually means the binary hash was already submitted (from a prior release or test run). Apple's notary service caches submissions. For a clean release, ensure you're tagging a fresh commit and only running `release.sh` once. If you get "Invalid", the binary is likely already in Apple's system; you can skip re-notarization by editing the script.
+- **Notarization returns "Invalid" status** — two common causes: (1) the binary is **not properly Developer ID-signed** (e.g. it's adhoc/linker-signed) — Apple rejects anything not signed with hardened runtime + a Developer ID cert; verify with `codesign -dvv <binary>` that the Authority is `Developer ID Application`, not `adhoc`; or (2) the binary hash was already submitted from a prior run (Apple caches submissions). Pull the detailed log with `xcrun notarytool log <submission-id> --key … --key-id … --issuer …` to see the exact reason. For a clean release, tag a fresh commit and run `release.sh` once.
 - **Binary downloads have Gatekeeper warning** — if notarization failed, users downloading from GitHub get "Apple could not verify" warnings. Workaround: users can extract from `.tar.gz` (removes quarantine) or use Homebrew (`brew install logsonic/logsonic/logsonic`). For the next release, ensure clean notarization (see above).
 - **GoReleaser signs OK but notarization errors** — notarize is optional for `.tar.gz` distribution (Gatekeeper validates via online hash lookup). Homebrew users bypass Gatekeeper checks entirely, so distribution is not blocked even if notarization fails.

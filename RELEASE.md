@@ -6,52 +6,53 @@ End-to-end plan for shipping signed `.dmg` (macOS), signed `.exe` installer (Win
 
 ## 1. Current state
 
-- Build: GoReleaser produces stripped `tar.gz` archives for darwin/linux/windows × amd64/arm64/386 at `backend/.goreleaser.yaml`.
+- Build: GoReleaser produces stripped `tar.gz` archives (darwin/linux) and `zip` (windows) for amd64/arm64, plus a `lipo`-merged darwin universal binary, at [`backend/.goreleaser.yaml`](backend/.goreleaser.yaml).
 - Frontend: Vite build copied into [backend/pkg/static/dist/](backend/pkg/static/dist/) and embedded via `go:embed`.
 - Runtime: [backend/main.go](backend/main.go) is a CLI that binds `localhost:8080` and prints "open this URL in your browser" — no native window, no menubar item, no auto-launch.
-- Signing: none. No `.app` bundle, no `.dmg`, no Windows installer, no notarization.
-- CI: no `.github/workflows` — releases are run manually from a dev machine.
-- Distribution: GitHub Releases only. Issue [#1](https://github.com/<OWNER>/logsonic/issues/1) tracks Homebrew.
+- Signing: **macOS binaries are signed with a Developer ID Application identity** (Keychain) and the darwin builds are **notarized** with Apple. No `.app` bundle, `.dmg`, or Windows installer/Authenticode yet.
+- CI: no `.github/workflows` — releases are run manually from a dev machine via [`backend/scripts/release.sh`](backend/scripts/release.sh).
+- Distribution: GitHub Releases + a **live Homebrew tap** at [`logsonic/homebrew-logsonic`](https://github.com/logsonic/homebrew-logsonic) (`brew install logsonic/logsonic/logsonic`).
+
+### How macOS signing works today
+
+GoReleaser's `binary_signs` block signs each Mach-O binary in place (before archiving) using the login-Keychain Developer ID identity. The codesign call is wrapped in an external script, [`backend/scripts/sign-macos.sh`](backend/scripts/sign-macos.sh), rather than an inline `sh -c` — GoReleaser runs its own `$`/`${}` expansion over every inline arg string, which would silently blank out a literal `$1` and sign nothing. The script also guards on `file … Mach-O`, so codesign never touches the linux/windows binaries. The universal binary is re-signed by `universal_binaries.hooks.post` after `lipo` strips per-arch signatures.
+
+Notarization runs *after* GoReleaser, in [`backend/scripts/release.sh`](backend/scripts/release.sh): each signed darwin binary is zipped and submitted to `xcrun notarytool`, registering its CD hash with Apple's online ticket service so the existing `.tar.gz` archives become Gatekeeper-valid (no stapling — that only works on `.pkg`/`.dmg`/`.app`).
+
+> ⚠️ Pitfall: do **not** set `artifacts: none` on `binary_signs` — that field filters *which artifacts to sign*, and `none` disables the whole pipe (`artifact signing is disabled`), shipping unsigned binaries. `signature: ""` is what prevents a separate `.sig` artifact.
+
+One-time setup (certs, notary API key, tokens, `.release.env`) is documented in [`backend/scripts/SIGNING.md`](backend/scripts/SIGNING.md).
 
 ### Today's manual flow
 
-This is the current end-to-end recipe. Run from a dev machine until CI takes over (§9). Produces unsigned `tar.gz` / `zip` archives attached to a GitHub Release.
+Run from a dev machine until CI takes over (§9). Produces signed + notarized darwin archives, plus linux/windows archives, attached to a GitHub Release, and updates the Homebrew tap.
 
 **Prerequisites**
 
 - [GoReleaser](https://goreleaser.com/install/) installed (`brew install goreleaser`).
-- A GitHub token with `repo` scope exported as `GITHUB_TOKEN`.
+- A Developer ID Application cert in your login Keychain (see [SIGNING.md §1](backend/scripts/SIGNING.md)).
+- [`backend/.release.env`](backend/scripts/SIGNING.md) (gitignored, `chmod 600`) exporting `GITHUB_TOKEN`, `HOMEBREW_TAP_TOKEN`, and optionally `MACOS_NOTARY_ISSUER_ID` / `MACOS_NOTARY_KEY_ID` / `MACOS_NOTARY_KEY` for notarization.
 
 **Steps**
 
-1. Build the frontend (it gets embedded into the Go binary):
+1. Tag the release:
    ```bash
-   cd frontend
-   npm ci
-   npm run build
-   npm run build:copy
-   cd ..
+   git tag -a vX.Y.Z -m "Release vX.Y.Z"
+   git push origin vX.Y.Z
    ```
 
-2. Tag the release:
+2. Run the release driver (it builds the frontend, runs GoReleaser, then notarizes):
    ```bash
-   git tag -a v0.X.0 -m "Release v0.X.0"
-   git push origin v0.X.0
+   ./backend/scripts/release.sh
    ```
 
-3. Run GoReleaser from the `backend/` directory:
+   Variants:
    ```bash
-   cd backend
-   goreleaser release --clean
+   ./backend/scripts/release.sh --snapshot      # dry-run, no signing/publish
+   ./backend/scripts/release.sh --skip-publish  # signed + notarized build, no GitHub upload
    ```
 
-   For a dry-run (no publish):
-   ```bash
-   cd backend
-   goreleaser release --snapshot --clean
-   ```
-
-The GoReleaser config lives at [`backend/.goreleaser.yaml`](backend/.goreleaser.yaml) and builds for Linux, Windows, and macOS.
+The driver handles the frontend build (`npm ci && npm run build && npm run build:copy`) and the `cd backend` itself — no manual prep needed.
 
 ## 2. Target artifacts (per release)
 
