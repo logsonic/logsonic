@@ -20,14 +20,15 @@ err() { printf '\033[31merror:\033[0m %s\n' "$1" >&2; exit 1; }
 info() { printf '\033[32m==>\033[0m %s\n' "$1"; }
 
 MODE="release"
-EXTRA_ARGS=()
+EXTRA_ARGS=""
 for arg in "$@"; do
   case "$arg" in
-    --snapshot)     MODE="snapshot"; EXTRA_ARGS+=("--snapshot") ;;
-    --skip-publish) EXTRA_ARGS+=("--skip=publish") ;;
-    *)              EXTRA_ARGS+=("$arg") ;;
+    --snapshot)     MODE="snapshot"; EXTRA_ARGS="$EXTRA_ARGS --snapshot" ;;
+    --skip-publish) EXTRA_ARGS="$EXTRA_ARGS --skip=publish" ;;
+    *)              EXTRA_ARGS="$EXTRA_ARGS $arg" ;;
   esac
 done
+EXTRA_ARGS="${EXTRA_ARGS# }"  # trim leading space
 
 command -v goreleaser >/dev/null || err "goreleaser not installed (brew install goreleaser)"
 command -v npm        >/dev/null || err "npm not installed"
@@ -73,7 +74,8 @@ npm run build:copy
 
 info "running goreleaser ($MODE)"
 cd "$BACKEND"
-goreleaser release --clean "${EXTRA_ARGS[@]}"
+# shellcheck disable=SC2086
+goreleaser release --clean $EXTRA_ARGS
 
 # Notarize the signed darwin binaries with Apple. notarytool accepts .zip/.pkg/.dmg,
 # so we zip each signed binary, submit, and let Apple register the binary's CD hash
