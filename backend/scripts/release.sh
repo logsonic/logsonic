@@ -32,15 +32,33 @@ done
 command -v goreleaser >/dev/null || err "goreleaser not installed (brew install goreleaser)"
 command -v npm        >/dev/null || err "npm not installed"
 
-if [ "$MODE" = "release" ]; then
-  if [ ! -f "$ENV_FILE" ]; then
-    err ".release.env not found at $ENV_FILE — see backend/scripts/SIGNING.md"
-  fi
+# Validate secrets file permissions before sourcing (applies to all modes).
+if [ -f "$ENV_FILE" ]; then
+  uid=$(id -u)
+  file_uid=$(stat -f%Uu "$ENV_FILE")
+  [ "$file_uid" = "$uid" ] || err ".release.env is owned by another user (UID $file_uid, you are $uid)"
+
+  perms=$(stat -f%Lp "$ENV_FILE")
+  [ "${perms: -2}" = "00" ] || err ".release.env is world/group-readable ($perms, should be 600)"
+
   # shellcheck disable=SC1090
   set -a; source "$ENV_FILE"; set +a
+fi
 
+if [ "$MODE" = "release" ]; then
+  [ -f "$ENV_FILE" ] || err ".release.env not found at $ENV_FILE — see backend/scripts/SIGNING.md"
   : "${GITHUB_TOKEN:?GITHUB_TOKEN not set}"
   : "${HOMEBREW_TAP_TOKEN:?HOMEBREW_TAP_TOKEN not set}"
+fi
+
+# Validate notary key file if present.
+if [ -n "${MACOS_NOTARY_KEY:-}" ] && [ -f "$MACOS_NOTARY_KEY" ]; then
+  uid=$(id -u)
+  file_uid=$(stat -f%Uu "$MACOS_NOTARY_KEY")
+  [ "$file_uid" = "$uid" ] || err "MACOS_NOTARY_KEY is owned by another user (UID $file_uid, you are $uid)"
+
+  perms=$(stat -f%Lp "$MACOS_NOTARY_KEY")
+  [ "$perms" = "600" ] || err "MACOS_NOTARY_KEY has insecure permissions ($perms, should be 600)"
 fi
 
 info "building frontend"
@@ -76,7 +94,8 @@ notarize_darwin() {
   local tmp; tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' RETURN
 
-  for bin in dist/logsonic_darwin_amd64_v1/logsonic dist/logsonic_darwin_arm64_v8.0/logsonic dist/logsonic-universal_darwin_all/logsonic; do
+  # Use glob patterns to find darwin binaries (robust to GoReleaser path changes).
+  for bin in dist/logsonic_darwin_*/logsonic dist/logsonic-universal_*/logsonic; do
     [ -f "$bin" ] || { info "notarize: missing $bin, skipping"; continue; }
     info "notarizing $bin"
     local zip="$tmp/$(basename "$(dirname "$bin")").zip"
