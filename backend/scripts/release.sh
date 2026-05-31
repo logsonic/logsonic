@@ -45,7 +45,11 @@ fi
 
 info "building frontend"
 cd "$FRONTEND"
-npm ci
+# --ignore-scripts blocks lifecycle scripts in every transitive package
+# during install. Verified the lockfile has zero install/postinstall scripts
+# today; if a dep adds one later, this opts us out by default. Native deps
+# that genuinely need scripts can be re-enabled per-package with `npm rebuild`.
+npm ci --ignore-scripts
 npm run build
 npm run build:copy
 

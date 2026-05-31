@@ -8,7 +8,9 @@ project_name: logsonic
 before:
   hooks:
     - go mod tidy
-    - go generate ./...
+    # `go generate ./...` removed: no //go:generate directives in the tree,
+    # and the hook would silently execute arbitrary commands if any dep ever
+    # added one. Reinstate explicitly (e.g. `go generate ./pkg/foo`) if needed.
     # Stage LICENSE + README inside backend/ so archives can include them
     # (goreleaser refuses src: paths outside its working dir).
     - cp ../LICENSE LICENSE

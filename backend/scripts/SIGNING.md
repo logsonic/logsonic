@@ -54,7 +54,14 @@ GoReleaser pushes the formula to a repo named `homebrew-<tapname>` under your Gi
 
 ## 5. GitHub token for the release itself
 
-A standard `GITHUB_TOKEN` with `repo` scope: <https://github.com/settings/tokens>.
+Create a **fine-grained Personal Access Token** scoped to only the `logsonic/logsonic` repo: <https://github.com/settings/personal-access-tokens/new>.
+
+- Resource owner: `logsonic`
+- Repositories: only `logsonic`
+- Permissions: **Contents: Read and write** (uploads release assets), **Metadata: Read-only**
+- Expiration: 90 days (rotate; set a calendar reminder)
+
+Avoid classic PATs with `repo` scope — they grant write to every repo you own, so a leak from a release laptop is catastrophic. The fine-grained token here can only touch the one repo it publishes releases to.
 
 ---
 
