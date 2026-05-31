@@ -37,6 +37,15 @@ builds:
     flags:
       - -trimpath
     mod_timestamp: '{{ .CommitTimestamp }}'
+    # Sign each Mach-O binary in place, right after it's built and before it's
+    # archived. Use a build post-hook, NOT binary_signs: binary_signs is for
+    # *detached* signature files and registers a Signature artifact per binary
+    # that goreleaser then tries (and fails) to upload — codesign embeds the
+    # signature in the binary itself rather than writing a separate file.
+    # scripts/sign-macos.sh skips non-Mach-O targets, so linux/windows pass through.
+    hooks:
+      post:
+        - 'scripts/sign-macos.sh "{{ .Path }}"'
 
 universal_binaries:
   - id: logsonic-universal
@@ -45,7 +54,7 @@ universal_binaries:
     name_template: logsonic
     # lipo strips per-arch signatures when merging — re-sign the fat binary.
     hooks:
-      post: 'codesign --force --options=runtime --sign "Developer ID Application: Akash Goswami (CW36P52426)" --timestamp "{{ .Path }}"'
+      post: 'scripts/sign-macos.sh "{{ .Path }}"'
 
 archives:
   - id: default
@@ -68,21 +77,11 @@ checksum:
   name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
   algorithm: sha256
 
-# Code signing for macOS binaries using Keychain identity.
-# binary_signs runs before archives, so the signed binary is what gets packaged.
-# signature: "" — codesign embeds the signature in the Mach-O binary itself; no separate .sig file
-# is produced or uploaded. (Do NOT set artifacts: none — that field is a "which artifacts to sign"
-# filter, and `none` makes the whole pipe skip with "artifact signing is disabled".)
-# cmd is an external script (not an inline `sh -c`): GoReleaser expands $/${} in every arg string
-# before exec, which would clobber a literal $1 inside an inline script to empty. The script skips
-# non-Mach-O artifacts so codesign doesn't attach stray xattrs to the linux/windows binaries.
-binary_signs:
-  - id: logsonic-sign
-    ids: [logsonic, logsonic-universal]
-    cmd: scripts/sign-macos.sh
-    signature: ""
-    args:
-      - "${artifact}"
+# macOS code signing is done in-place via build/universal post-hooks above
+# (scripts/sign-macos.sh), so the signed binary is what gets archived. We do NOT
+# use a binary_signs/signs block: those are for detached signature files and
+# create uploadable Signature artifacts, which breaks publishing when codesign
+# embeds the signature in the binary instead of writing a separate file.
 
 # `brews:` is deprecated in goreleaser ≥ 2.10 (favors homebrew_casks), but
 # homebrew_casks is macOS-only — formulas work for Linuxbrew too. Revisit if
