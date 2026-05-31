@@ -70,19 +70,18 @@ checksum:
 
 # Code signing for macOS binaries using Keychain identity.
 # binary_signs runs before archives, so the signed binary is what gets packaged.
-# artifacts: none prevents creating uploadable artifacts (we only want the signed binary in archives).
+# signature: "" — codesign embeds the signature in the Mach-O binary itself; no separate .sig file
+# is produced or uploaded. (Do NOT set artifacts: none — that field is a "which artifacts to sign"
+# filter, and `none` makes the whole pipe skip with "artifact signing is disabled".)
+# cmd is an external script (not an inline `sh -c`): GoReleaser expands $/${} in every arg string
+# before exec, which would clobber a literal $1 inside an inline script to empty. The script skips
+# non-Mach-O artifacts so codesign doesn't attach stray xattrs to the linux/windows binaries.
 binary_signs:
   - id: logsonic-sign
     ids: [logsonic, logsonic-universal]
-    cmd: codesign
+    cmd: scripts/sign-macos.sh
     signature: ""
-    artifacts: none
     args:
-      - "--force"
-      - "--options=runtime"
-      - "--sign"
-      - "Developer ID Application: Akash Goswami (CW36P52426)"
-      - "--timestamp"
       - "${artifact}"
 
 # `brews:` is deprecated in goreleaser ≥ 2.10 (favors homebrew_casks), but

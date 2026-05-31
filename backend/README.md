@@ -21,6 +21,18 @@ It also ships an MCP server extension so you can analyse logs with machine intel
 
 ## Installation
 
+### Homebrew (macOS & Linux)
+
+The easiest way to install LogSonic on macOS or Linux:
+
+```bash
+brew tap logsonic/logsonic
+brew install logsonic
+logsonic
+```
+
+Then open your browser to `http://localhost:8080`.
+
 ### Pre-built Binary
 
 1. Download the latest LogSonic binary for your platform from the [GitHub releases page](https://github.com/logsonic/logsonic/releases).
