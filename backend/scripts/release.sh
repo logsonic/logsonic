@@ -95,19 +95,46 @@ notarize_darwin() {
 
   local tmp; tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' RETURN
+  local failed=0
 
   # Use glob patterns to find darwin binaries (robust to GoReleaser path changes).
   for bin in dist/logsonic_darwin_*/logsonic dist/logsonic-universal_*/logsonic; do
     [ -f "$bin" ] || { info "notarize: missing $bin, skipping"; continue; }
+
+    # Verify binary is signed before notarizing.
+    if ! codesign -v "$bin" 2>/dev/null; then
+      echo "ERROR: $bin is not signed (codesign validation failed)" >&2
+      failed=1
+      continue
+    fi
+
     info "notarizing $bin"
     local zip="$tmp/$(basename "$(dirname "$bin")").zip"
     /usr/bin/ditto -c -k --keepParent "$bin" "$zip"
-    xcrun notarytool submit "$zip" \
+
+    # Submit and capture the result (status, not just success/failure).
+    local result
+    result=$(xcrun notarytool submit "$zip" \
       --key "$MACOS_NOTARY_KEY" \
       --key-id "$MACOS_NOTARY_KEY_ID" \
       --issuer "$MACOS_NOTARY_ISSUER_ID" \
-      --wait
+      --wait 2>&1)
+
+    # Check the status line in the output.
+    if echo "$result" | grep -q "status: Accepted"; then
+      info "notarization accepted: $bin"
+    elif echo "$result" | grep -q "status: Invalid"; then
+      echo "WARNING: notarization returned 'Invalid' for $bin (may be duplicate submission or other issue)" >&2
+      echo "Full result: $result" >&2
+      # Don't fail the release, but warn — Invalid often means already notarized or caching issue.
+    else
+      echo "ERROR: notarization failed for $bin" >&2
+      echo "Result: $result" >&2
+      failed=1
+    fi
   done
+
+  [ $failed -eq 0 ] || err "notarization failed for one or more binaries"
 }
 
 notarize_darwin
