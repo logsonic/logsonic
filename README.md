@@ -1,10 +1,35 @@
 # LogSonic
 
-LogSonic is a Desktop-First Log Analytics application which runs on Windows, Mac and Linux. It runs fully offline with no external dependencies. It installs as a single self-contained binary that serves a feature-rich User interface in your local browser. The log ingestion wizard supports importing local log files (single or many at once) and automatically recognises well-known log patterns to tokenise the contents. The log search experience is blazing fast, delightful and intuitive.
+> **Drop a log file — searchable in seconds, fully offline, and your AI agent can read it.**
+> `grep` doesn't scale · ELK is overkill · Datadog wants your data.
 
-It also ships an MCP server extension so you can analyse logs with machine intelligence.
+[![Release](https://img.shields.io/github/v/release/logsonic/logsonic?label=release)](https://github.com/logsonic/logsonic/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/logsonic/logsonic?style=social)](https://github.com/logsonic/logsonic/stargazers)
 
-<img src="docs/screenshot.png" alt="LogSonic Screenshot" width="1200" />
+LogSonic is a local-first log analytics app for Windows, Mac, and Linux. One self-contained binary serves a fast browser UI, auto-detects 100+ log formats on import, indexes everything for instant full-text search — and ships an **MCP server** so Claude, Cursor, or Windsurf can query your logs directly. No telemetry, no network calls, no cloud. Your data never leaves your machine.
+
+<img src="demo/demo.gif" alt="LogSonic demo — import logs, auto-detect the format, correct timestamps, search, color rows, and fit the time range" width="1000" />
+
+## Who it's for
+
+- **Offline & regulated engineers** — you legally can't ship logs to the cloud. LogSonic runs fully air-gapped; nothing leaves the box.
+- **AI-native developers** — you want Cursor / Claude / Windsurf to read your local logs. Point the MCP client at LogSonic and ask in plain English.
+- **Backend / SRE on call** — you were handed a 2 GB log dump. `grep` doesn't scale and standing up ELK is overkill; drop it in and search in seconds.
+
+## Why LogSonic
+
+| | **LogSonic** | lnav | Logdy | GoAccess | Datadog |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Fully offline / local-first | ✅ | ✅ | ✅ | ✅ | ❌ cloud |
+| Browser GUI | ✅ | ❌ terminal | ✅ | ✅ HTML report | ✅ |
+| Auto-detect log formats | ✅ 100+ patterns | partial | ❌ | web logs only | ✅ |
+| AI agent access (MCP) | ✅ | ❌ | ❌ | ❌ | partial |
+| Indexed full-text search | ✅ Bleve | ✅ SQL | ❌ | ❌ | ✅ |
+| Single binary, no deps | ✅ | ✅ | ✅ | ✅ | ❌ SaaS |
+| Live tail / streaming | 🔜 | ✅ | ✅ | ✅ | ✅ |
+
+*The wedge nobody else owns: local-first **+** GUI **+** your AI agent can query it, fully offline.*
 
 ## Features
 
@@ -32,6 +57,19 @@ logsonic
 ```
 
 Then open your browser to `http://localhost:8080`.
+
+**Upgrading:** third-party taps only refresh periodically, so run `brew update` first to pull the latest formula:
+
+```bash
+brew update && brew upgrade logsonic
+```
+
+If `brew upgrade` reports a checksum error or won't move off the installed version, refresh the tap from scratch:
+
+```bash
+brew untap logsonic/logsonic
+brew install logsonic/logsonic/logsonic
+```
 
 ### Pre-built Binary
 
