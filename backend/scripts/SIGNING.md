@@ -12,15 +12,22 @@ End-to-end setup for shipping signed macOS binaries via GoReleaser, plus the Hom
 
 ---
 
-## 1. Developer ID Application certificate
+## 1. Developer ID certificates (two of them)
 
-Install and verify on your Mac (`security find-identity -v -p codesigning` should show 1 valid identity). Import the Apple intermediate CA (`Developer ID Certification Authority` G2) from <https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer>.
+Two distinct Developer ID certs are needed — both issued from the Apple Developer portal:
+
+- **Developer ID Application** — signs the Mach-O binary (`scripts/sign-macos.sh`). `security find-identity -v -p codesigning` should show this one.
+- **Developer ID Installer** — signs the `.pkg` installer (`scripts/pkg-macos.sh`). It does *not* appear under `-p codesigning`; verify with `security find-identity -v | grep Installer`.
+
+The `.pkg` exists because logsonic ships as a bare binary, which can't have a notarization ticket stapled to it — so a Finder-extracted or offline download trips Gatekeeper. The stapled `.pkg` carries the ticket and installs `logsonic` to `/usr/local/bin`, validating offline with no dialog.
+
+Import the Apple intermediate CA (`Developer ID Certification Authority` G2) from <https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer>.
 
 ---
 
 ## 2. Local signing (Keychain)
 
-Local releases sign directly from your Keychain using `codesign`. GoReleaser's `binary_signs` block invokes [`scripts/sign-macos.sh`](sign-macos.sh), which calls `codesign` with the Developer ID identity (accessing the private key in your login Keychain) on the Mach-O binaries only.
+Local releases sign directly from your Keychain using `codesign`. GoReleaser's build and `universal_binaries` **post-hooks** invoke [`scripts/sign-macos.sh`](sign-macos.sh), which calls `codesign` with the Developer ID identity (accessing the private key in your login Keychain) on the Mach-O binaries only. (We deliberately avoid a `binary_signs`/`signs` block — it registers detached signature artifacts that fail to upload, since `codesign` embeds the signature in the binary.)
 
 For **local releases** (your machine), this is it — no `.p12` needed.
 

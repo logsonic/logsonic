@@ -139,4 +139,40 @@ notarize_darwin() {
 
 notarize_darwin
 
+# Wrap the universal darwin binary in a signed + notarized + STAPLED installer
+# .pkg, then attach it to the GitHub release. Unlike the bare binary in the
+# .tar.gz (which can't be stapled, so it forces an online Gatekeeper check and
+# trips a dialog on Finder-extracted downloads), the stapled .pkg carries its
+# notarization ticket — install works offline with no dialog. See
+# scripts/pkg-macos.sh. Skipped on snapshot and when tooling/creds are absent.
+build_macos_pkg() {
+  if [ "$MODE" = "snapshot" ]; then
+    info "skipping .pkg build (snapshot mode)"
+    return
+  fi
+  command -v pkgbuild >/dev/null || { info "skipping .pkg (pkgbuild not available — not macOS?)"; return; }
+
+  local ubin="dist/logsonic-universal_darwin_all/logsonic"
+  [ -f "$ubin" ] || { info "skipping .pkg (universal binary not found at $ubin)"; return; }
+
+  local version; version="$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')"
+  [ -n "$version" ] || err "build_macos_pkg: cannot determine version from git tags"
+
+  info "building macOS installer .pkg"
+  scripts/pkg-macos.sh "$ubin" "$version" dist
+  local pkg="dist/logsonic_${version}_macos.pkg"
+
+  # Attach to the GitHub release unless publishing was skipped.
+  if [[ "$EXTRA_ARGS" == *"--skip=publish"* ]]; then
+    info "publish skipped — .pkg left at $BACKEND/$pkg (not uploaded)"
+  elif command -v gh >/dev/null; then
+    local tag; tag="$(git describe --tags --abbrev=0)"
+    info "uploading $pkg to release $tag"
+    gh release upload "$tag" "$pkg" --clobber
+  else
+    info "gh not installed — .pkg built at $BACKEND/$pkg but NOT uploaded; attach it manually" >&2
+  fi
+}
+build_macos_pkg
+
 info "done. Artifacts in $BACKEND/dist/"
