@@ -1,7 +1,7 @@
 # LogSonic
 
 > **Drop a log file — searchable in seconds, fully offline, and your AI agent can read it.**
-> `grep` doesn't scale · ELK is overkill · Datadog wants your data.
+
 
 [![Release](https://img.shields.io/github/v/release/logsonic/logsonic?label=release)](https://github.com/logsonic/logsonic/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -19,7 +19,7 @@ LogSonic is a local-first log analytics app for Windows, Mac, and Linux. One sel
 
 ## Why LogSonic
 
-| | **LogSonic** | lnav | Logdy | GoAccess | Datadog |
+| | **LogSonic** | lnav | Logdy | GoAccess | Datadog/ELK |
 |---|:---:|:---:|:---:|:---:|:---:|
 | Fully offline / local-first | ✅ | ✅ | ✅ | ✅ | ❌ cloud |
 | Browser GUI | ✅ | ❌ terminal | ✅ | ✅ HTML report | ✅ |
@@ -29,7 +29,7 @@ LogSonic is a local-first log analytics app for Windows, Mac, and Linux. One sel
 | Single binary, no deps | ✅ | ✅ | ✅ | ✅ | ❌ SaaS |
 | Live tail / streaming | 🔜 | ✅ | ✅ | ✅ | ✅ |
 
-*The wedge nobody else owns: local-first **+** GUI **+** your AI agent can query it, fully offline.*
+*What makes Logsonic Unique: local-first **+** GUI **+** your AI agent can query it, fully offline.*
 
 ## Features
 
