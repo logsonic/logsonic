@@ -185,6 +185,60 @@ const Import: FC = () => {
     }
   };
 
+  // Runs the actual multi-file import and advances to the summary step.
+  // Split out of handleNext so it can be deferred until after the
+  // SavePatternDialog is resolved (saved or skipped) for custom patterns.
+  const proceedWithImport = async () => {
+    try {
+      setError(null);
+
+      if (files.length === 0) {
+        toast({
+          title: "Nothing to import",
+          description: "Please add at least one file.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Starting import",
+        description: `Importing ${files.length} file${files.length !== 1 ? 's' : ''}...`,
+      });
+
+      await handleMultiFileUpload(files, fileService);
+
+      const updatedFiles = useImportStore.getState().files;
+      const successCount = updatedFiles.filter(f => f.uploadStatus === 'success').length;
+      const failedCount = updatedFiles.filter(f => f.uploadStatus === 'failed').length;
+
+      if (successCount > 0) {
+        toast({
+          title: failedCount === 0 ? "Import successful" : "Import complete",
+          description: failedCount === 0
+            ? `All ${successCount} files imported successfully.`
+            : `${successCount} files imported, ${failedCount} failed.`,
+          variant: failedCount === 0 ? "default" : "destructive",
+        });
+      } else {
+        toast({
+          title: "Import failed",
+          description: "All files failed to import.",
+          variant: "destructive",
+        });
+      }
+
+      setCurrentStep(3);
+    } catch (uploadErr) {
+      toast({
+        title: "Import failed",
+        description: uploadErr instanceof Error ? uploadErr.message : "Failed to import files",
+        variant: "destructive",
+      });
+      setError(uploadErr instanceof Error ? uploadErr.message : 'An unexpected error occurred');
+    }
+  };
+
   const handleNext = async () => {
     try {
       switch (currentStep) {
@@ -225,8 +279,12 @@ const Import: FC = () => {
             return;
           }
 
-          // Show save dialog if any file uses a custom pattern. Doesn't
-          // block the import — the dialog is informational.
+          // If any file uses a custom pattern, prompt to name & save it
+          // BEFORE importing. The dialog must block the import: we open it
+          // and return here. Importing resumes from the dialog's onClose
+          // (Save Pattern or Skip & Continue). Without this early return the
+          // wizard would advance asynchronously to the summary step before
+          // the user had a chance to name the pattern.
           if (!showSaveDialogShown) {
             const customPatternFile = files.find(f => f.isCustomPattern && f.selectedPattern);
             if (customPatternFile && customPatternFile.selectedPattern) {
@@ -236,57 +294,11 @@ const Import: FC = () => {
               store.setCreateNewPatternDescription(customPatternFile.selectedPattern.description || '');
               setShowSaveDialog(true);
               setShowSaveDialogShown(true);
+              return;
             }
           }
 
-          setError(null);
-
-          if (files.length === 0) {
-            toast({
-              title: "Nothing to import",
-              description: "Please add at least one file.",
-              variant: "destructive",
-            });
-            return;
-          }
-
-          toast({
-            title: "Starting import",
-            description: `Importing ${files.length} file${files.length !== 1 ? 's' : ''}...`,
-          });
-
-          try {
-            await handleMultiFileUpload(files, fileService);
-
-            const updatedFiles = useImportStore.getState().files;
-            const successCount = updatedFiles.filter(f => f.uploadStatus === 'success').length;
-            const failedCount = updatedFiles.filter(f => f.uploadStatus === 'failed').length;
-
-            if (successCount > 0) {
-              toast({
-                title: failedCount === 0 ? "Import successful" : "Import complete",
-                description: failedCount === 0
-                  ? `All ${successCount} files imported successfully.`
-                  : `${successCount} files imported, ${failedCount} failed.`,
-                variant: failedCount === 0 ? "default" : "destructive",
-              });
-            } else {
-              toast({
-                title: "Import failed",
-                description: "All files failed to import.",
-                variant: "destructive",
-              });
-            }
-
-            setCurrentStep(3);
-          } catch (uploadErr) {
-            toast({
-              title: "Import failed",
-              description: uploadErr instanceof Error ? uploadErr.message : "Failed to import files",
-              variant: "destructive",
-            });
-            throw uploadErr;
-          }
+          await proceedWithImport();
           break;
         }
 
@@ -472,7 +484,12 @@ const Import: FC = () => {
               {showSaveDialog && (
                 <SavePatternDialog
                   open={showSaveDialog}
-                  onClose={() => setShowSaveDialog(false)}
+                  onClose={() => {
+                    setShowSaveDialog(false);
+                    // Resume the import the dialog was blocking. Runs whether
+                    // the user saved the pattern or chose Skip & Continue.
+                    proceedWithImport();
+                  }}
                 />
               )}
 

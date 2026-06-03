@@ -38,6 +38,8 @@ func (h *Services) HandleGrokPatterns(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
 		h.createGrokPattern(w, r)
+	case http.MethodPut:
+		h.updateGrokPattern(w, r)
 	case http.MethodDelete:
 		h.deleteGrokPattern(w, r)
 	case http.MethodGet:
@@ -120,6 +122,91 @@ func (h *Services) createGrokPattern(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(types.GrokPatternResponse{
+		Status: "success",
+		Patterns: []types.GrokPatternRequest{
+			{
+				Name:            req.Name,
+				Priority:        req.Priority,
+				CustomPatterns:  req.CustomPatterns,
+				Pattern:         req.Pattern,
+				Description:     req.Description,
+				TimestampConfig: req.TimestampConfig,
+			},
+		},
+	})
+}
+
+// updateGrokPattern edits an existing pattern in place. Unlike POST (which
+// rejects existing names with 409), PUT requires the name to already exist
+// and overwrites the stored pattern body / description / priority / custom
+// patterns. The pattern name is the identity key and cannot be changed here.
+func (h *Services) updateGrokPattern(w http.ResponseWriter, r *http.Request) {
+	var req types.GrokPatternRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(types.GrokPatternResponse{
+			Status: "error",
+			Error:  "Invalid request format: " + err.Error(),
+		})
+		return
+	}
+
+	if req.Name == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(types.GrokPatternResponse{
+			Status: "error",
+			Error:  "Pattern name is required",
+		})
+		return
+	}
+
+	// The pattern must already exist — otherwise PUT would silently create
+	// one, masking a stale/renamed reference on the client.
+	exists := false
+	for _, kp := range l2g.ListLibrary() {
+		if kp.Name == req.Name {
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(types.GrokPatternResponse{
+			Status: "error",
+			Error:  fmt.Sprintf("Pattern '%s' not found", req.Name),
+		})
+		return
+	}
+
+	kp := l2g.KnownPattern{
+		Name:           req.Name,
+		Pattern:        req.Pattern,
+		Priority:       req.Priority,
+		Description:    req.Description,
+		CustomPatterns: req.CustomPatterns,
+	}
+	if _, err := l2g.UpsertLibraryEntry(kp); err != nil {
+		// As with create, a non-nil err is almost always a bad grok body.
+		status := http.StatusBadRequest
+		if errors.Is(err, l2g.ErrConfigNotLoaded) {
+			status = http.StatusInternalServerError
+		}
+		w.WriteHeader(status)
+		json.NewEncoder(w).Encode(types.GrokPatternResponse{
+			Status: "error",
+			Error:  fmt.Sprintf("Failed to update pattern: %v", err),
+		})
+		return
+	}
+
+	// Best-effort timestamp config update (see createGrokPattern).
+	if req.TimestampConfig != nil && h.PatternTimestamps != nil {
+		if err := h.PatternTimestamps.Set(req.Name, *req.TimestampConfig); err != nil {
+			fmt.Printf("warning: failed to persist timestamp config for %q: %v\n", req.Name, err)
+		}
+	}
+
 	json.NewEncoder(w).Encode(types.GrokPatternResponse{
 		Status: "success",
 		Patterns: []types.GrokPatternRequest{

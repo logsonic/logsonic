@@ -208,6 +208,148 @@ html, body {
   filter: brightness(0.92);
 }
 
+/* ── Settings page — recreated from the Claude Design handoff ─────────
+   Two-pane layout (sticky nav + content), a data table for parsers, and
+   a filter search box. Design tokens remapped to the project's --ls-* set. */
+.ls-set-grid {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 36px;
+  align-items: start;
+}
+.ls-set-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  position: sticky;
+  top: 24px;
+}
+.ls-set-nav a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--ls-text-2);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.ls-set-nav a:hover {
+  background: var(--ls-bg-2);
+  color: var(--ls-text);
+}
+.ls-set-nav a.active {
+  background: var(--ls-accent-softer);
+  color: var(--ls-accent-text);
+  font-weight: 500;
+}
+
+/* filter search box (design .search-input) */
+.ls-set-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  height: 32px;
+  background: var(--ls-bg-1);
+  border: 1px solid var(--ls-border-strong);
+  border-radius: var(--ls-radius);
+  min-width: 0;
+  transition: all 0.12s;
+}
+.ls-set-search:focus-within {
+  border-color: var(--ls-accent);
+  box-shadow: 0 0 0 3px var(--ls-accent-softer);
+  background: var(--ls-panel);
+}
+.ls-set-search input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font-size: 12.5px;
+  color: var(--ls-text);
+  min-width: 0;
+}
+.ls-set-search input::placeholder {
+  color: var(--ls-text-4);
+}
+
+/* data table (design .dtable) */
+.ls-dtable {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--ls-panel);
+  border: 1px solid var(--ls-border);
+  border-radius: var(--ls-radius-lg);
+  overflow: hidden;
+}
+.ls-dtable th,
+.ls-dtable td {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 12.5px;
+  vertical-align: middle;
+}
+.ls-dtable th {
+  background: var(--ls-bg-1);
+  color: var(--ls-text-2);
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--ls-border);
+}
+.ls-dtable tbody tr {
+  border-top: 1px solid var(--ls-border-subtle);
+}
+.ls-dtable tbody tr:hover {
+  background: var(--ls-bg-2);
+}
+.ls-dtable td.mono {
+  font-family: var(--ls-font-mono);
+  font-size: 11.5px;
+}
+.ls-dtable td.muted {
+  color: var(--ls-text-3);
+}
+
+/* compact ghost icon button for table row actions */
+.ls-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--ls-text-3);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.ls-icon-btn:hover {
+  background: var(--ls-bg-2);
+  color: var(--ls-text);
+  border-color: var(--ls-border);
+}
+.ls-icon-btn.danger:hover {
+  background: var(--ls-err-soft);
+  color: var(--ls-err);
+  border-color: color-mix(in srgb, var(--ls-err) 25%, transparent);
+}
+
+/* inline monospace code token (design .mono-inline) */
+.ls-mono-inline {
+  font-family: var(--ls-font-mono);
+  font-size: 11.5px;
+  background: var(--ls-bg-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--ls-border);
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
