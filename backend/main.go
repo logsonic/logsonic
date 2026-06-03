@@ -80,21 +80,15 @@ func main() {
 	// via the Homebrew-symlinked `logsonic`). So app-launch gets the desktop
 	// defaults (open the browser, auto-select a port) while the CLI stays
 	// classic unless its own flags/env opt in.
+	// On macOS the Logsonic.app bundle is a native GUI shell (see macos/
+	// LogsonicApp.swift) that runs this binary as its child with a controlling
+	// pipe, shows the Dock icon + a log window, and opens the browser itself. So
+	// the server stays a plain headless process; app-style auto-port is requested
+	// by the GUI (or the -auto-port flag / env). LOGSONIC_APP still enables the
+	// desktop defaults for anyone invoking the binary directly.
 	asApp := envTrue("LOGSONIC_APP")
 	openBrowser := *openFlag || envTrue("LOGSONIC_OPEN_BROWSER") || asApp
 	autoPort := *autoPortFlag || envTrue("LOGSONIC_AUTO_PORT") || asApp
-
-	// A macOS .app double-click runs this binary faceless: no controlling
-	// terminal and no Cocoa event loop, so the Dock reports it "not responding"
-	// (it never answers the Quit Apple Event — the only way out is Force Quit,
-	// which SIGKILLs us with no graceful shutdown) and there's no visible output.
-	// On macOS, relaunchForApp re-launches the server inside a Terminal window
-	// (visible logs; Ctrl-C or closing the window delivers SIGINT/SIGHUP for a
-	// clean shutdown) and reports true so this faceless launcher can exit. It's a
-	// no-op on other platforms. See app_relaunch_darwin.go.
-	if asApp && relaunchForApp() {
-		return
-	}
 
 	retentionDays := *retentionFlag
 	if retentionDays == 0 {

@@ -24,6 +24,8 @@ macOS ships as a signed + notarized + **stapled** `Logsonic.app`, zipped as `log
 
 Import the Apple intermediate CA (`Developer ID Certification Authority` G2) from <https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer>.
 
+**App structure:** the bundle's `CFBundleExecutable` is a native AppKit shell, `LogsonicApp`, compiled by `scripts/app-macos.sh` from [`macos/LogsonicApp.swift`](../macos/LogsonicApp.swift) (so the build also needs **`swiftc`** from the Xcode command line tools — already present wherever `codesign`/`xcrun` are). It shows the responsive LogSonic Dock icon + a log window and runs the Go server `logsonic` (kept at `Contents/MacOS/logsonic`, also the CLI the cask symlinks) as a child, opening the browser and shutting the child down gracefully on Quit. Both inner binaries are signed (hardened runtime) before the bundle.
+
 **App icon:** `scripts/app-macos.sh` builds `AppIcon.icns` from `scripts/app-icon.svg` (the LogSonic "blitz" mark only — no wordmark — inset on the Apple icon grid). It renders each icon size with `rsvg-convert` (`brew install librsvg`) for crispness, falling back to downscaling the committed `scripts/app-icon.png` when librsvg isn't installed — so the build never hard-depends on it. To change the icon, edit `app-icon.svg` and regenerate the PNG: `rsvg-convert -w 1024 -h 1024 scripts/app-icon.svg -o scripts/app-icon.png`.
 
 ---
