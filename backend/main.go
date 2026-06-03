@@ -84,6 +84,18 @@ func main() {
 	openBrowser := *openFlag || envTrue("LOGSONIC_OPEN_BROWSER") || asApp
 	autoPort := *autoPortFlag || envTrue("LOGSONIC_AUTO_PORT") || asApp
 
+	// A macOS .app double-click runs this binary faceless: no controlling
+	// terminal and no Cocoa event loop, so the Dock reports it "not responding"
+	// (it never answers the Quit Apple Event — the only way out is Force Quit,
+	// which SIGKILLs us with no graceful shutdown) and there's no visible output.
+	// On macOS, relaunchForApp re-launches the server inside a Terminal window
+	// (visible logs; Ctrl-C or closing the window delivers SIGINT/SIGHUP for a
+	// clean shutdown) and reports true so this faceless launcher can exit. It's a
+	// no-op on other platforms. See app_relaunch_darwin.go.
+	if asApp && relaunchForApp() {
+		return
+	}
+
 	retentionDays := *retentionFlag
 	if retentionDays == 0 {
 		if v := os.Getenv("RETENTION_DAYS"); v != "" {

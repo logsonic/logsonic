@@ -260,9 +260,10 @@ func NewServer(cfg Config) (*Server, error) {
 	}, nil
 }
 
-// Start initializes and starts the HTTP server. It blocks until SIGINT or
-// SIGTERM is received, then performs a graceful shutdown with a 30-second
-// drain timeout before closing all storage indices.
+// Start initializes and starts the HTTP server. It blocks until SIGINT, SIGTERM,
+// or SIGHUP is received (SIGHUP is what Terminal sends when its window/tab is
+// closed), then performs a graceful shutdown with a 30-second drain timeout
+// before closing all storage indices.
 func (s *Server) Start() error {
 	// Bind synchronously so port-in-use errors surface before any
 	// "server started / open this URL" message is printed.
@@ -298,7 +299,7 @@ func (s *Server) Start() error {
 
 	// Listen for OS signals in the background.
 	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 
 	serverErr := make(chan error, 1)
 	go func() {

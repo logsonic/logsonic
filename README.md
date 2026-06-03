@@ -81,10 +81,10 @@ Whether you install via Homebrew or drag it in from the release `.zip`, **Logson
 **Launching it:**
 
 1. Open it from **Applications**, **Spotlight** (`⌘ Space` → "Logsonic"), or **Launchpad** — or double-click the bundle.
-2. On launch it starts the local server, **picks the first free port starting at 8080**, and **opens the web UI in your default browser** automatically. No Terminal needed.
-3. LogSonic runs as a lightweight background server with a **Dock icon** — there's no separate app window; the browser tab *is* the UI.
+2. It opens a **Terminal window** that runs the LogSonic server, so you can see it's running and read its logs. It **picks the first free port starting at 8080** and **opens the web UI in your default browser** automatically.
+3. The browser tab is the UI; the Terminal window is the running server.
 
-**Quitting:** right-click the Dock icon → **Quit** (or `⌘ Q` with it focused). This stops the server; closing only the browser tab leaves it running.
+**Quitting:** press **Ctrl-C** in the Terminal window, or close the window — either one shuts the server down gracefully. (Closing just the browser tab leaves the server running.)
 
 Because the app is signed, notarized, and **stapled**, it opens with no Gatekeeper prompt even on a fresh machine that's offline. Your indexed data is stored under `~/Library/Application Support/Logsonic` (see [Data & storage](#data--storage)).
 
