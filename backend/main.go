@@ -80,6 +80,12 @@ func main() {
 	// via the Homebrew-symlinked `logsonic`). So app-launch gets the desktop
 	// defaults (open the browser, auto-select a port) while the CLI stays
 	// classic unless its own flags/env opt in.
+	// On macOS the Logsonic.app bundle is a native GUI shell (see macos/
+	// LogsonicApp.swift) that runs this binary as its child with a controlling
+	// pipe, shows the Dock icon + a log window, and opens the browser itself. So
+	// the server stays a plain headless process; app-style auto-port is requested
+	// by the GUI (or the -auto-port flag / env). LOGSONIC_APP still enables the
+	// desktop defaults for anyone invoking the binary directly.
 	asApp := envTrue("LOGSONIC_APP")
 	openBrowser := *openFlag || envTrue("LOGSONIC_OPEN_BROWSER") || asApp
 	autoPort := *autoPortFlag || envTrue("LOGSONIC_AUTO_PORT") || asApp

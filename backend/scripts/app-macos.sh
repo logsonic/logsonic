@@ -5,22 +5,28 @@
 # Why a .app (vs the old .pkg): a .app can carry a stapled notarization ticket
 # (so it's trusted offline, no Gatekeeper dialog), it shows up in /Applications
 # as users expect, and Homebrew installs it via a cask `app` stanza WITHOUT sudo
-# (a .pkg always needs admin). The bundle's Info.plist sets LSEnvironment
-# LOGSONIC_APP=1, which LaunchServices injects on double-click so the binary
-# opens the browser and auto-selects a free port — but NOT when the same binary
-# is run from a terminal (e.g. the Homebrew-symlinked `logsonic`).
+# (a .pkg always needs admin).
+#
+# Bundle layout: the CFBundleExecutable is a small native AppKit shell,
+# `LogsonicApp` (compiled here from macos/LogsonicApp.swift), which shows the
+# responsive Dock icon + a log window and runs the Go server `logsonic` as a
+# child. The Go binary stays at Contents/MacOS/logsonic so it's also the CLI the
+# Homebrew cask symlinks. Both inner binaries are signed; the GUI is what a
+# double-click runs.
 #
 # Usage: app-macos.sh <universal-binary> <version> <out-dir> [icon-png]
 #
-# Requires a "Developer ID Application" identity in the Keychain. Notarize+staple
-# is skipped (leaving a signed-but-unstapled .app) when the MACOS_NOTARY_* env
-# vars are absent, matching release.sh's optional-notarization behavior.
+# Requires a "Developer ID Application" identity in the Keychain and `swiftc`
+# (Xcode command line tools). Notarize+staple is skipped (leaving a
+# signed-but-unstapled .app) when the MACOS_NOTARY_* env vars are absent,
+# matching release.sh's optional-notarization behavior.
 set -euo pipefail
 
 bin="${1:?app-macos.sh: missing universal binary path}"
 version="${2:?app-macos.sh: missing version}"
 outdir="${3:?app-macos.sh: missing output dir}"
 script_dir="$(cd "$(dirname "$0")" && pwd)"
+swift_src="$script_dir/../macos/LogsonicApp.swift"
 # App icon source: the square "blitz" mark only (no wordmark). Defaults to the
 # committed SVG, with a pre-rendered PNG as the no-librsvg fallback. We do NOT
 # use the wide logo.png — squished into a square icon it distorts badly.
@@ -37,9 +43,20 @@ app="$outdir/Logsonic.app"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 
-# Payload: the universal binary becomes the bundle executable.
+# Payload: the Go server binary (also the CLI the cask symlinks).
 cp "$bin" "$app/Contents/MacOS/logsonic"
 chmod 755 "$app/Contents/MacOS/logsonic"
+
+# Build the native AppKit GUI shell (universal) — the bundle's CFBundleExecutable.
+command -v swiftc >/dev/null || { echo "app-macos.sh: swiftc not found (install Xcode command line tools)" >&2; exit 1; }
+[ -f "$swift_src" ] || { echo "app-macos.sh: missing GUI source at $swift_src" >&2; exit 1; }
+swift_build=$(mktemp -d)
+swiftc -O -target arm64-apple-macos11  "$swift_src" -o "$swift_build/LogsonicApp-arm64"
+swiftc -O -target x86_64-apple-macos11 "$swift_src" -o "$swift_build/LogsonicApp-x86_64"
+lipo -create "$swift_build/LogsonicApp-arm64" "$swift_build/LogsonicApp-x86_64" \
+  -o "$app/Contents/MacOS/LogsonicApp"
+chmod 755 "$app/Contents/MacOS/LogsonicApp"
+rm -rf "$swift_build"
 
 # Build AppIcon.icns. Prefer rendering each iconset size straight from the SVG
 # (crisp at every resolution); fall back to downscaling the pre-rendered PNG when
@@ -86,7 +103,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
 	<key>CFBundleIdentifier</key>
 	<string>${identifier}</string>
 	<key>CFBundleExecutable</key>
-	<string>logsonic</string>
+	<string>LogsonicApp</string>
 	<key>CFBundleVersion</key>
 	<string>${version}</string>
 	<key>CFBundleShortVersionString</key>
@@ -97,17 +114,13 @@ cat > "$app/Contents/Info.plist" <<PLIST
 	<string>11.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>${icon_plist_entry}
-	<key>LSEnvironment</key>
-	<dict>
-		<key>LOGSONIC_APP</key>
-		<string>1</string>
-	</dict>
 </dict>
 </plist>
 PLIST
 
-# Sign inner executable first, then the bundle (Apple discourages --deep).
+# Sign inner executables first, then the bundle (Apple discourages --deep).
 codesign --force --options runtime --timestamp --sign "$sign_id" "$app/Contents/MacOS/logsonic"
+codesign --force --options runtime --timestamp --sign "$sign_id" "$app/Contents/MacOS/LogsonicApp"
 codesign --force --options runtime --timestamp --sign "$sign_id" "$app"
 codesign --verify --strict --verbose=2 "$app"
 echo "built + signed: $app"
