@@ -140,11 +140,12 @@ notarize_darwin() {
 notarize_darwin
 
 # Wrap the universal darwin binary in a signed + notarized + STAPLED installer
-# .pkg, then attach it to the GitHub release. Unlike the bare binary in the
-# .tar.gz (which can't be stapled, so it forces an online Gatekeeper check and
-# trips a dialog on Finder-extracted downloads), the stapled .pkg carries its
-# notarization ticket — install works offline with no dialog. See
-# scripts/pkg-macos.sh. Skipped on snapshot and when tooling/creds are absent.
+# .pkg, attach it to the GitHub release, and publish a Homebrew cask pointing at
+# it. macOS ships ONLY this way — there is no darwin .tar.gz (a bare binary can't
+# be stapled, so it forces an online Gatekeeper check and trips a dialog on
+# Finder-extracted downloads). The stapled .pkg carries its notarization ticket,
+# so install works offline with no dialog. See scripts/pkg-macos.sh and
+# scripts/publish-cask.sh. Skipped on snapshot and when tooling/creds are absent.
 build_macos_pkg() {
   if [ "$MODE" = "snapshot" ]; then
     info "skipping .pkg build (snapshot mode)"
@@ -162,15 +163,24 @@ build_macos_pkg() {
   scripts/pkg-macos.sh "$ubin" "$version" dist
   local pkg="dist/logsonic_${version}_macos.pkg"
 
-  # Attach to the GitHub release unless publishing was skipped.
+  # Attach to the GitHub release + publish the Homebrew cask, unless publishing
+  # was skipped.
   if [[ "$EXTRA_ARGS" == *"--skip=publish"* ]]; then
-    info "publish skipped — .pkg left at $BACKEND/$pkg (not uploaded)"
+    info "publish skipped — .pkg left at $BACKEND/$pkg (not uploaded, cask not published)"
   elif command -v gh >/dev/null; then
     local tag; tag="$(git describe --tags --abbrev=0)"
     info "uploading $pkg to release $tag"
     gh release upload "$tag" "$pkg" --clobber
+
+    # Publish the cask AFTER the .pkg is live, so its download URL resolves.
+    if [ -n "${HOMEBREW_TAP_TOKEN:-}" ]; then
+      info "publishing Homebrew cask for $version"
+      scripts/publish-cask.sh "$pkg" "$version"
+    else
+      info "HOMEBREW_TAP_TOKEN not set — cask NOT published; macOS brew install --cask will be stale" >&2
+    fi
   else
-    info "gh not installed — .pkg built at $BACKEND/$pkg but NOT uploaded; attach it manually" >&2
+    info "gh not installed — .pkg built at $BACKEND/$pkg but NOT uploaded; cask not published" >&2
   fi
 }
 build_macos_pkg

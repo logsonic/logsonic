@@ -1,10 +1,35 @@
 # LogSonic
 
-LogSonic is a Desktop-First Log Analytics application which runs on Windows, Mac and Linux. It runs fully offline with no external dependencies. It installs as a single self-contained binary that serves a feature-rich User interface in your local browser. The log ingestion wizard supports importing local log files (single or many at once) and automatically recognises well-known log patterns to tokenise the contents. The log search experience is blazing fast, delightful and intuitive.
+> **Drop a log file — searchable in seconds, fully offline, and your AI agent can read it.**
 
-It also ships an MCP server extension so you can analyse logs with machine intelligence.
 
-<img src="docs/screenshot.png" alt="LogSonic Screenshot" width="1200" />
+[![Release](https://img.shields.io/github/v/release/logsonic/logsonic?label=release)](https://github.com/logsonic/logsonic/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/logsonic/logsonic?style=social)](https://github.com/logsonic/logsonic/stargazers)
+
+LogSonic is a local-first log analytics app for Windows, Mac, and Linux. One self-contained binary serves a fast browser UI, auto-detects 100+ log formats on import, indexes everything for instant full-text search — and ships an **MCP server** so Claude, Cursor, or Windsurf can query your logs directly. No telemetry, no network calls, no cloud. Your data never leaves your machine.
+
+<img src="demo/demo.gif" alt="LogSonic demo — import logs, auto-detect the format, correct timestamps, search, color rows, and fit the time range" width="1000" />
+
+## Who it's for
+
+- **Offline & regulated engineers** — you legally can't ship logs to the cloud. LogSonic runs fully air-gapped; nothing leaves the box.
+- **AI-native developers** — you want Cursor / Claude / Windsurf to read your local logs. Point the MCP client at LogSonic and ask in plain English.
+- **Backend / SRE on call** — you were handed a 2 GB log dump. `grep` doesn't scale and standing up ELK is overkill; drop it in and search in seconds.
+
+## Why LogSonic
+
+| | **LogSonic** | lnav | Logdy | GoAccess | Datadog/ELK |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Fully offline / local-first | ✅ | ✅ | ✅ | ✅ | ❌ cloud |
+| Browser GUI | ✅ | ❌ terminal | ✅ | ✅ HTML report | ✅ |
+| Auto-detect log formats | ✅ 100+ patterns | partial | ❌ | web logs only | ✅ |
+| AI agent access (MCP) | ✅ | ❌ | ❌ | ❌ | partial |
+| Indexed full-text search | ✅ Bleve | ✅ SQL | ❌ | ❌ | ✅ |
+| Single binary, no deps | ✅ | ✅ | ✅ | ✅ | ❌ SaaS |
+| Live tail / streaming | 🔜 | ✅ | ✅ | ✅ | ✅ |
+
+*What makes Logsonic Unique: local-first **+** GUI **+** your AI agent can query it, fully offline.*
 
 ## Features
 
@@ -21,9 +46,9 @@ It also ships an MCP server extension so you can analyse logs with machine intel
 
 ## Installation
 
-### Homebrew (macOS & Linux)
+### Homebrew (macOS)
 
-The easiest way to install LogSonic on macOS or Linux:
+The easiest way to install LogSonic on macOS. It installs the signed + notarized `.pkg`, so there are no Gatekeeper prompts:
 
 ```bash
 brew tap logsonic/logsonic
@@ -33,26 +58,47 @@ logsonic
 
 Then open your browser to `http://localhost:8080`.
 
+**Upgrading:** third-party taps only refresh periodically, so run `brew update` first:
+
+```bash
+brew update && brew upgrade logsonic
+```
+
+If `brew upgrade` reports a checksum error or won't move off the installed version, refresh the tap from scratch:
+
+```bash
+brew untap logsonic/logsonic
+brew tap logsonic/logsonic
+brew install logsonic
+```
+
+> Linux: Homebrew isn't supported for LogSonic — use the pre-built binary, Docker, or build from source (below).
+
 ### Pre-built Binary
 
-1. Download the latest LogSonic binary for your platform from the [GitHub releases page](https://github.com/logsonic/logsonic/releases).
-2. Make the binary executable (Linux/Mac only):
-   ```bash
-   chmod +x logsonic
-   ```
-3. Run the binary (prefer to run from console to see errors etc.):
-   ```bash
-   ./logsonic
-   ```
+Grab the latest build for your platform from the [GitHub releases page](https://github.com/logsonic/logsonic/releases).
 
-> **Note**: On MacOS, unsigned download binaries are not allowed to run by default. In order to run the downloaded binary, open System Preferences, choose the Security control panel, select the General tab. Look for the message: "logSonic was blocked from opening because it is not from an identified developer." Click the Open Anyway button to the right of the message. 
+**macOS** — download `logsonic_<version>_macos.pkg` and double-click it (or `installer -pkg logsonic_<version>_macos.pkg -target /`). It's signed + notarized + stapled, so it installs `logsonic` to `/usr/local/bin` with no Gatekeeper warning, even offline. There is intentionally **no macOS `.tar.gz`**: a bare binary can't carry a stapled notarization ticket, so a Finder-extracted or offline download would trip Gatekeeper. Then just run:
 
-> On Windows: You may need to enable "Run this Application Anyway" while running the executeable. 
+```bash
+logsonic
+```
 
-Alternatively, you could build the binary yourself as per steps below or build the Docker image. 
+**Linux** — download the `.tar.gz`, extract, and run:
 
+```bash
+tar -xzf logsonic_<version>_linux_<arch>.tar.gz
+chmod +x logsonic
+./logsonic
+```
 
-4. Open your browser and navigate to `http://localhost:8080`
+**Windows** — download the `.zip`, extract, and run `logsonic.exe`.
+
+> On Windows: You may need to enable "Run this Application Anyway" while running the executable.
+
+Alternatively, you could build the binary yourself as per steps below or build the Docker image.
+
+Then open your browser and navigate to `http://localhost:8080`.
 
 If the port 8080 is not available in your system, you could choose another port to to run by command line option `-port 8088`
    ```bash

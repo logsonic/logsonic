@@ -19,7 +19,7 @@ Two distinct Developer ID certs are needed — both issued from the Apple Develo
 - **Developer ID Application** — signs the Mach-O binary (`scripts/sign-macos.sh`). `security find-identity -v -p codesigning` should show this one.
 - **Developer ID Installer** — signs the `.pkg` installer (`scripts/pkg-macos.sh`). It does *not* appear under `-p codesigning`; verify with `security find-identity -v | grep Installer`.
 
-The `.pkg` exists because logsonic ships as a bare binary, which can't have a notarization ticket stapled to it — so a Finder-extracted or offline download trips Gatekeeper. The stapled `.pkg` carries the ticket and installs `logsonic` to `/usr/local/bin`, validating offline with no dialog.
+The `.pkg` exists because logsonic ships as a bare binary, which can't have a notarization ticket stapled to it — so a Finder-extracted or offline download trips Gatekeeper. The stapled `.pkg` carries the ticket and installs `logsonic` to `/usr/local/bin`, validating offline with no dialog. **macOS ships only as this `.pkg` (plus a Homebrew cask pointing at it) — there is no darwin `.tar.gz`.** `scripts/publish-cask.sh` renders `Casks/logsonic.rb` in the tap (and deletes any stale `Formula/logsonic.rb`) so a plain `brew install logsonic` auto-resolves to the cask on macOS. There is no longer a Homebrew formula — Linux/Windows install via the `.tar.gz`/`.zip`, Docker, or source.
 
 Import the Apple intermediate CA (`Developer ID Certification Authority` G2) from <https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer>.
 
@@ -105,11 +105,17 @@ Then run a real signed build without uploading to GitHub:
 backend/scripts/release.sh --skip-publish
 ```
 
-Verify the macOS binary is signed:
+Verify the macOS binary is signed (there is no darwin `.tar.gz` — check the universal binary GoReleaser produced):
 
 ```bash
-tar -xzf backend/dist/logsonic_*_darwin_arm64.tar.gz -C /tmp logsonic
-codesign -dvvv /tmp/logsonic
+codesign -dvvv backend/dist/logsonic-universal_darwin_all/logsonic
+```
+
+After a non-snapshot `--skip-publish` run, also sanity-check the `.pkg` (built but not uploaded):
+
+```bash
+spctl -a -t install -vvv backend/dist/logsonic_*_macos.pkg   # → "accepted ... Notarized Developer ID"
+xcrun stapler validate backend/dist/logsonic_*_macos.pkg     # → "The validate action worked!"
 ```
 
 ---
@@ -122,17 +128,19 @@ git push origin v1.0.3
 backend/scripts/release.sh
 ```
 
-GoReleaser will:
-- Build all platforms
-- Sign the darwin binaries locally via `codesign`
-- Upload archives + checksums to <https://github.com/logsonic/logsonic/releases>
-- Open a commit on `logsonic/homebrew-logsonic` updating `Formula/logsonic.rb`
+`release.sh` will:
+- Build all platforms (GoReleaser); sign the darwin binaries locally via `codesign`
+- Upload the Linux `.tar.gz` + Windows `.zip` + checksums to <https://github.com/logsonic/logsonic/releases>
+- Notarize the darwin binaries, then build + notarize + staple `logsonic_<version>_macos.pkg`, upload it, and publish `Casks/logsonic.rb` to the tap (`scripts/publish-cask.sh`, which also removes any stale `Formula/logsonic.rb`)
 
-Users install with:
+macOS users install with (the cask resolves automatically — no `--cask` needed):
 
 ```bash
-brew install logsonic/logsonic/logsonic
+brew tap logsonic/logsonic
+brew install logsonic
 ```
+
+Linux/Windows: download the `.tar.gz`/`.zip` from the release, use Docker, or build from source.
 
 ---
 
@@ -141,5 +149,6 @@ brew install logsonic/logsonic/logsonic
 - **`codesign: The specified item could not be found in the keychain`** — the Developer ID cert or key is missing from login keychain. Reimport the `.cer` (double-click in Finder).
 - **`find-identity` shows the cert but 0 valid identities** — missing Apple intermediate CA. Download and import `DeveloperIDG2CA.cer` from <https://www.apple.com/certificateauthority/>.
 - **Notarization returns "Invalid" status** — two common causes: (1) the binary is **not properly Developer ID-signed** (e.g. it's adhoc/linker-signed) — Apple rejects anything not signed with hardened runtime + a Developer ID cert; verify with `codesign -dvv <binary>` that the Authority is `Developer ID Application`, not `adhoc`; or (2) the binary hash was already submitted from a prior run (Apple caches submissions). Pull the detailed log with `xcrun notarytool log <submission-id> --key … --key-id … --issuer …` to see the exact reason. For a clean release, tag a fresh commit and run `release.sh` once.
-- **Binary downloads have Gatekeeper warning** — if notarization failed, users downloading from GitHub get "Apple could not verify" warnings. Workaround: users can extract from `.tar.gz` (removes quarantine) or use Homebrew (`brew install logsonic/logsonic/logsonic`). For the next release, ensure clean notarization (see above).
-- **GoReleaser signs OK but notarization errors** — notarize is optional for `.tar.gz` distribution (Gatekeeper validates via online hash lookup). Homebrew users bypass Gatekeeper checks entirely, so distribution is not blocked even if notarization fails.
+- **macOS `.pkg` shows a Gatekeeper warning** — means notarize+staple didn't complete (the `MACOS_NOTARY_*` env vars were absent, or notarization returned non-Accepted). The `.pkg` is then signed but not stapled, so it forces an online check. Fix the notary creds and re-cut; verify with `xcrun stapler validate <pkg>` and `spctl -a -t install -vvv <pkg>`.
+- **`brew install logsonic` is stale / 404 on macOS** — the cask wasn't published. Either `HOMEBREW_TAP_TOKEN` was unset during `release.sh`, or `publish-cask.sh` ran before the `.pkg` finished uploading. Re-run `scripts/publish-cask.sh backend/dist/logsonic_<version>_macos.pkg <version>` once the release asset is live.
+- **`brew install logsonic` installs a formula instead of the cask** — a stale `Formula/logsonic.rb` is still in the tap and shadows the cask. `publish-cask.sh` deletes it on every run; if one lingers from before, remove it from `logsonic/homebrew-logsonic` manually. The tap must contain only `Casks/logsonic.rb`.

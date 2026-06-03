@@ -17,6 +17,11 @@ before:
     - cp ../README.md README.md
 
 builds:
+  # Linux + Windows ship as plain archives (no code-signing needed). darwin is a
+  # SEPARATE build id below so it can be excluded from `archives:` — macOS ships
+  # only as a signed + notarized + stapled .pkg (and a Homebrew cask), never a
+  # bare .tar.gz, because a lone Mach-O can't carry a stapled notarization ticket
+  # and trips Gatekeeper on Finder-extracted/offline downloads.
   - id: logsonic
     main: ./
     binary: logsonic
@@ -25,6 +30,24 @@ builds:
     goos:
       - linux
       - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    flags:
+      - -trimpath
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
+  - id: logsonic-darwin
+    main: ./
+    binary: logsonic
+    env:
+      - CGO_ENABLED=0
+    goos:
       - darwin
     goarch:
       - amd64
@@ -37,34 +60,32 @@ builds:
     flags:
       - -trimpath
     mod_timestamp: '{{ .CommitTimestamp }}'
-    # Sign each Mach-O binary in place, right after it's built and before it's
-    # archived. Use a build post-hook, NOT binary_signs: binary_signs is for
-    # *detached* signature files and registers a Signature artifact per binary
-    # that goreleaser then tries (and fails) to upload — codesign embeds the
-    # signature in the binary itself rather than writing a separate file.
-    # scripts/sign-macos.sh skips non-Mach-O targets, so linux/windows pass through.
+    # Sign each Mach-O binary in place, right after it's built. Use a build
+    # post-hook, NOT binary_signs: binary_signs is for *detached* signature files
+    # and registers a Signature artifact per binary that goreleaser then tries
+    # (and fails) to upload — codesign embeds the signature in the binary itself.
     hooks:
       post:
         - 'scripts/sign-macos.sh "{{ .Path }}"'
 
 universal_binaries:
   - id: logsonic-universal
-    ids: [logsonic]
+    ids: [logsonic-darwin]
     replace: false
     name_template: logsonic
     # lipo strips per-arch signatures when merging — re-sign the fat binary.
+    # This universal binary is NOT archived; scripts/pkg-macos.sh wraps it into
+    # the stapled .pkg that release.sh builds and uploads after notarization.
     hooks:
       post: 'scripts/sign-macos.sh "{{ .Path }}"'
 
 archives:
   - id: default
-    ids: [logsonic, logsonic-universal]
+    # Linux + Windows only. darwin (logsonic-darwin / logsonic-universal) is
+    # deliberately excluded — macOS is distributed as a notarized .pkg + cask.
+    ids: [logsonic]
     name_template: >-
-      {{ .ProjectName }}_{{ .Version }}_
-      {{- if eq .Os "darwin" }}darwin_
-        {{- if eq .Arch "all" }}universal
-        {{- else }}{{ .Arch }}{{ end }}
-      {{- else }}{{ .Os }}_{{ .Arch }}{{ end }}
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     formats: [tar.gz]
     format_overrides:
       - goos: windows
@@ -83,30 +104,12 @@ checksum:
 # create uploadable Signature artifacts, which breaks publishing when codesign
 # embeds the signature in the binary instead of writing a separate file.
 
-# `brews:` is deprecated in goreleaser ≥ 2.10 (favors homebrew_casks), but
-# homebrew_casks is macOS-only — formulas work for Linuxbrew too. Revisit if
-# we add a .app cask later (RELEASE.md §3).
-brews:
-  - name: logsonic
-    ids: [default]
-    repository:
-      owner: logsonic
-      name: homebrew-logsonic
-      branch: main
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
-    homepage: "https://github.com/logsonic/logsonic"
-    description: "Desktop-first log analytics with full-text search and Grok parsing"
-    license: "MIT"
-    commit_author:
-      name: goreleaserbot
-      email: bot@goreleaser.com
-    commit_msg_template: "brew formula update for {{ .ProjectName }} version {{ .Tag }}"
-    install: |
-      bin.install "logsonic"
-    test: |
-      assert_match "LogSonic", shell_output("#{bin}/logsonic -help")
-    skip_upload: auto
+# No `brews:` (formula) block. The Homebrew tap ships ONLY a cask named
+# `logsonic` (scripts/publish-cask.sh), pointing at the notarized .pkg. With no
+# same-named formula, `brew install logsonic` auto-resolves to the cask on macOS
+# — no `--cask` flag needed. A formula would shadow the cask and break that, so
+# we don't generate one. Linux/Windows users install via the .tar.gz/.zip below
+# (or Docker / from source) — there is no Linuxbrew formula anymore.
 
 changelog:
   sort: asc
@@ -127,6 +130,9 @@ release:
 
     ---
 
-    **Installing on macOS** (signed + notarized): download the `.tar.gz` for your arch, or `brew install logsonic/logsonic/logsonic`.
+    **macOS** (signed + notarized): `brew tap logsonic/logsonic && brew install logsonic`, or download the `.pkg` installer. There is no macOS `.tar.gz` — a bare binary can't carry a stapled notarization ticket and trips Gatekeeper.
+
+
+    **Linux / Windows**: download the `.tar.gz` / `.zip` for your arch (or use Docker).
 
     Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
