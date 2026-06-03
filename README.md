@@ -48,7 +48,7 @@ LogSonic is a local-first log analytics app for Windows, Mac, and Linux. One sel
 
 ### Homebrew (macOS)
 
-The easiest way to install LogSonic on macOS. It installs the signed + notarized `.pkg`, so there are no Gatekeeper prompts:
+The easiest way to install LogSonic on macOS. It installs the signed + notarized **Logsonic.app** into `/Applications` (no sudo, no Gatekeeper prompts) and symlinks the `logsonic` CLI into your Homebrew prefix:
 
 ```bash
 brew tap logsonic/logsonic
@@ -56,7 +56,7 @@ brew install logsonic
 logsonic
 ```
 
-Then open your browser to `http://localhost:8080`.
+Or launch **Logsonic** from Applications/Spotlight — it picks a free port starting at 8080 and opens the web UI in your browser automatically. (Running `logsonic` from the terminal serves on `http://localhost:8080` without opening a browser; pass `-open -auto-port` for the app-style behavior.)
 
 **Upgrading:** third-party taps only refresh periodically, so run `brew update` first:
 
@@ -78,11 +78,7 @@ brew install logsonic
 
 Grab the latest build for your platform from the [GitHub releases page](https://github.com/logsonic/logsonic/releases).
 
-**macOS** — download `logsonic_<version>_macos.pkg` and double-click it (or `installer -pkg logsonic_<version>_macos.pkg -target /`). It's signed + notarized + stapled, so it installs `logsonic` to `/usr/local/bin` with no Gatekeeper warning, even offline. There is intentionally **no macOS `.tar.gz`**: a bare binary can't carry a stapled notarization ticket, so a Finder-extracted or offline download would trip Gatekeeper. Then just run:
-
-```bash
-logsonic
-```
+**macOS** — download `logsonic_<version>_macos.zip`, unzip it, and drag **Logsonic.app** to your Applications folder. The app is signed + notarized + stapled, so it opens with no Gatekeeper warning, even offline — double-click it and it launches the server and opens the web UI in your browser. There is intentionally **no macOS `.tar.gz`**: a bare binary can't carry a stapled notarization ticket, so a Finder-extracted or offline download would trip Gatekeeper.
 
 **Linux** — download the `.tar.gz`, extract, and run:
 
@@ -107,6 +103,24 @@ If the port 8080 is not available in your system, you could choose another port 
 
 Looking for some sample logs to try? [LogHub](https://github.com/logpai/loghub/) repository has some great collection such as this [Apache log](https://github.com/logpai/loghub/blob/master/Apache/Apache_2k.log)
 Download the log to you local computer and import using Import File menu. 
+
+### Data & storage
+
+LogSonic indexes everything you ingest into a per-user data directory (overridable with `-storage <dir>` or `STORAGE_PATH`):
+
+| OS | Default location |
+|---|---|
+| macOS | `~/Library/Application Support/Logsonic` |
+| Linux | `$XDG_DATA_HOME/logsonic` (or `~/.local/share/logsonic`) |
+| Windows | `%APPDATA%\Logsonic` |
+
+The index grows with the volume of logs you ingest. To keep it bounded, run with `-retention-days N` (or `RETENTION_DAYS=N`) to automatically drop indices older than N days:
+
+```bash
+logsonic -retention-days 30
+```
+
+**Uninstalling:** removing the app does not delete this data. To purge it, run `brew uninstall --zap logsonic` (Homebrew), or delete the directory above manually.
 
 ### MCP server for AI clients
 

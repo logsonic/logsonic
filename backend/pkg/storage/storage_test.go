@@ -170,6 +170,67 @@ func TestClear(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// PruneOlderThan
+// ---------------------------------------------------------------------------
+
+func TestPruneOlderThan(t *testing.T) {
+	store, dir := setupTestStorage(t)
+
+	now := time.Now().UTC()
+	old := now.AddDate(0, 0, -40) // 40 days ago
+	recent := now.AddDate(0, 0, -5)
+
+	if err := store.Store(makeLogs([]time.Time{old}, "old.log"), "old.log"); err != nil {
+		t.Fatalf("store old: %v", err)
+	}
+	if err := store.Store(makeLogs([]time.Time{recent}, "recent.log"), "recent.log"); err != nil {
+		t.Fatalf("store recent: %v", err)
+	}
+
+	// Prune everything older than 30 days — only the 40-day-old index should go.
+	removed, err := store.PruneOlderThan(30 * 24 * time.Hour)
+	if err != nil {
+		t.Fatalf("PruneOlderThan failed: %v", err)
+	}
+	if removed != 1 {
+		t.Fatalf("expected 1 index removed, got %d", removed)
+	}
+
+	dates, _ := store.List()
+	if len(dates) != 1 || dates[0] != recent.Format("2006-01-02") {
+		t.Errorf("expected only the recent date to remain, got %v", dates)
+	}
+
+	// The pruned index's directory must be gone from disk and from the map.
+	oldPath := filepath.Join(dir, "logs-"+old.Format("2006-01-02")+".bleve")
+	if _, statErr := os.Stat(oldPath); !os.IsNotExist(statErr) {
+		t.Errorf("expected %s to be removed from disk", oldPath)
+	}
+	if _, ok := store.indices[old.Format("2006-01-02")]; ok {
+		t.Errorf("expected old index removed from open-indices map")
+	}
+}
+
+func TestPruneOlderThan_Disabled(t *testing.T) {
+	store, _ := setupTestStorage(t)
+
+	ts := time.Now().UTC().AddDate(0, 0, -100) // very old
+	_ = store.Store(makeLogs([]time.Time{ts}, "old.log"), "old.log")
+
+	// A non-positive maxAge means retention is disabled — nothing is removed.
+	removed, err := store.PruneOlderThan(0)
+	if err != nil {
+		t.Fatalf("PruneOlderThan(0) failed: %v", err)
+	}
+	if removed != 0 {
+		t.Errorf("expected 0 removed when disabled, got %d", removed)
+	}
+	if dates, _ := store.List(); len(dates) != 1 {
+		t.Errorf("expected index retained when disabled, got %d dates", len(dates))
+	}
+}
+
+// ---------------------------------------------------------------------------
 // BaseDir
 // ---------------------------------------------------------------------------
 

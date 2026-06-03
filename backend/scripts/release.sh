@@ -139,50 +139,51 @@ notarize_darwin() {
 
 notarize_darwin
 
-# Wrap the universal darwin binary in a signed + notarized + STAPLED installer
-# .pkg, attach it to the GitHub release, and publish a Homebrew cask pointing at
+# Wrap the universal darwin binary in a signed + notarized + STAPLED .app bundle,
+# zip it, attach it to the GitHub release, and publish a Homebrew cask pointing at
 # it. macOS ships ONLY this way — there is no darwin .tar.gz (a bare binary can't
 # be stapled, so it forces an online Gatekeeper check and trips a dialog on
-# Finder-extracted downloads). The stapled .pkg carries its notarization ticket,
-# so install works offline with no dialog. See scripts/pkg-macos.sh and
+# Finder-extracted downloads). The stapled .app carries its notarization ticket,
+# installs into /Applications with no sudo (cask `app` stanza), and symlinks the
+# `logsonic` CLI into the Homebrew prefix. See scripts/app-macos.sh and
 # scripts/publish-cask.sh. Skipped on snapshot and when tooling/creds are absent.
-build_macos_pkg() {
+build_macos_app() {
   if [ "$MODE" = "snapshot" ]; then
-    info "skipping .pkg build (snapshot mode)"
+    info "skipping .app build (snapshot mode)"
     return
   fi
-  command -v pkgbuild >/dev/null || { info "skipping .pkg (pkgbuild not available — not macOS?)"; return; }
+  command -v codesign >/dev/null || { info "skipping .app (codesign not available — not macOS?)"; return; }
 
   local ubin="dist/logsonic-universal_darwin_all/logsonic"
-  [ -f "$ubin" ] || { info "skipping .pkg (universal binary not found at $ubin)"; return; }
+  [ -f "$ubin" ] || { info "skipping .app (universal binary not found at $ubin)"; return; }
 
   local version; version="$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')"
-  [ -n "$version" ] || err "build_macos_pkg: cannot determine version from git tags"
+  [ -n "$version" ] || err "build_macos_app: cannot determine version from git tags"
 
-  info "building macOS installer .pkg"
-  scripts/pkg-macos.sh "$ubin" "$version" dist
-  local pkg="dist/logsonic_${version}_macos.pkg"
+  info "building macOS .app bundle"
+  scripts/app-macos.sh "$ubin" "$version" dist
+  local zip="dist/logsonic_${version}_macos.zip"
 
   # Attach to the GitHub release + publish the Homebrew cask, unless publishing
   # was skipped.
   if [[ "$EXTRA_ARGS" == *"--skip=publish"* ]]; then
-    info "publish skipped — .pkg left at $BACKEND/$pkg (not uploaded, cask not published)"
+    info "publish skipped — .app/zip left at $BACKEND/$zip (not uploaded, cask not published)"
   elif command -v gh >/dev/null; then
     local tag; tag="$(git describe --tags --abbrev=0)"
-    info "uploading $pkg to release $tag"
-    gh release upload "$tag" "$pkg" --clobber
+    info "uploading $zip to release $tag"
+    gh release upload "$tag" "$zip" --clobber
 
-    # Publish the cask AFTER the .pkg is live, so its download URL resolves.
+    # Publish the cask AFTER the zip is live, so its download URL resolves.
     if [ -n "${HOMEBREW_TAP_TOKEN:-}" ]; then
       info "publishing Homebrew cask for $version"
-      scripts/publish-cask.sh "$pkg" "$version"
+      scripts/publish-cask.sh "$zip" "$version"
     else
-      info "HOMEBREW_TAP_TOKEN not set — cask NOT published; macOS brew install --cask will be stale" >&2
+      info "HOMEBREW_TAP_TOKEN not set — cask NOT published; macOS brew install will be stale" >&2
     fi
   else
-    info "gh not installed — .pkg built at $BACKEND/$pkg but NOT uploaded; cask not published" >&2
+    info "gh not installed — .app zip built at $BACKEND/$zip but NOT uploaded; cask not published" >&2
   fi
 }
-build_macos_pkg
+build_macos_app
 
 info "done. Artifacts in $BACKEND/dist/"

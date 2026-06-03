@@ -6,7 +6,9 @@ import (
 	"log"
 	"logsonic/pkg/server"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -15,7 +17,10 @@ func main() {
 	// Define command line flags
 	hostFlag := flag.String("host", "", "Host address to bind to (default: localhost or HOST env var)")
 	portFlag := flag.String("port", "", "Port to listen on (default: 8080 or PORT env var)")
-	storageFlag := flag.String("storage", "", "Path to storage directory (default: STORAGE_PATH env var)")
+	storageFlag := flag.String("storage", "", "Path to storage directory (default: per-user app data dir)")
+	openFlag := flag.Bool("open", false, "Open the web UI in your browser once the server starts")
+	autoPortFlag := flag.Bool("auto-port", false, "If the port is busy, bind the next free port instead of failing")
+	retentionFlag := flag.Int("retention-days", 0, "Delete indexed logs older than N days (0 = keep everything)")
 	helpFlag := flag.Bool("help", false, "Show usage information")
 
 	// Parse command line arguments
@@ -50,10 +55,17 @@ func main() {
 		port = ":" + port
 	}
 
-	// Get storage path from command line flag or environment variable
+	// Resolve storage path: flag > STORAGE_PATH env > per-user app data dir.
 	storagePath := *storageFlag
 	if storagePath == "" {
 		storagePath = os.Getenv("STORAGE_PATH")
+	}
+	if storagePath == "" {
+		p, derr := defaultStoragePath()
+		if derr != nil {
+			log.Fatalf("failed to resolve default storage path: %v", derr)
+		}
+		storagePath = p
 	}
 
 	// Get working directory for defaults
@@ -62,23 +74,35 @@ func main() {
 		log.Fatalf("failed to get working directory: %v", err)
 	}
 
-	if storagePath == "" {
-		//For windows folder, use %appdata%
-		if runtime.GOOS == "windows" {
-			storagePath = os.Getenv("APPDATA") + "\\logsonic"
-		} else {
+	// The macOS .app launches with no flags and cwd "/". Its Info.plist sets
+	// LSEnvironment LOGSONIC_APP=1, which LaunchServices injects ONLY on
+	// double-click — never when the bundled binary is run from a terminal (e.g.
+	// via the Homebrew-symlinked `logsonic`). So app-launch gets the desktop
+	// defaults (open the browser, auto-select a port) while the CLI stays
+	// classic unless its own flags/env opt in.
+	asApp := envTrue("LOGSONIC_APP")
+	openBrowser := *openFlag || envTrue("LOGSONIC_OPEN_BROWSER") || asApp
+	autoPort := *autoPortFlag || envTrue("LOGSONIC_AUTO_PORT") || asApp
 
-			storagePath = workDir + "/.logsonic"
+	retentionDays := *retentionFlag
+	if retentionDays == 0 {
+		if v := os.Getenv("RETENTION_DAYS"); v != "" {
+			if n, parseErr := strconv.Atoi(v); parseErr == nil {
+				retentionDays = n
+			}
 		}
 	}
 
 	log.Println("Starting server on", host+port, "with storage path", storagePath)
 	cfg := server.Config{
-		Host:        host,
-		Port:        port,
-		StoragePath: storagePath,
-		WorkDir:     workDir,
-		Timeout:     60 * time.Second,
+		Host:          host,
+		Port:          port,
+		StoragePath:   storagePath,
+		WorkDir:       workDir,
+		Timeout:       60 * time.Second,
+		OpenBrowser:   openBrowser,
+		AutoPort:      autoPort,
+		RetentionDays: retentionDays,
 	}
 
 	// Try to create the server
@@ -102,21 +126,74 @@ func main() {
 	}
 }
 
+// defaultStoragePath returns the per-user data directory for logsonic's indices,
+// following each platform's convention so the location is stable regardless of
+// the working directory (important for the .app, which launches with cwd "/"):
+//
+//	macOS:   ~/Library/Application Support/Logsonic
+//	Windows: %APPDATA%\Logsonic
+//	Linux:   $XDG_DATA_HOME/logsonic  (or ~/.local/share/logsonic)
+//
+// The directory itself is created later by storage.NewStorage.
+func defaultStoragePath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	switch runtime.GOOS {
+	case "windows":
+		base := os.Getenv("APPDATA")
+		if base == "" {
+			base = filepath.Join(home, "AppData", "Roaming")
+		}
+		return filepath.Join(base, "Logsonic"), nil
+	case "darwin":
+		return filepath.Join(home, "Library", "Application Support", "Logsonic"), nil
+	default: // linux and other unixes
+		base := os.Getenv("XDG_DATA_HOME")
+		if base == "" {
+			base = filepath.Join(home, ".local", "share")
+		}
+		return filepath.Join(base, "logsonic"), nil
+	}
+}
+
+// envTrue reports whether an env var is set to a truthy value (1/true/yes/on).
+func envTrue(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 func printUsage() {
 	fmt.Println("LogSonic - Desktop Log ingestion and analysis server. Simple, minimal and fast.")
 	fmt.Println("\nUsage:")
 	fmt.Println("  logsonic [options]")
 	fmt.Println("\nOptions:")
-	fmt.Println("  -host string    Host address to bind to (default: localhost or HOST env var)")
-	fmt.Println("  -port string    Port to listen on (default: 8080 or PORT env var)")
-	fmt.Println("  -storage string Path to storage directory (default: STORAGE_PATH env var)")
-	fmt.Println("  -help           Show this help message")
+	fmt.Println("  -host string      Host address to bind to (default: localhost or HOST env var)")
+	fmt.Println("  -port string      Port to listen on (default: 8080 or PORT env var)")
+	fmt.Println("  -storage string   Path to storage directory (default: per-user app data dir)")
+	fmt.Println("  -open             Open the web UI in your browser once the server starts")
+	fmt.Println("  -auto-port        If the port is busy, bind the next free port instead of failing")
+	fmt.Println("  -retention-days N Delete indexed logs older than N days (0 = keep everything)")
+	fmt.Println("  -help             Show this help message")
 	fmt.Println("\nEnvironment Variables:")
-	fmt.Println("  HOST           Host address to bind to")
-	fmt.Println("  PORT           Port to listen on")
-	fmt.Println("  STORAGE_PATH   Path to storage directory")
+	fmt.Println("  HOST                  Host address to bind to")
+	fmt.Println("  PORT                  Port to listen on")
+	fmt.Println("  STORAGE_PATH          Path to storage directory")
+	fmt.Println("  LOGSONIC_OPEN_BROWSER Open the web UI on start (1/true/yes/on)")
+	fmt.Println("  LOGSONIC_AUTO_PORT    Auto-select a free port if busy (1/true/yes/on)")
+	fmt.Println("  RETENTION_DAYS        Delete indexed logs older than N days")
+	fmt.Println("\nStorage directory (default):")
+	fmt.Println("  macOS    ~/Library/Application Support/Logsonic")
+	fmt.Println("  Linux    $XDG_DATA_HOME/logsonic (or ~/.local/share/logsonic)")
+	fmt.Println("  Windows  %APPDATA%\\Logsonic")
 	fmt.Println("\nExamples:")
 	fmt.Println("  logsonic")
-	fmt.Println("  logsonic -host localhost -port 8080 -storage /var/logs/storage")
-	fmt.Println("  HOST=localhost PORT=8080 STORAGE_PATH=/var/logs/storage logsonic")
+	fmt.Println("  logsonic -open -auto-port")
+	fmt.Println("  logsonic -host localhost -port 8080 -storage /var/logs/storage -retention-days 30")
 }

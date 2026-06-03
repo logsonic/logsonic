@@ -19,7 +19,7 @@ before:
 builds:
   # Linux + Windows ship as plain archives (no code-signing needed). darwin is a
   # SEPARATE build id below so it can be excluded from `archives:` — macOS ships
-  # only as a signed + notarized + stapled .pkg (and a Homebrew cask), never a
+  # only as a signed + notarized + stapled .app (and a Homebrew cask), never a
   # bare .tar.gz, because a lone Mach-O can't carry a stapled notarization ticket
   # and trips Gatekeeper on Finder-extracted/offline downloads.
   - id: logsonic
@@ -74,15 +74,15 @@ universal_binaries:
     replace: false
     name_template: logsonic
     # lipo strips per-arch signatures when merging — re-sign the fat binary.
-    # This universal binary is NOT archived; scripts/pkg-macos.sh wraps it into
-    # the stapled .pkg that release.sh builds and uploads after notarization.
+    # This universal binary is NOT archived; scripts/app-macos.sh wraps it into
+    # the stapled Logsonic.app that release.sh builds and uploads after notarization.
     hooks:
       post: 'scripts/sign-macos.sh "{{ .Path }}"'
 
 archives:
   - id: default
     # Linux + Windows only. darwin (logsonic-darwin / logsonic-universal) is
-    # deliberately excluded — macOS is distributed as a notarized .pkg + cask.
+    # deliberately excluded — macOS is distributed as a notarized .app + cask.
     ids: [logsonic]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
@@ -105,11 +105,13 @@ checksum:
 # embeds the signature in the binary instead of writing a separate file.
 
 # No `brews:` (formula) block. The Homebrew tap ships ONLY a cask named
-# `logsonic` (scripts/publish-cask.sh), pointing at the notarized .pkg. With no
-# same-named formula, `brew install logsonic` auto-resolves to the cask on macOS
-# — no `--cask` flag needed. A formula would shadow the cask and break that, so
-# we don't generate one. Linux/Windows users install via the .tar.gz/.zip below
-# (or Docker / from source) — there is no Linuxbrew formula anymore.
+# `logsonic` (scripts/publish-cask.sh), pointing at the notarized Logsonic.app
+# zip. With no same-named formula, `brew install logsonic` auto-resolves to the
+# cask on macOS — no `--cask` flag, no sudo (the cask `app` stanza drops the
+# bundle into /Applications and symlinks the CLI into the Homebrew prefix). A
+# formula would shadow the cask and break that, so we don't generate one.
+# Linux/Windows users install via the .tar.gz/.zip below (or Docker / from
+# source) — there is no Linuxbrew formula anymore.
 
 changelog:
   sort: asc
@@ -130,7 +132,7 @@ release:
 
     ---
 
-    **macOS** (signed + notarized): `brew tap logsonic/logsonic && brew install logsonic`, or download the `.pkg` installer. There is no macOS `.tar.gz` — a bare binary can't carry a stapled notarization ticket and trips Gatekeeper.
+    **macOS** (signed + notarized): `brew tap logsonic/logsonic && brew install logsonic`, or download `logsonic_<version>_macos.zip` and drag **Logsonic.app** to Applications. There is no macOS `.tar.gz` — a bare binary can't carry a stapled notarization ticket and trips Gatekeeper.
 
 
     **Linux / Windows**: download the `.tar.gz` / `.zip` for your arch (or use Docker).

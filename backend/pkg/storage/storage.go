@@ -31,6 +31,7 @@ type StorageInterface interface {
 	BaseDir() string
 	GetDocCount(date string) (uint64, error)
 	DeleteByIds(ids []string) (int, error)
+	PruneOlderThan(maxAge time.Duration) (int, error)
 }
 
 // NewStorage initializes a new Storage instance
@@ -268,6 +269,57 @@ func (s *Storage) Clear() error {
 	}
 
 	return nil
+}
+
+// PruneOlderThan deletes every per-day index whose date is older than maxAge,
+// returning the number of indices removed. A non-positive maxAge is a no-op
+// (retention disabled), so callers can pass the configured window unconditionally.
+// Each index dir is named "logs-2006-01-02.bleve"; dates that don't parse are
+// skipped rather than treated as expired, so a stray directory is never deleted.
+func (s *Storage) PruneOlderThan(maxAge time.Duration) (int, error) {
+	if maxAge <= 0 {
+		return 0, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cutoff := time.Now().Add(-maxAge)
+	pattern := filepath.Join(s.baseDir, "logs-*.bleve")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list indices: %w", err)
+	}
+
+	removed := 0
+	for _, indexPath := range matches {
+		base := filepath.Base(indexPath)
+		if len(base) < 12 { // "logs-".."\.bleve" guard
+			continue
+		}
+		date := base[5 : len(base)-6]
+		t, err := time.Parse("2006-01-02", date)
+		if err != nil {
+			continue // not a dated index dir — leave it alone
+		}
+		if !t.Before(cutoff) {
+			continue
+		}
+
+		// Close the open handle (if any) before removing the directory.
+		if index, ok := s.indices[date]; ok {
+			if err := index.Close(); err != nil {
+				return removed, fmt.Errorf("failed to close index %s: %w", date, err)
+			}
+			delete(s.indices, date)
+		}
+		if err := os.RemoveAll(indexPath); err != nil {
+			return removed, fmt.Errorf("failed to remove index directory %s: %w", indexPath, err)
+		}
+		removed++
+	}
+
+	return removed, nil
 }
 
 // List returns all available dates that have indices

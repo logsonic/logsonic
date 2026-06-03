@@ -2,12 +2,16 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -37,11 +41,23 @@ type Config struct {
 	WorkDir     string // Directory where log files are stored
 	Timeout     time.Duration
 	Host        string
+
+	// OpenBrowser opens the web UI in the default browser once the server is
+	// listening. AutoPort makes Start scan upward from Port for a free port
+	// instead of failing when it is busy. Both default on when launched as the
+	// macOS .app (see main.go), off for the bare CLI.
+	OpenBrowser bool
+	AutoPort    bool
+
+	// RetentionDays deletes indexed logs older than N days on startup and once
+	// a day thereafter. 0 disables retention (keep everything).
+	RetentionDays int
 }
 
 type Server struct {
 	router   chi.Router
 	services *handlers.Services
+	store    storage.StorageInterface
 	config   Config
 }
 
@@ -60,10 +76,12 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
 	}
 
-	// Externalize the grok pattern catalog under .log2grok in the
-	// current working directory. LoadConfig seeds the dir from the
-	// embedded defaults on first run and reuses it on subsequent boots.
-	if err := l2g.LoadConfig("", os.Stderr); err != nil {
+	// Externalize the grok pattern catalog under <storage>/log2grok. LoadConfig
+	// seeds the dir from the embedded defaults on first run and reuses it on
+	// subsequent boots. We anchor it to the storage dir (not the working
+	// directory) so it lives in a stable, writable location — the .app launches
+	// with cwd "/", where a relative .log2grok could not be created.
+	if err := l2g.LoadConfig(filepath.Join(cfg.StoragePath, "log2grok"), os.Stderr); err != nil {
 		return nil, fmt.Errorf("failed to initialize log2grok config: %w", err)
 	}
 	// Initialize router with middleware
@@ -237,6 +255,7 @@ func NewServer(cfg Config) (*Server, error) {
 	return &Server{
 		router:   r,
 		services: h,
+		store:    store,
 		config:   cfg,
 	}, nil
 }
@@ -245,16 +264,15 @@ func NewServer(cfg Config) (*Server, error) {
 // SIGTERM is received, then performs a graceful shutdown with a 30-second
 // drain timeout before closing all storage indices.
 func (s *Server) Start() error {
-	addr := s.config.Host + s.config.Port
-
 	// Bind synchronously so port-in-use errors surface before any
 	// "server started / open this URL" message is printed.
-	ln, err := net.Listen("tcp", addr)
+	ln, port, err := s.listen()
 	if err != nil {
-		return fmt.Errorf("listen %s: %w", addr, err)
+		return err
 	}
 
-	fmt.Printf("Server listening on http://%s\n", addr)
+	url := fmt.Sprintf("http://%s", net.JoinHostPort(s.config.Host, strconv.Itoa(port)))
+	fmt.Printf("Server listening on %s\n", url)
 
 	httpServer := &http.Server{
 		Handler: s.router,
@@ -263,6 +281,20 @@ func (s *Server) Start() error {
 	// Start session cleanup goroutine; cancel it on shutdown.
 	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
 	handlers.StartSessionCleanup(cleanupCtx)
+
+	// Apply retention now and once a day; cancelled on shutdown.
+	s.startRetention(cleanupCtx)
+
+	// Open the web UI once the listener is up (the serve goroutine starts
+	// below, so a short delay avoids racing the first request).
+	if s.config.OpenBrowser {
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			if err := openBrowser(url); err != nil {
+				fmt.Fprintf(os.Stderr, "could not open browser (%v) — open %s manually\n", err, url)
+			}
+		}()
+	}
 
 	// Listen for OS signals in the background.
 	quit := make(chan os.Signal, 1)
@@ -299,4 +331,97 @@ func (s *Server) Start() error {
 
 	fmt.Println("Server stopped.")
 	return nil
+}
+
+// listen binds the server's TCP listener and returns it along with the port it
+// actually bound. With AutoPort, a busy port is skipped and the next one is
+// tried (scanning up to portScanRange ports); otherwise a busy port is fatal,
+// preserving the bare-CLI behavior. The returned port may differ from the
+// configured one, so callers use it (not config.Port) for the URL.
+func (s *Server) listen() (net.Listener, int, error) {
+	const portScanRange = 100
+
+	basePort, err := parsePort(s.config.Port)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	for port := basePort; port < basePort+portScanRange; port++ {
+		addr := net.JoinHostPort(s.config.Host, strconv.Itoa(port))
+		ln, lErr := net.Listen("tcp", addr)
+		if lErr == nil {
+			return ln, port, nil
+		}
+		if !s.config.AutoPort || !isAddrInUse(lErr) {
+			return nil, 0, fmt.Errorf("listen %s: %w", addr, lErr)
+		}
+		// Port busy and AutoPort is on — try the next one.
+	}
+	return nil, 0, fmt.Errorf("no free port found in range %d-%d", basePort, basePort+portScanRange-1)
+}
+
+// startRetention deletes indices older than RetentionDays now, then once a day
+// until ctx is cancelled. A non-positive RetentionDays disables it entirely.
+func (s *Server) startRetention(ctx context.Context) {
+	if s.config.RetentionDays <= 0 {
+		return
+	}
+	maxAge := time.Duration(s.config.RetentionDays) * 24 * time.Hour
+
+	prune := func() {
+		removed, err := s.store.PruneOlderThan(maxAge)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "retention: prune failed: %v\n", err)
+			return
+		}
+		if removed > 0 {
+			fmt.Printf("retention: removed %d index(es) older than %d day(s)\n", removed, s.config.RetentionDays)
+		}
+	}
+
+	prune() // sweep once at startup
+
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				prune()
+			}
+		}
+	}()
+}
+
+// parsePort turns a ":8080" or "8080" config value into an integer.
+func parsePort(p string) (int, error) {
+	n, err := strconv.Atoi(strings.TrimPrefix(p, ":"))
+	if err != nil {
+		return 0, fmt.Errorf("invalid port %q: %w", p, err)
+	}
+	return n, nil
+}
+
+// isAddrInUse reports whether err is the "address already in use" bind error.
+func isAddrInUse(err error) bool {
+	return errors.Is(err, syscall.EADDRINUSE) ||
+		strings.Contains(err.Error(), "address already in use")
+}
+
+// openBrowser opens url in the user's default browser, per platform. It returns
+// immediately (does not wait for the browser to close).
+func openBrowser(url string) error {
+	var cmd string
+	var args []string
+	switch runtime.GOOS {
+	case "darwin":
+		cmd, args = "open", []string{url}
+	case "windows":
+		cmd, args = "rundll32", []string{"url.dll,FileProtocolHandler", url}
+	default: // linux, bsd, …
+		cmd, args = "xdg-open", []string{url}
+	}
+	return exec.Command(cmd, args...).Start()
 }
