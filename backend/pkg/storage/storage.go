@@ -111,6 +111,17 @@ func buildIndexMapping() mapping.IndexMapping {
 	textField.IncludeInAll = true
 	logMapping.AddFieldMappingsAt("_raw", textField)
 
+	// _seq is internal ordering metadata (the sort tie-breaker). Persist
+	// it so it round-trips for sorting, but keep it out of the index and
+	// the _all field — otherwise IndexDynamic would make its numeric
+	// value searchable and a free-text query containing a number could
+	// match documents on their _seq.
+	seqField := bleve.NewNumericFieldMapping()
+	seqField.Store = true
+	seqField.Index = false
+	seqField.IncludeInAll = false
+	logMapping.AddFieldMappingsAt("_seq", seqField)
+
 	mapping.DefaultMapping = logMapping
 	mapping.DefaultAnalyzer = "standard"
 	mapping.IndexDynamic = true
@@ -206,7 +217,18 @@ func (s *Storage) Store(logs []map[string]interface{}, source string) error {
 					logCopy[k] = floatVal
 				}
 			}
-			docID := fmt.Sprintf("%d-%s-%d", log["timestamp"].(time.Time).UnixNano(), source, i)
+			// Disambiguate by the session-global `_seq` when present:
+			// the batch index `i` resets every ingest chunk, so two lines
+			// from different chunks that share a timestamp + source would
+			// otherwise produce the same docID and silently overwrite each
+			// other. `_seq` is monotonic across the whole session, so it
+			// keeps every line a distinct document. Falls back to `i` for
+			// callers (tests) that don't stamp `_seq`.
+			seqID := int64(i)
+			if v, ok := log["_seq"].(int64); ok {
+				seqID = v
+			}
+			docID := fmt.Sprintf("%d-%s-%d", log["timestamp"].(time.Time).UnixNano(), source, seqID)
 			if err := batch.Index(docID, logCopy); err != nil {
 				return fmt.Errorf("failed to index log entry: %w", err)
 			}
