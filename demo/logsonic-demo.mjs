@@ -28,6 +28,8 @@
  *   MAXIMIZE   "1" to maximize to the screen the window opens on
  *   SLOWMO     ms between actions (default 350)
  *   STEPDELAY  ms beat between import-wizard steps (default 2200)
+ *   PATTERN_FILTER  text typed into the Settings pattern filter (default
+ *              derived from the first row, falling back to "grok")
  *   STARTDELAY seconds to wait once the UI is up (browser open on the home
  *              page) before the demo actions begin, so you can frame Kap and
  *              start recording (default 10; set 0 to skip)
@@ -65,6 +67,9 @@ const SEARCH2 = process.env.SEARCH2 ?? 'error';
 const COLOR_FIELD = process.env.COLOR_FIELD ?? 'program';
 const COLOR_VALUE = process.env.COLOR_VALUE ?? 'sshd';
 const DARK = process.env.DARK !== '0';
+// Sample text typed into the Settings → Custom patterns filter box. Defaults
+// are derived from a real row at runtime; this is the fallback.
+const PATTERN_FILTER = process.env.PATTERN_FILTER ?? 'grok';
 
 // Plain-text logs (no JSON). linux-syslog.log is deliberately year-less so the
 // wizard flags its timestamps as "Ambiguous" — that's what lets the demo show
@@ -339,6 +344,70 @@ async function main() {
   }
   await clickByName('Filters'); // collapse the panel
   await pause(page, 1500);
+
+  // ── 11. Settings → Custom patterns (view, filter, export & import) ───────
+  log('Opening Settings → Custom patterns…');
+  if (!(await clickByName('Settings'))) {
+    await page.goto(`${FRONTEND}/#/settings/patterns`, { waitUntil: 'domcontentloaded' });
+  }
+  try {
+    await page.getByRole('heading', { name: 'Custom patterns' }).waitFor({ timeout: 10000 });
+    await step(page); // linger on the patterns table
+
+    // Filter the table by a term taken from a real row (so it always matches),
+    // then clear it.
+    const firstCell = await page
+      .locator('.ls-dtable tbody tr td')
+      .first()
+      .textContent()
+      .catch(() => '');
+    const filterTerm = (firstCell?.match(/[A-Za-z]+/)?.[0] ?? PATTERN_FILTER).slice(0, 5);
+    log(`Filtering patterns by "${filterTerm}"…`);
+    const pfilter = page.getByPlaceholder(/Filter patterns/i);
+    if (await pfilter.isVisible().catch(() => false)) {
+      await pfilter.click();
+      await page.keyboard.type(filterTerm, { delay: 55 });
+      await step(page);
+      await pfilter.fill('');
+      await pause(page, 600);
+    }
+
+    // Open the editor on the first pattern to show the edit dialog, then close.
+    log('Opening the pattern editor…');
+    const editBtn = page.getByRole('button', { name: /^Edit / }).first();
+    if (await editBtn.isVisible().catch(() => false)) {
+      await editBtn.click();
+      await step(page);
+      const cancel = page.getByRole('button', { name: 'Cancel', exact: true });
+      if (await cancel.isVisible().catch(() => false)) await cancel.click();
+      await pause(page, 600);
+    }
+
+    // Export every pattern to a versioned JSON file…
+    log('Exporting patterns to JSON…');
+    const [download] = await Promise.all([
+      page.waitForEvent('download').catch(() => null),
+      page.getByRole('button', { name: 'Export', exact: true }).click(),
+    ]);
+    await step(page);
+
+    // …then re-import that same file to show the upsert round-trip.
+    const exportPath = download ? await download.path().catch(() => null) : null;
+    if (exportPath) {
+      log('Re-importing the exported file (upsert round-trip)…');
+      await page.locator('input[type="file"]').first().setInputFiles(exportPath);
+      await page
+        .getByText(/Import complete|Import finished/i)
+        .first()
+        .waitFor({ timeout: 15000 })
+        .catch(() => {});
+      await step(page);
+    } else {
+      log('  (download not captured — skipping re-import)');
+    }
+  } catch (e) {
+    log(`  (settings step skipped: ${e.message.split('\n')[0]})`);
+  }
 
   log('Demo flow complete.');
   if (KEEP_OPEN) {

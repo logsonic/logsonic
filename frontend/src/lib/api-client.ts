@@ -88,6 +88,17 @@ export async function saveGrokPattern(request: GrokPatternRequest): Promise<Grok
   return apiRequest<GrokPatternResponse>('/grok', 'POST', request);
 }
 
+// Update an existing pattern in place (matched by name). The backend
+// requires the pattern to already exist and overwrites its body.
+export async function updateGrokPattern(request: GrokPatternRequest): Promise<GrokPatternResponse> {
+  return apiRequest<GrokPatternResponse>('/grok', 'PUT', request);
+}
+
+// Delete a saved pattern by name (DELETE /grok?name=<name>).
+export async function deleteGrokPattern(name: string): Promise<GrokPatternResponse> {
+  return apiRequest<GrokPatternResponse>('/grok', 'DELETE', undefined, { name });
+}
+
 export async function ingestStart(request: IngestSessionOptions): Promise<IngestResponse> {
   return apiRequest<IngestResponse>('/ingest/start', 'POST', request);
 }

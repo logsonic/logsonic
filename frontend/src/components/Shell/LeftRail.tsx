@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { Eye, Filter, List, Upload, Zap } from 'lucide-react';
+import { Eye, Filter, List, Settings, Upload, Zap } from 'lucide-react';
 import { ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -33,14 +33,22 @@ export const LeftRail = ({
   const path = location.pathname || '/';
   const isHome = path === '/' || path.startsWith('/?') || path.startsWith('/#');
   const isImport = path.startsWith('/import');
+  const isSettings = path.startsWith('/settings');
 
   const primary: RailEntry[] = [
     {
       id: 'logs',
       icon: <List size={18} strokeWidth={1.7} />,
       label: 'Logs',
-      onClick: () => navigate('/'),
-      active: isHome && !coloringOpen,
+      onClick: () => {
+        // Return to the plain log view: close any open side panel, then
+        // make sure we're on Home.
+        if (filterOpen) onToggleFilter?.();
+        else if (coloringOpen) onToggleColoring?.();
+        navigate('/');
+      },
+      // Only the "default" Home view — not when an overlay panel is open.
+      active: isHome && !filterOpen && !coloringOpen,
     },
     {
       id: 'filter',
@@ -62,6 +70,13 @@ export const LeftRail = ({
       label: 'Import',
       onClick: () => navigate('/import'),
       active: isImport,
+    },
+    {
+      id: 'settings',
+      icon: <Settings size={18} strokeWidth={1.7} />,
+      label: 'Settings',
+      onClick: () => navigate('/settings'),
+      active: isSettings,
     },
   ];
 
