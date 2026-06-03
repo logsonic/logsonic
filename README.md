@@ -56,7 +56,7 @@ brew install logsonic
 logsonic
 ```
 
-Or launch **Logsonic** from Applications/Spotlight — it picks a free port starting at 8080 and opens the web UI in your browser automatically. (Running `logsonic` from the terminal serves on `http://localhost:8080` without opening a browser; pass `-open -auto-port` for the app-style behavior.)
+This gives you both the **Logsonic.app** launcher (double-click to start the server and open the web UI — see [The macOS App](#the-macos-app)) and the `logsonic` CLI for the terminal.
 
 **Upgrading:** third-party taps only refresh periodically, so run `brew update` first:
 
@@ -73,6 +73,22 @@ brew install logsonic
 ```
 
 > Linux: Homebrew isn't supported for LogSonic — use the pre-built binary, Docker, or build from source (below).
+
+### The macOS App
+
+Whether you install via Homebrew or drag it in from the release `.zip`, **Logsonic.app** lives in `/Applications` and shows the LogSonic ⚡ icon in Finder, Launchpad, and Spotlight — just like any native Mac app.
+
+**Launching it:**
+
+1. Open it from **Applications**, **Spotlight** (`⌘ Space` → "Logsonic"), or **Launchpad** — or double-click the bundle.
+2. On launch it starts the local server, **picks the first free port starting at 8080**, and **opens the web UI in your default browser** automatically. No Terminal needed.
+3. LogSonic runs as a lightweight background server with a **Dock icon** — there's no separate app window; the browser tab *is* the UI.
+
+**Quitting:** right-click the Dock icon → **Quit** (or `⌘ Q` with it focused). This stops the server; closing only the browser tab leaves it running.
+
+Because the app is signed, notarized, and **stapled**, it opens with no Gatekeeper prompt even on a fresh machine that's offline. Your indexed data is stored under `~/Library/Application Support/Logsonic` (see [Data & storage](#data--storage)).
+
+> **App vs. CLI:** the `Logsonic.app` launcher always auto-selects a port and opens the browser. The `logsonic` command-line tool (symlinked into your Homebrew prefix) keeps the classic behavior — it serves on `http://localhost:8080` and does **not** open a browser — unless you pass `-open -auto-port`. Both share the same data directory.
 
 ### Pre-built Binary
 
@@ -180,13 +196,21 @@ LogSonic can be configured using command line flags or environment variables:
 ### Command Line Flags
 - `-host`: Host address to bind to (default: localhost)
 - `-port`: Port to listen on (default: 8080)
-- `-storage`: Path to storage directory for indices (default: system-specific)
+- `-storage`: Path to storage directory for indices (default: per-user app data dir)
+- `-open`: Open the web UI in your browser once the server starts
+- `-auto-port`: If the port is busy, bind the next free port instead of failing
+- `-retention-days N`: Delete indexed logs older than N days (0 = keep everything)
 - `-help`: Show usage information
 
 ### Environment Variables
 - `HOST`: Host address to bind to
 - `PORT`: Port to listen on
 - `STORAGE_PATH`: Path to storage directory
+- `LOGSONIC_OPEN_BROWSER`: Open the web UI on start (`1`/`true`/`yes`/`on`)
+- `LOGSONIC_AUTO_PORT`: Auto-select a free port if busy (`1`/`true`/`yes`/`on`)
+- `RETENTION_DAYS`: Delete indexed logs older than N days
+
+> The **Logsonic.app** bundle sets `-open` and `-auto-port` behavior automatically, so double-clicking it picks a free port and opens your browser. The bare `logsonic` CLI keeps the classic behavior (serves on `localhost:8080`, no browser) unless you pass these flags.
 
 ### Examples
 ```bash
@@ -198,6 +222,12 @@ logsonic -host 0.0.0.0 -port 9000
 
 # Custom storage path
 logsonic -storage /var/logs/storage
+
+# App-style: auto-select a free port and open the browser
+logsonic -open -auto-port
+
+# Cap on-disk index size: drop indices older than 30 days
+logsonic -retention-days 30
 
 # Using environment variables
 HOST=0.0.0.0 PORT=9000 STORAGE_PATH=/var/logs/storage logsonic

@@ -20,7 +20,12 @@ set -euo pipefail
 bin="${1:?app-macos.sh: missing universal binary path}"
 version="${2:?app-macos.sh: missing version}"
 outdir="${3:?app-macos.sh: missing output dir}"
-icon_png="${4:-pkg/static/dist/logo.png}"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+# App icon source: the square "blitz" mark only (no wordmark). Defaults to the
+# committed SVG, with a pre-rendered PNG as the no-librsvg fallback. We do NOT
+# use the wide logo.png — squished into a square icon it distorts badly.
+icon_src="${4:-$script_dir/app-icon.svg}"
+icon_png_fallback="$script_dir/app-icon.png"
 
 sign_id="${MACOS_SIGN_IDENTITY:-Developer ID Application: Akash Goswami (CW36P52426)}"
 identifier="com.logsonic.app"
@@ -36,19 +41,37 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/logsonic"
 chmod 755 "$app/Contents/MacOS/logsonic"
 
-# Optional icon: build AppIcon.icns from a PNG if one is available.
+# Build AppIcon.icns. Prefer rendering each iconset size straight from the SVG
+# (crisp at every resolution); fall back to downscaling the pre-rendered PNG when
+# librsvg (rsvg-convert) isn't installed, so the build never hard-depends on it.
 icon_plist_entry=""
-if [ -f "$icon_png" ] && command -v sips >/dev/null && command -v iconutil >/dev/null; then
+if command -v sips >/dev/null && command -v iconutil >/dev/null; then
   iconset=$(mktemp -d)/AppIcon.iconset
   mkdir -p "$iconset"
-  for sz in 16 32 64 128 256 512; do
-    sips -z "$sz" "$sz"       "$icon_png" --out "$iconset/icon_${sz}x${sz}.png"     >/dev/null
-    sips -z $((sz*2)) $((sz*2)) "$icon_png" --out "$iconset/icon_${sz}x${sz}@2x.png" >/dev/null
-  done
-  iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
-  icon_plist_entry='
+  render_ok=1
+  if [[ "$icon_src" == *.svg ]] && command -v rsvg-convert >/dev/null; then
+    for sz in 16 32 64 128 256 512; do
+      rsvg-convert -w "$sz"        -h "$sz"        "$icon_src" -o "$iconset/icon_${sz}x${sz}.png"     || render_ok=0
+      rsvg-convert -w $((sz*2))    -h $((sz*2))    "$icon_src" -o "$iconset/icon_${sz}x${sz}@2x.png"  || render_ok=0
+    done
+  else
+    # Raster fallback: use the supplied PNG, or the committed pre-rendered icon.
+    src_png="$icon_src"; [[ "$src_png" == *.svg ]] && src_png="$icon_png_fallback"
+    if [ -f "$src_png" ]; then
+      for sz in 16 32 64 128 256 512; do
+        sips -z "$sz" "$sz"         "$src_png" --out "$iconset/icon_${sz}x${sz}.png"     >/dev/null
+        sips -z $((sz*2)) $((sz*2)) "$src_png" --out "$iconset/icon_${sz}x${sz}@2x.png" >/dev/null
+      done
+    else
+      render_ok=0
+    fi
+  fi
+  if [ "$render_ok" = 1 ]; then
+    iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
+    icon_plist_entry='
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>'
+  fi
 fi
 
 cat > "$app/Contents/Info.plist" <<PLIST

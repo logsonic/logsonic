@@ -24,6 +24,8 @@ macOS ships as a signed + notarized + **stapled** `Logsonic.app`, zipped as `log
 
 Import the Apple intermediate CA (`Developer ID Certification Authority` G2) from <https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer>.
 
+**App icon:** `scripts/app-macos.sh` builds `AppIcon.icns` from `scripts/app-icon.svg` (the LogSonic "blitz" mark only — no wordmark — inset on the Apple icon grid). It renders each icon size with `rsvg-convert` (`brew install librsvg`) for crispness, falling back to downscaling the committed `scripts/app-icon.png` when librsvg isn't installed — so the build never hard-depends on it. To change the icon, edit `app-icon.svg` and regenerate the PNG: `rsvg-convert -w 1024 -h 1024 scripts/app-icon.svg -o scripts/app-icon.png`.
+
 ---
 
 ## 2. Local signing (Keychain)
