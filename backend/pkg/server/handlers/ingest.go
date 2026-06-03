@@ -6,6 +6,7 @@ import (
 	"logsonic/pkg/types"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,6 +37,12 @@ type IngestSession struct {
 	Options      types.IngestSessionOptions
 	CreationTime time.Time
 	Decoder      *l2g.Decoder
+	// Seq is a session-wide monotonic line counter shared across every
+	// /ingest call for this session (the session is copied by value out
+	// of sessionMap, but the pointer is shared, so the count survives
+	// across chunks). postProcess stamps each line's `_seq` from it to
+	// preserve original order and keep storage docIDs unique.
+	Seq *atomic.Int64
 }
 
 var sessionMap = make(map[string]IngestSession)
@@ -80,6 +87,7 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 	session, exists := sessionMap[req.SessionID]
 	sessionOptions := session.Options
 	sessionDecoder := session.Decoder
+	sessionSeq := session.Seq
 	sessionMapMutex.RUnlock()
 
 	if !exists || req.SessionID == "" {
@@ -98,7 +106,7 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 	// and output order is preserved, so this is a drop-in replacement
 	// for Decode that scales ingest throughput on multi-core boxes.
 	results := sessionDecoder.DecodeConcurrent(req.Logs, 0)
-	jsonOutput, successCount, failedCount, _ := postProcess(results, sessionOptions)
+	jsonOutput, successCount, failedCount, _ := postProcess(results, sessionOptions, sessionSeq)
 
 	if err := h.storage.Store(jsonOutput, sessionOptions.Source); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -208,6 +216,7 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		Options:      sessionOptions,
 		CreationTime: time.Now(),
 		Decoder:      dec,
+		Seq:          new(atomic.Int64),
 	}
 	sessionMapMutex.Unlock()
 

@@ -90,7 +90,10 @@ func (h *Services) HandleTimestampPreview(w http.ResponseWriter, r *http.Request
 
 	inf := timeresolve.Sniff(samples, req.SourceMTime)
 	inf.Resolution = mergeResolution(inf.Resolution, req.Resolution)
-	inf.Preview = buildPreviewFromResults(results, inf.Resolution)
+	// Mirror ingest: with no time captures at all, preview the synthesized
+	// per-line file-order timestamps instead of a flat anchor repeat.
+	syntheticMode := inf.Status == timeresolve.StatusMissing
+	inf.Preview = buildPreviewFromResults(results, inf.Resolution, syntheticMode, inf.Resolution.Anchor.Value)
 
 	json.NewEncoder(w).Encode(TimestampPreviewResponse{
 		Status:    "success",

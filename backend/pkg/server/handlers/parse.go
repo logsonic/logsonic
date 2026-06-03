@@ -103,12 +103,15 @@ func (h *Services) HandleParse(w http.ResponseWriter, r *http.Request) {
 	}
 
 	results := dec.Decode(req.Logs)
-	parsedLogs, successCount, failedCount, inference := postProcess(results, req.IngestSessionOptions)
+	// nil seq: the preview is ephemeral and single-shot, so a throwaway
+	// counter inside postProcess is fine — no cross-chunk continuity needed.
+	parsedLogs, successCount, failedCount, inference := postProcess(results, req.IngestSessionOptions, nil)
 
-	// /parse never persists, so drop _raw before returning to keep the
-	// preview payload light. Storage paths keep _raw via ingest.
+	// /parse never persists, so drop internal fields before returning to
+	// keep the preview payload light. Storage paths keep them via ingest.
 	for _, log := range parsedLogs {
 		delete(log, "_raw")
+		delete(log, "_seq")
 	}
 
 	json.NewEncoder(w).Encode(types.ParseResponse{

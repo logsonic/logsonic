@@ -485,13 +485,21 @@ func sortLogs(logs []map[string]interface{}, sortBy, sortOrder string) ([]map[st
 	// Extract unique column keys while processing logs
 	columnKeysMap := make(map[string]bool)
 
-	// Precompute comparison values to avoid repeated parsing
+	// Precompute comparison values (and the per-row `_seq` tie-breaker)
+	// to avoid repeated work inside the sort comparator.
 	comparisonValues := make([]interface{}, len(logs))
+	seqValues := make([]int64, len(logs))
 	for i, log := range logs {
-		// Extract column keys
+		// Extract column keys. `_seq` is internal ordering metadata: keep
+		// it out of the column list (and it's stripped from the response
+		// below) so it never surfaces in the UI.
 		for key := range log {
+			if key == "_seq" {
+				continue
+			}
 			columnKeysMap[key] = true
 		}
+		seqValues[i] = asSeq(log["_seq"])
 
 		val, exists := log[sortBy]
 		if !exists {
@@ -516,57 +524,29 @@ func sortLogs(logs []map[string]interface{}, sortBy, sortOrder string) ([]map[st
 		comparisonValues[i] = val
 	}
 
-	// Use a custom sorting algorithm with precomputed values
+	// Use a custom sorting algorithm with precomputed values. When the
+	// primary key ties, fall back to the monotonic ingest sequence so
+	// equal-timestamp (or sub-second-less) logs keep their original file
+	// order deterministically instead of sort.Slice's unstable result.
 	sort.Slice(indices, func(i, j int) bool {
-		valI := comparisonValues[indices[i]]
-		valJ := comparisonValues[indices[j]]
-
-		// Handle nil values (logs without the field)
-		if valI == nil && valJ == nil {
-			return false
+		oi, oj := indices[i], indices[j]
+		if c := comparePrimary(comparisonValues[oi], comparisonValues[oj], sortOrder); c != 0 {
+			return c < 0
 		}
-		if valI == nil {
-			return false // nil values go last
+		// Tie-break in the same direction as the primary sort so that
+		// reversing sort_order reverses the whole list cleanly.
+		if sortOrder == "asc" {
+			return seqValues[oi] < seqValues[oj]
 		}
-		if valJ == nil {
-			return true // nil values go last
-		}
-
-		// Compare based on type
-		switch a := valI.(type) {
-		case time.Time:
-			b := valJ.(time.Time)
-			if sortOrder == "asc" {
-				return a.Before(b)
-			}
-			return a.After(b)
-		case float64:
-			b := valJ.(float64)
-			if sortOrder == "asc" {
-				return a < b
-			}
-			return a > b
-		case string:
-			b := valJ.(string)
-			if sortOrder == "asc" {
-				return a < b
-			}
-			return a > b
-		default:
-			// Fallback to string representation
-			strA := fmt.Sprintf("%v", valI)
-			strB := fmt.Sprintf("%v", valJ)
-			if sortOrder == "asc" {
-				return strA < strB
-			}
-			return strA > strB
-		}
+		return seqValues[oi] > seqValues[oj]
 	})
 
 	// Build the sorted result — returned directly to avoid a copy back into logs.
 	sortedLogs := make([]map[string]interface{}, len(logs))
 	for i, idx := range indices {
-		sortedLogs[i] = logs[idx]
+		l := logs[idx]
+		delete(l, "_seq") // internal ordering key — not part of the response
+		sortedLogs[i] = l
 	}
 
 	// Convert column keys map to sorted slice
@@ -579,4 +559,73 @@ func sortLogs(logs []map[string]interface{}, sortBy, sortOrder string) ([]map[st
 	sort.Strings(availableColumns)
 
 	return sortedLogs, availableColumns
+}
+
+// comparePrimary orders two precomputed sort values, returning -1 when a
+// sorts before b, 1 when after, and 0 when equal (so the caller can apply
+// a tie-breaker). nil always sorts last regardless of direction; the
+// type-specific comparison is computed ascending and flipped for desc.
+func comparePrimary(a, b interface{}, sortOrder string) int {
+	switch {
+	case a == nil && b == nil:
+		return 0
+	case a == nil:
+		return 1
+	case b == nil:
+		return -1
+	}
+
+	nat := 0
+	switch av := a.(type) {
+	case time.Time:
+		if bv, ok := b.(time.Time); ok {
+			switch {
+			case av.Before(bv):
+				nat = -1
+			case av.After(bv):
+				nat = 1
+			}
+		} else {
+			nat = strings.Compare(fmt.Sprintf("%v", a), fmt.Sprintf("%v", b))
+		}
+	case float64:
+		if bv, ok := b.(float64); ok {
+			switch {
+			case av < bv:
+				nat = -1
+			case av > bv:
+				nat = 1
+			}
+		} else {
+			nat = strings.Compare(fmt.Sprintf("%v", a), fmt.Sprintf("%v", b))
+		}
+	case string:
+		if bv, ok := b.(string); ok {
+			nat = strings.Compare(av, bv)
+		} else {
+			nat = strings.Compare(av, fmt.Sprintf("%v", b))
+		}
+	default:
+		nat = strings.Compare(fmt.Sprintf("%v", a), fmt.Sprintf("%v", b))
+	}
+
+	if sortOrder != "asc" {
+		nat = -nat
+	}
+	return nat
+}
+
+// asSeq coerces a stored `_seq` value to int64. Bleve round-trips numeric
+// stored fields as float64, so accept both; missing/foreign values sort as
+// 0 (only relevant for legacy documents written before `_seq` existed).
+func asSeq(v interface{}) int64 {
+	switch n := v.(type) {
+	case int64:
+		return n
+	case float64:
+		return int64(n)
+	case int:
+		return int64(n)
+	}
+	return 0
 }
