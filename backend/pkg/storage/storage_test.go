@@ -542,6 +542,60 @@ func TestStore_MultipleSourcesSameDate(t *testing.T) {
 	}
 }
 
+// TestSearch_OpenNumericRangeExcludesTextTerms guards the numeric-range
+// rewrite against leaking non-numeric values from a mixed-type field. An
+// open-upper range (>, >=) must not match text terms, which sort above the
+// shift-0 numeric terms in the same field's dictionary.
+func TestSearch_OpenNumericRangeExcludesTextTerms(t *testing.T) {
+	store, _ := setupTestStorage(t)
+
+	ts := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	logs := []map[string]interface{}{
+		{"timestamp": ts, "_raw": "fast", "_src": "x.log", "latency": "100"},
+		{"timestamp": ts.Add(time.Minute), "_raw": "slow", "_src": "x.log", "latency": "timeout"},
+		{"timestamp": ts.Add(2 * time.Minute), "_raw": "quick", "_src": "x.log", "latency": "20"},
+	}
+	if err := store.Store(logs, "x.log"); err != nil {
+		t.Fatalf("Store failed: %v", err)
+	}
+
+	start := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2024, 1, 15, 23, 59, 59, 0, time.UTC)
+
+	cases := []struct {
+		query string
+		want  []string
+	}{
+		{"latency:>50", []string{"100"}},
+		{"latency:>=100", []string{"100"}},
+		{"latency:>0", []string{"20", "100"}},
+		{"latency:<200", []string{"20", "100"}},
+		{"latency:>600", nil},
+	}
+	for _, tc := range cases {
+		results, _, err := store.Search(tc.query, &start, &end, nil)
+		if err != nil {
+			t.Fatalf("Search(%q) failed: %v", tc.query, err)
+		}
+		got := make(map[string]bool, len(results))
+		for _, result := range results {
+			got[fmt.Sprintf("%v", result["latency"])] = true
+			if result["latency"] == "timeout" {
+				t.Errorf("Search(%q) leaked non-numeric latency value: %#v", tc.query, result)
+			}
+		}
+		if len(got) != len(tc.want) {
+			t.Errorf("Search(%q) returned %v, want %v", tc.query, results, tc.want)
+			continue
+		}
+		for _, want := range tc.want {
+			if !got[want] {
+				t.Errorf("Search(%q) missing latency %q; got %v", tc.query, want, results)
+			}
+		}
+	}
+}
+
 func TestSearch_MultipleSourcesKeepIndependentFields(t *testing.T) {
 	store, _ := setupTestStorage(t)
 

@@ -111,6 +111,10 @@ func buildIndexMapping() mapping.IndexMapping {
 	textField.Analyzer = "standard"
 	textField.IncludeTermVectors = false
 	textField.IncludeInAll = false
+	// Doc values build a columnar copy of every term, used only for sorting
+	// and faceting at the Bleve layer. LogSonic sorts results in Go and never
+	// facets, so the _raw doc-values payload is dead weight — disable it.
+	textField.DocValues = false
 	logMapping.AddFieldMappingsAt("_raw", textField)
 
 	// _seq is internal ordering metadata (the sort tie-breaker). Persist it

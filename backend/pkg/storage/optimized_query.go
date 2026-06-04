@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/blevesearch/bleve/v2/analysis"
 	"github.com/blevesearch/bleve/v2/mapping"
@@ -27,11 +28,20 @@ func optimizeQuery(input query.Query) query.Query {
 			fuzziness: typed.Fuzziness,
 		}
 	case *query.NumericRangeQuery:
+		// An open bound must still be clamped to the numeric term space.
+		// Every shift-0 numeric term begins with byte 0x20, while standard
+		// analyzer text terms begin at 0x30+, so an unbounded ("") upper
+		// bound would sweep past the numeric terms into any non-numeric text
+		// values stored in the same dynamic field. Clamp open bounds to the
+		// min/max int64 terms instead, which keeps the scan inside the
+		// numeric dictionary.
+		minBound, inclusiveMin := compactNumericLowerBound(typed.Min, typed.InclusiveMin)
+		maxBound, inclusiveMax := compactNumericUpperBound(typed.Max, typed.InclusiveMax)
 		numericRange := query.NewTermRangeInclusiveQuery(
-			compactNumericBound(typed.Min),
-			compactNumericBound(typed.Max),
-			typed.InclusiveMin,
-			typed.InclusiveMax,
+			minBound,
+			maxBound,
+			inclusiveMin,
+			inclusiveMax,
 		)
 		numericRange.SetField(typed.FieldVal)
 		numericRange.SetBoost(typed.Boost())
@@ -62,6 +72,27 @@ func optimizeOptionalQuery(input query.Query) query.Query {
 		return nil
 	}
 	return optimizeQuery(input)
+}
+
+// compactNumericLowerBound returns the shift-0 term for an inclusive/exclusive
+// numeric lower bound. A nil bound clamps to the minimum int64 term so the
+// range stays within the numeric dictionary rather than starting before it.
+func compactNumericLowerBound(value *float64, inclusive *bool) (string, *bool) {
+	if value == nil {
+		clamp := true
+		return string(numeric.MustNewPrefixCodedInt64(math.MinInt64, 0)), &clamp
+	}
+	return compactNumericBound(value), inclusive
+}
+
+// compactNumericUpperBound mirrors compactNumericLowerBound for upper bounds,
+// clamping a nil bound to the maximum int64 term.
+func compactNumericUpperBound(value *float64, inclusive *bool) (string, *bool) {
+	if value == nil {
+		clamp := true
+		return string(numeric.MustNewPrefixCodedInt64(math.MaxInt64, 0)), &clamp
+	}
+	return compactNumericBound(value), inclusive
 }
 
 func compactNumericBound(value *float64) string {
