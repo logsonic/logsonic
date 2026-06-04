@@ -1,4 +1,4 @@
-import { ArrowLeft, Info, Settings as SettingsIcon, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, Info, Settings as SettingsIcon, SlidersHorizontal, Terminal } from 'lucide-react';
 import { FC, ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -18,6 +18,12 @@ const NAV: NavItem[] = [
     label: 'Custom patterns',
     path: '/settings/patterns',
     icon: <SlidersHorizontal size={14} />,
+  },
+  {
+    id: 'mcp',
+    label: 'MCP Integration',
+    path: '/settings/mcp',
+    icon: <Terminal size={14} />,
   },
   {
     id: 'about',

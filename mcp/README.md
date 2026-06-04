@@ -12,81 +12,89 @@ A Model Context Protocol (MCP) server that lets AI clients — Claude Desktop, C
 | `list_grok_patterns`  | Inspect the parser library so the agent knows which fields exist.       |
 | `test_grok_pattern`   | Dry-run a Grok pattern against sample lines (or autosuggest).           |
 | `logsonic_url`        | Build a deep-link into the LogSonic web UI with query + time pre-filled.|
+| `log_distribution`    | Time-bucketed log counts without the row payload — fast trend overview. |
 
-The agent-facing playbook — query syntax, workflow, common recipes, pitfalls — lives in **[SKILLS.md](SKILLS.md)**. Point your MCP client at it (most clients have a "system prompt" or "instructions" field) so the model knows how to use the tools effectively without trial and error.
+The agent-facing playbook — query syntax, workflow, common recipes, pitfalls — lives in **[SKILLS.md](SKILLS.md)**. Point your MCP client at it so the model knows how to use the tools effectively.
 
-## Install
+## Connect your MCP client
 
-Clone the repo and install Node deps:
+### Option A — HTTP transport (recommended)
 
-```bash
-cd logsonic/mcp
-npm install
-```
-
-You need Node.js 20 or later.
-
-## Configure your MCP client
-
-Add this to your client's MCP configuration (e.g. `claude_desktop_config.json` for Claude Desktop, `mcp.json` for Cursor). **Replace the path** with the absolute path to your clone.
+LogSonic exposes the MCP server directly on its HTTP port at `/mcp`. No binary path, no extra install — just a URL. Works with Claude Desktop, Cursor, Windsurf, and any MCP client that supports the Streamable HTTP transport (updated after March 2025).
 
 ```json
 {
   "mcpServers": {
     "logsonic": {
-      "command": "npx",
-      "args": [
-        "tsx",
-        "/absolute/path/to/logsonic/mcp/index.ts"
-      ],
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+If LogSonic is running on a different port, replace `8080` accordingly.
+
+**Config file locations:**
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- Cursor: `mcp.json` in your project or global Cursor settings
+
+**Verify:** after restarting your client, run:
+```bash
+curl http://localhost:8080/mcp
+```
+You should get a JSON-RPC response. If not, make sure LogSonic is running first.
+
+---
+
+### Option B — binary stdio (fallback)
+
+Use this if your client doesn't support HTTP transport yet. The MCP server is built into the `logsonic` binary — a downloaded binary or Homebrew install already includes it.
+
+```json
+{
+  "mcpServers": {
+    "logsonic": {
+      "command": "/path/to/logsonic",
+      "args": ["mcp"],
       "env": {
-        "LOGSONIC_HOST": "localhost",
-        "LOGSONIC_PORT": "8080"
+        "LOGSONIC_URL": "http://localhost:8080"
       }
     }
   }
 }
 ```
 
-### Environment variables
-
-| Variable                 | Default                | Purpose                                              |
-|--------------------------|------------------------|------------------------------------------------------|
-| `LOGSONIC_URL`           | (composed)             | Full base URL. Wins over host/port. Use for HTTPS or non-standard paths. |
-| `LOGSONIC_HOST`          | `localhost`            | LogSonic host.                                       |
-| `LOGSONIC_PORT`          | `8080`                 | LogSonic port.                                       |
-| `LOGSONIC_TIMEOUT_MS`    | `30000`                | Per-request timeout.                                 |
-| `LOGSONIC_MAX_RETRIES`   | `3`                    | Retry budget for network errors and 5xx responses.   |
-
-## Reliability features
-
-The server is built to fail loud, not silent:
-
-- **Startup probe** — pings LogSonic at boot and logs to stderr if unreachable, so the client surfaces a clear warning before the user runs a tool.
-- **Per-request timeout** via `AbortController` (30 s default).
-- **Exponential backoff** on network errors and 5xx responses (3 attempts by default, base 250 ms).
-- **No retries on 4xx** — they're caller bugs; retrying wastes time and obscures the real error.
-- **Structured `UserError`** messages so the model gets readable text it can act on, not opaque stack traces.
-- **All diagnostics go to stderr.** The stdio channel is reserved for the MCP JSON-RPC protocol; writing anything to stdout would break the connection.
-
-## Pointing it at a remote LogSonic
-
-If you run LogSonic on a different machine (or behind a tunnel), set `LOGSONIC_URL`:
-
-```json
-"env": {
-  "LOGSONIC_URL": "https://logs.internal.example.com"
-}
-```
-
-The server appends `/api/v1` itself, so don't include it in the URL.
-
-## Verifying the connection
-
-After adding the config, restart your MCP client. Open the MCP debug panel (or check the client's log file) — you should see a single stderr line:
-
+Run `which logsonic` to find the binary path. When the client starts, check its MCP log for:
 ```
 [logsonic-mcp] connected to LogSonic at http://localhost:8080
 ```
+If you see the `WARNING: ... is not reachable` line instead, start LogSonic first.
 
-If you see the `WARNING: ... is not reachable yet` line instead, LogSonic isn't running. Start it (`./logsonic` or `cd backend && go run main.go`) and the next tool call will succeed.
+### Environment variables (Option B / HTTP transport with non-default address)
+
+| Variable              | Default                | Purpose                                              |
+|-----------------------|------------------------|------------------------------------------------------|
+| `LOGSONIC_URL`        | (composed)             | Full base URL. Wins over host/port. Use for HTTPS or non-standard paths. |
+| `LOGSONIC_HOST`       | `localhost`            | LogSonic host.                                       |
+| `LOGSONIC_PORT`       | `8080`                 | LogSonic port.                                       |
+| `LOGSONIC_TIMEOUT_MS` | `30000`                | Per-request timeout (Option B only).                 |
+
+## Pointing at a remote LogSonic
+
+Option A: just change the URL in the config:
+```json
+{ "mcpServers": { "logsonic": { "url": "https://logs.internal.example.com/mcp" } } }
+```
+
+Option B: set `LOGSONIC_URL` in the `env` block:
+```json
+"env": { "LOGSONIC_URL": "https://logs.internal.example.com" }
+```
+
+## Reliability
+
+- **Startup probe** — on stdio start, pings LogSonic and logs a warning to stderr if unreachable.
+- **Per-request timeout** — 30 s default (configurable via `LOGSONIC_TIMEOUT_MS`).
+- **Structured errors** — `UserError` messages reach the model as readable text, not opaque stack traces.
+- **Stateless HTTP** — the HTTP transport uses no session state; every request is independent.

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"logsonic/docs"
+	lsmcp "logsonic/pkg/mcp"
 	"logsonic/pkg/server/handlers"
 
 	"logsonic/pkg/static"
@@ -210,6 +211,13 @@ func NewServer(cfg Config) (*Server, error) {
 		// For all other paths, serve the file from the non-redirecting file server
 		noRedirectFileServer.ServeHTTP(w, r)
 	}
+
+	// MCP HTTP transport — Streamable HTTP (MCP spec 2025-03-26).
+	// Clients connect at /mcp; config is just: {"url": "http://localhost:PORT/mcp"}.
+	// The base URL the tools call back to is the configured host:port; if
+	// auto-port changes it the caller should set LOGSONIC_URL instead.
+	mcpBaseURL := fmt.Sprintf("http://%s%s", cfg.Host, cfg.Port)
+	r.Mount("/mcp", lsmcp.Handler(mcpBaseURL))
 
 	// Handle all paths
 	r.HandleFunc("/*", serveWithMimeType)

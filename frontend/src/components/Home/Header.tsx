@@ -20,8 +20,9 @@ import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import { useThemeStore } from '@/stores/useThemeStore';
-import { ExternalLink, HardDrive, Moon, Sun, Trash2 } from 'lucide-react';
+import { Bot, ExternalLink, HardDrive, Moon, Sun, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import SystemInfoModal from './SystemInfoModal';
 
 type ActiveSection = 'filter' | 'styling' | null;
@@ -41,6 +42,7 @@ const SECTION_LABEL: Record<Exclude<ActiveSection, null>, string> = {
 export const Header = ({ activeSection = null }: HeaderProps = {}) => {
   const { execute: clearLogs, isLoading } = useClearLogs();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [systemInfoOpen, setSystemInfoOpen] = useState(false);
   const { systemInfo, setSystemInfo } = useSystemInfoStore();
   const theme = useThemeStore((s) => s.theme);
@@ -142,6 +144,26 @@ export const Header = ({ activeSection = null }: HeaderProps = {}) => {
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs">
                 <p>Visit logsonic.io</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  style={{ color: 'var(--ls-text-2)' }}
+                  onClick={() => navigate('/settings/mcp')}
+                  aria-label="MCP Integration"
+                >
+                  <Bot className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                <p>MCP Integration</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

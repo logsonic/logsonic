@@ -83,6 +83,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var copyButton: NSButton!
     private var copyLogsButton: NSButton!
 
+    // Storage info bar
+    private let storagePathLabel = NSTextField(labelWithString: "Index: detecting…")
+    private let storageSizeLabel = NSTextField(labelWithString: "")
+    private var revealButton: NSButton!
+    private var storageDir: String?
+
     private var process: Process?
     private var serverURL: String?
     private var lineBuffer = ""
@@ -173,14 +179,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func buildWindow() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 740, height: 520),
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 740, height: 554),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                           backing: .buffered, defer: false)
         window.title = "LogSonic"
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
-        window.minSize = NSSize(width: 560, height: 380)
+        window.minSize = NSSize(width: 560, height: 414)
         window.center()
         window.isReleasedWhenClosed = false
         let root = NSView()
@@ -263,6 +269,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scroll.documentView = console
         card.addSubview(scroll)
 
+        // --- Storage info bar (sits between console card and footer) ---
+        let storageBar = NSView()
+        storageBar.translatesAutoresizingMaskIntoConstraints = false
+
+        let folderIcon = NSImageView(image: NSImage(systemSymbolName: "folder", accessibilityDescription: "Index folder") ?? NSImage())
+        folderIcon.contentTintColor = .tertiaryLabelColor
+        folderIcon.translatesAutoresizingMaskIntoConstraints = false
+
+        storagePathLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        storagePathLabel.textColor = .secondaryLabelColor
+        storagePathLabel.lineBreakMode = .byTruncatingMiddle
+        storagePathLabel.translatesAutoresizingMaskIntoConstraints = false
+        storagePathLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        storagePathLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        storageSizeLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        storageSizeLabel.textColor = .tertiaryLabelColor
+        storageSizeLabel.translatesAutoresizingMaskIntoConstraints = false
+        storageSizeLabel.setContentHuggingPriority(.required, for: .horizontal)
+
+        revealButton = NSButton(title: "Reveal in Finder", target: self, action: #selector(revealInFinder))
+        revealButton.isBordered = false
+        revealButton.font = .systemFont(ofSize: 11, weight: .medium)
+        revealButton.contentTintColor = brandColor
+        revealButton.isEnabled = false
+        revealButton.translatesAutoresizingMaskIntoConstraints = false
+        if let img = NSImage(systemSymbolName: "arrow.up.forward.square", accessibilityDescription: "Reveal") {
+            revealButton.image = img
+            revealButton.imagePosition = .imageLeading
+            revealButton.imageHugsTitle = true
+        }
+
+        storageBar.addSubview(folderIcon)
+        storageBar.addSubview(storagePathLabel)
+        storageBar.addSubview(storageSizeLabel)
+        storageBar.addSubview(revealButton)
+
         // --- Footer (URL + actions) ---
         let footer = NSVisualEffectView()
         footer.material = .titlebar
@@ -295,6 +338,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         root.addSubview(header)
         root.addSubview(card)
+        root.addSubview(storageBar)
         root.addSubview(footer)
 
         NSLayoutConstraint.activate([
@@ -329,8 +373,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             scroll.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -1),
             scroll.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -1),
 
+            // Storage info bar
+            storageBar.topAnchor.constraint(equalTo: card.bottomAnchor, constant: 7),
+            storageBar.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 18),
+            storageBar.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -16),
+            storageBar.heightAnchor.constraint(equalToConstant: 20),
+            folderIcon.leadingAnchor.constraint(equalTo: storageBar.leadingAnchor),
+            folderIcon.centerYAnchor.constraint(equalTo: storageBar.centerYAnchor),
+            folderIcon.widthAnchor.constraint(equalToConstant: 13),
+            storagePathLabel.leadingAnchor.constraint(equalTo: folderIcon.trailingAnchor, constant: 6),
+            storagePathLabel.centerYAnchor.constraint(equalTo: storageBar.centerYAnchor),
+            storageSizeLabel.leadingAnchor.constraint(equalTo: storagePathLabel.trailingAnchor, constant: 8),
+            storageSizeLabel.centerYAnchor.constraint(equalTo: storageBar.centerYAnchor),
+            revealButton.leadingAnchor.constraint(equalTo: storageSizeLabel.trailingAnchor, constant: 12),
+            revealButton.trailingAnchor.constraint(lessThanOrEqualTo: storageBar.trailingAnchor),
+            revealButton.centerYAnchor.constraint(equalTo: storageBar.centerYAnchor),
+
             // Footer
-            footer.topAnchor.constraint(equalTo: card.bottomAnchor, constant: 12),
+            footer.topAnchor.constraint(equalTo: storageBar.bottomAnchor, constant: 7),
             footer.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             footer.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             footer.bottomAnchor.constraint(equalTo: root.bottomAnchor),
@@ -403,6 +463,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             status.set("Running", color: .systemGreen)
         }
         if let u = URL(string: url) { NSWorkspace.shared.open(u) }
+        fetchStorageInfo(serverURL: url)
+    }
+
+    // Fetch storage path and size from /api/v1/info after the server is up.
+    private func fetchStorageInfo(serverURL: String) {
+        guard let url = URL(string: "\(serverURL)/api/v1/info") else { return }
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let storageInfo = json["storage_info"] as? [String: Any],
+                  let dir = storageInfo["storage_directory"] as? String else { return }
+            let sizeBytes = storageInfo["storage_size_bytes"] as? Int64 ?? 0
+            DispatchQueue.main.async { self?.updateStorageInfo(dir: dir, sizeBytes: sizeBytes) }
+        }.resume()
+    }
+
+    private func updateStorageInfo(dir: String, sizeBytes: Int64) {
+        storageDir = dir
+        storagePathLabel.stringValue = dir
+        storageSizeLabel.stringValue = formatStorageSize(sizeBytes)
+        revealButton.isEnabled = true
+    }
+
+    // Format bytes as human-readable string (KB / MB / GB).
+    private func formatStorageSize(_ bytes: Int64) -> String {
+        let kb = Double(bytes) / 1_024
+        let mb = kb / 1_024
+        let gb = mb / 1_024
+        if gb >= 1 { return String(format: "%.1f GB", gb) }
+        if mb >= 1 { return String(format: "%.1f MB", mb) }
+        if kb >= 1 { return String(format: "%.0f KB", kb) }
+        return "\(bytes) B"
+    }
+
+    @objc private func revealInFinder() {
+        guard let dir = storageDir else { return }
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: dir)
     }
 
     @objc private func openInBrowser() {

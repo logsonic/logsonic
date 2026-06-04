@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	lsmcp "logsonic/pkg/mcp"
 	"logsonic/pkg/server"
 	"os"
 	"path/filepath"
@@ -14,6 +15,20 @@ import (
 )
 
 func main() {
+	// mcp subcommand: logsonic mcp [--url http://localhost:8080]
+	// Runs the MCP stdio server so AI clients can query LogSonic.
+	// All other args are consumed by the regular server flag set below.
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		mcpFlags := flag.NewFlagSet("mcp", flag.ExitOnError)
+		mcpURL := mcpFlags.String("url", "", "LogSonic base URL (overrides LOGSONIC_URL / LOGSONIC_HOST + LOGSONIC_PORT)")
+		mcpFlags.Parse(os.Args[2:])
+		if err := lsmcp.Serve(*mcpURL); err != nil {
+			fmt.Fprintf(os.Stderr, "mcp: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	// Define command line flags
 	hostFlag := flag.String("host", "", "Host address to bind to (default: localhost or HOST env var)")
 	portFlag := flag.String("port", "", "Port to listen on (default: 8080 or PORT env var)")
@@ -179,6 +194,7 @@ func printUsage() {
 	fmt.Println("LogSonic - Desktop Log ingestion and analysis server. Simple, minimal and fast.")
 	fmt.Println("\nUsage:")
 	fmt.Println("  logsonic [options]")
+	fmt.Println("  logsonic mcp [--url http://localhost:8080]   Start the MCP stdio server for AI clients")
 	fmt.Println("\nOptions:")
 	fmt.Println("  -host string      Host address to bind to (default: localhost or HOST env var)")
 	fmt.Println("  -port string      Port to listen on (default: 8080 or PORT env var)")

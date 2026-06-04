@@ -1,19 +1,60 @@
-import { ExternalLink, Github } from 'lucide-react';
-import { FC } from 'react';
+import { Check, Copy, ExternalLink, Github } from 'lucide-react';
+import { FC, useState } from 'react';
 
 import pkg from '../../../package.json';
 
 import { SettingsLayout } from './SettingsLayout';
 
 import { Button } from '@/components/ui/button';
+import { formatBytes } from '@/lib/utils';
+import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 
 const SOURCE_URL = 'https://github.com/logsonic/logsonic';
 
-const About: FC = () => {
-  // Truthful, runtime-derivable facts only — no fabricated build metadata.
-  const apiBase = import.meta.env.DEV ? 'http://localhost:8080/api/v1' : '/api/v1';
+const CopyableValue: FC<{ value: string }> = ({ value }) => {
+  const [copied, setCopied] = useState(false);
 
-  const rows: [string, string][] = [
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  return (
+    <div className="flex items-center" style={{ gap: 6, minWidth: 0 }}>
+      <span className="ls-mono-inline" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }} title={value}>
+        {value}
+      </span>
+      <button
+        type="button"
+        onClick={handleCopy}
+        title="Copy to clipboard"
+        style={{
+          flexShrink: 0,
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          padding: 2,
+          color: 'var(--ls-text-3)',
+          display: 'flex',
+          alignItems: 'center',
+        }}
+      >
+        {copied ? <Check size={12} style={{ color: 'var(--ls-ok)' }} /> : <Copy size={12} />}
+      </button>
+    </div>
+  );
+};
+
+const About: FC = () => {
+  const { systemInfo } = useSystemInfoStore();
+
+  const apiBase = import.meta.env.DEV ? 'http://localhost:8080/api/v1' : '/api/v1';
+  const storageDir = systemInfo?.storage_info?.storage_directory;
+  const storageSize = systemInfo?.storage_info?.storage_size_bytes;
+
+  const staticRows: [string, string][] = [
     ['Version', `v${pkg.version}`],
     ['License', 'MIT'],
     ['API endpoint', apiBase],
@@ -31,6 +72,7 @@ const About: FC = () => {
         </p>
       </div>
 
+      {/* Storage location card */}
       <div
         style={{
           background: 'var(--ls-panel)',
@@ -41,7 +83,40 @@ const About: FC = () => {
           marginBottom: 14,
         }}
       >
-        {rows.map(([k, v], i) => (
+        <div
+          className="flex items-center justify-between"
+          style={{ gap: 16, padding: '10px 0' }}
+        >
+          <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ls-text)', flexShrink: 0 }}>Index location</span>
+          {storageDir ? (
+            <CopyableValue value={storageDir} />
+          ) : (
+            <span className="ls-mono-inline" style={{ color: 'var(--ls-text-3)' }}>loading…</span>
+          )}
+        </div>
+        <div
+          className="flex items-center justify-between"
+          style={{ gap: 16, padding: '10px 0', borderTop: '1px solid var(--ls-border-subtle)' }}
+        >
+          <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ls-text)', flexShrink: 0 }}>Index size</span>
+          <span className="ls-mono-inline">
+            {storageSize != null ? formatBytes(storageSize) : '…'}
+          </span>
+        </div>
+      </div>
+
+      {/* App metadata card */}
+      <div
+        style={{
+          background: 'var(--ls-panel)',
+          border: '1px solid var(--ls-border)',
+          borderRadius: 'var(--ls-radius-lg)',
+          boxShadow: 'var(--ls-shadow-sm)',
+          padding: '6px 16px',
+          marginBottom: 14,
+        }}
+      >
+        {staticRows.map(([k, v], i) => (
           <div
             key={k}
             className="flex items-center justify-between"
