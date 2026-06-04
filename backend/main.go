@@ -28,6 +28,9 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "tail" {
+		os.Exit(runTailCommand(os.Args[2:]))
+	}
 
 	// Define command line flags
 	hostFlag := flag.String("host", "", "Host address to bind to (default: localhost or HOST env var)")
@@ -195,6 +198,8 @@ func printUsage() {
 	fmt.Println("\nUsage:")
 	fmt.Println("  logsonic [options]")
 	fmt.Println("  logsonic mcp [--url http://localhost:8080]   Start the MCP stdio server for AI clients")
+	fmt.Println("  logsonic tail -f /path/to/file [options]     Stream appended file lines into LogSonic")
+	fmt.Println("  cmd | logsonic tail - [options]              Stream stdin into LogSonic")
 	fmt.Println("\nOptions:")
 	fmt.Println("  -host string      Host address to bind to (default: localhost or HOST env var)")
 	fmt.Println("  -port string      Port to listen on (default: 8080 or PORT env var)")

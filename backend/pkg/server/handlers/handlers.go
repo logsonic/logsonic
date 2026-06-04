@@ -9,6 +9,7 @@ import (
 
 type Services struct {
 	storage storage.StorageInterface
+	Live    *TailManager
 
 	StoragePath string
 
@@ -32,13 +33,15 @@ func NewHandler(storage storage.StorageInterface, storagePath string) *Services 
 		// as "no persistence" and falls through cleanly.
 		log.Printf("timeresolve: failed to open pattern_timestamps.json: %v", err)
 	}
-	return &Services{
+	svc := &Services{
 		storage:           storage,
 		StoragePath:       storagePath,
 		PatternTimestamps: store,
 		storageInfoCache:  nil,
 		cacheValid:        false,
 	}
+	svc.Live = NewTailManager(storage, svc.InvalidateInfoCache)
+	return svc
 }
 
 // CloseStorage cleanly shuts down all open Bleve indices.

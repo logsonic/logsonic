@@ -5,6 +5,7 @@ import {
   IngestRequest,
   IngestResponse,
   IngestSessionOptions,
+  LiveControlResponse,
   LogQueryParams,
   LogResponse,
   ParseRequest,
@@ -18,9 +19,11 @@ import {
 // API base configuration
 // For local development, use port 8080
 // For production, use relative URL
-const API_BASE_URL = (import.meta.env.DEV
+export const API_BASE_URL = (import.meta.env.DEV
   ? 'http://localhost:8080'
   : '') + '/api/v1';
+
+export const liveEventsURL = () => `${API_BASE_URL}/live/events`;
 
 // Helper function for API requests
 async function apiRequest<T = unknown>(
@@ -116,6 +119,14 @@ export async function ingestFile(request: IngestFileRequest): Promise<IngestResp
   return apiRequest<IngestResponse>('/ingestFile', 'POST', request);
 }
 
+export async function pauseLiveSubscriber(subscriberId: string): Promise<LiveControlResponse> {
+  return apiRequest<LiveControlResponse>(`/live/subscribers/${encodeURIComponent(subscriberId)}/pause`, 'POST', {});
+}
+
+export async function resumeLiveSubscriber(subscriberId: string): Promise<LiveControlResponse> {
+  return apiRequest<LiveControlResponse>(`/live/subscribers/${encodeURIComponent(subscriberId)}/resume`, 'POST', {});
+}
+
 // Log Querying
 export async function getLogs(params?: LogQueryParams): Promise<LogResponse> {
   return apiRequest<LogResponse>('/logs', 'GET', undefined, params);
@@ -170,4 +181,3 @@ export async function pingServer(): Promise<PingResponse> {
 export async function deleteLogsById(ids: string[]): Promise<any> {
   return apiRequest<any>('/logs/ids', 'DELETE', { ids });
 }
-

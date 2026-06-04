@@ -135,6 +135,45 @@ func TestStore_EmptyLogs(t *testing.T) {
 	}
 }
 
+func TestStoreWithIDs_ReturnsStableIDsInInputOrder(t *testing.T) {
+	store, _ := setupTestStorage(t)
+
+	ts := time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC)
+	logs := []map[string]interface{}{
+		{
+			"timestamp": ts,
+			"_raw":      "first",
+			"_src":      "app.log",
+			"message":   "first",
+			"_seq":      int64(41),
+		},
+		{
+			"timestamp": ts,
+			"_raw":      "second",
+			"_src":      "app.log",
+			"message":   "second",
+			"_seq":      int64(42),
+		},
+	}
+
+	ids, err := store.StoreWithIDs(logs, "app.log")
+	if err != nil {
+		t.Fatalf("StoreWithIDs failed: %v", err)
+	}
+	if len(ids) != 2 {
+		t.Fatalf("expected 2 IDs, got %d", len(ids))
+	}
+	if ids[0] != BuildDocID(logs[0], "app.log", 0) {
+		t.Fatalf("unexpected first ID: %s", ids[0])
+	}
+	if ids[1] != BuildDocID(logs[1], "app.log", 1) {
+		t.Fatalf("unexpected second ID: %s", ids[1])
+	}
+	if ids[0] == ids[1] {
+		t.Fatalf("expected distinct IDs for equal timestamp/source rows")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Clear
 // ---------------------------------------------------------------------------

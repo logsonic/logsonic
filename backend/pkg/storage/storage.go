@@ -24,6 +24,7 @@ type Storage struct {
 // StorageInterface defines the methods implemented by *Storage.
 type StorageInterface interface {
 	Store(logs []map[string]interface{}, source string) error
+	StoreWithIDs(logs []map[string]interface{}, source string) ([]string, error)
 	Search(query string, startDate, endDate *time.Time, sources []string) ([]map[string]interface{}, time.Duration, error)
 	List() ([]string, error)
 	GetSourceNames() ([]string, error)
@@ -186,25 +187,49 @@ func (s *Storage) getOrCreateIndex(date string) (bleve.Index, error) {
 	return index, nil
 }
 
+// BuildDocID returns the Bleve document ID used for a row. It is shared by
+// StoreWithIDs and live publishing so callers do not duplicate ID semantics.
+func BuildDocID(log map[string]interface{}, source string, fallbackSeq int) string {
+	seqID := int64(fallbackSeq)
+	if v, ok := log["_seq"].(int64); ok {
+		seqID = v
+	}
+	return fmt.Sprintf("%d-%s-%d", log["timestamp"].(time.Time).UnixNano(), source, seqID)
+}
+
 // Store saves the parsed log data to appropriate daily indices.
 func (s *Storage) Store(logs []map[string]interface{}, source string) error {
+	_, err := s.StoreWithIDs(logs, source)
+	return err
+}
+
+type datedLog struct {
+	index int
+	log   map[string]interface{}
+}
+
+// StoreWithIDs saves parsed log data and returns the generated document IDs in
+// the same order as the input rows.
+func (s *Storage) StoreWithIDs(logs []map[string]interface{}, source string) ([]string, error) {
+	docIDs := make([]string, len(logs))
 
 	// Group logs by date.
-	logsByDate := make(map[string][]map[string]interface{})
-	for _, log := range logs {
+	logsByDate := make(map[string][]datedLog)
+	for i, log := range logs {
 		ts := log["timestamp"].(time.Time)
 		date := ts.Format("2006-01-02")
-		logsByDate[date] = append(logsByDate[date], log)
+		logsByDate[date] = append(logsByDate[date], datedLog{index: i, log: log})
 	}
 
 	for date, dateLogs := range logsByDate {
 		index, err := s.getOrCreateIndex(date)
 		if err != nil {
-			return fmt.Errorf("failed to get index for date %s: %w", date, err)
+			return nil, fmt.Errorf("failed to get index for date %s: %w", date, err)
 		}
 
 		batch := index.NewBatch()
-		for i, log := range dateLogs {
+		for _, entry := range dateLogs {
+			log := entry.log
 			logCopy := make(map[string]interface{}, len(log))
 			for k, v := range log {
 				logCopy[k] = v
@@ -226,31 +251,28 @@ func (s *Storage) Store(logs []map[string]interface{}, source string) error {
 				}
 			}
 			// Disambiguate by the session-global `_seq` when present:
-			// the batch index `i` resets every ingest chunk, so two lines
-			// from different chunks that share a timestamp + source would
-			// otherwise produce the same docID and silently overwrite each
-			// other. `_seq` is monotonic across the whole session, so it
-			// keeps every line a distinct document. Falls back to `i` for
+			// the batch index resets every ingest chunk, so two lines from
+			// different chunks that share a timestamp + source would otherwise
+			// produce the same docID and silently overwrite each other. `_seq`
+			// is monotonic across the whole session, so it keeps every line a
+			// distinct document. Falls back to the original input index for
 			// callers (tests) that don't stamp `_seq`.
-			seqID := int64(i)
-			if v, ok := log["_seq"].(int64); ok {
-				seqID = v
-			}
-			docID := fmt.Sprintf("%d-%s-%d", log["timestamp"].(time.Time).UnixNano(), source, seqID)
+			docID := BuildDocID(log, source, entry.index)
+			docIDs[entry.index] = docID
 			doc, err := buildOptimizedDocument(index.Mapping(), docID, logCopy)
 			if err != nil {
-				return fmt.Errorf("failed to index log entry: %w", err)
+				return nil, fmt.Errorf("failed to index log entry: %w", err)
 			}
 			if err := batch.IndexAdvanced(doc); err != nil {
-				return fmt.Errorf("failed to add log entry to batch: %w", err)
+				return nil, fmt.Errorf("failed to add log entry to batch: %w", err)
 			}
 		}
 		if err := index.Batch(batch); err != nil {
-			return fmt.Errorf("failed to commit batch for date %s: %w", date, err)
+			return nil, fmt.Errorf("failed to commit batch for date %s: %w", date, err)
 		}
 	}
 
-	return nil
+	return docIDs, nil
 }
 
 // Clear removes all indices

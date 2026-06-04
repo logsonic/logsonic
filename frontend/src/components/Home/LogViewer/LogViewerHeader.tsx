@@ -3,12 +3,17 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { pauseLiveSubscriber, resumeLiveSubscriber } from '@/lib/api-client';
+import { useLiveLogStore } from '@/stores/useLiveLogStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import {
+  Activity,
   Columns,
   Lock,
   Maximize2,
+  Pause,
+  Play,
   Search,
   Unlock,
   X,
@@ -25,6 +30,7 @@ export const LogViewerHeader = (
 
 ) => {
   const store = useSearchQueryParamsStore();
+  const live = useLiveLogStore();
 
   // Toggle lock state
   const toggleLock = useCallback(() => {
@@ -35,6 +41,35 @@ export const LogViewerHeader = (
 
   const [isColumnPopoverOpen, setIsColumnPopoverOpen] = useState(false);
   const [headerSearchQuery, setHeaderSearchQuery] = useState('');
+
+  const toggleLive = useCallback(() => {
+    if (live.enabled) {
+      live.setEnabled(false);
+      return;
+    }
+    store.setSortBy('timestamp');
+    store.setSortOrder('desc');
+    live.setPaused(false);
+    live.setEnabled(true);
+  }, [live, store]);
+
+  const togglePause = useCallback(async () => {
+    if (!live.subscriberId) return;
+    try {
+      if (live.paused) {
+        await resumeLiveSubscriber(live.subscriberId);
+        live.setPaused(false);
+        live.setError(null);
+        return;
+      }
+      await pauseLiveSubscriber(live.subscriberId);
+      live.setPaused(true);
+      live.setError(null);
+    } catch (error) {
+      live.setError(error instanceof Error ? error.message : 'Live control request failed');
+      return;
+    }
+  }, [live]);
 
  
   // Filter out _raw and _src fields
@@ -215,13 +250,13 @@ export const LogViewerHeader = (
 
           <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: 'var(--ls-border)' }} />
 
-          <Button
-            variant="ghost"
-            className="ls-toolbar-btn h-7 rounded-none px-2.5 flex items-center gap-1"
-            onClick={autofitColumns}
-            disabled={store.isColumnLocked}
-            title="Auto-adjust column widths"
-          >
+	          <Button
+	            variant="ghost"
+	            className="ls-toolbar-btn h-7 rounded-none px-2.5 flex items-center gap-1"
+	            onClick={autofitColumns}
+	            disabled={store.isColumnLocked || live.enabled}
+	            title="Auto-adjust column widths"
+	          >
             <Maximize2 className="h-3.5 w-3.5" />
             <span className="text-xs">Fit</span>
           </Button>
@@ -245,17 +280,76 @@ export const LogViewerHeader = (
                 <span className="text-xs">Lock</span>
               </>
             )}
-          </Button>
-        </div>
-      </div>
+	          </Button>
+	        </div>
+
+	        <div
+	          className="ls-toolbar-group flex items-center overflow-hidden rounded-md"
+	          style={{
+	            background: 'var(--ls-bg-1)',
+	            border: '1px solid var(--ls-border)',
+	          }}
+	        >
+	          <Button
+	            variant="ghost"
+	            className="ls-toolbar-btn h-7 rounded-none px-2.5 flex items-center gap-1"
+	            onClick={toggleLive}
+	            title={live.enabled ? 'Stop live view' : 'Start live view'}
+	          >
+	            <Activity className="h-3.5 w-3.5" />
+	            <span className="text-xs">Live</span>
+	          </Button>
+
+	          <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: 'var(--ls-border)' }} />
+
+	          <Button
+	            variant="ghost"
+	            className="ls-toolbar-btn h-7 rounded-none px-2.5 flex items-center gap-1"
+	            onClick={togglePause}
+	            disabled={!live.enabled || !live.subscriberId}
+	            title={live.paused ? 'Resume live rows' : 'Pause live rows'}
+	          >
+	            {live.paused ? (
+	              <>
+	                <Play className="h-3.5 w-3.5" />
+	                <span className="text-xs">Resume</span>
+	              </>
+	            ) : (
+	              <>
+	                <Pause className="h-3.5 w-3.5" />
+	                <span className="text-xs">Pause</span>
+	              </>
+	            )}
+	          </Button>
+	        </div>
+	      </div>
 
       {/* Stats — "matches" is the count after the search query + time range
           filter; "indexed" is the total in storage. Showing both with explicit
           labels avoids the old ambiguous "500 / 2,500 logs". */}
       <div className="flex items-center gap-3">
-        <div className="text-xs" style={{ color: 'var(--ls-text-3)' }}>
-          {store.resultCount > 0 ? (
-            <span className="flex items-center gap-1.5">
+	        <div className="text-xs" style={{ color: 'var(--ls-text-3)' }}>
+	          {live.enabled ? (
+	            <span className="flex items-center gap-1.5">
+	              <span className="font-semibold" style={{ color: live.connected ? 'var(--ls-ok)' : 'var(--ls-warn)' }}>
+	                {live.connected ? 'connected' : 'connecting'}
+	              </span>
+	              <span style={{ color: 'var(--ls-text-4)' }}>
+	                {live.rows.length.toLocaleString()} live
+	              </span>
+	              {live.skippedCount > 0 && (
+	                <span style={{ color: 'var(--ls-text-4)' }}>
+	                  · {live.skippedCount.toLocaleString()} skipped
+	                </span>
+	              )}
+	              {live.error && (
+	                <span title={live.error} style={{ color: 'var(--ls-warn)' }}>
+	                  · error
+	                </span>
+	              )}
+	            </span>
+	          ) : store.resultCount > 0 ? (
+	            <span className="flex items-center gap-1.5">
               <span className="font-semibold" style={{ color: 'var(--ls-text)', fontFamily: 'var(--ls-font-mono)' }}>
                 {store.resultCount.toLocaleString()}
               </span>

@@ -63,6 +63,46 @@ export interface IngestSessionOptions {
   meta?: Record<string, any>;
 }
 
+export interface LiveFileRequest {
+  path: string;
+  options: IngestSessionOptions;
+}
+
+export interface LiveSourceResponse {
+  status: string;
+  source_id?: string;
+  error?: string;
+}
+
+export interface LiveControlResponse {
+  status: string;
+  subscriber_id?: string;
+  skipped?: Record<string, number>;
+  error?: string;
+}
+
+export interface LiveHelloEvent {
+  subscriber_id: string;
+  source_ids: string[];
+}
+
+export interface LiveRowsEvent {
+  source_id: string;
+  rows: Record<string, any>[];
+}
+
+export interface LiveSkippedEvent {
+  source_id: string;
+  count: number;
+  reason: 'paused' | 'overflow' | 'reconnect';
+}
+
+export interface LiveSourceStatusEvent {
+  source_id: string;
+  status: 'started' | 'stopped' | 'error';
+  message?: string;
+}
+
 // --- Timestamp resolution (mirrors backend pkg/timeresolve) ---
 
 export type TimestampStatus = 'exact' | 'inferred' | 'ambiguous' | 'missing';

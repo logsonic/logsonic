@@ -78,6 +78,46 @@ type IngestResponse struct {
 	SessionID string `json:"session_id,omitempty"`
 }
 
+type LiveFileRequest struct {
+	Path    string               `json:"path"`
+	Options IngestSessionOptions `json:"options"`
+}
+
+type LiveSourceResponse struct {
+	Status   string `json:"status"`
+	SourceID string `json:"source_id,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
+type LiveControlResponse struct {
+	Status       string         `json:"status"`
+	SubscriberID string         `json:"subscriber_id,omitempty"`
+	Skipped      map[string]int `json:"skipped,omitempty"`
+	Error        string         `json:"error,omitempty"`
+}
+
+type LiveHelloEvent struct {
+	SubscriberID string   `json:"subscriber_id"`
+	SourceIDs    []string `json:"source_ids"`
+}
+
+type LiveRowsEvent struct {
+	SourceID string                   `json:"source_id"`
+	Rows     []map[string]interface{} `json:"rows"`
+}
+
+type LiveSkippedEvent struct {
+	SourceID string `json:"source_id"`
+	Count    int    `json:"count"`
+	Reason   string `json:"reason"`
+}
+
+type LiveSourceStatusEvent struct {
+	SourceID string `json:"source_id"`
+	Status   string `json:"status"`
+	Message  string `json:"message,omitempty"`
+}
+
 // ParseResponse represents the response from the parse endpoint
 // @Description Response from the parse endpoint, containing parsed logs and potential error information
 type ParseResponse struct {
@@ -207,15 +247,15 @@ type LogResponse struct {
 
 // AutosuggestResult represents the result of pattern matching
 type AutosuggestResult struct {
-	PatternName        string                   `json:"pattern_name"`
-	PatternDescription string                   `json:"pattern_description"`
-	Pattern            string                   `json:"pattern"`
-	Score              float64                  `json:"score"`
+	PatternName        string  `json:"pattern_name"`
+	PatternDescription string  `json:"pattern_description"`
+	Pattern            string  `json:"pattern"`
+	Score              float64 `json:"score"`
 	// Coverage is the fraction of input lines matched by this pattern (0.0–1.0).
 	// Heterogeneous streams will show multiple patterns each covering a subset.
-	Coverage           float64                  `json:"coverage"`
-	ParsedLogs         []map[string]interface{} `json:"parsed_logs"`
-	CustomPatterns     map[string]string        `json:"custom_patterns,omitempty"`
+	Coverage       float64                  `json:"coverage"`
+	ParsedLogs     []map[string]interface{} `json:"parsed_logs"`
+	CustomPatterns map[string]string        `json:"custom_patterns,omitempty"`
 	// TimestampField / TimestampLayout / TimestampSource carry log2grok's
 	// auto-derived timestamp hint when one was inferred from the chosen
 	// Grok body (HTTPDATE → "timestamp" + Go layout, TIMESTAMP_ISO8601 →

@@ -39,6 +39,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { useSearchLogs } from '@/hooks/useSearchLogs';
 import { deleteLogsById, getSystemInfo } from '@/lib/api-client';
+import { useLiveLogStore } from '@/stores/useLiveLogStore';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import {
@@ -62,6 +63,24 @@ import {
 type LogData = Record<string, any>;
 
 const fixedColumns = ['select', 'expander'];
+
+const getLogRowId = (row: LogData, index: number) => {
+  return row._id ? String(row._id) : String(index);
+};
+
+const collectColumns = (rows: LogData[]) => {
+  const columns = new Set<string>();
+  rows.forEach(row => {
+    Object.keys(row).forEach(key => {
+      if (key !== '_seq') columns.add(key);
+    });
+  });
+  return Array.from(columns).sort((a, b) => {
+    if (a === 'timestamp') return -1;
+    if (b === 'timestamp') return 1;
+    return a.localeCompare(b);
+  });
+};
 
 // Sortable header component
 interface SortableHeaderProps {
@@ -157,8 +176,11 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
 
   const store = useSearchQueryParamsStore();
   const { logData, isLoading } = useLogResultStore();
+  const liveEnabled = useLiveLogStore(state => state.enabled);
+  const liveRows = useLiveLogStore(state => state.rows);
   const { colorRules } = useColorRuleStore();
-  const logs = logData?.logs || [];
+  const logs = liveEnabled ? liveRows : (logData?.logs || []);
+  const isTableLoading = !liveEnabled && isLoading;
   const { parseSearchQuery, createHighlighter } = useSearchParser();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -220,6 +242,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
   const fitRangeToData = useFitRangeToData();
 
   const autofitColumns = useCallback(() => {
+    if (liveEnabled) return;
 
     if (store.selectedColumns.length === 0) return;
     if (!logData || !logData.logs || logData.logs.length === 0) return;
@@ -331,7 +354,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     });
 
     store.setColumnWidths(columnWidths);
-  }, [logData, store.selectedColumns, store.mandatoryColumns, store.pageSize]);
+  }, [liveEnabled, logData, store.selectedColumns, store.mandatoryColumns, store.pageSize]);
 
   // Expose the autofitColumns function through the ref
   React.useImperativeHandle(ref, () => ({
@@ -340,6 +363,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
 
   // Handle sort change
   const handleSort = useCallback((column: string) => {
+    if (liveEnabled) return;
     if (store.sortBy === column) {
       // Toggle sort order if clicking the same column
       const newSortOrder = store.sortOrder === 'asc' ? 'desc' : 'asc';
@@ -350,19 +374,34 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
       store.setSortOrder('desc');
     }
     store.resetPagination();
-  }, [store]);
+  }, [liveEnabled, store]);
 
   useEffect(() => {
+    if (liveEnabled) return;
     autofitColumns();
     // Re-fit on new search results too — the visible-column set is derived
     // from log content, so widths must be recalculated when content changes.
-  }, [store.selectedColumns, logData]);
+  }, [liveEnabled, store.selectedColumns, logData]);
+
+  useEffect(() => {
+    if (!liveEnabled || logs.length === 0) return;
+    const liveColumns = collectColumns(logs);
+    if (liveColumns.length === 0) return;
+    const current = store.availableColumns;
+    const changed =
+      liveColumns.length !== current.length ||
+      liveColumns.some((col, index) => col !== current[index]);
+    if (changed) {
+      store.setAvailableColumns(liveColumns, logs);
+    }
+  }, [liveEnabled, logs, store]);
 
   // Refit on viewport resize so the table never gets stuck wider/narrower
   // than the available space when the user adjusts the window or sidebar.
   useEffect(() => {
     let raf = 0;
     const onResize = () => {
+      if (liveEnabled) return;
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => autofitColumns());
     };
@@ -372,7 +411,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [autofitColumns]);
+  }, [autofitColumns, liveEnabled]);
 
   // State for column resizing
   const [columnResizeMode, setColumnResizeMode] = useState<ColumnResizeMode>('onChange');
@@ -599,7 +638,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
               : 150
           ),
           enableResizing: !store.isColumnLocked,
-          enableSorting: true, // Always enable sorting for debugging
+          enableSorting: !liveEnabled,
         }
       )
     );
@@ -607,7 +646,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
   
 
     return [selectionColumn, expanderColumn, ...dataColumns];
-  }, [store.selectedColumns, formatTimestamp, store.sortBy, store.sortOrder, expanded, store.isColumnLocked, columnHelper, store.columnWidths]);
+  }, [store.selectedColumns, formatTimestamp, store.sortBy, store.sortOrder, expanded, store.isColumnLocked, columnHelper, store.columnWidths, liveEnabled]);
 
   // The user picks the visible columns via the Column Selector, and that
   // choice is the source of truth — even if the current page happens to be
@@ -667,6 +706,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
   const table = useReactTable({
     data: logs,
     columns,
+    getRowId: getLogRowId,
     state: {
       sorting,
       rowSelection,
@@ -678,7 +718,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     columnResizeMode,
-    enableColumnResizing: !store.isColumnLocked,
+    enableColumnResizing: !store.isColumnLocked && !liveEnabled,
     manualSorting: true,
     debugTable: false, // Enable table debugging
     debugHeaders: false, // Enable headers debugging
@@ -711,6 +751,10 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     },
   });
 
+  useEffect(() => {
+    setRowSelection({});
+  }, [liveEnabled]);
+
   // Force table to update when column widths change
   useEffect(() => {
     // This will force the table to recalculate with the new column sizes
@@ -727,8 +771,12 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
 
   // Get selected logs
   const selectedLogs = useMemo(() => {
+    const byID = new Map<string, LogData>();
+    logs.forEach((log, index) => {
+      byID.set(getLogRowId(log, index), log);
+    });
     return Object.keys(rowSelection)
-      .map(id => logs[parseInt(id)])
+      .map(id => byID.get(id))
       .filter(Boolean);
   }, [logs, rowSelection]);
 
@@ -916,7 +964,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     return result;
   }, [colorRules]);
 
-  if (isLoading) {
+  if (isTableLoading) {
     return (
       <div className="p-4">
         <LogViewerSkeleton columns={store.selectedColumns.length} rows={10} />
@@ -925,6 +973,14 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
   }
 
     if (logs.length === 0) {
+      if (liveEnabled) {
+        return (
+          <div className="flex flex-col items-center justify-center h-64 gap-2">
+            <p className="text-sm" style={{ color: 'var(--ls-text-2)' }}>Waiting for live rows.</p>
+            <p className="text-xs" style={{ color: 'var(--ls-text-4)' }}>Start a tail source from the CLI.</p>
+          </div>
+        );
+      }
 
       if (noLogsInSystem){
         return (
@@ -1076,7 +1132,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
                       <SortableHeader 
                         key={header.id}
                         header={header}
-                        isLocked={store.isColumnLocked}
+                        isLocked={store.isColumnLocked || liveEnabled}
                         handleSort={handleSort}
                       />
                     ))}

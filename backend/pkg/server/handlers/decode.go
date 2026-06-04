@@ -34,14 +34,23 @@ import (
 //     chunks. `seq` may be nil (e.g. the /parse preview path), in which
 //     case a throwaway local counter is used.
 func postProcess(results []l2g.LineResult, opts types.IngestSessionOptions, seq *atomic.Int64) (parsedLogs []map[string]interface{}, success, failed int, inference timeresolve.Inference) {
-	parsedLogs = make([]map[string]interface{}, 0, len(results))
 	if seq == nil {
 		seq = new(atomic.Int64)
 	}
 
 	resolution, inference := buildResolution(results, opts)
 	resolver := timeresolve.New(resolution)
+	syntheticMode, anchorVal := syntheticTimestampSettings(inference, resolution)
+	parsedLogs, success, failed = postProcessWithResolver(results, opts, resolver, seq, syntheticMode, anchorVal)
 
+	// The inference returned to /parse should preview the actual
+	// resolution used, including any overrides. Build a fresh preview
+	// that reflects what the wire payload contains.
+	inference.Preview = buildPreviewFromResults(results, resolution, syntheticMode, anchorVal)
+	return parsedLogs, success, failed, inference
+}
+
+func syntheticTimestampSettings(inference timeresolve.Inference, resolution timeresolve.Resolution) (bool, time.Time) {
 	// When the sample carries no time captures at all, the resolver
 	// stamps every line with the same anchor. Ordering and docID
 	// uniqueness are already guaranteed by `_seq` (the sort tie-breaker
@@ -54,7 +63,14 @@ func postProcess(results []l2g.LineResult, opts types.IngestSessionOptions, seq 
 	// Safe precisely because there are no real timestamps to contradict.
 	syntheticMode := inference.Status == timeresolve.StatusMissing
 	anchorVal := resolution.Anchor.Value
+	return syntheticMode, anchorVal
+}
 
+func postProcessWithResolver(results []l2g.LineResult, opts types.IngestSessionOptions, resolver *timeresolve.Resolver, seq *atomic.Int64, syntheticMode bool, anchorVal time.Time) (parsedLogs []map[string]interface{}, success, failed int) {
+	parsedLogs = make([]map[string]interface{}, 0, len(results))
+	if seq == nil {
+		seq = new(atomic.Int64)
+	}
 	for _, r := range results {
 		s := seq.Add(1)
 		if r.Matched {
@@ -110,12 +126,7 @@ func postProcess(results []l2g.LineResult, opts types.IngestSessionOptions, seq 
 		parsedLogs = append(parsedLogs, row)
 		failed++
 	}
-
-	// The inference returned to /parse should preview the actual
-	// resolution used, including any overrides. Build a fresh preview
-	// that reflects what the wire payload contains.
-	inference.Preview = buildPreviewFromResults(results, resolution, syntheticMode, anchorVal)
-	return parsedLogs, success, failed, inference
+	return parsedLogs, success, failed
 }
 
 // buildResolution sniffs the sample to derive defaults, then layers

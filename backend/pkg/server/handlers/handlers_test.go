@@ -3,16 +3,19 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	storagepkg "logsonic/pkg/storage"
 	"logsonic/pkg/types"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	l2g "github.com/logsonic/log2grok/pkg/log2grok"
+	"logsonic/pkg/timeresolve"
 )
 
 // ---------------------------------------------------------------------------
@@ -39,11 +42,24 @@ func newMockStorage() *mockStorage {
 }
 
 func (m *mockStorage) Store(logs []map[string]interface{}, source string) error {
+	_, err := m.StoreWithIDs(logs, source)
+	return err
+}
+
+func (m *mockStorage) StoreWithIDs(logs []map[string]interface{}, source string) ([]string, error) {
 	if m.storeErr != nil {
-		return m.storeErr
+		return nil, m.storeErr
 	}
-	m.logs = append(m.logs, logs...)
-	return nil
+	ids := make([]string, len(logs))
+	for i, log := range logs {
+		copied := make(map[string]interface{}, len(log))
+		for k, v := range log {
+			copied[k] = v
+		}
+		m.logs = append(m.logs, copied)
+		ids[i] = storagepkg.BuildDocID(log, source, i)
+	}
+	return ids, nil
 }
 
 func (m *mockStorage) Search(query string, startDate, endDate *time.Time, sources []string) ([]map[string]interface{}, time.Duration, error) {
@@ -468,7 +484,7 @@ func TestHandleGrokPatterns_DeleteNotFound(t *testing.T) {
 
 func TestHandleGrokPatterns_UnsupportedMethod(t *testing.T) {
 	h, _ := setupHandler(t)
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/grok", nil)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/grok", nil)
 	w := httptest.NewRecorder()
 	h.HandleGrokPatterns(w, req)
 
@@ -859,5 +875,155 @@ func TestHandleReadAll_EmptyStore(t *testing.T) {
 	}
 	if resp.TotalCount != 0 {
 		t.Errorf("expected 0 total, got %d", resp.TotalCount)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Live tailing
+// ---------------------------------------------------------------------------
+
+func TestPostProcessWithResolverCarriesAcrossBatches(t *testing.T) {
+	anchor := time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC)
+	opts := types.IngestSessionOptions{
+		Source:      "live.log",
+		SourceMTime: &anchor,
+	}
+	firstBatch := []l2g.LineResult{{
+		Raw:     "12:00:01 first",
+		Matched: true,
+		Fields: map[string]string{
+			"time":    "12:00:01",
+			"message": "first",
+		},
+	}}
+
+	resolution, inference := buildResolution(firstBatch, opts)
+	resolver := timeresolve.New(resolution)
+	synthetic, anchorVal := syntheticTimestampSettings(inference, resolution)
+	seq := new(atomic.Int64)
+
+	firstRows, firstSuccess, firstFailed := postProcessWithResolver(firstBatch, opts, resolver, seq, synthetic, anchorVal)
+	if firstSuccess != 1 || firstFailed != 0 {
+		t.Fatalf("expected first batch success=1 failed=0, got %d/%d", firstSuccess, firstFailed)
+	}
+
+	secondBatch := []l2g.LineResult{{
+		Raw:     "unmatched",
+		Matched: false,
+		Error:   "no match",
+	}}
+	secondRows, secondSuccess, secondFailed := postProcessWithResolver(secondBatch, opts, resolver, seq, synthetic, anchorVal)
+	if secondSuccess != 0 || secondFailed != 1 {
+		t.Fatalf("expected second batch success=0 failed=1, got %d/%d", secondSuccess, secondFailed)
+	}
+
+	firstTS := firstRows[0]["timestamp"].(time.Time)
+	secondTS := secondRows[0]["timestamp"].(time.Time)
+	if !secondTS.Equal(firstTS) {
+		t.Fatalf("expected unmatched row to carry %s, got %s", firstTS, secondTS)
+	}
+	if seq.Load() != 2 {
+		t.Fatalf("expected persistent seq to reach 2, got %d", seq.Load())
+	}
+}
+
+func TestTailSourcePublishesStoredRowsWithStableIDsAcrossSubscribers(t *testing.T) {
+	h, store := setupHandler(t)
+	source, err := h.Live.newSource(types.IngestSessionOptions{
+		Name:    DefaultPatternName,
+		Pattern: DefaultPattern,
+		Source:  "live.log",
+	})
+	if err != nil {
+		t.Fatalf("newSource: %v", err)
+	}
+	if err := h.Live.addSource(source); err != nil {
+		t.Fatalf("addSource: %v", err)
+	}
+	defer h.Live.removeSource(source.id)
+
+	sub1 := h.Live.Subscribe("")
+	if err := source.processLines([]string{"first"}); err != nil {
+		t.Fatalf("process first: %v", err)
+	}
+	event1 := waitLiveEvent(t, sub1)
+	rows1 := event1.data.(types.LiveRowsEvent).Rows
+	if len(rows1) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows1))
+	}
+	id1, ok := rows1[0]["_id"].(string)
+	if !ok || id1 == "" {
+		t.Fatalf("expected live row _id, got %#v", rows1[0]["_id"])
+	}
+	if _, exists := rows1[0]["_seq"]; exists {
+		t.Fatalf("live row exposed internal _seq: %#v", rows1[0])
+	}
+	h.Live.Unsubscribe(sub1.id)
+
+	sub2 := h.Live.Subscribe("")
+	if err := source.processLines([]string{"second"}); err != nil {
+		t.Fatalf("process second: %v", err)
+	}
+	event2 := waitLiveEvent(t, sub2)
+	rows2 := event2.data.(types.LiveRowsEvent).Rows
+	id2, ok := rows2[0]["_id"].(string)
+	if !ok || id2 == "" {
+		t.Fatalf("expected second live row _id, got %#v", rows2[0]["_id"])
+	}
+	if id1 == id2 {
+		t.Fatalf("expected producer seq to avoid docID collision, got %q twice", id1)
+	}
+
+	if len(store.logs) != 2 {
+		t.Fatalf("expected 2 stored logs, got %d", len(store.logs))
+	}
+	if got := store.logs[0]["_seq"]; got != int64(1) {
+		t.Fatalf("expected first stored _seq=1, got %#v", got)
+	}
+	if got := store.logs[1]["_seq"]; got != int64(2) {
+		t.Fatalf("expected second stored _seq=2, got %#v", got)
+	}
+}
+
+func TestTailManagerPauseResumeTracksSkippedRows(t *testing.T) {
+	h, _ := setupHandler(t)
+	sub := h.Live.Subscribe("")
+	defer h.Live.Unsubscribe(sub.id)
+
+	if !h.Live.PauseSubscriber(sub.id) {
+		t.Fatal("pause failed")
+	}
+	h.Live.publishRows("source-1", []map[string]interface{}{
+		{"_id": "1", "timestamp": time.Now()},
+		{"_id": "2", "timestamp": time.Now()},
+	})
+	select {
+	case event := <-sub.ch:
+		t.Fatalf("paused subscriber received event: %#v", event)
+	default:
+	}
+
+	skipped, ok := h.Live.ResumeSubscriber(sub.id)
+	if !ok {
+		t.Fatal("resume failed")
+	}
+	if skipped["source-1"] != 2 {
+		t.Fatalf("expected 2 skipped rows, got %v", skipped)
+	}
+	event := waitLiveEvent(t, sub)
+	payload := event.data.(types.LiveSkippedEvent)
+	if event.name != "skipped" || payload.Count != 2 || payload.SourceID != "source-1" {
+		t.Fatalf("unexpected skipped event: %#v %#v", event.name, payload)
+	}
+}
+
+func waitLiveEvent(t *testing.T, sub *liveSubscriber) liveEvent {
+	t.Helper()
+	select {
+	case event := <-sub.ch:
+		return event
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for live event")
+		return liveEvent{}
 	}
 }

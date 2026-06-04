@@ -104,10 +104,6 @@ func NewServer(cfg Config) (*Server, error) {
 		})
 	})
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(cfg.Timeout))
-
-	// Add rate limiting middleware
-	r.Use(middleware.ThrottleBacklog(10, 50, 5*time.Second))
 
 	// Add security headers middleware
 	r.Use(func(next http.Handler) http.Handler {
@@ -125,7 +121,7 @@ func NewServer(cfg Config) (*Server, error) {
 		// Restrict to localhost origins only instead of wildcard "*"
 		AllowedOrigins:   []string{"http://localhost:*", "http://127.0.0.1:*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Logsonic-Live-Options"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: false,
 		MaxAge:           300, // Maximum value not ignored by any of major browsers
@@ -219,46 +215,63 @@ func NewServer(cfg Config) (*Server, error) {
 	mcpBaseURL := fmt.Sprintf("http://%s%s", cfg.Host, cfg.Port)
 	r.Mount("/mcp", lsmcp.Handler(mcpBaseURL))
 
-	// Handle all paths
-	r.HandleFunc("/*", serveWithMimeType)
+	// Long-lived live-tail routes must stay outside the normal API timeout and
+	// throttle middleware. They still receive request IDs, logging, recovery,
+	// security headers, and CORS from the root router.
+	r.Get("/api/v1/live/events", h.HandleLiveEvents)
+	r.Post("/api/v1/live/stdin", h.HandleLiveStdin)
 
 	// Set up API routes
-	r.Route("/api/v1", func(r chi.Router) {
-		// Swagger UI endpoint
-		r.Get("/swagger/*", httpSwagger.Handler(
-			httpSwagger.URL("doc.json"),
-			httpSwagger.DeepLinking(true),
-			httpSwagger.DocExpansion("none"),
-			httpSwagger.DomID("swagger-ui"),
-		))
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Timeout(cfg.Timeout))
+		r.Use(middleware.ThrottleBacklog(10, 50, 5*time.Second))
+		r.Route("/api/v1", func(r chi.Router) {
+			// Swagger UI endpoint
+			r.Get("/swagger/*", httpSwagger.Handler(
+				httpSwagger.URL("doc.json"),
+				httpSwagger.DeepLinking(true),
+				httpSwagger.DocExpansion("none"),
+				httpSwagger.DomID("swagger-ui"),
+			))
 
-		// Ping endpoint for health checks
-		r.Get("/ping", h.HandlePing)
+			// Ping endpoint for health checks
+			r.Get("/ping", h.HandlePing)
 
-		// Ingest API endpoints
-		r.Post("/ingest/logs", h.HandleIngest)
-		r.Post("/ingest/start", h.HandleIngestStart)
-		r.Post("/ingest/end", h.HandleIngestEnd)
+			// Ingest API endpoints
+			r.Post("/ingest/logs", h.HandleIngest)
+			r.Post("/ingest/start", h.HandleIngestStart)
+			r.Post("/ingest/end", h.HandleIngestEnd)
 
-		// Parse endpoints
-		r.Post("/parse", h.HandleParse)
-		r.Post("/timestamp/preview", h.HandleTimestampPreview)
-		r.Route("/logs", func(r chi.Router) {
-			r.Get("/", h.HandleReadAll)
-			r.Delete("/", h.HandleClear)
-			r.Delete("/ids", h.HandleDeleteByIds)
+			// Parse endpoints
+			r.Post("/parse", h.HandleParse)
+			r.Post("/timestamp/preview", h.HandleTimestampPreview)
+			r.Route("/logs", func(r chi.Router) {
+				r.Get("/", h.HandleReadAll)
+				r.Delete("/", h.HandleClear)
+				r.Delete("/ids", h.HandleDeleteByIds)
+			})
+			r.Get("/info", h.HandleInfo)
+
+			// Live-tail controls are short-lived JSON calls and can use the
+			// normal API timeout/throttle budget.
+			r.Post("/live/files", h.HandleLiveFileStart)
+			r.Delete("/live/sources/{sourceID}", h.HandleLiveSourceStop)
+			r.Post("/live/subscribers/{subscriberID}/pause", h.HandleLivePause)
+			r.Post("/live/subscribers/{subscriberID}/resume", h.HandleLiveResume)
+
+			// Add the new /grok endpoint with support for multiple methods
+			r.Route("/grok", func(r chi.Router) {
+				r.Post("/", h.HandleGrokPatterns)
+				r.Get("/", h.HandleGrokPatterns)
+				r.Put("/", h.HandleGrokPatterns)
+				r.Delete("/", h.HandleGrokPatterns)
+			})
 		})
-		r.Get("/info", h.HandleInfo)
-
-		// Add the new /grok endpoint with support for multiple methods
-		r.Route("/grok", func(r chi.Router) {
-			r.Post("/", h.HandleGrokPatterns)
-			r.Get("/", h.HandleGrokPatterns)
-			r.Put("/", h.HandleGrokPatterns)
-			r.Delete("/", h.HandleGrokPatterns)
-		})
-
 	})
+
+	// Handle all non-API paths after API registration so the SPA catch-all never
+	// shadows JSON or SSE routes.
+	r.HandleFunc("/*", serveWithMimeType)
 
 	return &Server{
 		router:   r,
@@ -290,6 +303,7 @@ func (s *Server) Start() error {
 	// Start session cleanup goroutine; cancel it on shutdown.
 	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
 	handlers.StartSessionCleanup(cleanupCtx)
+	s.services.StartLive(cleanupCtx)
 
 	// Apply retention now and once a day; cancelled on shutdown.
 	s.startRetention(cleanupCtx)

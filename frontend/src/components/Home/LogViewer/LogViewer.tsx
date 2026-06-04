@@ -5,6 +5,8 @@ import { PaginationControls } from '../PaginationControls';
 import { LogViewerHeader } from './LogViewerHeader';
 import { LogViewerTable } from './LogViewerTable';
 import { useSearchLogs } from '@/hooks/useSearchLogs';
+import { useLogStream } from '@/hooks/useLogStream';
+import { useLiveLogStore } from '@/stores/useLiveLogStore';
 
 // Define the interface for the LogViewerTable ref
 interface LogViewerTableRef {
@@ -27,6 +29,8 @@ type SearchParamType = {
 export const LogViewer = () => {
   // Get the store directly using the hook
   const store = useSearchQueryParamsStore();
+  const liveEnabled = useLiveLogStore(state => state.enabled);
+  useLogStream();
   
   // Use the search logs hook
   const { searchLogs } = useSearchLogs();
@@ -51,7 +55,7 @@ export const LogViewer = () => {
 
   // Fetch logs when search parameters change (excluding date changes)
   useEffect(() => {
-    if (!store.hasSearched) return;
+    if (!store.hasSearched || liveEnabled) return;
     
     // Check if search parameters have actually changed
     const currentParams: SearchParamType = {
@@ -105,7 +109,8 @@ export const LogViewer = () => {
     store.sortBy, 
     store.sortOrder,
     store.sources,
-   
+    liveEnabled,
+	   
   ]);
 
   // Handle page change
@@ -135,20 +140,22 @@ export const LogViewer = () => {
         <LogViewerTable ref={logViewerTableRef} />
       </div>
 
-      <div
-        className="sticky bottom-0"
-        style={{
-          background: 'var(--ls-panel)',
-          borderTop: '1px solid var(--ls-border)',
-          padding: '4px 0',
-        }}
-      >
-        <PaginationControls
-          onPageChange={handlePageChange}
-          onPageSizeChange={handlePageSizeChange}
-          pageSizeOptions={[10, 25, 50, 100, 250, 1000]}
-        />
-      </div>
+      {!liveEnabled && (
+        <div
+          className="sticky bottom-0"
+          style={{
+            background: 'var(--ls-panel)',
+            borderTop: '1px solid var(--ls-border)',
+            padding: '4px 0',
+          }}
+        >
+          <PaginationControls
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            pageSizeOptions={[10, 25, 50, 100, 250, 1000]}
+          />
+        </div>
+      )}
     </Card>
   );
 };
