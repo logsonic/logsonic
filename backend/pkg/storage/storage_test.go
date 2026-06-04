@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/blevesearch/bleve/v2"
 )
 
 // ---------------------------------------------------------------------------
@@ -537,6 +539,271 @@ func TestStore_MultipleSourcesSameDate(t *testing.T) {
 	}
 	if len(sources) != 3 {
 		t.Errorf("expected 3 source names, got %d: %v", len(sources), sources)
+	}
+}
+
+// TestSearch_OpenNumericRangeExcludesTextTerms guards the numeric-range
+// rewrite against leaking non-numeric values from a mixed-type field. An
+// open-upper range (>, >=) must not match text terms, which sort above the
+// shift-0 numeric terms in the same field's dictionary.
+func TestSearch_OpenNumericRangeExcludesTextTerms(t *testing.T) {
+	store, _ := setupTestStorage(t)
+
+	ts := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	logs := []map[string]interface{}{
+		{"timestamp": ts, "_raw": "fast", "_src": "x.log", "latency": "100"},
+		{"timestamp": ts.Add(time.Minute), "_raw": "slow", "_src": "x.log", "latency": "timeout"},
+		{"timestamp": ts.Add(2 * time.Minute), "_raw": "quick", "_src": "x.log", "latency": "20"},
+	}
+	if err := store.Store(logs, "x.log"); err != nil {
+		t.Fatalf("Store failed: %v", err)
+	}
+
+	start := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2024, 1, 15, 23, 59, 59, 0, time.UTC)
+
+	cases := []struct {
+		query string
+		want  []string
+	}{
+		{"latency:>50", []string{"100"}},
+		{"latency:>=100", []string{"100"}},
+		{"latency:>0", []string{"20", "100"}},
+		{"latency:<200", []string{"20", "100"}},
+		{"latency:>600", nil},
+	}
+	for _, tc := range cases {
+		results, _, err := store.Search(tc.query, &start, &end, nil)
+		if err != nil {
+			t.Fatalf("Search(%q) failed: %v", tc.query, err)
+		}
+		got := make(map[string]bool, len(results))
+		for _, result := range results {
+			got[fmt.Sprintf("%v", result["latency"])] = true
+			if result["latency"] == "timeout" {
+				t.Errorf("Search(%q) leaked non-numeric latency value: %#v", tc.query, result)
+			}
+		}
+		if len(got) != len(tc.want) {
+			t.Errorf("Search(%q) returned %v, want %v", tc.query, results, tc.want)
+			continue
+		}
+		for _, want := range tc.want {
+			if !got[want] {
+				t.Errorf("Search(%q) missing latency %q; got %v", tc.query, want, results)
+			}
+		}
+	}
+}
+
+func TestSearch_MultipleSourcesKeepIndependentFields(t *testing.T) {
+	store, _ := setupTestStorage(t)
+
+	ts := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	nginxLogs := []map[string]interface{}{
+		{
+			"timestamp": ts,
+			"_raw":      `GET /checkout returned 503 from upstream`,
+			"_src":      "nginx.access.log",
+			"method":    "GET",
+			"url":       "/checkout",
+			"status":    "503",
+		},
+		{
+			"timestamp": ts.Add(time.Minute),
+			"_raw":      `GET /health returned 200`,
+			"_src":      "nginx.access.log",
+			"method":    "GET",
+			"url":       "/health",
+			"status":    "200",
+		},
+	}
+	appLogs := []map[string]interface{}{
+		{
+			"timestamp":  ts.Add(2 * time.Minute),
+			"_raw":       `billing worker connection timeout after retry`,
+			"_src":       "app.service.log",
+			"level":      "error",
+			"service":    "billing-worker",
+			"message":    "connection timeout after retry",
+			"deployment": "blue canary",
+		},
+		{
+			"timestamp": ts.Add(3 * time.Minute),
+			"_raw":      `billing worker completed request`,
+			"_src":      "app.service.log",
+			"level":     "info",
+			"service":   "billing-worker",
+			"message":   "completed request",
+		},
+	}
+
+	if err := store.Store(nginxLogs, "nginx.access.log"); err != nil {
+		t.Fatalf("Store nginx logs failed: %v", err)
+	}
+	if err := store.Store(appLogs, "app.service.log"); err != nil {
+		t.Fatalf("Store app logs failed: %v", err)
+	}
+
+	start := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2024, 1, 15, 23, 59, 59, 0, time.UTC)
+
+	assertSearch := func(query string, sources []string, want int, verify func(map[string]interface{})) {
+		t.Helper()
+		results, _, err := store.Search(query, &start, &end, sources)
+		if err != nil {
+			t.Fatalf("Search(%q, %v) failed: %v", query, sources, err)
+		}
+		if len(results) != want {
+			t.Fatalf("Search(%q, %v) returned %d results, want %d: %#v", query, sources, len(results), want, results)
+		}
+		for _, result := range results {
+			verify(result)
+		}
+	}
+
+	assertSearch("status:>=500", nil, 1, func(result map[string]interface{}) {
+		if result["_src"] != "nginx.access.log" || result["url"] != "/checkout" {
+			t.Errorf("numeric range returned wrong nginx row: %#v", result)
+		}
+		if _, exists := result["service"]; exists {
+			t.Errorf("nginx row unexpectedly contains app-only service field: %#v", result)
+		}
+	})
+	assertSearch("status:503", nil, 1, func(result map[string]interface{}) {
+		if result["_src"] != "nginx.access.log" {
+			t.Errorf("numeric equality returned wrong source: %#v", result)
+		}
+	})
+	assertSearch("503", nil, 1, func(result map[string]interface{}) {
+		if result["_src"] != "nginx.access.log" {
+			t.Errorf("bare numeric query returned wrong source: %#v", result)
+		}
+	})
+	assertSearch("status:>200", nil, 1, func(result map[string]interface{}) {
+		if result["url"] != "/checkout" {
+			t.Errorf("exclusive numeric range returned wrong row: %#v", result)
+		}
+	})
+	assertSearch(`message:"connection timeout"`, nil, 1, func(result map[string]interface{}) {
+		if result["_src"] != "app.service.log" || result["service"] != "billing-worker" {
+			t.Errorf("field phrase returned wrong app row: %#v", result)
+		}
+		if _, exists := result["status"]; exists {
+			t.Errorf("app row unexpectedly contains nginx-only status field: %#v", result)
+		}
+	})
+	assertSearch(`"connection timeout"`, nil, 1, func(result map[string]interface{}) {
+		if result["_src"] != "app.service.log" {
+			t.Errorf("bare phrase returned wrong source: %#v", result)
+		}
+	})
+	assertSearch("canary", nil, 1, func(result map[string]interface{}) {
+		if result["deployment"] != "blue canary" {
+			t.Errorf("bare parsed-field term returned wrong row: %#v", result)
+		}
+	})
+	assertSearch(`"blue canary"`, nil, 1, func(result map[string]interface{}) {
+		if result["deployment"] != "blue canary" {
+			t.Errorf("bare parsed-field phrase returned wrong row: %#v", result)
+		}
+	})
+	assertSearch("canar*", nil, 1, func(result map[string]interface{}) {
+		if result["deployment"] != "blue canary" {
+			t.Errorf("bare wildcard returned wrong row: %#v", result)
+		}
+	})
+	assertSearch("/canar.*/", nil, 1, func(result map[string]interface{}) {
+		if result["deployment"] != "blue canary" {
+			t.Errorf("bare regexp returned wrong row: %#v", result)
+		}
+	})
+	assertSearch("canarz~1", nil, 1, func(result map[string]interface{}) {
+		if result["deployment"] != "blue canary" {
+			t.Errorf("bare fuzzy query returned wrong row: %#v", result)
+		}
+	})
+	assertSearch("+level:error +deployment:canary", nil, 1, func(result map[string]interface{}) {
+		if result["deployment"] != "blue canary" {
+			t.Errorf("boolean query returned wrong row: %#v", result)
+		}
+	})
+	assertSearch(`message:"timeout connection"`, nil, 0, func(map[string]interface{}) {})
+	assertSearch("", []string{"nginx.access.log"}, 2, func(result map[string]interface{}) {
+		if result["_src"] != "nginx.access.log" {
+			t.Errorf("source filter returned wrong row: %#v", result)
+		}
+	})
+	assertSearch("level:error", []string{"app.service.log"}, 1, func(result map[string]interface{}) {
+		if result["_src"] != "app.service.log" {
+			t.Errorf("field query and source filter returned wrong row: %#v", result)
+		}
+	})
+
+	sources, err := store.GetSourceNames()
+	if err != nil {
+		t.Fatalf("GetSourceNames failed: %v", err)
+	}
+	sourceSet := make(map[string]bool, len(sources))
+	for _, source := range sources {
+		sourceSet[source] = true
+	}
+	if !sourceSet["nginx.access.log"] || !sourceSet["app.service.log"] || len(sourceSet) != 2 {
+		t.Fatalf("GetSourceNames returned wrong sources: %v", sources)
+	}
+}
+
+func TestSearch_OptimizedQueriesReadLegacyIndex(t *testing.T) {
+	dir := t.TempDir()
+	date := "2024-01-15"
+	indexPath := filepath.Join(dir, "logs-"+date+".bleve")
+	legacyIndex, err := bleve.New(indexPath, bleve.NewIndexMapping())
+	if err != nil {
+		t.Fatalf("create legacy index: %v", err)
+	}
+
+	ts := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	if err := legacyIndex.Index("legacy-1", map[string]interface{}{
+		"timestamp": ts,
+		"_raw":      "legacy connection timeout",
+		"_src":      "legacy.log",
+		"message":   "connection timeout",
+		"status":    503,
+	}); err != nil {
+		legacyIndex.Close()
+		t.Fatalf("index legacy document: %v", err)
+	}
+
+	store := &Storage{
+		baseDir: dir,
+		indices: map[string]bleve.Index{date: legacyIndex},
+	}
+	t.Cleanup(func() { store.Close() })
+	if err := store.Store([]map[string]interface{}{{
+		"timestamp": ts.Add(time.Minute),
+		"_raw":      "new connection timeout",
+		"_src":      "legacy.log",
+		"message":   "connection timeout",
+		"status":    "504",
+	}}, "legacy.log"); err != nil {
+		t.Fatalf("append optimized document to legacy index: %v", err)
+	}
+
+	start := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2024, 1, 15, 23, 59, 59, 0, time.UTC)
+	for _, query := range []string{`"connection timeout"`, `message:"connection timeout"`, "status:>=500"} {
+		results, _, err := store.Search(query, &start, &end, nil)
+		if err != nil {
+			t.Fatalf("Search(%q) on legacy index failed: %v", query, err)
+		}
+		if len(results) != 2 {
+			t.Fatalf("Search(%q) on legacy index returned wrong rows: %#v", query, results)
+		}
+		for _, result := range results {
+			if result["_src"] != "legacy.log" {
+				t.Fatalf("Search(%q) on legacy index returned wrong source: %#v", query, result)
+			}
+		}
 	}
 }
 

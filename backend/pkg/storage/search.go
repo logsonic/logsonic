@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -123,10 +122,15 @@ func (s *Storage) Search(queryStr string, startDate, endDate *time.Time, sources
 				if queryStr != "" {
 					unescapedQueryStr, err := url.PathUnescape(queryStr)
 					if err != nil {
+						resultChan <- indexResult{err: fmt.Errorf("invalid query encoding: %w", err)}
 						return
 					}
-					// Use Bleve's built-in query string parser
-					searchQuery = bleve.NewQueryStringQuery(unescapedQueryStr)
+					parsedQuery, err := bleve.NewQueryStringQuery(unescapedQueryStr).Parse()
+					if err != nil {
+						resultChan <- indexResult{err: fmt.Errorf("invalid query: %w", err)}
+						return
+					}
+					searchQuery = optimizeQuery(parsedQuery)
 
 				} else {
 					searchQuery = bleve.NewMatchAllQuery()
@@ -134,7 +138,15 @@ func (s *Storage) Search(queryStr string, startDate, endDate *time.Time, sources
 
 				// Add source filter if provided
 				if len(sources) > 0 {
-					sourceFilter := bleve.NewQueryStringQuery(strings.Join(sources, ","))
+					sourceQueries := make([]query.Query, 0, len(sources))
+					for _, source := range sources {
+						sourceQueries = append(sourceQueries, &storedPhraseQuery{
+							phrase: source,
+							field:  "_src",
+							boost:  1,
+						})
+					}
+					sourceFilter := bleve.NewDisjunctionQuery(sourceQueries...)
 					searchQuery = bleve.NewConjunctionQuery(searchQuery, sourceFilter)
 				}
 

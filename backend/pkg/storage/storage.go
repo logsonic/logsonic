@@ -97,38 +97,45 @@ func (s *Storage) Close() error {
 
 // buildIndexMapping returns the standard Bleve index mapping used for all shards.
 func buildIndexMapping() mapping.IndexMapping {
-	mapping := bleve.NewIndexMapping()
+	indexMapping := bleve.NewIndexMapping()
 	logMapping := bleve.NewDocumentMapping()
 
 	dateField := bleve.NewDateTimeFieldMapping()
 	dateField.Store = true
 	dateField.Index = false
+	dateField.IncludeInAll = false
 	logMapping.AddFieldMappingsAt("timestamp", dateField)
 
 	textField := bleve.NewTextFieldMapping()
 	textField.Store = true
 	textField.Analyzer = "standard"
 	textField.IncludeTermVectors = false
-	textField.IncludeInAll = true
+	textField.IncludeInAll = false
+	// Doc values build a columnar copy of every term, used only for sorting
+	// and faceting at the Bleve layer. LogSonic sorts results in Go and never
+	// facets, so the _raw doc-values payload is dead weight — disable it.
+	textField.DocValues = false
 	logMapping.AddFieldMappingsAt("_raw", textField)
 
-	// _seq is internal ordering metadata (the sort tie-breaker). Persist
-	// it so it round-trips for sorting, but keep it out of the index and
-	// the _all field — otherwise IndexDynamic would make its numeric
-	// value searchable and a free-text query containing a number could
-	// match documents on their _seq.
+	// _seq is internal ordering metadata (the sort tie-breaker). Persist it
+	// so it round-trips for sorting, but keep it out of the field index.
 	seqField := bleve.NewNumericFieldMapping()
 	seqField.Store = true
 	seqField.Index = false
 	seqField.IncludeInAll = false
 	logMapping.AddFieldMappingsAt("_seq", seqField)
 
-	mapping.DefaultMapping = logMapping
-	mapping.DefaultAnalyzer = "standard"
-	mapping.IndexDynamic = true
-	mapping.StoreDynamic = true
-	mapping.DocValuesDynamic = false
-	return mapping
+	// The default _all composite re-indexed _raw plus every parsed field,
+	// causing several copies of the same content on disk. Search replaces it
+	// with an all-fields query at runtime, so disable the stored composite.
+	logMapping.AddSubDocumentMapping("_all", bleve.NewDocumentDisabledMapping())
+	indexMapping.DefaultField = "_raw"
+	indexMapping.DefaultMapping = logMapping
+	indexMapping.DefaultAnalyzer = "standard"
+	indexMapping.IndexDynamic = true
+	indexMapping.StoreDynamic = true
+	indexMapping.DocValuesDynamic = false
+	return indexMapping
 }
 
 // kvConfig is the LevelDB configuration shared by all Bleve shards.
@@ -230,8 +237,12 @@ func (s *Storage) Store(logs []map[string]interface{}, source string) error {
 				seqID = v
 			}
 			docID := fmt.Sprintf("%d-%s-%d", log["timestamp"].(time.Time).UnixNano(), source, seqID)
-			if err := batch.Index(docID, logCopy); err != nil {
+			doc, err := buildOptimizedDocument(index.Mapping(), docID, logCopy)
+			if err != nil {
 				return fmt.Errorf("failed to index log entry: %w", err)
+			}
+			if err := batch.IndexAdvanced(doc); err != nil {
+				return fmt.Errorf("failed to add log entry to batch: %w", err)
 			}
 		}
 		if err := index.Batch(batch); err != nil {
@@ -365,34 +376,34 @@ func (s *Storage) GetDocCount(date string) (uint64, error) {
 func (s *Storage) DeleteByIds(ids []string) (int, error) {
 	// Track how many logs were deleted
 	deletedCount := 0
-	
+
 	// Convert ids array to a map for faster lookups
 	idMap := make(map[string]bool, len(ids))
 	for _, id := range ids {
 		idMap[id] = true
 	}
-	
+
 	// Get all available dates
 	dates, err := s.List()
 	if err != nil {
 		return 0, fmt.Errorf("failed to list available dates: %w", err)
 	}
-	
+
 	// For each date index, check for matching document IDs
 	for _, date := range dates {
 		index, err := s.getOrCreateIndex(date)
 		if err != nil {
 			return deletedCount, fmt.Errorf("failed to get index for date %s: %w", date, err)
 		}
-		
+
 		// Create a batch for deletions
 		batch := index.NewBatch()
-		
+
 		// Process each ID
 		for id := range idMap {
 			batch.Delete(id)
 		}
-		
+
 		// Only execute the batch if there are operations to perform
 		if batch.Size() > 0 {
 			if err := index.Batch(batch); err != nil {
@@ -403,6 +414,6 @@ func (s *Storage) DeleteByIds(ids []string) (int, error) {
 			deletedCount += batch.Size()
 		}
 	}
-	
+
 	return deletedCount, nil
 }
