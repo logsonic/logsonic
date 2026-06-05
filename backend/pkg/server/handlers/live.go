@@ -271,6 +271,14 @@ func (m *TailManager) currentRootCtx() context.Context {
 	return context.Background()
 }
 
+// Done reports manager shutdown. Long-lived handlers (the SSE stream) select on
+// it so they unblock when the server begins draining, rather than waiting out
+// the HTTP graceful-shutdown timeout — http.Server.Shutdown does not cancel
+// in-flight request contexts, so r.Context() alone never fires on shutdown.
+func (m *TailManager) Done() <-chan struct{} {
+	return m.currentRootCtx().Done()
+}
+
 func (m *TailManager) newSource(opts types.IngestSessionOptions) (*TailSource, error) {
 	opts = defaultLiveOptions(opts)
 	decoder, err := l2g.NewDecoder(l2g.PatternSpec{
@@ -681,9 +689,15 @@ func (h *Services) HandleLiveEvents(w http.ResponseWriter, r *http.Request) {
 	heartbeat := time.NewTicker(liveHeartbeat)
 	defer heartbeat.Stop()
 
+	managerDone := h.Live.Done()
+
 	for {
 		select {
 		case <-r.Context().Done():
+			return
+		case <-managerDone:
+			// Server is draining; close the stream so graceful shutdown
+			// doesn't block on this held-open connection.
 			return
 		case event := <-sub.ch:
 			if err := writeSSE(w, event.name, event.data); err != nil {

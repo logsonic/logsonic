@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -66,5 +67,56 @@ func TestLiveEventsRouteStreamsHello(t *testing.T) {
 	}
 	if hello.SubscriberID == "" {
 		t.Fatal("expected subscriber id")
+	}
+}
+
+// TestLiveEventsStreamUnblocksOnShutdown proves the held-open SSE handler
+// returns when the live manager begins draining, instead of blocking the HTTP
+// graceful-shutdown timeout. http.Server.Shutdown does not cancel in-flight
+// request contexts, so without the manager Done signal this connection would
+// stay open until the drain deadline.
+func TestLiveEventsStreamUnblocksOnShutdown(t *testing.T) {
+	srv, err := NewServer(Config{
+		Host:        "localhost",
+		Port:        ":0",
+		StoragePath: t.TempDir(),
+		Timeout:     time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	t.Cleanup(func() { _ = srv.services.CloseStorage() })
+
+	// Wire the live manager to a cancellable context the way Server.Start does.
+	managerCtx, cancelManager := context.WithCancel(context.Background())
+	srv.services.StartLive(managerCtx)
+
+	httpServer := httptest.NewServer(srv.router)
+	defer httpServer.Close()
+
+	req, err := http.NewRequest(http.MethodGet, httpServer.URL+"/api/v1/live/events", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET live events: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Drain the body in the background; it returns EOF once the handler exits.
+	done := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(io.Discard, resp.Body)
+		done <- err
+	}()
+
+	// Trigger manager shutdown — the SSE handler should unblock promptly.
+	cancelManager()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("SSE handler did not return after manager shutdown")
 	}
 }
