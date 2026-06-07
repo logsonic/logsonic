@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { pauseLiveSubscriber, resumeLiveSubscriber } from '@/lib/api-client';
-import { useLiveLogStore } from '@/stores/useLiveLogStore';
+import { isLiveDataAvailable, liveActiveSourceCount, useLiveLogStore } from '@/stores/useLiveLogStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import {
@@ -30,7 +30,6 @@ export const LogViewerHeader = (
 
 ) => {
   const store = useSearchQueryParamsStore();
-  const live = useLiveLogStore();
 
   // Toggle lock state
   const toggleLock = useCallback(() => {
@@ -38,38 +37,87 @@ export const LogViewerHeader = (
   }, [store.isColumnLocked]);
 
   const { systemInfo } = useSystemInfoStore();
+  const liveConnected = useLiveLogStore(state => state.connected);
+  const livePaused = useLiveLogStore(state => state.paused);
+  const liveSubscriberId = useLiveLogStore(state => state.subscriberId);
+  const liveRowsLength = useLiveLogStore(state => state.rows.length);
+  const liveSkippedCount = useLiveLogStore(state => state.skippedCount);
+  const liveError = useLiveLogStore(state => state.error);
+  const liveAvailable = useLiveLogStore(isLiveDataAvailable);
+  const liveSourceCount = useLiveLogStore(liveActiveSourceCount);
+  const setLivePaused = useLiveLogStore(state => state.setPaused);
+  const setLiveError = useLiveLogStore(state => state.setError);
 
   const [isColumnPopoverOpen, setIsColumnPopoverOpen] = useState(false);
   const [headerSearchQuery, setHeaderSearchQuery] = useState('');
-
-  const toggleLive = useCallback(() => {
-    if (live.enabled) {
-      live.setEnabled(false);
-      return;
-    }
-    store.setSortBy('timestamp');
-    store.setSortOrder('desc');
-    live.setPaused(false);
-    live.setEnabled(true);
-  }, [live, store]);
+  const liveBadgeState = !liveConnected && liveError
+    ? 'error'
+    : livePaused
+      ? 'paused'
+      : liveAvailable
+        ? 'active'
+        : liveConnected
+          ? 'listening'
+          : 'connecting';
+  const liveBadgeText = liveBadgeState === 'active'
+    ? 'Live'
+    : liveBadgeState === 'paused'
+      ? 'Paused'
+      : liveBadgeState === 'error'
+        ? 'Live error'
+        : liveBadgeState === 'listening'
+          ? 'Listening'
+          : 'Connecting';
+  const liveBadgeDetail = liveSourceCount > 0
+    ? `${liveSourceCount} ${liveSourceCount === 1 ? 'source' : 'sources'}`
+    : liveRowsLength > 0
+      ? `${liveRowsLength.toLocaleString()} rows`
+      : '';
+  const liveBadgeStyle = liveBadgeState === 'active'
+    ? {
+        background: 'var(--ls-ok-soft)',
+        borderColor: 'color-mix(in srgb, var(--ls-ok) 45%, transparent)',
+        color: 'var(--ls-ok)',
+        boxShadow: '0 0 0 3px color-mix(in srgb, var(--ls-ok) 12%, transparent)',
+      }
+    : liveBadgeState === 'paused'
+      ? {
+          background: 'var(--ls-warn-soft)',
+          borderColor: 'color-mix(in srgb, var(--ls-warn) 45%, transparent)',
+          color: 'var(--ls-warn)',
+          boxShadow: '0 0 0 3px color-mix(in srgb, var(--ls-warn) 10%, transparent)',
+        }
+      : liveBadgeState === 'error'
+        ? {
+            background: 'var(--ls-err-soft)',
+            borderColor: 'color-mix(in srgb, var(--ls-err) 45%, transparent)',
+            color: 'var(--ls-err)',
+            boxShadow: 'none',
+          }
+        : {
+            background: 'var(--ls-bg-2)',
+            borderColor: 'var(--ls-border)',
+            color: 'var(--ls-text-2)',
+            boxShadow: 'none',
+          };
 
   const togglePause = useCallback(async () => {
-    if (!live.subscriberId) return;
+    if (!liveSubscriberId) return;
     try {
-      if (live.paused) {
-        await resumeLiveSubscriber(live.subscriberId);
-        live.setPaused(false);
-        live.setError(null);
+      if (livePaused) {
+        await resumeLiveSubscriber(liveSubscriberId);
+        setLivePaused(false);
+        setLiveError(null);
         return;
       }
-      await pauseLiveSubscriber(live.subscriberId);
-      live.setPaused(true);
-      live.setError(null);
+      await pauseLiveSubscriber(liveSubscriberId);
+      setLivePaused(true);
+      setLiveError(null);
     } catch (error) {
-      live.setError(error instanceof Error ? error.message : 'Live control request failed');
+      setLiveError(error instanceof Error ? error.message : 'Live control request failed');
       return;
     }
-  }, [live]);
+  }, [livePaused, liveSubscriberId, setLiveError, setLivePaused]);
 
  
   // Filter out _raw and _src fields
@@ -254,7 +302,7 @@ export const LogViewerHeader = (
 	            variant="ghost"
 	            className="ls-toolbar-btn h-7 rounded-none px-2.5 flex items-center gap-1"
 	            onClick={autofitColumns}
-	            disabled={store.isColumnLocked || live.enabled}
+	            disabled={store.isColumnLocked || liveAvailable}
 	            title="Auto-adjust column widths"
 	          >
             <Maximize2 className="h-3.5 w-3.5" />
@@ -290,15 +338,20 @@ export const LogViewerHeader = (
 	            border: '1px solid var(--ls-border)',
 	          }}
 	        >
-	          <Button
-	            variant="ghost"
-	            className="ls-toolbar-btn h-7 rounded-none px-2.5 flex items-center gap-1"
-	            onClick={toggleLive}
-	            title={live.enabled ? 'Stop live view' : 'Start live view'}
+	          <div
+	            className={`ls-live-indicator ls-live-indicator--${liveBadgeState}`}
+	            role="status"
+	            aria-live="polite"
+	            title={liveError || (liveAvailable ? 'Live data is available' : 'Listening for live data')}
+	            style={liveBadgeStyle}
 	          >
-	            <Activity className="h-3.5 w-3.5" />
-	            <span className="text-xs">Live</span>
-	          </Button>
+	            <span className="ls-live-dot" aria-hidden />
+	            <Activity className="h-3.5 w-3.5 shrink-0" />
+	            <span className="ls-live-label">{liveBadgeText}</span>
+	            {liveBadgeDetail && (
+	              <span className="ls-live-detail">{liveBadgeDetail}</span>
+	            )}
+	          </div>
 
 	          <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: 'var(--ls-border)' }} />
 
@@ -306,10 +359,10 @@ export const LogViewerHeader = (
 	            variant="ghost"
 	            className="ls-toolbar-btn h-7 rounded-none px-2.5 flex items-center gap-1"
 	            onClick={togglePause}
-	            disabled={!live.enabled || !live.subscriberId}
-	            title={live.paused ? 'Resume live rows' : 'Pause live rows'}
+	            disabled={liveSourceCount === 0 || !liveSubscriberId}
+	            title={livePaused ? 'Resume live rows' : 'Pause live rows'}
 	          >
-	            {live.paused ? (
+	            {livePaused ? (
 	              <>
 	                <Play className="h-3.5 w-3.5" />
 	                <span className="text-xs">Resume</span>
@@ -329,21 +382,21 @@ export const LogViewerHeader = (
           labels avoids the old ambiguous "500 / 2,500 logs". */}
       <div className="flex items-center gap-3">
 	        <div className="text-xs" style={{ color: 'var(--ls-text-3)' }}>
-	          {live.enabled ? (
+	          {liveAvailable ? (
 	            <span className="flex items-center gap-1.5">
-	              <span className="font-semibold" style={{ color: live.connected ? 'var(--ls-ok)' : 'var(--ls-warn)' }}>
-	                {live.connected ? 'connected' : 'connecting'}
+	              <span className="font-semibold" style={{ color: liveConnected ? 'var(--ls-ok)' : 'var(--ls-warn)' }}>
+	                {liveConnected ? 'connected' : 'connecting'}
 	              </span>
 	              <span style={{ color: 'var(--ls-text-4)' }}>
-	                {live.rows.length.toLocaleString()} live
+	                {liveRowsLength.toLocaleString()} live
 	              </span>
-	              {live.skippedCount > 0 && (
+	              {liveSkippedCount > 0 && (
 	                <span style={{ color: 'var(--ls-text-4)' }}>
-	                  · {live.skippedCount.toLocaleString()} skipped
+	                  · {liveSkippedCount.toLocaleString()} skipped
 	                </span>
 	              )}
-	              {live.error && (
-	                <span title={live.error} style={{ color: 'var(--ls-warn)' }}>
+	              {liveError && (
+	                <span title={liveError} style={{ color: 'var(--ls-warn)' }}>
 	                  · error
 	                </span>
 	              )}

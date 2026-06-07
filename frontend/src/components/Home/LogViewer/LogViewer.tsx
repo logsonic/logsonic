@@ -6,7 +6,7 @@ import { LogViewerHeader } from './LogViewerHeader';
 import { LogViewerTable } from './LogViewerTable';
 import { useSearchLogs } from '@/hooks/useSearchLogs';
 import { useLogStream } from '@/hooks/useLogStream';
-import { useLiveLogStore } from '@/stores/useLiveLogStore';
+import { isLiveDataAvailable, useLiveLogStore } from '@/stores/useLiveLogStore';
 
 // Define the interface for the LogViewerTable ref
 interface LogViewerTableRef {
@@ -29,7 +29,7 @@ type SearchParamType = {
 export const LogViewer = () => {
   // Get the store directly using the hook
   const store = useSearchQueryParamsStore();
-  const liveEnabled = useLiveLogStore(state => state.enabled);
+  const liveAvailable = useLiveLogStore(isLiveDataAvailable);
   useLogStream();
   
   // Use the search logs hook
@@ -55,7 +55,7 @@ export const LogViewer = () => {
 
   // Fetch logs when search parameters change (excluding date changes)
   useEffect(() => {
-    if (!store.hasSearched || liveEnabled) return;
+    if (!store.hasSearched || liveAvailable) return;
     
     // Check if search parameters have actually changed
     const currentParams: SearchParamType = {
@@ -109,7 +109,7 @@ export const LogViewer = () => {
     store.sortBy, 
     store.sortOrder,
     store.sources,
-    liveEnabled,
+    liveAvailable,
 	   
   ]);
 
@@ -140,7 +140,7 @@ export const LogViewer = () => {
         <LogViewerTable ref={logViewerTableRef} />
       </div>
 
-      {!liveEnabled && (
+      {!liveAvailable && (
         <div
           className="sticky bottom-0"
           style={{

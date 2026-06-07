@@ -91,3 +91,31 @@ Or a large windowed size on that screen instead of fullscreen:
 ```bash
 WINDOW_POS=-1723,-2160 WINDOW=2560,2000 node demo/logsonic-demo.mjs
 ```
+
+## Streaming demo
+
+`streaming-demo.mjs` is a smoke/demo runner for live tailing. It starts the
+backend and frontend dev servers if they are not already running, opens the UI,
+waits for the live listener, generates structured synthetic logs, streams them
+into `/api/v1/live/stdin`, and verifies that they are searchable.
+
+```bash
+node demo/streaming-demo.mjs
+```
+
+Useful variants:
+
+```bash
+ROWS=400 RATE=12 KEEP_OPEN=1 node demo/streaming-demo.mjs
+MODE=file node demo/streaming-demo.mjs
+```
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `ROWS` | `240` | Number of synthetic rows to generate. |
+| `RATE` | `8` | Rows per second. |
+| `MODE` | `stdin` | Use `stdin` for `/live/stdin`, or `file` for server-side file tailing. |
+| `KEEP_OPEN` | closes | Set `KEEP_OPEN=1` to leave the browser and auto-started servers running. |
+| `CLEAR` | auto | Auto-clears demo-started storage; set `CLEAR=1` to clear an existing backend or `CLEAR=0` to keep all logs. |
+| `FRONTEND` / `BACKEND` | `:8081` / `:8080` | Override when targeting already-running servers. |
+| `HEADLESS` | headed | Set `HEADLESS=1` for an automated smoke run. |

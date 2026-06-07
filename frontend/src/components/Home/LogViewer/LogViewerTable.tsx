@@ -39,7 +39,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { useSearchLogs } from '@/hooks/useSearchLogs';
 import { deleteLogsById, getSystemInfo } from '@/lib/api-client';
-import { useLiveLogStore } from '@/stores/useLiveLogStore';
+import { LIVE_ROW_LIMIT, isLiveDataAvailable, useLiveLogStore } from '@/stores/useLiveLogStore';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import {
@@ -63,9 +63,51 @@ import {
 type LogData = Record<string, any>;
 
 const fixedColumns = ['select', 'expander'];
+const STYLE_CACHE_LIMIT = LIVE_ROW_LIMIT * 2;
+
+type RowStyleInfo = {
+  className: string;
+  colorClass: string;
+  title: string;
+};
+
+type PreparedColorRule = ColorRule & {
+  regex?: RegExp;
+};
 
 const getLogRowId = (row: LogData, index: number) => {
   return row._id ? String(row._id) : String(index);
+};
+
+const getStyleCacheRowKey = (row: LogData): string | null => {
+  const stableID = row._id ?? row.id ?? row.request_id ?? row.requestId;
+  if (stableID !== undefined && stableID !== null && stableID !== '') {
+    return String(stableID);
+  }
+
+  const timestamp = row.timestamp ?? row['@timestamp'] ?? row.time;
+  const message = row.message ?? row.msg;
+  if (timestamp !== undefined && message !== undefined) {
+    return `${String(timestamp)}|${String(message)}`;
+  }
+
+  return null;
+};
+
+const setBoundedStyleCacheEntry = (
+  cache: Map<string, RowStyleInfo>,
+  key: string,
+  value: RowStyleInfo,
+) => {
+  cache.set(key, value);
+  if (cache.size <= STYLE_CACHE_LIMIT) return;
+
+  let overflow = cache.size - STYLE_CACHE_LIMIT;
+  for (const oldestKey of cache.keys()) {
+    cache.delete(oldestKey);
+    overflow--;
+    if (overflow <= 0) break;
+  }
 };
 
 const collectColumns = (rows: LogData[]) => {
@@ -176,9 +218,24 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
 
   const store = useSearchQueryParamsStore();
   const { logData, isLoading } = useLogResultStore();
-  const liveEnabled = useLiveLogStore(state => state.enabled);
+  const liveEnabled = useLiveLogStore(isLiveDataAvailable);
   const liveRows = useLiveLogStore(state => state.rows);
   const { colorRules } = useColorRuleStore();
+  const activeColorRules = useMemo<PreparedColorRule[]>(() => {
+    return colorRules
+      .filter(rule => rule.enabled)
+      .map(rule => {
+        if (rule.operator !== 'regex') return rule;
+        try {
+          return { ...rule, regex: new RegExp(rule.value) };
+        } catch (error) {
+          if (import.meta.env.DEV) {
+            console.error('Invalid regex in color rule:', error);
+          }
+          return rule;
+        }
+      });
+  }, [colorRules]);
   const logs = liveEnabled ? liveRows : (logData?.logs || []);
   const isTableLoading = !liveEnabled && isLoading;
   const { parseSearchQuery, createHighlighter } = useSearchParser();
@@ -421,6 +478,31 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
   
   // State for selected rows
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  const liveRowIDs = useMemo(() => {
+    if (!liveEnabled) return null;
+    return new Set(logs.map((log, index) => getLogRowId(log, index)));
+  }, [liveEnabled, logs]);
+
+  useEffect(() => {
+    if (!liveEnabled || !liveRowIDs) return;
+
+    const pruneBooleanRecord = (record: Record<string, boolean>) => {
+      let changed = false;
+      const next: Record<string, boolean> = {};
+      for (const [id, value] of Object.entries(record)) {
+        if (liveRowIDs.has(id)) {
+          next[id] = value;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : record;
+    };
+
+    setExpanded(prev => pruneBooleanRecord(prev));
+    setRowSelection(prev => pruneBooleanRecord(prev) as RowSelectionState);
+  }, [liveEnabled, liveRowIDs]);
   
   // State for sorting
   const [sorting, setSorting] = useState<SortingState>([
@@ -856,15 +938,15 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
   }, [store.columnWidths, table]);
 
   // A simple cache for memoizing style results
-  const styleCache = useRef(new Map());
+  const styleCache = useRef<Map<string, RowStyleInfo>>(new Map());
   
   // Clear style cache when color rules change
   useEffect(() => {
     styleCache.current.clear();
-  }, [colorRules]);
+  }, [activeColorRules]);
 
   // Function to check if a field value matches a rule
-  const checkRuleMatch = (fieldValue: any, rule: ColorRule): boolean => {
+  const checkRuleMatch = (fieldValue: any, rule: PreparedColorRule): boolean => {
     // For the "exists" operator, we just check if field has any value
     if (rule.operator === 'exists') {
       return fieldValue !== undefined && fieldValue !== null && fieldValue !== '';
@@ -890,13 +972,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
       case 'contains':
         return rowValueLower.includes(ruleValueLower);
       case 'regex':
-        try {
-          const regex = new RegExp(ruleValue);
-          return regex.test(rowValue);
-        } catch (e) {
-          console.error('Invalid regex in color rule:', e);
-          return false;
-        }
+        return rule.regex?.test(rowValue) ?? false;
       default:
         return false;
     }
@@ -904,14 +980,13 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
 
   // Function to get row styles based on color rules
   const getRowStyles = useCallback((row: LogData, isSelected: boolean) => {
-    // Create a cache key using the row ID (or a hash of the row), rule count, and selection state
-    // This assumes each row has a unique ID or key property
-    const rowId = row.id || JSON.stringify(row);
-    const cacheKey = `${rowId}-${colorRules.length}-${isSelected}`;
+    const rowKey = getStyleCacheRowKey(row);
+    const cacheKey = rowKey ? `${rowKey}\u0000${activeColorRules.length}\u0000${isSelected ? '1' : '0'}` : null;
     
     // Check if we already computed this result
-    if (styleCache.current.has(cacheKey)) {
-      return styleCache.current.get(cacheKey);
+    if (cacheKey) {
+      const cached = styleCache.current.get(cacheKey);
+      if (cached) return cached;
     }
     
     // Create base result object with selection class if needed
@@ -922,17 +997,13 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     };
     
     // Skip color rule processing if no rules or row is empty
-    if (!colorRules || colorRules.length === 0 || !row) {
-      styleCache.current.set(cacheKey, result);
+    if (activeColorRules.length === 0 || !row) {
       return result;
     }
 
-    // Filter out disabled rules
-    const activeRules = colorRules.filter(rule => rule.enabled);
-
     // Check if any rule matches this row
     // Rules are applied in order of definition (first match wins)
-    for (const rule of activeRules) {
+    for (const rule of activeColorRules) {
       if (checkRuleMatch(row[rule.field], rule)) {
         // Create a tooltip showing the rule that matched
         let operatorSymbol;
@@ -954,15 +1025,15 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
         result.title = tooltip;
         
         // Cache and return the result
-        styleCache.current.set(cacheKey, result);
+        if (cacheKey) setBoundedStyleCacheEntry(styleCache.current, cacheKey, result);
         return result;
       }
     }
     
     // No match - return base result
-    styleCache.current.set(cacheKey, result);
+    if (cacheKey) setBoundedStyleCacheEntry(styleCache.current, cacheKey, result);
     return result;
-  }, [colorRules]);
+  }, [activeColorRules]);
 
   if (isTableLoading) {
     return (

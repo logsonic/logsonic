@@ -190,6 +190,56 @@ html, body {
   opacity: 0.5;
   cursor: not-allowed;
 }
+.ls-live-indicator {
+  height: 28px;
+  min-width: 132px;
+  max-width: 230px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--ls-border);
+  border-radius: 0;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+.ls-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: currentColor;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 16%, transparent);
+}
+.ls-live-indicator--active .ls-live-dot {
+  animation: ls-live-pulse 1.4s ease-out infinite;
+}
+.ls-live-label {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ls-live-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--ls-font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.78;
+}
+@keyframes ls-live-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 38%, transparent); }
+  70% { box-shadow: 0 0 0 8px color-mix(in srgb, currentColor 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ls-live-indicator--active .ls-live-dot {
+    animation: none;
+  }
+}
 .ls-col-row { transition: background 100ms ease; }
 .ls-col-row:hover { background: var(--ls-bg-2); }
 
