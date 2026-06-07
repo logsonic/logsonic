@@ -1,6 +1,6 @@
 # Live Streaming And Tailing
 
-Start LogSonic first, then leave the browser UI open. The UI keeps a live event stream connected and switches to incoming rows as soon as a live source starts.
+Start LogSonic first, then leave the browser UI open. The UI switches to incoming rows as soon as a live source starts.
 
 ## Follow A Server-Side File
 
@@ -53,7 +53,13 @@ python3 demo/logsonic-event-generator.py --rate 10 --output /tmp/logsonic-live.l
 
 ## Streaming Demo
 
-The streaming demo generates structured synthetic logs, streams them through the live API, and checks that they are searchable. Install frontend dependencies once so Playwright is available, then run it from the repo root:
+The combined demo shows import/search and Livestream in one UI recording: it imports sample logs, searches them, starts a live stdin stream, clicks Pause/Resume, and verifies that streamed rows are searchable.
+
+```bash
+node demo/combined-demo.mjs
+```
+
+For a smaller live-tail smoke run, use the streaming demo. It generates structured synthetic logs, streams them through the live API, and checks that they are searchable. Install frontend dependencies once so Playwright is available, then run it from the repo root:
 
 ```bash
 cd frontend

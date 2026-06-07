@@ -47,6 +47,7 @@ export const LogViewerHeader = (
   const liveSourceCount = useLiveLogStore(liveActiveSourceCount);
   const setLivePaused = useLiveLogStore(state => state.setPaused);
   const setLiveError = useLiveLogStore(state => state.setError);
+  const showLiveControls = liveAvailable || livePaused;
 
   const [isColumnPopoverOpen, setIsColumnPopoverOpen] = useState(false);
   const [headerSearchQuery, setHeaderSearchQuery] = useState('');
@@ -331,50 +332,52 @@ export const LogViewerHeader = (
 	          </Button>
 	        </div>
 
-	        <div
-	          className="ls-toolbar-group flex items-center overflow-hidden rounded-md"
-	          style={{
-	            background: 'var(--ls-bg-1)',
-	            border: '1px solid var(--ls-border)',
-	          }}
-	        >
+	        {showLiveControls && (
 	          <div
-	            className={`ls-live-indicator ls-live-indicator--${liveBadgeState}`}
-	            role="status"
-	            aria-live="polite"
-	            title={liveError || (liveAvailable ? 'Live data is available' : 'Listening for live data')}
-	            style={liveBadgeStyle}
+	            className="ls-toolbar-group flex items-center overflow-hidden rounded-md"
+	            style={{
+	              background: 'var(--ls-bg-1)',
+	              border: '1px solid var(--ls-border)',
+	            }}
 	          >
-	            <span className="ls-live-dot" aria-hidden />
-	            <Activity className="h-3.5 w-3.5 shrink-0" />
-	            <span className="ls-live-label">{liveBadgeText}</span>
-	            {liveBadgeDetail && (
-	              <span className="ls-live-detail">{liveBadgeDetail}</span>
-	            )}
+	            <div
+	              className={`ls-live-indicator ls-live-indicator--${liveBadgeState}`}
+	              role="status"
+	              aria-live="polite"
+	              title={liveError || (liveAvailable ? 'Live data is available' : 'Listening for live data')}
+	              style={liveBadgeStyle}
+	            >
+	              <span className="ls-live-dot" aria-hidden />
+	              <Activity className="h-3.5 w-3.5 shrink-0" />
+	              <span className="ls-live-label">{liveBadgeText}</span>
+	              {liveBadgeDetail && (
+	                <span className="ls-live-detail">{liveBadgeDetail}</span>
+	              )}
+	            </div>
+
+	            <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: 'var(--ls-border)' }} />
+
+	            <Button
+	              variant="ghost"
+	              className="ls-toolbar-btn h-7 rounded-none px-2.5 flex items-center gap-1"
+	              onClick={togglePause}
+	              disabled={liveSourceCount === 0 || !liveSubscriberId}
+	              title={livePaused ? 'Resume live rows' : 'Pause live rows'}
+	            >
+	              {livePaused ? (
+	                <>
+	                  <Play className="h-3.5 w-3.5" />
+	                  <span className="text-xs">Resume</span>
+	                </>
+	              ) : (
+	                <>
+	                  <Pause className="h-3.5 w-3.5" />
+	                  <span className="text-xs">Pause</span>
+	                </>
+	              )}
+	            </Button>
 	          </div>
-
-	          <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: 'var(--ls-border)' }} />
-
-	          <Button
-	            variant="ghost"
-	            className="ls-toolbar-btn h-7 rounded-none px-2.5 flex items-center gap-1"
-	            onClick={togglePause}
-	            disabled={liveSourceCount === 0 || !liveSubscriberId}
-	            title={livePaused ? 'Resume live rows' : 'Pause live rows'}
-	          >
-	            {livePaused ? (
-	              <>
-	                <Play className="h-3.5 w-3.5" />
-	                <span className="text-xs">Resume</span>
-	              </>
-	            ) : (
-	              <>
-	                <Pause className="h-3.5 w-3.5" />
-	                <span className="text-xs">Pause</span>
-	              </>
-	            )}
-	          </Button>
-	        </div>
+	        )}
 	      </div>
 
       {/* Stats — "matches" is the count after the search query + time range

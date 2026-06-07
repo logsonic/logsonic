@@ -1,6 +1,6 @@
 # LogSonic
 
-> **Drop a log file. Search it in seconds. Keep it fully offline. Let your AI agent query it.**
+> **Drop a log file or livestream one. Search it in seconds. Keep it fully offline. Let your AI agent query it.**
 
 [![Release](https://img.shields.io/github/v/release/logsonic/logsonic?label=release)](https://github.com/logsonic/logsonic/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -8,7 +8,22 @@
 
 LogSonic is a local-first log analytics app for Windows, Mac, and Linux. One self-contained binary serves a fast browser UI, auto-detects log formats, indexes everything for full-text search, and ships an MCP server so Claude, Cursor, Windsurf, or any MCP client can query your local logs. No telemetry. No cloud. No network calls.
 
-<img src="demo/demo.gif" alt="LogSonic demo: import logs, auto-detect format, correct timestamps, search, color rows, and fit the time range" width="1000" />
+<img src="demo/demo.gif" alt="LogSonic demo: import logs, search them, then livestream rows with pause and resume" width="1000" />
+
+## Livestream
+
+Stream logs into LogSonic while the browser is open. `logsonic tail` can follow a server-side file or read stdin, publish rows to the UI in real time, keep indexing in the background, and let you pause/resume the browser feed without stopping ingestion.
+
+```bash
+tail -f /var/log/app.log | logsonic tail - --source app
+logsonic tail -f /var/log/app.log --source app
+```
+
+Rows are searchable immediately, including rows skipped while the browser feed was paused. See [Live Streaming](docs/live-streaming.md) or run the combined import + Livestream demo:
+
+```bash
+node demo/combined-demo.mjs
+```
 
 ## Installation
 
