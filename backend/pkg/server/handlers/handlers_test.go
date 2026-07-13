@@ -31,6 +31,7 @@ type mockStorage struct {
 	clearErr    error
 	baseDir     string
 	docCounts   map[string]uint64
+	searchCalls int
 }
 
 func newMockStorage() *mockStorage {
@@ -63,6 +64,7 @@ func (m *mockStorage) StoreWithIDs(logs []map[string]interface{}, source string)
 }
 
 func (m *mockStorage) Search(query string, startDate, endDate *time.Time, sources []string) ([]map[string]interface{}, time.Duration, error) {
+	m.searchCalls++
 	if m.searchErr != nil {
 		return nil, 0, m.searchErr
 	}
@@ -875,6 +877,36 @@ func TestHandleReadAll_EmptyStore(t *testing.T) {
 	}
 	if resp.TotalCount != 0 {
 		t.Errorf("expected 0 total, got %d", resp.TotalCount)
+	}
+}
+
+func TestHandleReadAll_EmptySourceFilterReturnsNoRows(t *testing.T) {
+	h, store := setupHandler(t)
+	store.logs = []map[string]interface{}{
+		{
+			"timestamp": time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC),
+			"_src":      "app.log",
+			"message":   "hello",
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/logs?_src=&start_date=2024-01-01T00:00:00Z&end_date=2024-12-31T23:59:59Z", nil)
+	w := httptest.NewRecorder()
+
+	h.HandleReadAll(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	if store.searchCalls != 0 {
+		t.Fatalf("expected empty source filter to skip storage search, got %d calls", store.searchCalls)
+	}
+
+	var resp types.LogResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.TotalCount != 0 || resp.Count != 0 || len(resp.Logs) != 0 {
+		t.Fatalf("expected empty result, got total=%d count=%d logs=%d", resp.TotalCount, resp.Count, len(resp.Logs))
 	}
 }
 

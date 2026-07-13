@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -6,13 +5,18 @@ import { cn } from "@/lib/utils";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
 import { useSystemInfoStore } from "@/stores/useSystemInfoStore";
 import { CheckSquare2, Eye, FilterX, Loader2, Square } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { VerticalTab } from "./Sidebar/CollapsiblePanel";
 import { ColorRulesPanel } from "./Sidebar/ColorRulesPanel";
+
+const sameSources = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((source, index) => source === b[index]);
 
 export const SidebarPanel = () => {
   const { systemInfo, refreshSystemInfo, isLoading, error } = useSystemInfoStore();
   const { sources , setSources} = useSearchQueryParamsStore();
+  const initializedSourcesRef = useRef(false);
+  const previousSourceNamesRef = useRef<string[]>([]);
 
   const allSourceNames = systemInfo?.storage_info?.source_names || [];
   const allSelected = allSourceNames.length > 0 && allSourceNames.every(s => sources.includes(s));
@@ -22,9 +26,29 @@ export const SidebarPanel = () => {
   useEffect(() => {
     if (!systemInfo) {
       refreshSystemInfo();
+      return;
     }
-    setSources(systemInfo?.storage_info?.source_names || []);
-  }, [systemInfo, refreshSystemInfo]);
+
+    const sourceNames = systemInfo.storage_info?.source_names || [];
+    const previousSourceNames = previousSourceNamesRef.current;
+    const hadAllPreviousSources =
+      previousSourceNames.length > 0 &&
+      previousSourceNames.every(source => sources.includes(source));
+
+    let nextSources = sources.filter(source => sourceNames.includes(source));
+    if (!initializedSourcesRef.current) {
+      nextSources = sources.length > 0 ? nextSources : [...sourceNames];
+    } else if (hadAllPreviousSources || (previousSourceNames.length === 0 && sources.length === 0)) {
+      nextSources = [...sourceNames];
+    }
+
+    if (!sameSources(nextSources, sources)) {
+      setSources(nextSources);
+    }
+
+    initializedSourcesRef.current = true;
+    previousSourceNamesRef.current = [...sourceNames];
+  }, [systemInfo, refreshSystemInfo, sources, setSources]);
 
   // Handle checkbox change
   const handleSourceChange = (source: string, checked: boolean) => {

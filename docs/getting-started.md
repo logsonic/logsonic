@@ -15,7 +15,7 @@ For timestamp controls, see [Timestamp Resolution](timestamp-resolution.md).
 1. Use the search bar to filter logs by time range and keywords.
 2. Use the left panel for field-based filtering.
 3. Use advanced syntax for field shorthand, regex, exclusions, and boolean operators.
-4. Create custom filters and save them for future use.
+4. Save recurring searches from the workspace menu to restore query, time range, sources, columns, widths, and row coloring later.
 
 ## MCP Server For AI Clients
 

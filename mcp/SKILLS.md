@@ -1,6 +1,6 @@
 # Working with LogSonic via MCP
 
-This is the agent-facing playbook for the LogSonic MCP server. If you (the agent) have access to the `ping`, `query_logs`, `log_info`, `list_grok_patterns`, `test_grok_pattern`, and `logsonic_url` tools, read this first — it will save the user a lot of back-and-forth.
+This is the agent-facing playbook for the LogSonic MCP server. If you (the agent) have access to the `ping`, `query_logs`, `log_info`, `list_grok_patterns`, `test_grok_pattern`, `logsonic_url`, and workspace tools, read this first — it will save the user a lot of back-and-forth.
 
 ## What LogSonic is
 
@@ -11,6 +11,8 @@ You cannot:
 - Tail logs in real time — every query is a snapshot.
 - Query data outside the range LogSonic has indexed.
 
+You can create and reopen saved investigation workspaces. Workspaces store local query state, time range, sources, columns, coloring, and visualization mode under the user's LogSonic storage directory.
+
 ## The standard workflow
 
 For any new question, follow this sequence:
@@ -18,6 +20,8 @@ For any new question, follow this sequence:
 1. **`ping`** — confirm the server is up. If this fails, stop and tell the user the LogSonic server isn't running (default `http://localhost:8080`).
 2. **`log_info`** — read `source_names` and `available_dates`. Without this, you don't know what sources exist or what time range has data. Skipping this is the most common mistake.
 3. **`query_logs`** — run the actual search. Constrain by `source` and time range when you can; it makes queries faster and answers more accurate.
+
+For recurring investigations, call `list_workspaces` after `log_info`. If an existing workspace matches the user's intent, use `open_workspace` or `workspace_url` instead of rebuilding the query from scratch.
 
 If a query returns zero results, **do not** immediately assume "no errors exist." Check whether your time window overlaps `available_dates`, whether the field name you used is in `available_columns` from a prior query, and whether the source filter is spelled correctly.
 

@@ -23,29 +23,45 @@ import (
 // All diagnostic output goes to stderr — stdout is the MCP JSON-RPC wire.
 var logger = log.New(os.Stderr, "[logsonic-mcp] ", 0)
 
+type baseURLProvider func() string
+
 // client holds the resolved base URL and a shared HTTP client.
 type client struct {
-	baseURL    string
-	apiBaseURL string
-	http       *http.Client
+	baseURL baseURLProvider
+	http    *http.Client
 }
 
 func newClient(baseURL string) *client {
+	return newClientWithBaseURLProvider(staticBaseURL(baseURL))
+}
+
+func newClientWithBaseURLProvider(provider baseURLProvider) *client {
 	return &client{
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		apiBaseURL: strings.TrimRight(baseURL, "/") + "/api/v1",
-		http:       &http.Client{Timeout: 30 * time.Second},
+		baseURL: provider,
+		http:    &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
+func staticBaseURL(baseURL string) baseURLProvider {
+	trimmed := strings.TrimRight(baseURL, "/")
+	return func() string {
+		return trimmed
+	}
+}
+
+func (c *client) serverBaseURL() string {
+	return strings.TrimRight(c.baseURL(), "/")
+}
+
 func (c *client) get(path string, params url.Values) (json.RawMessage, error) {
-	u := c.apiBaseURL + path
+	baseURL := c.serverBaseURL()
+	u := baseURL + "/api/v1" + path
 	if len(params) > 0 {
 		u += "?" + params.Encode()
 	}
 	resp, err := c.http.Get(u)
 	if err != nil {
-		return nil, fmt.Errorf("cannot reach LogSonic at %s: %w", c.baseURL, err)
+		return nil, fmt.Errorf("cannot reach LogSonic at %s: %w", baseURL, err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -63,9 +79,10 @@ func (c *client) post(path string, payload any) (json.RawMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.http.Post(c.apiBaseURL+path, "application/json", bytes.NewReader(b))
+	baseURL := c.serverBaseURL()
+	resp, err := c.http.Post(baseURL+"/api/v1"+path, "application/json", bytes.NewReader(b))
 	if err != nil {
-		return nil, fmt.Errorf("cannot reach LogSonic at %s: %w", c.baseURL, err)
+		return nil, fmt.Errorf("cannot reach LogSonic at %s: %w", baseURL, err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -89,7 +106,11 @@ func resultErr(err error) *mcp.CallToolResult {
 // build constructs and returns a configured MCPServer with all tools registered.
 // baseURL is the LogSonic server root (e.g. "http://localhost:8080").
 func build(baseURL string) *server.MCPServer {
-	c := newClient(baseURL)
+	return buildWithBaseURLProvider(staticBaseURL(baseURL))
+}
+
+func buildWithBaseURLProvider(provider baseURLProvider) *server.MCPServer {
+	c := newClientWithBaseURLProvider(provider)
 	s := server.NewMCPServer("Logsonic MCP", "1.2.0")
 
 	// ------------------------------------------------------------------ ping
@@ -101,7 +122,7 @@ func build(baseURL string) *server.MCPServer {
 		if err != nil {
 			return resultErr(err), nil
 		}
-		out, _ := json.Marshal(map[string]any{"status": "ok", "base_url": baseURL, "server": json.RawMessage(data)})
+		out, _ := json.Marshal(map[string]any{"status": "ok", "base_url": c.serverBaseURL(), "server": json.RawMessage(data)})
 		return mcp.NewToolResultText(string(out)), nil
 	})
 
@@ -254,7 +275,7 @@ RESPONSE: JSON with logs[], count, total_count, available_columns, log_distribut
 		if v := req.GetString("end_date", ""); v != "" {
 			p.Set("to", v)
 		}
-		result := baseURL + "/?#" + p.Encode()
+		result := c.serverBaseURL() + "/?#" + p.Encode()
 		return mcp.NewToolResultText(result), nil
 	})
 
@@ -300,7 +321,207 @@ RESPONSE: JSON with logs[], count, total_count, available_columns, log_distribut
 		return resultText(data), nil
 	})
 
+	// -------------------------------------------------------- list_workspaces
+	s.AddTool(mcp.NewTool("list_workspaces",
+		mcp.WithDescription("List saved LogSonic investigation workspaces. "+
+			"Use this when the user wants to reopen or reuse a named troubleshooting view."),
+	), func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		data, err := c.get("/workspaces", nil)
+		if err != nil {
+			return resultErr(err), nil
+		}
+		return mcp.NewToolResultText(compactWorkspaces(data)), nil
+	})
+
+	// -------------------------------------------------------- open_workspace
+	s.AddTool(mcp.NewTool("open_workspace",
+		mcp.WithDescription("Return one saved investigation workspace by id, including the UI URL that opens its query/time range."),
+		mcp.WithString("id", mcp.Description("Workspace id from list_workspaces"), mcp.Required()),
+	), func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id := strings.TrimSpace(req.GetString("id", ""))
+		if id == "" {
+			return resultErr(fmt.Errorf("id is required")), nil
+		}
+		data, err := c.get("/workspaces/"+url.PathEscape(id), nil)
+		if err != nil {
+			return resultErr(err), nil
+		}
+		return mcp.NewToolResultText(withWorkspaceURL(data, c.serverBaseURL())), nil
+	})
+
+	// ------------------------------------------------------- create_workspace
+	s.AddTool(mcp.NewTool("create_workspace",
+		mcp.WithDescription("Create a saved investigation workspace from query/time/source state. "+
+			"Prefer relative_time for reusable views; use start_date/end_date only when the window must stay fixed."),
+		mcp.WithString("name", mcp.Description("Workspace name"), mcp.Required()),
+		mcp.WithString("description", mcp.Description("Optional description")),
+		mcp.WithString("query", mcp.Description("Bleve query string to save")),
+		mcp.WithString("source", mcp.Description("Comma-separated source names")),
+		mcp.WithString("relative_time", mcp.Description("Relative range such as last-24-hours or last-7-days")),
+		mcp.WithString("start_date", mcp.Description("Absolute start time, RFC3339")),
+		mcp.WithString("end_date", mcp.Description("Absolute end time, RFC3339")),
+		mcp.WithString("columns", mcp.Description("Comma-separated columns to restore")),
+	), func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		name := strings.TrimSpace(req.GetString("name", ""))
+		if name == "" {
+			return resultErr(fmt.Errorf("name is required")), nil
+		}
+
+		startDate := strings.TrimSpace(req.GetString("start_date", ""))
+		endDate := strings.TrimSpace(req.GetString("end_date", ""))
+		relativeTime := strings.TrimSpace(req.GetString("relative_time", ""))
+		if relativeTime == "" {
+			relativeTime = "last-24-hours"
+		}
+
+		timeSpec := map[string]any{"mode": "relative", "relative": relativeTime}
+		if startDate != "" || endDate != "" {
+			if startDate == "" || endDate == "" {
+				return resultErr(fmt.Errorf("both start_date and end_date are required for an absolute workspace")), nil
+			}
+			timeSpec = map[string]any{"mode": "absolute", "start": startDate, "end": endDate}
+		}
+
+		payload := map[string]any{
+			"name":          name,
+			"description":   strings.TrimSpace(req.GetString("description", "")),
+			"query":         strings.TrimSpace(req.GetString("query", "")),
+			"sources":       splitCSV(req.GetString("source", "")),
+			"time":          timeSpec,
+			"sort_by":       "timestamp",
+			"sort_order":    "desc",
+			"columns":       splitCSV(req.GetString("columns", "")),
+			"visualization": map[string]any{"type": "logs", "bucket": "auto"},
+		}
+		data, err := c.post("/workspaces", payload)
+		if err != nil {
+			return resultErr(err), nil
+		}
+		return mcp.NewToolResultText(withWorkspaceURL(data, c.serverBaseURL())), nil
+	})
+
+	// ---------------------------------------------------------- workspace_url
+	s.AddTool(mcp.NewTool("workspace_url",
+		mcp.WithDescription("Build a UI URL for a saved workspace id. The URL restores query and time range."),
+		mcp.WithString("id", mcp.Description("Workspace id from list_workspaces"), mcp.Required()),
+	), func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id := strings.TrimSpace(req.GetString("id", ""))
+		if id == "" {
+			return resultErr(fmt.Errorf("id is required")), nil
+		}
+		data, err := c.get("/workspaces/"+url.PathEscape(id), nil)
+		if err != nil {
+			return resultErr(err), nil
+		}
+		workspace, err := extractWorkspace(data)
+		if err != nil {
+			return resultErr(err), nil
+		}
+		return mcp.NewToolResultText(buildWorkspaceURL(c.serverBaseURL(), workspace)), nil
+	})
+
 	return s
+}
+
+func compactWorkspaces(data json.RawMessage) string {
+	var response struct {
+		Status     string `json:"status"`
+		Workspaces []struct {
+			ID          string          `json:"id"`
+			Name        string          `json:"name"`
+			Description string          `json:"description,omitempty"`
+			Query       string          `json:"query,omitempty"`
+			Sources     []string        `json:"sources,omitempty"`
+			Time        json.RawMessage `json:"time"`
+			Favorite    bool            `json:"favorite"`
+			UpdatedAt   string          `json:"updated_at,omitempty"`
+		} `json:"workspaces"`
+	}
+	if json.Unmarshal(data, &response) != nil {
+		return string(data)
+	}
+	out, err := json.Marshal(response)
+	if err != nil {
+		return string(data)
+	}
+	return string(out)
+}
+
+func withWorkspaceURL(data json.RawMessage, baseURL string) string {
+	workspace, err := extractWorkspace(data)
+	if err != nil {
+		return string(data)
+	}
+	var response map[string]any
+	if json.Unmarshal(data, &response) != nil {
+		return string(data)
+	}
+	response["url"] = buildWorkspaceURL(baseURL, workspace)
+	out, err := json.Marshal(response)
+	if err != nil {
+		return string(data)
+	}
+	return string(out)
+}
+
+func extractWorkspace(data json.RawMessage) (map[string]any, error) {
+	var response struct {
+		Workspace map[string]any `json:"workspace"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, err
+	}
+	if len(response.Workspace) == 0 {
+		return nil, fmt.Errorf("workspace not found in response")
+	}
+	return response.Workspace, nil
+}
+
+func buildWorkspaceURL(baseURL string, workspace map[string]any) string {
+	p := url.Values{}
+	if query, ok := workspace["query"].(string); ok && query != "" {
+		p.Set("q", query)
+	}
+
+	if timeSpec, ok := workspace["time"].(map[string]any); ok {
+		mode, _ := timeSpec["mode"].(string)
+		if mode == "absolute" {
+			if start, ok := timeSpec["start"].(string); ok && start != "" {
+				if parsed, err := time.Parse(time.RFC3339Nano, start); err == nil {
+					p.Set("since", fmt.Sprint(parsed.UnixMilli()))
+				}
+			}
+			if end, ok := timeSpec["end"].(string); ok && end != "" {
+				if parsed, err := time.Parse(time.RFC3339Nano, end); err == nil {
+					p.Set("to", fmt.Sprint(parsed.UnixMilli()))
+				}
+			}
+		} else {
+			relative, _ := timeSpec["relative"].(string)
+			if relative == "" {
+				relative = "last-24-hours"
+			}
+			p.Set("isRelative", "true")
+			p.Set("relativeValue", relative)
+			p.Set("relative", relative)
+		}
+	}
+
+	return baseURL + "/?#" + p.Encode()
+}
+
+func splitCSV(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 // resolveURL returns the LogSonic base URL from the explicit flag value, then
@@ -341,8 +562,11 @@ func Serve(flagURL string) error {
 // baseURL is the LogSonic server root the tools will call — typically the
 // same origin the handler is mounted on (e.g. "http://localhost:8080").
 func Handler(baseURL string) http.Handler {
-	baseURL = strings.TrimRight(baseURL, "/")
-	return server.NewStreamableHTTPServer(build(baseURL),
+	return HandlerWithBaseURLProvider(staticBaseURL(baseURL))
+}
+
+func HandlerWithBaseURLProvider(provider func() string) http.Handler {
+	return server.NewStreamableHTTPServer(buildWithBaseURLProvider(provider),
 		server.WithStateLess(true), // no session state needed for read-only tools
 	)
 }

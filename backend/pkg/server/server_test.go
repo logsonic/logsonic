@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -68,6 +70,82 @@ func TestLiveEventsRouteStreamsHello(t *testing.T) {
 	if hello.SubscriberID == "" {
 		t.Fatal("expected subscriber id")
 	}
+}
+
+func TestListenAutoPortSkipsBusyPort(t *testing.T) {
+	busy, busyPort := reserveBusyPortWithFreeNext(t)
+	defer busy.Close()
+
+	srv, err := NewServer(Config{
+		Host:        "127.0.0.1",
+		Port:        ":" + strconv.Itoa(busyPort),
+		StoragePath: t.TempDir(),
+		Timeout:     time.Second,
+		AutoPort:    true,
+	})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	t.Cleanup(func() { _ = srv.services.CloseStorage() })
+
+	ln, actualPort, err := srv.listen()
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	if actualPort != busyPort+1 {
+		t.Fatalf("expected port %d after busy port, got %d", busyPort+1, actualPort)
+	}
+}
+
+func TestListenBusyPortFailsWithoutAutoPort(t *testing.T) {
+	busy, busyPort := reserveBusyPortWithFreeNext(t)
+	defer busy.Close()
+
+	srv, err := NewServer(Config{
+		Host:        "127.0.0.1",
+		Port:        ":" + strconv.Itoa(busyPort),
+		StoragePath: t.TempDir(),
+		Timeout:     time.Second,
+		AutoPort:    false,
+	})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	t.Cleanup(func() { _ = srv.services.CloseStorage() })
+
+	ln, _, err := srv.listen()
+	if err == nil {
+		ln.Close()
+		t.Fatal("expected busy port error")
+	}
+	if !isAddrInUse(err) {
+		t.Fatalf("expected address-in-use error, got %v", err)
+	}
+}
+
+func reserveBusyPortWithFreeNext(t *testing.T) (net.Listener, int) {
+	t.Helper()
+
+	for port := 30000; port < 60000; port++ {
+		addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+		busy, err := net.Listen("tcp", addr)
+		if err != nil {
+			continue
+		}
+
+		nextAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port+1))
+		next, err := net.Listen("tcp", nextAddr)
+		if err == nil {
+			next.Close()
+			return busy, port
+		}
+		busy.Close()
+	}
+
+	t.Fatal("could not reserve adjacent test ports")
+	return nil, 0
 }
 
 // TestLiveEventsStreamUnblocksOnShutdown proves the held-open SSE handler

@@ -35,7 +35,7 @@ brew install logsonic
 logsonic
 ```
 
-Or download a pre-built binary from [GitHub Releases](https://github.com/logsonic/logsonic/releases), then open:
+Or download a pre-built binary from [GitHub Releases](https://github.com/logsonic/logsonic/releases), then open the URL printed by the server, usually:
 
 ```text
 http://localhost:8080
@@ -69,6 +69,7 @@ For Linux, Windows, Docker, source builds, storage locations, and the macOS app 
 - Bleve-backed full-text search with field shorthand, regex, exclusions, and boolean operators.
 - Live tailing from stdin or server-side files.
 - MCP server for AI clients.
+- Saved local workspaces for recurring investigations.
 - Color rules, event histogram, source filters, and dark/light themes.
 - Local file-based storage with retention controls.
 

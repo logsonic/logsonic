@@ -14,6 +14,9 @@ import {
   SystemInfoResponse,
   TimestampPreviewRequest,
   TimestampPreviewResponse,
+  Workspace,
+  WorkspaceListResponse,
+  WorkspaceResponse,
 } from './api-types';
 
 // API base configuration
@@ -72,8 +75,16 @@ async function apiRequest<T = unknown>(
     throw new Error(errorMessage);
   }
   
-  // Parse and return response
-  return await response.json() as T;
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  const text = await response.text();
+  if (!text) {
+    return undefined as T;
+  }
+
+  return JSON.parse(text) as T;
 }
 
 // API Functions
@@ -134,6 +145,31 @@ export async function getLogs(params?: LogQueryParams): Promise<LogResponse> {
 
 export async function clearLogs(): Promise<any> {
   return apiRequest<any>('/logs', 'DELETE');
+}
+
+// Saved Workspaces
+export async function listWorkspaces(): Promise<WorkspaceListResponse> {
+  return apiRequest<WorkspaceListResponse>('/workspaces', 'GET');
+}
+
+export async function createWorkspace(workspace: Workspace): Promise<WorkspaceResponse> {
+  return apiRequest<WorkspaceResponse>('/workspaces', 'POST', workspace);
+}
+
+export async function getWorkspace(id: string): Promise<WorkspaceResponse> {
+  return apiRequest<WorkspaceResponse>(`/workspaces/${encodeURIComponent(id)}`, 'GET');
+}
+
+export async function updateWorkspace(id: string, workspace: Workspace): Promise<WorkspaceResponse> {
+  return apiRequest<WorkspaceResponse>(`/workspaces/${encodeURIComponent(id)}`, 'PUT', workspace);
+}
+
+export async function deleteWorkspace(id: string): Promise<void> {
+  await apiRequest<unknown>(`/workspaces/${encodeURIComponent(id)}`, 'DELETE');
+}
+
+export async function duplicateWorkspace(id: string): Promise<WorkspaceResponse> {
+  return apiRequest<WorkspaceResponse>(`/workspaces/${encodeURIComponent(id)}/duplicate`, 'POST', {});
 }
 
 // Log Parsing

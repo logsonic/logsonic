@@ -199,6 +199,58 @@ export interface LogResponse {
   total_count?: number;
 }
 
+export interface WorkspaceTime {
+  mode: 'relative' | 'absolute';
+  relative?: string;
+  custom_relative_count?: number;
+  custom_relative_unit?: string;
+  start?: string;
+  end?: string;
+}
+
+export interface WorkspaceColorRule {
+  id?: string;
+  field: string;
+  operator: 'eq' | 'neq' | 'contains' | 'exists' | 'regex';
+  value: string;
+  color: string;
+  enabled: boolean;
+}
+
+export interface WorkspaceVisualization {
+  type: 'logs' | 'analytics';
+  bucket?: string;
+}
+
+export interface Workspace {
+  id?: string;
+  name: string;
+  description?: string;
+  query?: string;
+  sources?: string[];
+  time: WorkspaceTime;
+  sort_by?: string;
+  sort_order?: 'asc' | 'desc';
+  columns?: string[];
+  column_widths?: Record<string, number>;
+  color_rules?: WorkspaceColorRule[];
+  facet_fields?: string[];
+  visualization: WorkspaceVisualization;
+  favorite?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface WorkspaceListResponse {
+  status: string;
+  workspaces: Workspace[];
+}
+
+export interface WorkspaceResponse {
+  status: string;
+  workspace: Workspace;
+}
+
 // Parse Types
 export interface ParseRequest {
   custom_patterns?: Record<string, string>;

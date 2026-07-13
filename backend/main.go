@@ -37,7 +37,7 @@ func main() {
 	portFlag := flag.String("port", "", "Port to listen on (default: 8080 or PORT env var)")
 	storageFlag := flag.String("storage", "", "Path to storage directory (default: per-user app data dir)")
 	openFlag := flag.Bool("open", false, "Open the web UI in your browser once the server starts")
-	autoPortFlag := flag.Bool("auto-port", false, "If the port is busy, bind the next free port instead of failing")
+	autoPortFlag := flag.Bool("auto-port", true, "If the port is busy, bind the next free port instead of failing")
 	retentionFlag := flag.Int("retention-days", 0, "Delete indexed logs older than N days (0 = keep everything)")
 	helpFlag := flag.Bool("help", false, "Show usage information")
 
@@ -96,8 +96,9 @@ func main() {
 	// LSEnvironment LOGSONIC_APP=1, which LaunchServices injects ONLY on
 	// double-click — never when the bundled binary is run from a terminal (e.g.
 	// via the Homebrew-symlinked `logsonic`). So app-launch gets the desktop
-	// defaults (open the browser, auto-select a port) while the CLI stays
-	// classic unless its own flags/env opt in.
+	// defaults (open the browser, auto-select a port). The CLI also
+	// auto-selects a free port by default, but stays headless unless its own
+	// flags/env opt in.
 	// On macOS the Logsonic.app bundle is a native GUI shell (see macos/
 	// LogsonicApp.swift) that runs this binary as its child with a controlling
 	// pipe, shows the Dock icon + a log window, and opens the browser itself. So
@@ -117,7 +118,7 @@ func main() {
 		}
 	}
 
-	log.Println("Starting server on", host+port, "with storage path", storagePath)
+	log.Println("Starting server from", host+port, "with storage path", storagePath)
 	cfg := server.Config{
 		Host:          host,
 		Port:          port,
@@ -205,7 +206,7 @@ func printUsage() {
 	fmt.Println("  -port string      Port to listen on (default: 8080 or PORT env var)")
 	fmt.Println("  -storage string   Path to storage directory (default: per-user app data dir)")
 	fmt.Println("  -open             Open the web UI in your browser once the server starts")
-	fmt.Println("  -auto-port        If the port is busy, bind the next free port instead of failing")
+	fmt.Println("  -auto-port        If the port is busy, bind the next free port instead of failing (default true; use -auto-port=false to disable)")
 	fmt.Println("  -retention-days N Delete indexed logs older than N days (0 = keep everything)")
 	fmt.Println("  -help             Show this help message")
 	fmt.Println("\nEnvironment Variables:")

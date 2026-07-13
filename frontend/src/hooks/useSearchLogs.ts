@@ -38,7 +38,7 @@ export const useSearchLogs = (
       // The backend always expects UTC timestamps regardless of the displayed timezone
       const params : LogQueryParams = {
         query: store.searchQuery,
-        _src: store.sources.length > 0 ? store.sources.join(',') : undefined,
+        _src: store.sources.join(','),
         start_date: startDate.toISOString(), // Already in UTC format
         end_date: endDate.toISOString(), // Already in UTC format
         limit: store.pageSize,
@@ -110,19 +110,11 @@ export const useSearchLogs = (
     
     return null;
   }, [
-    store.searchQuery,
-    store.sources,
-    store.UTCTimeSince,
-    store.UTCTimeTo,
-    store.pageSize,
-    store.currentPage,
-    store.sortBy,
-    store.sortOrder,
+    store,
     logResultStore,
     fetchLogs,
     onSearchComplete,
     performanceMetrics,
-    store.setPerformanceMetrics
   ]);
 
   return {
@@ -130,4 +122,4 @@ export const useSearchLogs = (
     isLoading: apiLoading || logResultStore.isLoading,
     performanceMetrics,
   };
-}; 
+};

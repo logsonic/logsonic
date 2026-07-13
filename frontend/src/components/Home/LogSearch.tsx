@@ -1,7 +1,7 @@
 import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";
 import { useToast } from "@/components/ui/use-toast";
-import { useSearchLogs } from "@/hooks/useSearchLogs";
 import { getLogs } from "@/lib/api-client";
+import type { LogResponse } from "@/lib/api-types";
 import { calculateRelativeDateRange } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
 import { useLogResultStore } from "@/stores/useLogResultStore";
@@ -12,6 +12,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { PerformanceMetricsPopover } from "./PerformanceMetricsPopover";
 import { QueryHelperPopover } from "./QueryHelperPopover";
+import { WorkspaceMenu } from "./WorkspaceMenu";
 
 // Cap exports so we don't churn the browser on huge result sets; the user
 // is warned via toast if matches exceed this.
@@ -69,15 +70,14 @@ const SYNTAX_HINTS = [
 // Log Search component renders and updates the SearchQueryParamsStoreState
 // this includes search query and date range. 
 export const LogSearch = ({ 
-    onSearchComplete // optional callback for the caller to get notifications when the search is complete
+    onSearchComplete: _onSearchComplete // reserved for callers that need search completion notifications
   }: {
-    onSearchComplete?: (data: any) => void;
+    onSearchComplete?: (data: LogResponse) => void;
   }) => {
 
   // Get the store directly using the hook
   const store = useSearchQueryParamsStore();
 
-  const { searchLogs } = useSearchLogs(onSearchComplete);
   const { isLoading } = useLogResultStore();
   const [localSearchQuery, setLocalSearchQuery] = useState(store.searchQuery);
   const [isExporting, setIsExporting] = useState(false);
@@ -120,14 +120,11 @@ export const LogSearch = ({
     setLocalSearchQuery(e.target.value);
   }, []);
 
-  const handleSearch = useCallback((force: boolean = false) => {
+  const handleSearch = useCallback(() => {
     store.resetPagination();
     store.setSearchQuery(localSearchQuery);
-
-    if (force) {
-      searchLogs();
-    }
-  }, [localSearchQuery, searchLogs, store]);
+    store.triggerSearch();
+  }, [localSearchQuery, store]);
 
   const handleClearSearch = useCallback(() => {
     setLocalSearchQuery('');
@@ -177,7 +174,7 @@ export const LogSearch = ({
       const cappedAt = Math.min(totalCount, EXPORT_MAX_ROWS);
       const result = await getLogs({
         query: store.searchQuery,
-        _src: store.sources.length > 0 ? store.sources.join(',') : undefined,
+        _src: store.sources.join(','),
         start_date: startDate.toISOString(),
         end_date: endDate.toISOString(),
         limit: cappedAt,
@@ -342,7 +339,7 @@ export const LogSearch = ({
               <span aria-hidden style={{ width: 1, background: 'var(--ls-border-strong)' }} />
 
               <Button
-                onClick={() => handleSearch(true)}
+                onClick={handleSearch}
                 className="h-full px-4 rounded-none text-white"
                 style={{
                   background: 'var(--ls-accent)',
@@ -472,7 +469,8 @@ export const LogSearch = ({
             />
           </div>
 
-          <div className="flex flex-shrink-0 items-center">
+          <div className="flex flex-shrink-0 items-center gap-1">
+            <WorkspaceMenu />
             <GhostBtn
               icon={isExporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
               onClick={isExporting ? undefined : handleExport}

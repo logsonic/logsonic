@@ -10,7 +10,7 @@ Go 1.25.7 or later is required. For hot reload:
 go install github.com/air-verse/air@latest
 ```
 
-Run the backend on port 8080:
+Run the backend on fixed port 8080. The dev script exits if the port is already in use:
 
 ```bash
 cd backend
@@ -21,7 +21,7 @@ Or run it directly:
 
 ```bash
 cd backend
-go run main.go -port 8080
+go run main.go -port 8080 -auto-port=false
 ```
 
 ## Frontend

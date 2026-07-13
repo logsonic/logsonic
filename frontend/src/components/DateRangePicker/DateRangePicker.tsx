@@ -22,7 +22,7 @@ export const DateRangePicker: FC<DateRangePickerProps> = ({ onApply, initialActi
   // Get the store directly using the hook
   const store = useSearchQueryParamsStore();
 
-  const [_, setActiveTab] = useState<"relative" | "absolute">(
+  const [activeTab, setActiveTab] = useState<"relative" | "absolute">(
     initialActiveTab
       ? (initialActiveTab as "relative" | "absolute")
       : store.isRelative
@@ -38,7 +38,12 @@ export const DateRangePicker: FC<DateRangePickerProps> = ({ onApply, initialActi
   }, [initialActiveTab]);
 
   const handleTabChange = (value: string) => {
-    store.isRelative = value === "relative";
+    const nextTab = value as "relative" | "absolute";
+    setActiveTab(nextTab);
+    store.setIsRelative(nextTab === "relative");
+    if (nextTab === "relative") {
+      store.updateRelativeValue();
+    }
   };
 
   const formatDateRange = useCallback(() => {
@@ -50,7 +55,7 @@ export const DateRangePicker: FC<DateRangePickerProps> = ({ onApply, initialActi
       <CardContent className="p-4">
         <div className="space-y-4">
           <Tabs
-            defaultValue={store.isRelative ? "relative" : "absolute"}
+            value={activeTab}
             onValueChange={handleTabChange}
             className="w-full"
           >

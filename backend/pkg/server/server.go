@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -45,8 +46,7 @@ type Config struct {
 
 	// OpenBrowser opens the web UI in the default browser once the server is
 	// listening. AutoPort makes Start scan upward from Port for a free port
-	// instead of failing when it is busy. Both default on when launched as the
-	// macOS .app (see main.go), off for the bare CLI.
+	// instead of failing when it is busy. It is enabled by default in main.go.
 	OpenBrowser bool
 	AutoPort    bool
 
@@ -56,10 +56,11 @@ type Config struct {
 }
 
 type Server struct {
-	router   chi.Router
-	services *handlers.Services
-	store    storage.StorageInterface
-	config   Config
+	router     chi.Router
+	services   *handlers.Services
+	store      storage.StorageInterface
+	config     Config
+	mcpBaseURL atomic.Value
 }
 
 // NewServer initializes a new Server instance
@@ -129,6 +130,13 @@ func NewServer(cfg Config) (*Server, error) {
 
 	// Initialize handler
 	h := handlers.NewHandler(store, cfg.StoragePath)
+	srv := &Server{
+		services: h,
+		store:    store,
+		config:   cfg,
+	}
+	mcpFallbackBaseURL := fmt.Sprintf("http://%s%s", cfg.Host, cfg.Port)
+	srv.mcpBaseURL.Store(mcpFallbackBaseURL)
 
 	// Serve static files from embedded filesystem
 	embeddedFS := static.GetFileSystem()
@@ -210,10 +218,14 @@ func NewServer(cfg Config) (*Server, error) {
 
 	// MCP HTTP transport — Streamable HTTP (MCP spec 2025-03-26).
 	// Clients connect at /mcp; config is just: {"url": "http://localhost:PORT/mcp"}.
-	// The base URL the tools call back to is the configured host:port; if
-	// auto-port changes it the caller should set LOGSONIC_URL instead.
-	mcpBaseURL := fmt.Sprintf("http://%s%s", cfg.Host, cfg.Port)
-	r.Mount("/mcp", lsmcp.Handler(mcpBaseURL))
+	// Tool calls resolve the local API base URL at request time so AutoPort can
+	// update it after Start binds the actual port.
+	r.Mount("/mcp", lsmcp.HandlerWithBaseURLProvider(func() string {
+		if v, ok := srv.mcpBaseURL.Load().(string); ok && v != "" {
+			return v
+		}
+		return mcpFallbackBaseURL
+	}))
 
 	// Long-lived live-tail routes must stay outside the normal API timeout and
 	// throttle middleware. They still receive request IDs, logging, recovery,
@@ -250,6 +262,14 @@ func NewServer(cfg Config) (*Server, error) {
 				r.Delete("/", h.HandleClear)
 				r.Delete("/ids", h.HandleDeleteByIds)
 			})
+			r.Route("/workspaces", func(r chi.Router) {
+				r.Get("/", h.HandleListWorkspaces)
+				r.Post("/", h.HandleCreateWorkspace)
+				r.Post("/{id}/duplicate", h.HandleDuplicateWorkspace)
+				r.Get("/{id}", h.HandleGetWorkspace)
+				r.Put("/{id}", h.HandleUpdateWorkspace)
+				r.Delete("/{id}", h.HandleDeleteWorkspace)
+			})
 			r.Get("/info", h.HandleInfo)
 
 			// Live-tail controls are short-lived JSON calls and can use the
@@ -273,12 +293,8 @@ func NewServer(cfg Config) (*Server, error) {
 	// shadows JSON or SSE routes.
 	r.HandleFunc("/*", serveWithMimeType)
 
-	return &Server{
-		router:   r,
-		services: h,
-		store:    store,
-		config:   cfg,
-	}, nil
+	srv.router = r
+	return srv, nil
 }
 
 // Start initializes and starts the HTTP server. It blocks until SIGINT, SIGTERM,
@@ -294,6 +310,7 @@ func (s *Server) Start() error {
 	}
 
 	url := fmt.Sprintf("http://%s", net.JoinHostPort(s.config.Host, strconv.Itoa(port)))
+	s.mcpBaseURL.Store(url)
 	fmt.Printf("Server listening on %s\n", url)
 
 	httpServer := &http.Server{
@@ -358,9 +375,9 @@ func (s *Server) Start() error {
 
 // listen binds the server's TCP listener and returns it along with the port it
 // actually bound. With AutoPort, a busy port is skipped and the next one is
-// tried (scanning up to portScanRange ports); otherwise a busy port is fatal,
-// preserving the bare-CLI behavior. The returned port may differ from the
-// configured one, so callers use it (not config.Port) for the URL.
+// tried (scanning up to portScanRange ports); otherwise a busy port is fatal.
+// The returned port may differ from the configured one, so callers use it (not
+// config.Port) for the URL.
 func (s *Server) listen() (net.Listener, int, error) {
 	const portScanRange = 100
 

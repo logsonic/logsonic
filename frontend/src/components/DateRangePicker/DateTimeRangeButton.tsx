@@ -56,12 +56,6 @@ export const DateTimeRangeButton: FC = () => {
     store.timeZone
   ]);
 
-  // Handle tab change
-  const handleTabChange = (value: string) => {
-    setActiveTab(value);
-    store.isRelative = value === "relative";
-  };
-
   // Handle search button click
   const handleSearchClick = () => {
     // Close the popover
@@ -134,4 +128,4 @@ export const DateTimeRangeButton: FC = () => {
   );
 };
 
-export default DateTimeRangeButton; 
+export default DateTimeRangeButton;
