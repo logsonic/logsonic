@@ -41,7 +41,7 @@ const App = () => {
 
   return (
     <>
-      <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <HashRouter>
         <Suspense fallback={<LoadingScreen />}>
           <Routes>
             <Route path="/" element={<Home />} />

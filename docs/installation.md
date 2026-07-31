@@ -38,7 +38,7 @@ Whether installed via Homebrew or from the release `.zip`, **Logsonic.app** live
 
 Closing only the browser tab leaves the server running. Press `Cmd+Q`, click **Quit**, or close the app window to stop it gracefully.
 
-The app stores indexed data under `~/Library/Application Support/Logsonic`. The `Logsonic.app` launcher always auto-selects a port and opens the browser. The `logsonic` CLI serves on `http://localhost:8080` and does not open a browser unless you pass `-open -auto-port`.
+The app stores indexed data under `~/Library/Application Support/Logsonic`. The `Logsonic.app` launcher always auto-selects a port and opens the browser. The `logsonic` CLI serves on the first free port starting at `http://localhost:8080` and does not open a browser unless you pass `-open`.
 
 ## Pre-Built Binary
 
@@ -56,11 +56,7 @@ chmod +x logsonic
 
 **Windows:** download the `.zip`, extract it, and run `logsonic.exe`.
 
-Then open `http://localhost:8080`. If port 8080 is unavailable:
-
-```bash
-./logsonic -port 8088
-```
+Then open the URL printed by the server. It starts at `http://localhost:8080` and automatically uses the next free port if `8080` is unavailable.
 
 Looking for sample logs? [LogHub](https://github.com/logpai/loghub/) has useful examples, including this [Apache log](https://github.com/logpai/loghub/blob/master/Apache/Apache_2k.log).
 

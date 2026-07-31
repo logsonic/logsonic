@@ -634,6 +634,248 @@
                     }
                 }
             }
+        },
+        "/workspaces": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "summary": "List saved investigation workspaces",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.WorkspaceListResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "summary": "Create a saved investigation workspace",
+                "parameters": [
+                    {
+                        "description": "Workspace",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.Workspace"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/types.WorkspaceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "summary": "Get a saved investigation workspace",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.WorkspaceResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "summary": "Update a saved investigation workspace",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Workspace",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.Workspace"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.WorkspaceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "workspaces"
+                ],
+                "summary": "Delete a saved investigation workspace",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{id}/duplicate": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "summary": "Duplicate a saved investigation workspace",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/types.WorkspaceResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -1169,6 +1411,10 @@
                         "type": "string"
                     }
                 },
+                "multi": {
+                    "description": "Multi requests heterogeneous-stream detection: when true and no\nGrokPattern is supplied, autosuggest runs log2grok's DiscoverMulti\nand returns an ordered set of standalone patterns (results[0] is the\ndominant one) that together cover the input. When false (default)\nautosuggest runs the single-pattern Discover, preserving the\nhistorical one-result behaviour.",
+                    "type": "boolean"
+                },
                 "session_options": {
                     "$ref": "#/definitions/types.IngestSessionOptions"
                 }
@@ -1226,6 +1472,10 @@
         "types.SuggestResponse": {
             "type": "object",
             "properties": {
+                "combined_coverage": {
+                    "description": "CombinedCoverage is the fraction of input lines covered by the union\nof all returned patterns (0.0–1.0). It only differs from\nResults[0].Coverage when a multi-pattern set was requested (Multi)\nand more than one pattern was returned. Omitted for single-pattern\nresponses.",
+                    "type": "number"
+                },
                 "results": {
                     "type": "array",
                     "items": {
@@ -1311,6 +1561,157 @@
                             "type": "string"
                         }
                     }
+                }
+            }
+        },
+        "types.Workspace": {
+            "type": "object",
+            "properties": {
+                "color_rules": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.WorkspaceColorRule"
+                    }
+                },
+                "column_widths": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "columns": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "facet_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "favorite": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "query": {
+                    "type": "string"
+                },
+                "sort_by": {
+                    "type": "string"
+                },
+                "sort_order": {
+                    "type": "string"
+                },
+                "sources": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "time": {
+                    "$ref": "#/definitions/types.WorkspaceTime"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "visualization": {
+                    "$ref": "#/definitions/types.WorkspaceVisualization"
+                }
+            }
+        },
+        "types.WorkspaceColorRule": {
+            "type": "object",
+            "properties": {
+                "color": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "field": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "operator": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.WorkspaceListResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string"
+                },
+                "workspaces": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.Workspace"
+                    }
+                }
+            }
+        },
+        "types.WorkspaceResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string"
+                },
+                "workspace": {
+                    "$ref": "#/definitions/types.Workspace"
+                }
+            }
+        },
+        "types.WorkspaceTime": {
+            "type": "object",
+            "properties": {
+                "custom_relative_count": {
+                    "type": "integer"
+                },
+                "custom_relative_unit": {
+                    "type": "string"
+                },
+                "end": {
+                    "type": "string"
+                },
+                "mode": {
+                    "description": "\"relative\" or \"absolute\"",
+                    "type": "string"
+                },
+                "relative": {
+                    "type": "string"
+                },
+                "start": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.WorkspaceVisualization": {
+            "type": "object",
+            "properties": {
+                "bucket": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         }

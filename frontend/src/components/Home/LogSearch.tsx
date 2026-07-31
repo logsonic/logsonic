@@ -1,60 +1,15 @@
 import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";
-import { useToast } from "@/components/ui/use-toast";
-import { useSearchLogs } from "@/hooks/useSearchLogs";
-import { getLogs } from "@/lib/api-client";
-import { calculateRelativeDateRange } from "@/lib/date-utils";
+import type { LogResponse } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 import { useLogResultStore } from "@/stores/useLogResultStore";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
-import { ArrowRight, Download, HelpCircle, Loader2, Search, X } from "lucide-react";
+import { ArrowRight, HelpCircle, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { PerformanceMetricsPopover } from "./PerformanceMetricsPopover";
 import { QueryHelperPopover } from "./QueryHelperPopover";
-
-// Cap exports so we don't churn the browser on huge result sets; the user
-// is warned via toast if matches exceed this.
-const EXPORT_MAX_ROWS = 100_000;
-
-const GhostBtn = ({
-  icon,
-  children,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  children: React.ReactNode;
-  onClick?: () => void;
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className="inline-flex items-center transition-colors"
-    style={{
-      gap: 6,
-      height: 24,
-      padding: '0 8px',
-      borderRadius: 5,
-      fontSize: 12,
-      fontWeight: 500,
-      background: 'transparent',
-      color: 'var(--ls-text-2)',
-      border: '1px solid transparent',
-      cursor: 'pointer',
-    }}
-    onMouseEnter={(e) => {
-      e.currentTarget.style.background = 'var(--ls-bg-2)';
-      e.currentTarget.style.color = 'var(--ls-text)';
-    }}
-    onMouseLeave={(e) => {
-      e.currentTarget.style.background = 'transparent';
-      e.currentTarget.style.color = 'var(--ls-text-2)';
-    }}
-  >
-    {icon}
-    <span>{children}</span>
-  </button>
-);
+import { WorkspaceMenu } from "./WorkspaceMenu";
 
 // Syntax hint chips shown below the search bar when focused
 const SYNTAX_HINTS = [
@@ -69,19 +24,16 @@ const SYNTAX_HINTS = [
 // Log Search component renders and updates the SearchQueryParamsStoreState
 // this includes search query and date range. 
 export const LogSearch = ({ 
-    onSearchComplete // optional callback for the caller to get notifications when the search is complete
+    onSearchComplete: _onSearchComplete // reserved for callers that need search completion notifications
   }: {
-    onSearchComplete?: (data: any) => void;
+    onSearchComplete?: (data: LogResponse) => void;
   }) => {
 
   // Get the store directly using the hook
   const store = useSearchQueryParamsStore();
 
-  const { searchLogs } = useSearchLogs(onSearchComplete);
   const { isLoading } = useLogResultStore();
   const [localSearchQuery, setLocalSearchQuery] = useState(store.searchQuery);
-  const [isExporting, setIsExporting] = useState(false);
-  const { toast } = useToast();
   
   const [isInputFocused, setIsInputFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -120,14 +72,11 @@ export const LogSearch = ({
     setLocalSearchQuery(e.target.value);
   }, []);
 
-  const handleSearch = useCallback((force: boolean = false) => {
+  const handleSearch = useCallback(() => {
     store.resetPagination();
     store.setSearchQuery(localSearchQuery);
-
-    if (force) {
-      searchLogs();
-    }
-  }, [localSearchQuery, searchLogs, store]);
+    store.triggerSearch();
+  }, [localSearchQuery, store]);
 
   const handleClearSearch = useCallback(() => {
     setLocalSearchQuery('');
@@ -144,106 +93,6 @@ export const LogSearch = ({
       inputRef.current?.blur();
     }
   }, [handleSearch]);
-
-  // Export all rows matching the current query (not just the visible page).
-  // The old behavior dumped only the current page silently, which was lossy.
-  const handleExport = useCallback(async () => {
-    const totalCount = store.resultCount;
-    if (totalCount === 0) {
-      toast({
-        title: 'Nothing to export',
-        description: 'Run a search that returns at least one row.',
-        variant: 'default',
-      });
-      return;
-    }
-
-    setIsExporting(true);
-    try {
-      // Resolve the active time range — mirrors useSearchLogs so relative
-      // ranges aren't snapshotted to a stale value.
-      let startDate = store.UTCTimeSince;
-      let endDate = store.UTCTimeTo;
-      if (store.isRelative) {
-        const r = calculateRelativeDateRange(
-          store.relativeValue,
-          store.customRelativeUnit,
-          store.customRelativeCount,
-        );
-        startDate = r.startDate;
-        endDate = r.endDate;
-      }
-
-      const cappedAt = Math.min(totalCount, EXPORT_MAX_ROWS);
-      const result = await getLogs({
-        query: store.searchQuery,
-        _src: store.sources.length > 0 ? store.sources.join(',') : undefined,
-        start_date: startDate.toISOString(),
-        end_date: endDate.toISOString(),
-        limit: cappedAt,
-        offset: 0,
-        sort_by: store.sortBy,
-        sort_order: store.sortOrder,
-      });
-
-      const logs = result?.logs ?? [];
-      if (logs.length === 0) {
-        toast({
-          title: 'Export failed',
-          description: 'Backend returned no rows for this query.',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      const jsonl = logs.map(log => JSON.stringify(log)).join('\n') + '\n';
-      const blob = new Blob([jsonl], { type: 'application/x-ndjson' });
-      const url = URL.createObjectURL(blob);
-
-      const ts = new Date().toISOString().replace(/[:.]/g, '-');
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `logsonic-export-${ts}.jsonl`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      if (totalCount > EXPORT_MAX_ROWS) {
-        toast({
-          title: `Exported first ${EXPORT_MAX_ROWS.toLocaleString()} of ${totalCount.toLocaleString()} rows`,
-          description: 'Narrow the time range or query to export the remainder.',
-          variant: 'default',
-        });
-      } else {
-        toast({
-          title: `Exported ${logs.length.toLocaleString()} rows`,
-          variant: 'default',
-        });
-      }
-    } catch (err) {
-      toast({
-        title: 'Export failed',
-        description: err instanceof Error ? err.message : 'Unknown error',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsExporting(false);
-    }
-  }, [
-    store.resultCount,
-    store.searchQuery,
-    store.sources,
-    store.isRelative,
-    store.relativeValue,
-    store.customRelativeCount,
-    store.customRelativeUnit,
-    store.UTCTimeSince,
-    store.UTCTimeTo,
-    store.sortBy,
-    store.sortOrder,
-    toast,
-  ]);
 
   // Insert a hint snippet into the search input and focus it so the user
   // can keep typing without a second click.
@@ -342,7 +191,7 @@ export const LogSearch = ({
               <span aria-hidden style={{ width: 1, background: 'var(--ls-border-strong)' }} />
 
               <Button
-                onClick={() => handleSearch(true)}
+                onClick={handleSearch}
                 className="h-full px-4 rounded-none text-white"
                 style={{
                   background: 'var(--ls-accent)',
@@ -472,13 +321,8 @@ export const LogSearch = ({
             />
           </div>
 
-          <div className="flex flex-shrink-0 items-center">
-            <GhostBtn
-              icon={isExporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-              onClick={isExporting ? undefined : handleExport}
-            >
-              {isExporting ? 'Exporting…' : 'Export'}
-            </GhostBtn>
+          <div className="flex flex-shrink-0 items-center gap-1">
+            <WorkspaceMenu />
           </div>
         </div>
       </div>

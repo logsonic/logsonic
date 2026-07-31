@@ -4,6 +4,7 @@ import (
 	"log"
 	"logsonic/pkg/storage"
 	"logsonic/pkg/timeresolve"
+	"logsonic/pkg/workspaces"
 	"sync"
 )
 
@@ -17,6 +18,7 @@ type Services struct {
 	// log2grok library. Saved patterns thus restore their last-used
 	// anchor / year strategy / timezone on next import.
 	PatternTimestamps *timeresolve.LibraryStore
+	Workspaces        *workspaces.Store
 
 	storageInfoCache any
 	infoCacheMutex   sync.RWMutex
@@ -33,10 +35,15 @@ func NewHandler(storage storage.StorageInterface, storagePath string) *Services 
 		// as "no persistence" and falls through cleanly.
 		log.Printf("timeresolve: failed to open pattern_timestamps.json: %v", err)
 	}
+	workspaceStore, err := workspaces.NewStore(storagePath)
+	if err != nil {
+		log.Printf("workspaces: failed to open workspaces.json: %v", err)
+	}
 	svc := &Services{
 		storage:           storage,
 		StoragePath:       storagePath,
 		PatternTimestamps: store,
+		Workspaces:        workspaceStore,
 		storageInfoCache:  nil,
 		cacheValid:        false,
 	}

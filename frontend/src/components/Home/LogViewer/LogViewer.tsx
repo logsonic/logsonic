@@ -22,6 +22,7 @@ type SearchParamType = {
   sortBy: string;
   sortOrder: string;
   sources: string[];
+  searchNonce: number;
 }
 /**
  * Main LogViewer component
@@ -50,7 +51,8 @@ export const LogViewer = () => {
     to: store.UTCTimeToMs,
     sortBy: store.sortBy,
     sortOrder: store.sortOrder,
-    sources: store.sources
+    sources: store.sources,
+    searchNonce: store.searchNonce
   });
 
   // Fetch logs when search parameters change (excluding date changes)
@@ -66,7 +68,8 @@ export const LogViewer = () => {
       to: store.UTCTimeToMs,
       sortBy: store.sortBy,
       sortOrder: store.sortOrder,
-      sources: store.sources
+      sources: store.sources,
+      searchNonce: store.searchNonce
     };
     
     const prevParams = prevSearchParamsRef.current;
@@ -109,7 +112,9 @@ export const LogViewer = () => {
     store.sortBy, 
     store.sortOrder,
     store.sources,
+    store.searchNonce,
     liveAvailable,
+    searchLogs,
 	   
   ]);
 

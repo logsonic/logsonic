@@ -152,11 +152,40 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 	// Ensure that we preserve the full time components (hours, minutes, seconds) of dates
 	// for accurate filtering, not just the calendar date
 
-	//Source filter
-	sourceFilter := query.Get("_src")
+	// Source filter. Omitting _src means "all sources" for API compatibility.
+	// Supplying _src= means "no sources selected", which the UI uses for
+	// Deselect All.
+	sourceValues, sourceFilterPresent := query["_src"]
+	sourceFilter := strings.Join(sourceValues, ",")
 	sources := []string{}
-	if sourceFilter != "" {
-		sources = strings.Split(sourceFilter, ",")
+	if sourceFilterPresent {
+		for _, source := range strings.Split(sourceFilter, ",") {
+			source = strings.TrimSpace(source)
+			if source != "" {
+				sources = append(sources, source)
+			}
+		}
+		if len(sources) == 0 {
+			totalTime := time.Since(startTime)
+			json.NewEncoder(w).Encode(types.LogResponse{
+				Status:           "success",
+				TotalCount:       0,
+				IndexQueryTime:   0,
+				TimeTaken:        int(totalTime.Microseconds()),
+				Offset:           0,
+				Limit:            limit,
+				Count:            0,
+				Logs:             []map[string]interface{}{},
+				SortBy:           sortBy,
+				SortOrder:        sortOrder,
+				Query:            searchQuery,
+				StartDate:        startDate.Format(time.RFC3339),
+				EndDate:          endDate.Format(time.RFC3339),
+				AvailableColumns: []string{},
+				LogDistribution:  []types.LogDistributionEntry{},
+			})
+			return
+		}
 	}
 
 	var allLogs []map[string]interface{}

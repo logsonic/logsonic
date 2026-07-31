@@ -444,6 +444,23 @@ func TestDeleteByIds_EmptyList(t *testing.T) {
 	}
 }
 
+func TestDeleteByIds_DoesNotCountMissingIDs(t *testing.T) {
+	store, _ := setupTestStorage(t)
+
+	ts := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	if err := store.Store(makeLogs([]time.Time{ts}, "test.log"), "test.log"); err != nil {
+		t.Fatalf("Store failed: %v", err)
+	}
+
+	deleted, err := store.DeleteByIds([]string{"does-not-exist"})
+	if err != nil {
+		t.Fatalf("DeleteByIds failed: %v", err)
+	}
+	if deleted != 0 {
+		t.Fatalf("expected 0 deletions for a missing id, got %d", deleted)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // GetSourceNames (integration)
 // ---------------------------------------------------------------------------

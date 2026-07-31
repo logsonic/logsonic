@@ -22,6 +22,7 @@ export interface ColorRuleStoreState {
   deleteRule: (id: string) => void;
   toggleRule: (id: string) => void;
   moveRule: (fromIndex: number, toIndex: number) => void; // For reordering rules
+  setRules: (rules: ColorRule[]) => void;
   clearRules: () => void;
 }
 
@@ -105,6 +106,13 @@ export const useColorRuleStore = create<ColorRuleStoreState>()(
         newRules.splice(toIndex, 0, removed);
         return { colorRules: newRules };
       }),
+
+      setRules: (rules) => set({
+        colorRules: rules.map(rule => ({
+          ...rule,
+          id: rule.id || crypto.randomUUID()
+        }))
+      }),
       
       clearRules: () => set({ colorRules: [] }),
     }),
@@ -128,4 +136,4 @@ export const useColorRuleStore = create<ColorRuleStoreState>()(
       }
     }
   )
-); 
+);

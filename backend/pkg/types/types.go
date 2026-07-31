@@ -245,6 +245,64 @@ type LogResponse struct {
 	LogDistribution  []LogDistributionEntry   `json:"log_distribution"`
 }
 
+// WorkspaceTime captures either a relative time range that should be
+// recomputed on load, or an absolute window that should stay fixed.
+type WorkspaceTime struct {
+	Mode                string `json:"mode"` // "relative" or "absolute"
+	Relative            string `json:"relative,omitempty"`
+	CustomRelativeCount int    `json:"custom_relative_count,omitempty"`
+	CustomRelativeUnit  string `json:"custom_relative_unit,omitempty"`
+	Start               string `json:"start,omitempty"`
+	End                 string `json:"end,omitempty"`
+}
+
+// WorkspaceColorRule mirrors the frontend row-coloring rule shape so saved
+// workspaces can restore investigation styling without relying on localStorage.
+type WorkspaceColorRule struct {
+	ID       string `json:"id,omitempty"`
+	Field    string `json:"field"`
+	Operator string `json:"operator"`
+	Value    string `json:"value"`
+	Color    string `json:"color"`
+	Enabled  bool   `json:"enabled"`
+}
+
+type WorkspaceVisualization struct {
+	Type   string `json:"type"`
+	Bucket string `json:"bucket,omitempty"`
+}
+
+// Workspace is a named local investigation view. It intentionally stores only
+// local UI/query state; no cloud identity or sharing scope is implied.
+type Workspace struct {
+	ID            string                 `json:"id"`
+	Name          string                 `json:"name"`
+	Description   string                 `json:"description,omitempty"`
+	Query         string                 `json:"query,omitempty"`
+	Sources       []string               `json:"sources,omitempty"`
+	Time          WorkspaceTime          `json:"time"`
+	SortBy        string                 `json:"sort_by,omitempty"`
+	SortOrder     string                 `json:"sort_order,omitempty"`
+	Columns       []string               `json:"columns,omitempty"`
+	ColumnWidths  map[string]int         `json:"column_widths,omitempty"`
+	ColorRules    []WorkspaceColorRule   `json:"color_rules,omitempty"`
+	FacetFields   []string               `json:"facet_fields,omitempty"`
+	Visualization WorkspaceVisualization `json:"visualization"`
+	Favorite      bool                   `json:"favorite"`
+	CreatedAt     string                 `json:"created_at"`
+	UpdatedAt     string                 `json:"updated_at"`
+}
+
+type WorkspaceListResponse struct {
+	Status     string      `json:"status"`
+	Workspaces []Workspace `json:"workspaces"`
+}
+
+type WorkspaceResponse struct {
+	Status    string    `json:"status"`
+	Workspace Workspace `json:"workspace"`
+}
+
 // AutosuggestResult represents the result of pattern matching
 type AutosuggestResult struct {
 	PatternName        string  `json:"pattern_name"`

@@ -40,11 +40,6 @@ import (
 // Complex queries can combine these features:
 //   - "+level:ERROR +(service:api OR service:auth) -message:timeout"
 func (s *Storage) Search(queryStr string, startDate, endDate *time.Time, sources []string) ([]map[string]interface{}, time.Duration, error) {
-	// If no indices exist, return an empty list
-	if len(s.indices) == 0 {
-		return []map[string]interface{}{}, 0, nil
-	}
-
 	now := time.Now()
 
 	// If no start date provided, use 1 year ago

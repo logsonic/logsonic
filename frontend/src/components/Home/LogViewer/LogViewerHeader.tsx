@@ -7,6 +7,7 @@ import { pauseLiveSubscriber, resumeLiveSubscriber } from '@/lib/api-client';
 import { isLiveDataAvailable, liveActiveSourceCount, useLiveLogStore } from '@/stores/useLiveLogStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
+import { LogExportButton } from '../LogExportButton';
 import {
   Activity,
   Columns,
@@ -383,7 +384,8 @@ export const LogViewerHeader = (
       {/* Stats — "matches" is the count after the search query + time range
           filter; "indexed" is the total in storage. Showing both with explicit
           labels avoids the old ambiguous "500 / 2,500 logs". */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
+        <LogExportButton />
 	        <div className="text-xs" style={{ color: 'var(--ls-text-3)' }}>
 	          {liveAvailable ? (
 	            <span className="flex items-center gap-1.5">

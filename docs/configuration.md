@@ -8,7 +8,7 @@ LogSonic can be configured with command-line flags or environment variables.
 - `-port`: port to listen on, default `8080`
 - `-storage`: path to storage directory for indices
 - `-open`: open the web UI in your browser once the server starts
-- `-auto-port`: if the port is busy, bind the next free port instead of failing
+- `-auto-port`: if the port is busy, bind the next free port instead of failing; enabled by default, pass `-auto-port=false` to fail instead
 - `-retention-days N`: delete indexed logs older than N days; `0` keeps everything
 - `-help`: show usage information
 
@@ -21,7 +21,7 @@ LogSonic can be configured with command-line flags or environment variables.
 - `LOGSONIC_AUTO_PORT`: auto-select a free port if busy (`1`, `true`, `yes`, `on`)
 - `RETENTION_DAYS`: delete indexed logs older than N days
 
-The **Logsonic.app** bundle sets `-open` and `-auto-port` automatically. The CLI keeps the classic behavior unless you pass those flags.
+The **Logsonic.app** bundle sets `-open` and auto-port automatically. The CLI also auto-selects the first free port starting at `8080`, but it does not open a browser unless you pass `-open`.
 
 ## CLI Subcommands
 
@@ -44,7 +44,7 @@ logsonic -host 0.0.0.0 -port 9000
 logsonic -storage /var/logs/storage
 
 # App-style: auto-select a free port and open the browser
-logsonic -open -auto-port
+logsonic -open
 
 # Cap on-disk index size
 logsonic -retention-days 30

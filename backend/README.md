@@ -19,7 +19,11 @@ tail -f /var/log/app.log | logsonic tail - --source app
 logsonic tail -f /var/log/app.log --source app
 ```
 
-Rows are searchable immediately, including rows skipped while the browser feed was paused. See [Live Streaming](docs/live-streaming.md) or run the combined import 
+Rows are searchable immediately, including rows skipped while the browser feed was paused. See [Live Streaming](docs/live-streaming.md) or run the combined import + Livestream demo:
+
+```bash
+node demo/combined-demo.mjs
+```
 
 ## Installation
 
@@ -31,7 +35,7 @@ brew install logsonic
 logsonic
 ```
 
-Or download a pre-built binary from [GitHub Releases](https://github.com/logsonic/logsonic/releases), then open:
+Or download a pre-built binary from [GitHub Releases](https://github.com/logsonic/logsonic/releases), then open the URL printed by the server, usually:
 
 ```text
 http://localhost:8080
@@ -65,6 +69,7 @@ For Linux, Windows, Docker, source builds, storage locations, and the macOS app 
 - Bleve-backed full-text search with field shorthand, regex, exclusions, and boolean operators.
 - Live tailing from stdin or server-side files.
 - MCP server for AI clients.
+- Saved local workspaces for recurring investigations.
 - Color rules, event histogram, source filters, and dark/light themes.
 - Local file-based storage with retention controls.
 

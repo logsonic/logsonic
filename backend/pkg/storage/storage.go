@@ -396,13 +396,23 @@ func (s *Storage) GetDocCount(date string) (uint64, error) {
 
 // DeleteByIds removes logs with matching document IDs from storage
 func (s *Storage) DeleteByIds(ids []string) (int, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
 	// Track how many logs were deleted
 	deletedCount := 0
 
 	// Convert ids array to a map for faster lookups
-	idMap := make(map[string]bool, len(ids))
+	idMap := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
-		idMap[id] = true
+		if id == "" {
+			continue
+		}
+		idMap[id] = struct{}{}
+	}
+	if len(idMap) == 0 {
+		return 0, nil
 	}
 
 	// Get all available dates
@@ -420,10 +430,20 @@ func (s *Storage) DeleteByIds(ids []string) (int, error) {
 
 		// Create a batch for deletions
 		batch := index.NewBatch()
+		batchDeletes := 0
 
 		// Process each ID
 		for id := range idMap {
+			doc, err := index.Document(id)
+			if err != nil {
+				return deletedCount, fmt.Errorf("failed to read document %s from index %s: %w", id, date, err)
+			}
+			if doc == nil {
+				continue
+			}
+
 			batch.Delete(id)
+			batchDeletes++
 		}
 
 		// Only execute the batch if there are operations to perform
@@ -431,9 +451,7 @@ func (s *Storage) DeleteByIds(ids []string) (int, error) {
 			if err := index.Batch(batch); err != nil {
 				return deletedCount, fmt.Errorf("error deleting documents from index %s: %w", date, err)
 			}
-			// Since we don't know exactly how many documents were deleted from each index,
-			// we'll update the deletedCount based on the batch size
-			deletedCount += batch.Size()
+			deletedCount += batchDeletes
 		}
 	}
 

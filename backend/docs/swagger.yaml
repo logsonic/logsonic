@@ -384,6 +384,15 @@ definitions:
         items:
           type: string
         type: array
+      multi:
+        description: |-
+          Multi requests heterogeneous-stream detection: when true and no
+          GrokPattern is supplied, autosuggest runs log2grok's DiscoverMulti
+          and returns an ordered set of standalone patterns (results[0] is the
+          dominant one) that together cover the input. When false (default)
+          autosuggest runs the single-pattern Discover, preserving the
+          historical one-result behaviour.
+        type: boolean
       session_options:
         $ref: '#/definitions/types.IngestSessionOptions'
     type: object
@@ -430,6 +439,14 @@ definitions:
     type: object
   types.SuggestResponse:
     properties:
+      combined_coverage:
+        description: |-
+          CombinedCoverage is the fraction of input lines covered by the union
+          of all returned patterns (0.0–1.0). It only differs from
+          Results[0].Coverage when a multi-pattern set was requested (Multi)
+          and more than one pattern was returned. Omitted for single-pattern
+          responses.
+        type: number
       results:
         items:
           $ref: '#/definitions/types.AutosuggestResult'
@@ -486,6 +503,105 @@ definitions:
           os_type:
             type: string
         type: object
+    type: object
+  types.Workspace:
+    properties:
+      color_rules:
+        items:
+          $ref: '#/definitions/types.WorkspaceColorRule'
+        type: array
+      column_widths:
+        additionalProperties:
+          type: integer
+        type: object
+      columns:
+        items:
+          type: string
+        type: array
+      created_at:
+        type: string
+      description:
+        type: string
+      facet_fields:
+        items:
+          type: string
+        type: array
+      favorite:
+        type: boolean
+      id:
+        type: string
+      name:
+        type: string
+      query:
+        type: string
+      sort_by:
+        type: string
+      sort_order:
+        type: string
+      sources:
+        items:
+          type: string
+        type: array
+      time:
+        $ref: '#/definitions/types.WorkspaceTime'
+      updated_at:
+        type: string
+      visualization:
+        $ref: '#/definitions/types.WorkspaceVisualization'
+    type: object
+  types.WorkspaceColorRule:
+    properties:
+      color:
+        type: string
+      enabled:
+        type: boolean
+      field:
+        type: string
+      id:
+        type: string
+      operator:
+        type: string
+      value:
+        type: string
+    type: object
+  types.WorkspaceListResponse:
+    properties:
+      status:
+        type: string
+      workspaces:
+        items:
+          $ref: '#/definitions/types.Workspace'
+        type: array
+    type: object
+  types.WorkspaceResponse:
+    properties:
+      status:
+        type: string
+      workspace:
+        $ref: '#/definitions/types.Workspace'
+    type: object
+  types.WorkspaceTime:
+    properties:
+      custom_relative_count:
+        type: integer
+      custom_relative_unit:
+        type: string
+      end:
+        type: string
+      mode:
+        description: '"relative" or "absolute"'
+        type: string
+      relative:
+        type: string
+      start:
+        type: string
+    type: object
+  types.WorkspaceVisualization:
+    properties:
+      bucket:
+        type: string
+      type:
+        type: string
     type: object
 host: localhost:8080
 info:
@@ -919,4 +1035,162 @@ paths:
       summary: Preview timestamp resolution
       tags:
       - parsing
+  /workspaces:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.WorkspaceListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: List saved investigation workspaces
+      tags:
+      - workspaces
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Workspace
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.Workspace'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/types.WorkspaceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Create a saved investigation workspace
+      tags:
+      - workspaces
+  /workspaces/{id}:
+    delete:
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Delete a saved investigation workspace
+      tags:
+      - workspaces
+    get:
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.WorkspaceResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Get a saved investigation workspace
+      tags:
+      - workspaces
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Workspace
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.Workspace'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.WorkspaceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Update a saved investigation workspace
+      tags:
+      - workspaces
+  /workspaces/{id}/duplicate:
+    post:
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/types.WorkspaceResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Duplicate a saved investigation workspace
+      tags:
+      - workspaces
 swagger: "2.0"

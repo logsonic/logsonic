@@ -13,6 +13,10 @@ A Model Context Protocol (MCP) server that lets AI clients — Claude Desktop, C
 | `test_grok_pattern`   | Dry-run a Grok pattern against sample lines (or autosuggest).           |
 | `logsonic_url`        | Build a deep-link into the LogSonic web UI with query + time pre-filled.|
 | `log_distribution`    | Time-bucketed log counts without the row payload — fast trend overview. |
+| `list_workspaces`     | List saved investigation workspaces.                                    |
+| `open_workspace`      | Fetch one saved workspace and a UI URL for it.                          |
+| `create_workspace`    | Save a query/time/source view as a local workspace.                     |
+| `workspace_url`       | Build a UI URL for a saved workspace id.                                |
 
 The agent-facing playbook — query syntax, workflow, common recipes, pitfalls — lives in **[SKILLS.md](SKILLS.md)**. Point your MCP client at it so the model knows how to use the tools effectively.
 

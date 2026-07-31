@@ -87,6 +87,13 @@ describe("search query actions", () => {
     useSearchQueryParamsStore.getState().triggerSearch();
     expect(useSearchQueryParamsStore.getState().hasSearched).toBe(true);
   });
+
+  it("triggerSearch increments searchNonce every time", () => {
+    const initialNonce = useSearchQueryParamsStore.getState().searchNonce;
+    useSearchQueryParamsStore.getState().triggerSearch();
+    useSearchQueryParamsStore.getState().triggerSearch();
+    expect(useSearchQueryParamsStore.getState().searchNonce).toBe(initialNonce + 2);
+  });
 });
 
 // ---------------------------------------------------------------------------

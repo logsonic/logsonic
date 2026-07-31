@@ -29,6 +29,7 @@ export interface SearchQueryParamsStoreState {
   timeZone: string;
   // Flag to indicate if a search has been performed
   hasSearched: boolean;
+  searchNonce: number;
 
   // Performance metrics
   apiExecutionTime: number | null; // API call time in microseconds
@@ -108,6 +109,11 @@ const areDatesEqual = (date1: unknown, date2: unknown): boolean => {
   return date1.getTime() === date2.getTime();
 };
 
+const areStringArraysEqual = (a: string[], b: string[]): boolean => {
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+};
+
 // Function to read URL search parameters
 const getUrlParams = () => {
   if (typeof window === 'undefined') return null;
@@ -167,6 +173,7 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
         UTCTimeToMs: initialTimeTo,
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
         hasSearched: false,
+        searchNonce: 0,
         lastSearchStart: new Date(),
         lastSearchEnd: new Date(),
         // Performance metrics
@@ -197,7 +204,7 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
         },
         setSources: (sources) => {
           const currentState = get();
-          if (currentState.sources !== sources) {
+          if (!areStringArraysEqual(currentState.sources, sources)) {
             set({ sources });
           }
         },
@@ -316,7 +323,10 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
         },
         triggerSearch: () => {
           const currentState = get();
-          set({ hasSearched: true });
+          set({
+            hasSearched: true,
+            searchNonce: currentState.searchNonce + 1,
+          });
           
           // Update URL parameters when search is triggered
           currentState.updateUrlParams();
@@ -588,7 +598,11 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
             set({ isLoading: true, hasSearched: false });
             setTimeout(() => {
               const updatedState = get();
-              set({ hasSearched: true, isLoading: false });
+              set({
+                hasSearched: true,
+                isLoading: false,
+                searchNonce: updatedState.searchNonce + 1,
+              });
             }, 0);
           }
         },
@@ -655,7 +669,8 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
             UTCTimeSinceMs: Date.now() - 10 * 365 * 24 * 60 * 60 * 1000,
             UTCTimeToMs: Date.now(),
             timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-            hasSearched: false, 
+            hasSearched: false,
+            searchNonce: 0,
             sortBy: 'timestamp',
             sortOrder: 'desc',
             pageSize: 100,
@@ -767,4 +782,4 @@ if (typeof window !== 'undefined') {
   }
 }
 
-export default useSearchQueryParamsStore; 
+export default useSearchQueryParamsStore;

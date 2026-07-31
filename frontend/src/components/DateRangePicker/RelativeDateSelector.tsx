@@ -50,37 +50,37 @@ export const RelativeDateSelector: FC = () => {
 
   const handleOptionChange = (value: string) => {
     setSelectedOption(value);
-    store.relativeValue = value;
-    // Set isRelative to true since we're using a relative date
-    store.isRelative = true;
+    store.setRelativeValue(value);
+    store.setIsRelative(true);
     store.updateRelativeValue();
     store.updateUrlParams();
   };
 
   const handleCustomCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const count = parseInt(e.target.value);
-    store.setCustomRelativeCount(isNaN(count) ? 1 : count);
+    const count = parseInt(e.target.value, 10);
+    const nextCount = isNaN(count) ? 1 : count;
+    store.setCustomRelativeCount(nextCount);
+    store.setRelativeValue("custom");
+    store.setIsRelative(true);
+    setSelectedOption("custom");
     
     // Update the custom date range
-    if (!isNaN(count)) {
-      const now = new Date();
-      const startDate = calculateRelativeDate(now, store.customRelativeUnit, count, "backward");
-      const endDate = now;
-      
-      // Update the store with the new dates without triggering a search
-      store.setUTCTimeSince(startDate);
-      store.setUTCTimeSinceMs(startDate.getTime());
-      store.setUTCTimeTo(endDate);
-      store.setUTCTimeToMs(endDate.getTime());
-      store.relativeValue = "custom";
-      store.isRelative = true;
-      // Save custom values to store
-      store.setCustomRelativeCount(count);
-    }
+    const now = new Date();
+    const startDate = calculateRelativeDate(now, store.customRelativeUnit, nextCount, "backward");
+    const endDate = now;
+
+    // Update the store with the new dates without triggering a search
+    store.setUTCTimeSince(startDate);
+    store.setUTCTimeSinceMs(startDate.getTime());
+    store.setUTCTimeTo(endDate);
+    store.setUTCTimeToMs(endDate.getTime());
   };
 
   const handleCustomUnitChange = (value: string) => {
     store.setCustomRelativeUnit(value);
+    store.setRelativeValue("custom");
+    store.setIsRelative(true);
+    setSelectedOption("custom");
     
     // Update the custom date range
     const now = new Date();
@@ -92,10 +92,6 @@ export const RelativeDateSelector: FC = () => {
     store.setUTCTimeSinceMs(startDate.getTime());
     store.setUTCTimeTo(endDate);
     store.setUTCTimeToMs(endDate.getTime());
-    store.relativeValue = "custom";
-    store.isRelative = true;
-    // Save custom unit to store
-    store.setCustomRelativeUnit(value);
   };
 
   // Convert options to include rendered icons
@@ -152,4 +148,4 @@ export const RelativeDateSelector: FC = () => {
   );
 };
 
-export default RelativeDateSelector;    
+export default RelativeDateSelector;
