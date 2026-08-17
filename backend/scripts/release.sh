@@ -6,7 +6,8 @@
 #   backend/scripts/release.sh --snapshot      # dry-run, no publish
 #   backend/scripts/release.sh --skip-publish  # signed build, no GitHub upload
 #
-# Env vars loaded from backend/.release.env (gitignored). See backend/scripts/SIGNING.md.
+# Env vars: GITHUB_TOKEN / HOMEBREW_TAP_TOKEN from the environment win over
+# backend/.release.env (gitignored). See backend/scripts/SIGNING.md.
 # Note: Local signing uses Keychain identity (no P12 needed). Notarization is optional.
 
 set -euo pipefail
@@ -33,6 +34,19 @@ EXTRA_ARGS="${EXTRA_ARGS# }"  # trim leading space
 command -v goreleaser >/dev/null || err "goreleaser not installed (brew install goreleaser)"
 command -v npm        >/dev/null || err "npm not installed"
 
+# Remember credentials already in the environment so sourcing .release.env
+# cannot clobber them. Callers (CI, a one-off export) always win.
+GITHUB_TOKEN_FROM_ENV=0
+HOMEBREW_TAP_TOKEN_FROM_ENV=0
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  GITHUB_TOKEN_FROM_ENV=1
+  GITHUB_TOKEN_PRESERVED=$GITHUB_TOKEN
+fi
+if [ -n "${HOMEBREW_TAP_TOKEN:-}" ]; then
+  HOMEBREW_TAP_TOKEN_FROM_ENV=1
+  HOMEBREW_TAP_TOKEN_PRESERVED=$HOMEBREW_TAP_TOKEN
+fi
+
 # Validate secrets file permissions before sourcing (applies to all modes).
 if [ -f "$ENV_FILE" ]; then
   uid=$(id -u)
@@ -44,12 +58,42 @@ if [ -f "$ENV_FILE" ]; then
 
   # shellcheck disable=SC1090
   set -a; source "$ENV_FILE"; set +a
+
+  if [ "$GITHUB_TOKEN_FROM_ENV" = 1 ]; then
+    export GITHUB_TOKEN=$GITHUB_TOKEN_PRESERVED
+  fi
+  if [ "$HOMEBREW_TAP_TOKEN_FROM_ENV" = 1 ]; then
+    export HOMEBREW_TAP_TOKEN=$HOMEBREW_TAP_TOKEN_PRESERVED
+  fi
 fi
 
+token_source() {
+  local from_env=$1
+  if [ "$from_env" = 1 ]; then
+    if [ -f "$ENV_FILE" ]; then
+      printf 'the environment (overrides %s)' "$ENV_FILE"
+    else
+      printf 'the environment'
+    fi
+  elif [ -f "$ENV_FILE" ]; then
+    printf '%s' "$ENV_FILE"
+  else
+    printf 'the environment'
+  fi
+}
+
 if [ "$MODE" = "release" ]; then
-  [ -f "$ENV_FILE" ] || err ".release.env not found at $ENV_FILE — see backend/scripts/SIGNING.md"
-  : "${GITHUB_TOKEN:?GITHUB_TOKEN not set}"
-  : "${HOMEBREW_TAP_TOKEN:?HOMEBREW_TAP_TOKEN not set}"
+  if [ -z "${GITHUB_TOKEN:-}" ]; then
+    err "GITHUB_TOKEN is not set. Export it, or put it in $ENV_FILE — see backend/scripts/SIGNING.md"
+  fi
+  if [ -z "${HOMEBREW_TAP_TOKEN:-}" ]; then
+    err "HOMEBREW_TAP_TOKEN is not set. Export it, or put it in $ENV_FILE — see backend/scripts/SIGNING.md"
+  fi
+  if [ "$GITHUB_TOKEN_FROM_ENV" != 1 ] && [ ! -f "$ENV_FILE" ]; then
+    err ".release.env not found at $ENV_FILE and GITHUB_TOKEN was not exported — see backend/scripts/SIGNING.md"
+  fi
+  info "GITHUB_TOKEN read from $(token_source "$GITHUB_TOKEN_FROM_ENV")"
+  info "HOMEBREW_TAP_TOKEN read from $(token_source "$HOMEBREW_TAP_TOKEN_FROM_ENV")"
 fi
 
 # Validate notary key file if present.
@@ -75,7 +119,13 @@ npm run build:copy
 info "running goreleaser ($MODE)"
 cd "$BACKEND"
 # shellcheck disable=SC2086
-goreleaser release --clean $EXTRA_ARGS
+if ! goreleaser release --clean $EXTRA_ARGS; then
+  if [ "$MODE" = "release" ]; then
+    src=$(token_source "$GITHUB_TOKEN_FROM_ENV")
+    err "goreleaser failed to publish. GITHUB_TOKEN was read from ${src}. A 401 means that token is invalid or expired — export a fine-grained PAT to override ${ENV_FILE}."
+  fi
+  err "goreleaser failed"
+fi
 
 # Notarize the signed darwin binaries with Apple. notarytool accepts .zip/.pkg/.dmg,
 # so we zip each signed binary, submit, and let Apple register the binary's CD hash
