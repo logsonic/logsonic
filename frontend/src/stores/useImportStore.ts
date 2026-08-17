@@ -3,6 +3,7 @@ import { parseLogs } from '@/lib/api-client';
 import {
   GrokPatternRequest,
   IngestSessionOptions,
+  MultilineConfig,
   SuggestResponse,
   TimestampInference,
   TimestampResolution
@@ -26,6 +27,29 @@ export const DEFAULT_SESSION_OPTIONS: FileSessionOptions = {
   month: '',
   day: '',
 };
+
+export function sessionMultilineOption(state: {
+  sessionOptionsMultilineEnabled: boolean;
+  sessionOptionsMultilineMode: 'header' | 'indent';
+  sessionOptionsMultilineHeaderPattern: string;
+}): MultilineConfig | undefined {
+  if (!state.sessionOptionsMultilineEnabled) return undefined;
+  return {
+    enabled: true,
+    mode: state.sessionOptionsMultilineMode,
+    header_pattern: state.sessionOptionsMultilineHeaderPattern || undefined,
+  };
+}
+
+export function isMultilineHeaderInvalid(state: {
+  sessionOptionsMultilineEnabled: boolean;
+  sessionOptionsMultilineMode: 'header' | 'indent';
+  sessionOptionsMultilineHeaderPattern: string;
+}): boolean {
+  return state.sessionOptionsMultilineEnabled
+    && state.sessionOptionsMultilineMode === 'header'
+    && !state.sessionOptionsMultilineHeaderPattern.trim();
+}
 
 // Add a type for the provider upload handler
 export type ProviderUploadHandler = (handleImport: (chunkSize: number, callback: (lines: string[], totalLines: number, next: () => void) => Promise<void>) => Promise<void>) => Promise<void>;
@@ -92,6 +116,9 @@ interface ImportState {
   sessionOptionsYear: string;
   sessionOptionsMonth: string;
   sessionOptionsDay: string;
+  sessionOptionsMultilineEnabled: boolean;
+  sessionOptionsMultilineMode: 'header' | 'indent';
+  sessionOptionsMultilineHeaderPattern: string;
 
   // Timestamp resolution: inference comes from /parse, overrides are
   // user-edited knob values. The effective resolution sent to ingest
@@ -158,6 +185,9 @@ interface ImportState {
   setSessionOptionYear: (year: string) => void;
   setSessionOptionMonth: (month: string) => void;
   setSessionOptionDay: (day: string) => void;
+  setSessionOptionMultilineEnabled: (enabled: boolean) => void;
+  setSessionOptionMultilineMode: (mode: 'header' | 'indent') => void;
+  setSessionOptionMultilineHeaderPattern: (pattern: string) => void;
   setTimestampInference: (inference: TimestampInference | null) => void;
   setTimestampOverrides: (overrides: Partial<TimestampResolution>) => void;
   patchTimestampOverride: (patch: Partial<TimestampResolution>) => void;
@@ -212,6 +242,9 @@ export const useImportStore = create<ImportState>((set, get) => ({
   sessionOptionsYear: '',
   sessionOptionsMonth: '',
   sessionOptionsDay: '',
+  sessionOptionsMultilineEnabled: false,
+  sessionOptionsMultilineMode: 'header',
+  sessionOptionsMultilineHeaderPattern: '',
   timestampInference: null,
   timestampOverrides: {},
   timestampConfirmed: false,
@@ -422,6 +455,9 @@ export const useImportStore = create<ImportState>((set, get) => ({
   setSessionOptionYear: (year: string) => set({ sessionOptionsYear: year }),
   setSessionOptionMonth: (month: string) => set({ sessionOptionsMonth: month }),
   setSessionOptionDay: (day: string) => set({ sessionOptionsDay: day }),
+  setSessionOptionMultilineEnabled: (enabled: boolean) => set({ sessionOptionsMultilineEnabled: enabled }),
+  setSessionOptionMultilineMode: (mode: 'header' | 'indent') => set({ sessionOptionsMultilineMode: mode }),
+  setSessionOptionMultilineHeaderPattern: (pattern: string) => set({ sessionOptionsMultilineHeaderPattern: pattern }),
   setTimestampInference: (timestampInference) => {
     // status="exact" means no user intervention is needed — auto-confirm
     // so the wizard's gating logic doesn't block at step 3.
@@ -481,7 +517,8 @@ export const useImportStore = create<ImportState>((set, get) => ({
         force_start_month: sessionOptionsMonth,
         force_start_day: sessionOptionsDay,
         source_mtime: sourceMTime || undefined,
-        meta: metadata
+        meta: metadata,
+        multiline: sessionMultilineOption(get()),
       };
 
       const parseResult = await parseLogs({
@@ -558,6 +595,9 @@ export const useImportStore = create<ImportState>((set, get) => ({
       sessionOptionsYear: '',
       sessionOptionsMonth: '',
       sessionOptionsDay: '',
+      sessionOptionsMultilineEnabled: false,
+      sessionOptionsMultilineMode: 'header',
+      sessionOptionsMultilineHeaderPattern: '',
       timestampInference: null,
       timestampOverrides: {},
       timestampConfirmed: false,

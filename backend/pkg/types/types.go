@@ -30,6 +30,32 @@ type IngestSessionOptions struct {
 	// Meta contains additional fields to be added to each log entry.
 	// These fields are merged directly into the JSON output for each log.
 	Meta map[string]interface{} `json:"meta,omitempty"`
+	// Multiline configures folding of physical lines into logical log
+	// records before pattern matching, for formats where a single log
+	// statement spans multiple lines (stack traces, multi-line JSON,
+	// etc). Nil/disabled preserves the historical one-line-per-record
+	// behaviour. Folding is applied on /parse (including autosuggest)
+	// as well as ingest and live tail.
+	Multiline *MultilineConfig `json:"multiline,omitempty"`
+}
+
+// MultilineConfig describes how physical lines should be folded into
+// logical log records. Mirrors (a JSON-serializable subset of)
+// log2grok's MultilineConfig: Mode "header" treats any line NOT matching
+// HeaderPattern as a continuation of the previous record; Mode "indent"
+// treats any line starting with a space or tab as a continuation.
+type MultilineConfig struct {
+	Enabled bool   `json:"enabled"`
+	Mode    string `json:"mode"` // "header" | "indent"
+	// HeaderPattern is a regular expression; required when Mode=="header".
+	// A line matching it starts a new record, everything else is folded
+	// into the preceding record. Continuation lines are joined with
+	// spaces (log2grok's JoinMultilineStrings behaviour).
+	HeaderPattern string `json:"header_pattern,omitempty"`
+	// MaxLines caps continuation lines folded into one record (default
+	// 100). MaxBytes caps the folded record's byte length (default 1MiB).
+	MaxLines int `json:"max_lines,omitempty"`
+	MaxBytes int `json:"max_bytes,omitempty"`
 }
 
 // GrokPatternDefinition represents a comprehensive Grok pattern definition
@@ -336,6 +362,12 @@ type SuggestResponse struct {
 	// and more than one pattern was returned. Omitted for single-pattern
 	// responses.
 	CombinedCoverage float64 `json:"combined_coverage,omitempty"`
+	// Multiline is the folding config used for this suggestion. Set when
+	// the caller supplied one, or when /parse auto-detected a common
+	// continuation style (syslog / ISO 8601 / indent) because folding
+	// produced a better library match than treating each physical line
+	// as its own record.
+	Multiline *MultilineConfig `json:"multiline,omitempty"`
 }
 
 // LogDistributionResponse represents the response for log distribution retrieval

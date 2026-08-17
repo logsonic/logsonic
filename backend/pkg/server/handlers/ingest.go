@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"logsonic/pkg/types"
 	"net/http"
 	"sync"
@@ -43,6 +44,10 @@ type IngestSession struct {
 	// across chunks). postProcess stamps each line's `_seq` from it to
 	// preserve original order and keep storage docIDs unique.
 	Seq *atomic.Int64
+	// Multiline folds physical lines into logical records across
+	// /ingest/logs chunk boundaries before decoding. Nil when the
+	// session didn't opt into multiline folding.
+	Multiline *multilineFolder
 }
 
 var sessionMap = make(map[string]IngestSession)
@@ -88,6 +93,7 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 	sessionOptions := session.Options
 	sessionDecoder := session.Decoder
 	sessionSeq := session.Seq
+	sessionMultiline := session.Multiline
 	sessionMapMutex.RUnlock()
 
 	if !exists || req.SessionID == "" {
@@ -100,12 +106,40 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	logs := req.Logs
+	if sessionMultiline != nil {
+		folded, err := sessionMultiline.Feed(req.Logs)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(types.ErrorResponse{
+				Status:  "error",
+				Error:   "Failed to fold multiline records",
+				Code:    "MULTILINE_ERROR",
+				Details: err.Error(),
+			})
+			return
+		}
+		logs = folded
+	}
+
+	if len(logs) == 0 {
+		// Batch was entirely absorbed into a still-open multiline record;
+		// nothing to decode/store yet.
+		json.NewEncoder(w).Encode(types.IngestResponse{
+			Status:    "success",
+			Processed: 0,
+			Failed:    0,
+			SessionID: req.SessionID,
+		})
+		return
+	}
+
 	// DecodeConcurrent fans the regex work across NumCPU goroutines for
 	// large batches and transparently falls back to serial Decode below
 	// its internal threshold (~512 lines). The Decoder is goroutine-safe
 	// and output order is preserved, so this is a drop-in replacement
 	// for Decode that scales ingest throughput on multi-core boxes.
-	results := sessionDecoder.DecodeConcurrent(req.Logs, 0)
+	results := sessionDecoder.DecodeConcurrent(logs, 0)
 	jsonOutput, successCount, failedCount, _ := postProcess(results, sessionOptions, sessionSeq)
 
 	if err := h.storage.Store(jsonOutput, sessionOptions.Source); err != nil {
@@ -193,6 +227,22 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	multilineCfg, err := buildMultilineConfig(req.Multiline)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(types.ErrorResponse{
+			Status:  "error",
+			Error:   "Invalid multiline configuration",
+			Code:    "MULTILINE_CONFIG_ERROR",
+			Details: err.Error(),
+		})
+		return
+	}
+	var multiline *multilineFolder
+	if multilineCfg != nil {
+		multiline = newMultilineFolder(*multilineCfg)
+	}
+
 	sessionID := uuid.New().String()
 
 	sessionOptions := types.IngestSessionOptions{
@@ -208,7 +258,8 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		TimestampConfig: req.TimestampConfig,
 		// Meta is freely passed through so callers can stamp every
 		// record with additional fields.
-		Meta: req.Meta,
+		Meta:      req.Meta,
+		Multiline: req.Multiline,
 	}
 
 	sessionMapMutex.Lock()
@@ -217,6 +268,7 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		CreationTime: time.Now(),
 		Decoder:      dec,
 		Seq:          new(atomic.Int64),
+		Multiline:    multiline,
 	}
 	sessionMapMutex.Unlock()
 
@@ -259,8 +311,13 @@ func (h *Services) HandleIngestEnd(w http.ResponseWriter, r *http.Request) {
 
 	if req.SessionID != "" {
 		sessionMapMutex.Lock()
+		session, exists := sessionMap[req.SessionID]
 		delete(sessionMap, req.SessionID)
 		sessionMapMutex.Unlock()
+
+		if exists {
+			h.flushSessionMultiline(session, req.SessionID)
+		}
 	}
 
 	json.NewEncoder(w).Encode(types.IngestResponse{
@@ -268,24 +325,61 @@ func (h *Services) HandleIngestEnd(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// flushSessionMultiline decodes and stores any still-open trailing
+// multiline record. Used by /ingest/end and by session expiry so the
+// last record isn't dropped when nothing arrived to prove it complete.
+func (h *Services) flushSessionMultiline(session IngestSession, sessionID string) {
+	if session.Multiline == nil {
+		return
+	}
+	final := session.Multiline.Flush()
+	if len(final) == 0 {
+		return
+	}
+	results := session.Decoder.DecodeConcurrent(final, 0)
+	jsonOutput, _, _, _ := postProcess(results, session.Options, session.Seq)
+	if len(jsonOutput) == 0 {
+		return
+	}
+	if err := h.storage.Store(jsonOutput, session.Options.Source); err != nil {
+		log.Printf("ingest: failed to store trailing multiline record for session %s: %v", sessionID, err)
+		return
+	}
+	h.InvalidateInfoCache()
+}
+
+// expireStaleSessions removes sessions older than SessionTimeout and
+// flushes any pending multiline records before they are discarded.
+func expireStaleSessions(now time.Time, h *Services) {
+	type expiredSession struct {
+		id      string
+		session IngestSession
+	}
+	var expired []expiredSession
+	sessionMapMutex.Lock()
+	for id, session := range sessionMap {
+		if now.Sub(session.CreationTime) > SessionTimeout {
+			expired = append(expired, expiredSession{id: id, session: session})
+			delete(sessionMap, id)
+		}
+	}
+	sessionMapMutex.Unlock()
+	for _, e := range expired {
+		h.flushSessionMultiline(e.session, e.id)
+	}
+}
+
 // StartSessionCleanup launches a background goroutine that sweeps
 // sessionMap every 5 minutes and removes sessions older than
 // SessionTimeout. Runs until ctx is cancelled (i.e. on server shutdown).
-func StartSessionCleanup(ctx context.Context) {
+func StartSessionCleanup(ctx context.Context, h *Services) {
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				now := time.Now()
-				sessionMapMutex.Lock()
-				for id, session := range sessionMap {
-					if now.Sub(session.CreationTime) > SessionTimeout {
-						delete(sessionMap, id)
-					}
-				}
-				sessionMapMutex.Unlock()
+				expireStaleSessions(time.Now(), h)
 			case <-ctx.Done():
 				return
 			}

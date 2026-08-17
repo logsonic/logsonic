@@ -1,0 +1,33 @@
+Apr  1 09:14:22 logsonic-host logsonic[1420]: ingest session started session_id=a1b2c3d4 source=app.log
+Apr  1 09:15:01 logsonic-host kernel: Out of memory: Killed process 8841 (logsonic)
+    pid: 8841 uid: 1000 tgid: 8841 total_vm: 2148124kB
+    rss: 1812044kB pgtables: 4208kB
+    anon-rss: 1798820kB file-rss: 13224kB
+    oom_score_adj: 0
+Apr  1 09:15:02 logsonic-host systemd[1]: logsonic.service: Main process exited, code=killed, status=9/KILL
+Apr  1 09:15:02 logsonic-host systemd[1]: logsonic.service: Failed with result 'oom-kill'.
+Apr  1 09:16:18 logsonic-host python[9102]: Traceback (most recent call last):
+  File "/opt/logsonic/scripts/export.py", line 88, in <module>
+    main()
+  File "/opt/logsonic/scripts/export.py", line 61, in main
+    rows = client.query(args.query)
+  File "/opt/logsonic/scripts/client.py", line 44, in query
+    raise ApiError(resp.status_code, resp.text)
+client.ApiError: 503 Service Unavailable
+    {"status":"error","error":"storage not ready"}
+Apr  1 09:16:19 logsonic-host python[9102]: export aborted; will retry in 30s
+Apr  1 09:18:44 logsonic-host nginx[221]: 2026/04/01 09:18:44 [error] 221#221: *1841 connect() failed (111: Connection refused) while connecting to upstream
+    client: 10.0.4.18
+    server: logs.local
+    request: "GET /api/v1/logs HTTP/1.1"
+    upstream: "http://127.0.0.1:8080/api/v1/logs"
+    host: "logs.local"
+Apr  1 09:18:45 logsonic-host systemd[1]: Starting LogSonic API...
+Apr  1 09:18:46 logsonic-host systemd[1]: Started LogSonic API.
+Apr  1 09:21:03 logsonic-host sudo[10211]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/journalctl -u logsonic -n 200
+Apr  1 09:22:11 logsonic-host CRON[10240]: (root) CMD (/opt/logsonic/bin/logsonic retention --apply)
+Apr  1 09:22:11 logsonic-host logsonic[1420]: retention: failed to drop expired index
+    index=logs-2026-03-01.bleve
+    error=directory not empty
+    leftover=index_meta.json, store/
+Apr  1 09:24:30 logsonic-host logsonic[1420]: ingest session ended session_id=a1b2c3d4 processed=4096 failed=2

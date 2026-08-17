@@ -49,6 +49,48 @@ func (h *Services) HandleParse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	multilineCfg, err := buildMultilineConfig(req.IngestSessionOptions.Multiline)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(types.ErrorResponse{
+			Status:  "error",
+			Error:   "Invalid multiline configuration",
+			Code:    "MULTILINE_CONFIG_ERROR",
+			Details: err.Error(),
+		})
+		return
+	}
+	usedMultiline := req.IngestSessionOptions.Multiline
+	if multilineCfg == nil {
+		if detected := detectMultilineConfig(req.Logs); detected != nil {
+			usedMultiline = detected
+			multilineCfg, err = buildMultilineConfig(detected)
+			if err != nil {
+				multilineCfg = nil
+				usedMultiline = nil
+			}
+		}
+	}
+	if multilineCfg != nil {
+		folded, err := l2g.JoinMultilineStrings(req.Logs, *multilineCfg)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(types.ErrorResponse{
+				Status:  "error",
+				Error:   "Failed to fold multiline records",
+				Code:    "MULTILINE_ERROR",
+				Details: err.Error(),
+			})
+			return
+		}
+		req.Logs = folded
+	}
+
+	var respMultiline *types.MultilineConfig
+	if usedMultiline != nil && usedMultiline.Enabled {
+		respMultiline = usedMultiline
+	}
+
 	if req.GrokPattern == "" {
 		var (
 			autosuggestResults []types.AutosuggestResult
@@ -76,6 +118,7 @@ func (h *Services) HandleParse(w http.ResponseWriter, r *http.Request) {
 			Type:             "autosuggest",
 			Results:          autosuggestResults,
 			CombinedCoverage: combinedCoverage,
+			Multiline:        respMultiline,
 		})
 		return
 	}
@@ -107,10 +150,10 @@ func (h *Services) HandleParse(w http.ResponseWriter, r *http.Request) {
 	// counter inside postProcess is fine — no cross-chunk continuity needed.
 	parsedLogs, successCount, failedCount, inference := postProcess(results, req.IngestSessionOptions, nil)
 
-	// /parse never persists, so drop internal fields before returning to
-	// keep the preview payload light. Storage paths keep them via ingest.
+	// Keep `_raw` so the wizard can render folded records (Java stack
+	// traces, syslog continuations) as one preview row per logical log.
+	// Drop only `_seq`, which is meaningless for a one-shot preview.
 	for _, log := range parsedLogs {
-		delete(log, "_raw")
 		delete(log, "_seq")
 	}
 

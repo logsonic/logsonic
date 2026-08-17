@@ -1,0 +1,50 @@
+2026-04-01 09:14:22 INFO  [http-nio-8080-exec-3] c.l.api.IngestController - ingest session started session_id=a1b2c3d4 source=app.log
+2026-04-01 09:14:23 DEBUG [http-nio-8080-exec-3] c.l.api.IngestController - chunk received lines=128 bytes=18432
+2026-04-01 09:15:01 ERROR [http-nio-8080-exec-7] c.l.storage.BleveStore - failed to store log batch
+java.lang.IllegalStateException: index writer is closed
+	at com.logsonic.storage.BleveStore.store(BleveStore.java:214)
+	at com.logsonic.storage.BleveStore.store(BleveStore.java:198)
+	at com.logsonic.ingest.SessionIngester.flush(SessionIngester.java:87)
+	at com.logsonic.api.IngestController.ingestLogs(IngestController.java:142)
+	at jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at org.springframework.web.method.support.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:205)
+	at org.springframework.web.servlet.mvc.method.AbstractHandlerMethodAdapter.handle(AbstractHandlerMethodAdapter.java:87)
+Caused by: java.io.IOException: No space left on device
+	at java.base/sun.nio.ch.FileDispatcherImpl.write0(Native Method)
+	at java.base/sun.nio.ch.FileDispatcherImpl.write(FileDispatcherImpl.java:62)
+	at com.logsonic.storage.IndexShard.append(IndexShard.java:56)
+	... 6 more
+2026-04-01 09:15:02 WARN  [http-nio-8080-exec-7] c.l.ingest.SessionIngester - retrying store after transient failure attempt=1/3
+2026-04-01 09:15:04 INFO  [http-nio-8080-exec-7] c.l.ingest.SessionIngester - store retry succeeded processed=128 failed=0
+2026-04-01T09:16:18 ERROR [parser-pool-2] c.l.parse.GrokDecoder - pattern match failed for line
+com.logsonic.parse.PatternException: unknown grok primitive %{FOO:bar}
+	at com.logsonic.parse.GrokDecoder.compile(GrokDecoder.java:61)
+	at com.logsonic.parse.GrokDecoder.decode(GrokDecoder.java:88)
+	at com.logsonic.parse.ParseService.handle(ParseService.java:44)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+2026-04-01 09:16:19 INFO  [parser-pool-2] c.l.parse.ParseService - falling back to %{GREEDYDATA:message}
+2026-04-01 09:18:44 WARN  [live-tail-1] c.l.live.TailSource - file rotated, reopening path=/var/log/app.log
+java.nio.file.NoSuchFileException: /var/log/app.log
+	at java.base/sun.nio.fs.UnixException.translateToIOException(UnixException.java:92)
+	at java.base/sun.nio.fs.UnixException.rethrowAsIOException(UnixException.java:106)
+	at java.base/sun.nio.fs.UnixException.rethrowAsIOException(UnixException.java:111)
+	at java.base/sun.nio.fs.UnixFileSystemProvider.newByteChannel(UnixFileSystemProvider.java:218)
+	at com.logsonic.live.TailSource.openExisting(TailSource.java:119)
+	at com.logsonic.live.TailSource.readFile(TailSource.java:201)
+2026-04-01 09:18:45 INFO  [live-tail-1] c.l.live.TailSource - reopened rotated file inode=18421 offset=0
+2026-04-01 09:21:03 INFO  [http-nio-8080-exec-1] c.l.api.SearchController - query executed q=level:ERROR hits=12 took_ms=18
+2026-04-01 09:22:11 ERROR [scheduler-1] c.l.retention.RetentionJob - failed to drop expired index logs-2026-03-01.bleve
+java.nio.file.DirectoryNotEmptyException: /data/indices/logs-2026-03-01.bleve
+	at java.base/sun.nio.fs.UnixFileSystemProvider.implDelete(UnixFileSystemProvider.java:242)
+	at java.base/sun.nio.fs.AbstractFileSystemProvider.delete(AbstractFileSystemProvider.java:104)
+	at java.base/java.nio.file.Files.delete(Files.java:1152)
+	at com.logsonic.retention.RetentionJob.deleteIndex(RetentionJob.java:73)
+	at com.logsonic.retention.RetentionJob.run(RetentionJob.java:41)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+2026-04-01 09:22:12 WARN  [scheduler-1] c.l.retention.RetentionJob - will retry expired-index cleanup on next tick
+2026-04-01 09:24:30 INFO  [http-nio-8080-exec-4] c.l.api.IngestController - ingest session ended session_id=a1b2c3d4 processed=4096 failed=2

@@ -1,12 +1,23 @@
 import { ArrowRight } from "lucide-react";
 import { FC } from "react";
-import { useImportStore } from "../../../stores/useImportStore";
+import { isMultilineHeaderInvalid, useImportStore } from "../../../stores/useImportStore";
 
 const HandleNavigation: FC<{
     onNext: () => void;
     onBack: () => void;
 }> = ({ onNext, onBack }) => {
-    const { currentStep, importSource, readyToSelectPattern, isUploading, files, timestampInference, timestampConfirmed } = useImportStore();
+    const {
+        currentStep,
+        importSource,
+        readyToSelectPattern,
+        isUploading,
+        files,
+        timestampInference,
+        timestampConfirmed,
+        sessionOptionsMultilineEnabled,
+        sessionOptionsMultilineMode,
+        sessionOptionsMultilineHeaderPattern,
+    } = useImportStore();
 
     const isMultiFile = importSource === 'file' && files.length > 0;
 
@@ -35,6 +46,11 @@ const HandleNavigation: FC<{
                 if (!isMultiFile && !readyToSelectPattern) return true;
                 return false;
             case 2:
+                if (isMultilineHeaderInvalid({
+                    sessionOptionsMultilineEnabled,
+                    sessionOptionsMultilineMode,
+                    sessionOptionsMultilineHeaderPattern,
+                })) return true;
                 if (isMultiFile) {
                     // All files must have a selected pattern and be done detecting
                     if (files.some(f => !f.selectedPattern)) return true;

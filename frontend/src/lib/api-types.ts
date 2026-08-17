@@ -61,6 +61,20 @@ export interface IngestSessionOptions {
   source_mtime?: string;                  // RFC3339
   timestamp_config?: TimestampResolution;
   meta?: Record<string, any>;
+  multiline?: MultilineConfig;
+}
+
+// Folds physical lines into logical log records before pattern matching,
+// for formats where a single log statement spans multiple lines (stack
+// traces, multi-line JSON, etc). Mode "header" treats any line NOT
+// matching header_pattern as a continuation of the previous record; mode
+// "indent" treats any line starting with a space or tab as a continuation.
+export interface MultilineConfig {
+  enabled: boolean;
+  mode: 'header' | 'indent';
+  header_pattern?: string;
+  max_lines?: number;
+  max_bytes?: number;
 }
 
 export interface LiveFileRequest {
@@ -297,6 +311,8 @@ export interface SuggestResponse {
   results?: AutosuggestResult[];
   status?: string;
   type?: string;
+  combined_coverage?: number;
+  multiline?: MultilineConfig;
 }
 
 // System Info Types

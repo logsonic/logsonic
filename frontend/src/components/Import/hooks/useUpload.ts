@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 
 import { useIngestEnd, useIngestLogs, useIngestStart } from '@/hooks/useApi';
 import { IngestSessionOptions } from '@/lib/api-types';
-import { useImportStore } from '@/stores/useImportStore';
+import { sessionMultilineOption, useImportStore } from '@/stores/useImportStore';
 import type { ImportFile, UploadProgressHookResult } from '../types';
 import { LogSourceProviderService } from '../types';
 
@@ -57,6 +57,7 @@ export const useUpload = (): UploadProgressHookResult => {
             ?? (importFile.file.lastModified ? new Date(importFile.file.lastModified).toISOString() : undefined),
           timestamp_config: fileTsConfig,
           meta: { _src: `file.${importFile.fileName}` },
+          multiline: sessionMultilineOption(useImportStore.getState()),
         };
 
         const startResponse = await ingestStartApi.execute(sessionOptions);
@@ -112,7 +113,14 @@ export const useUpload = (): UploadProgressHookResult => {
 
     setIsUploading(false);
     return results;
-  }, [updateFile, setIsUploading, ingestStartApi, ingestLogsApi, ingestEndApi, sessionID]);
+  }, [
+    updateFile,
+    setIsUploading,
+    ingestStartApi,
+    ingestLogsApi,
+    ingestEndApi,
+    sessionID,
+  ]);
 
   return {
     isUploading,

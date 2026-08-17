@@ -319,7 +319,7 @@ func (s *Server) Start() error {
 
 	// Start session cleanup goroutine; cancel it on shutdown.
 	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
-	handlers.StartSessionCleanup(cleanupCtx)
+	handlers.StartSessionCleanup(cleanupCtx, s.services)
 	s.services.StartLive(cleanupCtx)
 
 	// Apply retention now and once a day; cancelled on shutdown.

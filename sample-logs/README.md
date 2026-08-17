@@ -22,3 +22,5 @@ Ready-to-import log files for testing logsonic. Files from [logpai/loghub](https
 | `app-json.log` | 500 | synthetic | `{"timestamp":"2026-04-01T00:00:00+00:00","level":"INFO","service":"api","message":"..."}` |
 | `postgresql.log` | 400 | synthetic | `2026-04-01 00:00:00.123 UTC [12345] app_user@logsonic LOG: statement: SELECT ...` |
 | `docker.log` | 400 | synthetic | `2026-04-01T00:00:00.000Z  a1b2c3d4e5f6  logsonic-api  Starting server on :8080` |
+| `java-stacktrace.log` | ~50 | synthetic | ISO 8601 header + Java stack traces. Wizard: **New line starts with an ISO 8601 timestamp** |
+| `syslog-multiline.log` | ~35 | synthetic | Syslog header + indented continuations (OOM, traceback, nginx). Wizard: **New line starts with a syslog timestamp** or **Continuation lines are indented** |

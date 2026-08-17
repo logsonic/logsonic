@@ -15,21 +15,64 @@ import { useImportStore } from '@/stores/useImportStore';
 import { Settings2 } from 'lucide-react';
 import { FC } from 'react';
 
+// Presets mirror log2grok's CommonMultilineConfigs() so the wizard's
+// choices stay consistent with the backend's own ready-made configs.
+export const ISO8601_HEADER_PATTERN = String.raw`^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}`;
+export const SYSLOG_HEADER_PATTERN = String.raw`^[A-Z][a-z]{2}\s{1,2}\d{1,2}\s\d{2}:\d{2}:\d{2}`;
+
+type MultilinePreset = 'iso8601' | 'syslog' | 'indent' | 'custom';
+
+const presetFromState = (mode: 'header' | 'indent', headerPattern: string): MultilinePreset => {
+  if (mode === 'indent') return 'indent';
+  if (headerPattern === ISO8601_HEADER_PATTERN) return 'iso8601';
+  if (headerPattern === SYSLOG_HEADER_PATTERN) return 'syslog';
+  return 'custom';
+};
+
 export const IngestSessionOptions: FC = () => {
-  const { 
+  const {
     sessionOptionsSmartDecoder,
     sessionOptionsTimezone,
-    sessionOptionsYear,      
+    sessionOptionsYear,
     sessionOptionsMonth,
     sessionOptionsDay,
+    sessionOptionsMultilineEnabled,
+    sessionOptionsMultilineMode,
+    sessionOptionsMultilineHeaderPattern,
     setSessionOptionSmartDecoder,
     setSessionOptionTimezone,
     setSessionOptionYear,
     setSessionOptionMonth,
     setSessionOptionDay,
+    setSessionOptionMultilineEnabled,
+    setSessionOptionMultilineMode,
+    setSessionOptionMultilineHeaderPattern,
   } = useImportStore();
 
- 
+  const multilinePreset = presetFromState(sessionOptionsMultilineMode, sessionOptionsMultilineHeaderPattern);
+
+  const handlePresetChange = (preset: MultilinePreset) => {
+    switch (preset) {
+      case 'iso8601':
+        setSessionOptionMultilineMode('header');
+        setSessionOptionMultilineHeaderPattern(ISO8601_HEADER_PATTERN);
+        break;
+      case 'syslog':
+        setSessionOptionMultilineMode('header');
+        setSessionOptionMultilineHeaderPattern(SYSLOG_HEADER_PATTERN);
+        break;
+      case 'indent':
+        setSessionOptionMultilineMode('indent');
+        setSessionOptionMultilineHeaderPattern('');
+        break;
+      case 'custom':
+        setSessionOptionMultilineMode('header');
+        setSessionOptionMultilineHeaderPattern('');
+        break;
+    }
+  };
+
+
 
   return (
     <Card className="mt-4">
@@ -131,8 +174,68 @@ export const IngestSessionOptions: FC = () => {
                   <p className="text-xs text-muted-foreground mt-1">Force the day of the logs to a specific day</p>
                 </div>
               </div>
-              
-        
+
+              <div className="grid grid-cols-1 md:grid-cols-6 gap-x-4 gap-y-0 items-end mt-4 pt-4 border-t">
+
+                {/* Multiline: enable */}
+                <div className="space-y-1.5 col-span-2">
+                  <Label htmlFor="multiline_enabled" className="text-sm font-medium">Multiline Records</Label>
+                  <div className="h-9 flex items-center">
+                    <Switch
+                      id="multiline_enabled"
+                      checked={sessionOptionsMultilineEnabled}
+                      onCheckedChange={(checked) => {
+                        setSessionOptionMultilineEnabled(checked);
+                        if (
+                          checked
+                          && sessionOptionsMultilineMode === 'header'
+                          && !sessionOptionsMultilineHeaderPattern.trim()
+                        ) {
+                          setSessionOptionMultilineHeaderPattern(ISO8601_HEADER_PATTERN);
+                        }
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Fold continuation lines (stack traces, wrapped entries) into the log statement they belong to</p>
+                </div>
+
+                {/* Multiline: continuation style */}
+                <div className="space-y-1.5 col-span-2">
+                  <Label htmlFor="multiline_preset" className="text-sm font-medium">Continuation Style</Label>
+                  <Select
+                    value={multilinePreset}
+                    onValueChange={(value) => handlePresetChange(value as MultilinePreset)}
+                    disabled={!sessionOptionsMultilineEnabled}
+                  >
+                    <SelectTrigger id="multiline_preset" className="h-9">
+                      <SelectValue placeholder="Continuation style" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="iso8601">New line starts with an ISO 8601 timestamp</SelectItem>
+                      <SelectItem value="syslog">New line starts with a syslog timestamp</SelectItem>
+                      <SelectItem value="indent">Continuation lines are indented</SelectItem>
+                      <SelectItem value="custom">Custom regex</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">How to tell a new log statement from a continuation of the previous one</p>
+                </div>
+
+                {/* Multiline: custom header pattern */}
+                {sessionOptionsMultilineEnabled && sessionOptionsMultilineMode === 'header' && (
+                  <div className="space-y-1.5 col-span-2">
+                    <Label htmlFor="multiline_header_pattern" className="text-sm font-medium">New-record Pattern</Label>
+                    <Input
+                      id="multiline_header_pattern"
+                      value={sessionOptionsMultilineHeaderPattern}
+                      onChange={(e) => setSessionOptionMultilineHeaderPattern(e.target.value)}
+                      placeholder={String.raw`e.g. ^\d{4}-\d{2}-\d{2}`}
+                      className="h-9 font-mono text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Regex matching the start of a new log statement; every other line joins the previous one</p>
+                  </div>
+                )}
+              </div>
+
             </CardContent>
           </AccordionContent>
         </AccordionItem>

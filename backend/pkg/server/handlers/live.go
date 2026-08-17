@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -58,6 +59,12 @@ type TailSource struct {
 	done   chan struct{}
 
 	seq *atomic.Int64
+
+	// multiline folds physical lines into logical records across reads
+	// (each read/flush is its own batch, so a record's continuation
+	// lines can arrive in a later batch). Nil when the source didn't
+	// opt into multiline folding.
+	multiline *multilineFolder
 
 	mu            sync.Mutex
 	resolver      *timeresolve.Resolver
@@ -293,16 +300,26 @@ func (m *TailManager) newSource(opts types.IngestSessionOptions) (*TailSource, e
 		return nil, fmt.Errorf("create decoder: %w", err)
 	}
 
+	multilineCfg, err := buildMultilineConfig(opts.Multiline)
+	if err != nil {
+		return nil, fmt.Errorf("invalid multiline configuration: %w", err)
+	}
+	var multiline *multilineFolder
+	if multilineCfg != nil {
+		multiline = newMultilineFolder(*multilineCfg)
+	}
+
 	ctx, cancel := context.WithCancel(m.currentRootCtx())
 	return &TailSource{
-		id:      uuid.New().String(),
-		opts:    opts,
-		decoder: decoder,
-		manager: m,
-		ctx:     ctx,
-		cancel:  cancel,
-		done:    make(chan struct{}),
-		seq:     new(atomic.Int64),
+		id:        uuid.New().String(),
+		opts:      opts,
+		decoder:   decoder,
+		manager:   m,
+		ctx:       ctx,
+		cancel:    cancel,
+		done:      make(chan struct{}),
+		seq:       new(atomic.Int64),
+		multiline: multiline,
 	}, nil
 }
 
@@ -429,10 +446,15 @@ func (s *TailSource) followFile() {
 	for {
 		select {
 		case <-s.ctx.Done():
+			s.flushMultiline()
 			s.finish("stopped", "source stopped")
 			return
 		case <-ticker.C:
 			if rotated, nextInfo := fileChanged(s.path, info, offset); rotated {
+				// The old file is gone; any content already read but not
+				// yet proven complete belongs to it, so flush it now
+				// rather than folding it into lines from the new file.
+				s.flushMultiline()
 				file.Close()
 				file, info, err = openExistingTailFile(s.path)
 				if err != nil {
@@ -515,12 +537,14 @@ func (s *TailSource) readStdin(ctx context.Context, reader io.Reader) {
 	for {
 		select {
 		case <-s.ctx.Done():
+			s.flushMultiline()
 			s.finish("stopped", "source stopped")
 			return
 		case <-ctx.Done():
 			if !flush() {
 				return
 			}
+			s.flushMultiline()
 			s.finish("stopped", "client disconnected")
 			return
 		case line, ok := <-lines:
@@ -528,6 +552,7 @@ func (s *TailSource) readStdin(ctx context.Context, reader io.Reader) {
 				if !flush() {
 					return
 				}
+				s.flushMultiline()
 				if err := <-errCh; err != nil && !errors.Is(err, context.Canceled) {
 					s.finish("error", err.Error())
 				} else {
@@ -548,6 +573,38 @@ func (s *TailSource) readStdin(ctx context.Context, reader io.Reader) {
 }
 
 func (s *TailSource) processLines(lines []string) error {
+	if len(lines) == 0 {
+		return nil
+	}
+
+	if s.multiline != nil {
+		folded, err := s.multiline.Feed(lines)
+		if err != nil {
+			return err
+		}
+		lines = folded
+	}
+
+	return s.processFoldedLines(lines)
+}
+
+// flushMultiline emits any still-open trailing multiline record. Call it
+// once, after the last processLines call, so a source's final record isn't
+// silently dropped just because nothing arrived to prove it was complete.
+func (s *TailSource) flushMultiline() {
+	if s.multiline == nil {
+		return
+	}
+	final := s.multiline.Flush()
+	if len(final) == 0 {
+		return
+	}
+	if err := s.processFoldedLines(final); err != nil {
+		log.Printf("live: failed to store trailing multiline record for source %s: %v", s.id, err)
+	}
+}
+
+func (s *TailSource) processFoldedLines(lines []string) error {
 	if len(lines) == 0 {
 		return nil
 	}

@@ -1,4 +1,4 @@
-import { DEFAULT_PATTERN, useImportStore } from '@/stores/useImportStore';
+import { DEFAULT_PATTERN, sessionMultilineOption, useImportStore } from '@/stores/useImportStore';
 import { Check, ChevronDown, ChevronRight, AlertTriangle, File, Loader2, RefreshCw, Search } from 'lucide-react';
 import { FC, useCallback, useEffect, useRef, useState } from 'react';
 import { parseLogs, suggestPatterns } from '../../../lib/api-client';
@@ -10,6 +10,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useFileSelectionService } from '../LocalFileImport/FileSelectionService';
+import { IngestSessionOptions } from './IngestSessionOptions';
 
 interface FileAnalyzingStepProps {
   onDetectionComplete: (result: DetectionResult) => void;
@@ -62,8 +63,8 @@ const FilePatternCard: FC<{
   // regardless of the isCustomPattern flag (guards against sync issues)
   const isShowingCustomEditor = selectedPattern?.name === DEFAULT_PATTERN.name;
   const successCount = importFile.parsedLogs.filter(l => !l.error).length;
-  const previewCount = importFile.previewLines.length;
-  const matchRate = previewCount > 0 ? Math.round((successCount / Math.min(previewCount, 20)) * 100) : 0;
+  const previewCount = importFile.parsedLogs.length || importFile.previewLines.length;
+  const matchRate = previewCount > 0 ? Math.round((successCount / previewCount) * 100) : 0;
 
   const handlePatternSelect = (patternName: string) => {
     const pattern = availablePatterns.find(p => p.name === patternName);
@@ -466,7 +467,11 @@ const FilePatternCard: FC<{
             <PatternTestResults
               pattern={importFile.selectedPattern?.pattern || ''}
               customPatterns={importFile.selectedPattern?.custom_patterns || {}}
-              logs={importFile.previewLines.slice(0, 20)}
+              logs={
+                importFile.parsedLogs.some(l => typeof l._raw === 'string' && l._raw)
+                  ? importFile.parsedLogs.map(l => String(l._raw))
+                  : importFile.previewLines.slice(0, 20)
+              }
               parsedLogsOverride={importFile.parsedLogs}
               isLoadingOverride={importFile.detectionStatus === 'detecting'}
               errorOverride={importFile.detectionError ?? null}
@@ -496,6 +501,12 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
     setSourceMTime,
     setFileTimestampInference,
     setActiveFileId,
+    sessionOptionsMultilineEnabled,
+    sessionOptionsMultilineMode,
+    sessionOptionsMultilineHeaderPattern,
+    setSessionOptionMultilineEnabled,
+    setSessionOptionMultilineMode,
+    setSessionOptionMultilineHeaderPattern,
   } = useImportStore();
 
   const fileService = useFileSelectionService();
@@ -518,21 +529,39 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
 
       const approxLines = previewLines.length;
 
-      // Auto-suggest patterns
-      const suggestResponse = await suggestPatterns({ logs: previewLines });
+      const multiline = sessionMultilineOption({
+        sessionOptionsMultilineEnabled,
+        sessionOptionsMultilineMode,
+        sessionOptionsMultilineHeaderPattern,
+      });
+
+      // Auto-suggest patterns against folded records when multiline is on.
+      const suggestResponse = await suggestPatterns({
+        logs: previewLines,
+        session_options: { multiline },
+      });
 
       if (suggestResponse.results && suggestResponse.results.length > 0) {
         const bestMatch = suggestResponse.results[0];
+        const detectedMultiline = suggestResponse.multiline;
+        if (detectedMultiline?.enabled) {
+          setSessionOptionMultilineEnabled(true);
+          if (detectedMultiline.mode === 'indent' || detectedMultiline.mode === 'header') {
+            setSessionOptionMultilineMode(detectedMultiline.mode);
+          }
+          setSessionOptionMultilineHeaderPattern(detectedMultiline.header_pattern || '');
+        }
 
         // Test the best match. Pass source_mtime so the resolver
         // anchors year-less / 2-digit-year timestamps against the
         // file rather than falling back to wall-clock now.
-        const parseResponse = await parseLogs({
-          logs: previewLines.slice(0, 20),
+          const parseResponse = await parseLogs({
+          logs: previewLines,
           grok_pattern: bestMatch.pattern,
           custom_patterns: bestMatch.custom_patterns || {},
           session_options: {
             source_mtime: file.file.lastModified ? new Date(file.file.lastModified).toISOString() : undefined,
+            multiline: detectedMultiline?.enabled ? detectedMultiline : multiline,
           },
         });
 
@@ -589,20 +618,21 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
         isCustomPattern: true,
       };
     }
-  }, [availablePatterns, fileService]);
+  }, [availablePatterns, fileService, sessionOptionsMultilineEnabled, sessionOptionsMultilineMode, sessionOptionsMultilineHeaderPattern, setSessionOptionMultilineEnabled, setSessionOptionMultilineMode, setSessionOptionMultilineHeaderPattern]);
 
   const runAllDetections = useCallback(async () => {
-    if (files.length === 0) return;
+    const current = useImportStore.getState().files;
+    if (current.length === 0) return;
 
     setAllDetecting(true);
 
     // Mark all as detecting
-    for (const file of files) {
+    for (const file of current) {
       updateFile(file.id, { detectionStatus: 'detecting' });
     }
 
     // Run detections sequentially to avoid overwhelming the server
-    for (const file of files) {
+    for (const file of current) {
       const updates = await detectPatternForFile(file);
       updateFile(file.id, updates);
     }
@@ -638,15 +668,32 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
       suggestedPattern: currentFiles[0]?.selectedPattern || undefined,
       error: allDetected ? undefined : 'Some files need manual pattern selection',
     });
-  }, [files, detectPatternForFile, updateFile, setReadyToImportLogs, onDetectionComplete]);
+  }, [detectPatternForFile, updateFile, setReadyToImportLogs, onDetectionComplete]);
+
+  const runAllDetectionsRef = useRef(runAllDetections);
+  runAllDetectionsRef.current = runAllDetections;
 
   // Run detection on mount for multi-file mode
   useEffect(() => {
     if (isMultiFile && !detectionRanRef.current) {
       detectionRanRef.current = true;
-      runAllDetections();
+      runAllDetectionsRef.current();
     }
   }, [isMultiFile]);
+
+  const multilineConfigKey = `${sessionOptionsMultilineEnabled}|${sessionOptionsMultilineMode}|${sessionOptionsMultilineHeaderPattern}`;
+  const skipMultilineRedetect = useRef(true);
+  useEffect(() => {
+    if (!isMultiFile || !detectionRanRef.current) return;
+    if (skipMultilineRedetect.current) {
+      skipMultilineRedetect.current = false;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      runAllDetectionsRef.current();
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [isMultiFile, multilineConfigKey]);
 
   // --- Multi-file handlers ---
 
@@ -657,11 +704,18 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
     updateFile(fileId, { detectionStatus: 'detecting' });
 
     try {
-      const previewLines = file.previewLines.slice(0, 20);
+      const previewLines = file.previewLines;
       const parseResponse = await parseLogs({
         logs: previewLines,
         grok_pattern: pattern.pattern,
         custom_patterns: pattern.custom_patterns || {},
+        session_options: {
+          multiline: sessionMultilineOption({
+            sessionOptionsMultilineEnabled,
+            sessionOptionsMultilineMode,
+            sessionOptionsMultilineHeaderPattern,
+          }),
+        },
       });
 
       updateFile(fileId, {
@@ -679,7 +733,7 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
         detectionError: err instanceof Error ? err.message : 'Failed to test pattern',
       });
     }
-  }, [files, updateFile]);
+  }, [files, updateFile, sessionOptionsMultilineEnabled, sessionOptionsMultilineMode, sessionOptionsMultilineHeaderPattern]);
 
   const handleFileTestPattern = useCallback(async (fileId: string, pattern: Pattern) => {
     await handleFilePatternChange(fileId, pattern);
@@ -819,6 +873,8 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
             />
           ))}
         </div>
+
+        <IngestSessionOptions />
       </div>
     );
   }

@@ -3,7 +3,10 @@ import {
   useImportStore,
   DEFAULT_PATTERN,
   DEFAULT_SESSION_OPTIONS,
+  sessionMultilineOption,
+  isMultilineHeaderInvalid,
 } from "../useImportStore";
+import { parseLogs } from "@/lib/api-client";
 
 // Mock api-client to prevent real network calls
 vi.mock("@/lib/api-client", () => ({
@@ -616,5 +619,76 @@ describe("reset", () => {
     expect(state.sessionOptionsSmartDecoder).toBe(true);
     expect(state.sessionOptionsTimezone).toBe("");
     expect(state.providerUploadHandler).toBeNull();
+  });
+});
+
+describe("sessionMultilineOption", () => {
+  it("returns undefined when disabled", () => {
+    expect(sessionMultilineOption({
+      sessionOptionsMultilineEnabled: false,
+      sessionOptionsMultilineMode: "header",
+      sessionOptionsMultilineHeaderPattern: "^\\d",
+    })).toBeUndefined();
+  });
+
+  it("returns enabled config", () => {
+    expect(sessionMultilineOption({
+      sessionOptionsMultilineEnabled: true,
+      sessionOptionsMultilineMode: "indent",
+      sessionOptionsMultilineHeaderPattern: "",
+    })).toEqual({ enabled: true, mode: "indent", header_pattern: undefined });
+  });
+});
+
+describe("isMultilineHeaderInvalid", () => {
+  it("is invalid when header mode is enabled without a pattern", () => {
+    expect(isMultilineHeaderInvalid({
+      sessionOptionsMultilineEnabled: true,
+      sessionOptionsMultilineMode: "header",
+      sessionOptionsMultilineHeaderPattern: "  ",
+    })).toBe(true);
+  });
+
+  it("is valid for indent mode", () => {
+    expect(isMultilineHeaderInvalid({
+      sessionOptionsMultilineEnabled: true,
+      sessionOptionsMultilineMode: "indent",
+      sessionOptionsMultilineHeaderPattern: "",
+    })).toBe(false);
+  });
+
+  it("is valid for iso8601 header pattern", () => {
+    expect(isMultilineHeaderInvalid({
+      sessionOptionsMultilineEnabled: true,
+      sessionOptionsMultilineMode: "header",
+      sessionOptionsMultilineHeaderPattern: String.raw`^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}`,
+    })).toBe(false);
+  });
+});
+
+describe("handlePatternOperation multiline", () => {
+  it("passes multiline session options to parseLogs", async () => {
+    useImportStore.getState().setSelectedFileName("test.log");
+    useImportStore.getState().setFilePreviewBuffer({
+      lines: ["2024-01-01T00:00:00 error", "  continued"],
+      filename: "test.log",
+    });
+    useImportStore.getState().setSessionOptionMultilineEnabled(true);
+    useImportStore.getState().setSessionOptionMultilineMode("header");
+    useImportStore.getState().setSessionOptionMultilineHeaderPattern("^\\\\d");
+
+    await useImportStore.getState().handlePatternOperation(DEFAULT_PATTERN, true);
+
+    expect(parseLogs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session_options: expect.objectContaining({
+          multiline: {
+            enabled: true,
+            mode: "header",
+            header_pattern: "^\\\\d",
+          },
+        }),
+      }),
+    );
   });
 });
