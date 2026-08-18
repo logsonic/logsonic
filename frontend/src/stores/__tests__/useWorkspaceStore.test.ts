@@ -51,6 +51,22 @@ describe('workspace state mapping', () => {
     expect(workspace.color_rules).toHaveLength(1);
   });
 
+  it('clamps oversized persisted column widths before saving', () => {
+    const search = useSearchQueryParamsStore.getState();
+    search.setSelectedColumns(['timestamp', 'program']);
+    // Hydrated Zustand state can predate the normalization boundary.
+    useSearchQueryParamsStore.setState({ columnWidths: { program: 2400 } });
+
+    const workspace = buildWorkspaceFromState(
+      'Program view',
+      '',
+      useSearchQueryParamsStore.getState(),
+      useColorRuleStore.getState().colorRules,
+    );
+
+    expect(workspace.column_widths).toEqual({ program: 2000 });
+  });
+
   it('applies a workspace to search state and color rules', () => {
     const workspace: Workspace = {
       id: 'workspace-1',

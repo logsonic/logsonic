@@ -1,4 +1,5 @@
 import { calculatePresetRelativeDate, calculateRelativeDate, calculateRelativeDateRange, RELATIVE_DATE_PRESETS } from '@/lib/date-utils';
+import { normalizeWorkspaceColumnWidths } from '@/lib/workspace-utils';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
@@ -467,18 +468,19 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
           set({ selectedColumns: newSelectedColumns });
         },
         setColumnWidths: (columnWidths) => {
-          set({ columnWidths });
+          set({ columnWidths: normalizeWorkspaceColumnWidths(columnWidths) });
         },
         setColumnLocked: (columnLocked) => {
           set({ isColumnLocked: columnLocked });
         },
         updateColumnWidth: (column, width) => {
           const currentState = get();
+          const columnWidths = normalizeWorkspaceColumnWidths({
+            ...currentState.columnWidths,
+            [column]: width,
+          });
           set({ 
-            columnWidths: { 
-              ...currentState.columnWidths, 
-              [column]: width 
-            } 
+            columnWidths,
           });
         },
         resetPagination: () => {

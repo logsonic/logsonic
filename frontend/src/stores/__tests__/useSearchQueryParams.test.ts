@@ -225,6 +225,19 @@ describe("column management", () => {
     expect(state.columnWidths["message"]).toBe(300);
   });
 
+  it("keeps column widths within the workspace API limits", () => {
+    useSearchQueryParamsStore.getState().setColumnWidths({
+      program: 2400,
+      message: -20,
+      invalid: Number.NaN,
+    });
+
+    expect(useSearchQueryParamsStore.getState().columnWidths).toEqual({
+      program: 2000,
+      message: 0,
+    });
+  });
+
   it("setColumnLocked toggles lock state", () => {
     useSearchQueryParamsStore.getState().setColumnLocked(true);
     expect(useSearchQueryParamsStore.getState().isColumnLocked).toBe(true);
