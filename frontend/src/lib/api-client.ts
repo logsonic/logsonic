@@ -33,7 +33,8 @@ async function apiRequest<T = unknown>(
   endpoint: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' = 'GET',
   body?: any,
-  params?: Record<string, string | number | boolean | undefined> | LogQueryParams
+  params?: Record<string, string | number | boolean | undefined> | LogQueryParams,
+  signal?: AbortSignal,
 ): Promise<T> {
   // Build URL with query parameters if provided
   let url = `${API_BASE_URL}${endpoint}`;
@@ -55,6 +56,7 @@ async function apiRequest<T = unknown>(
   // Configure request options
   const options: RequestInit = {
     method,
+    signal,
     headers: {
       'Content-Type': 'application/json',
     },
@@ -113,17 +115,17 @@ export async function deleteGrokPattern(name: string): Promise<GrokPatternRespon
   return apiRequest<GrokPatternResponse>('/grok', 'DELETE', undefined, { name });
 }
 
-export async function ingestStart(request: IngestSessionOptions): Promise<IngestResponse> {
-  return apiRequest<IngestResponse>('/ingest/start', 'POST', request);
+export async function ingestStart(request: IngestSessionOptions, signal?: AbortSignal): Promise<IngestResponse> {
+  return apiRequest<IngestResponse>('/ingest/start', 'POST', request, undefined, signal);
 }
 
-export async function ingestEnd(sessionId?: string): Promise<IngestResponse> {
+export async function ingestEnd(sessionId?: string, signal?: AbortSignal): Promise<IngestResponse> {
   const request = sessionId ? { session_id: sessionId } : {};
-  return apiRequest<IngestResponse>('/ingest/end', 'POST', request);
+  return apiRequest<IngestResponse>('/ingest/end', 'POST', request, undefined, signal);
 }
 
-export async function ingestLogs(request: IngestRequest): Promise<IngestResponse> {
-  return apiRequest<IngestResponse>('/ingest/logs', 'POST', request);
+export async function ingestLogs(request: IngestRequest, signal?: AbortSignal): Promise<IngestResponse> {
+  return apiRequest<IngestResponse>('/ingest/logs', 'POST', request, undefined, signal);
 }
 
 export async function ingestFile(request: IngestFileRequest): Promise<IngestResponse> {

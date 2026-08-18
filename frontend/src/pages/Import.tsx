@@ -39,6 +39,7 @@ const Import: FC = () => {
 
   const {
     handleMultiFileUpload,
+    cancelUpload,
   } = useUpload();
 
   const fileService = useFileSelectionService();
@@ -171,7 +172,7 @@ const Import: FC = () => {
         );
       case 2:
         if (isUploading) {
-          return <UploadingStep />;
+          return <UploadingStep onCancel={cancelUpload} />;
         }
         return (
           <FileAnalyzingStep
@@ -206,11 +207,19 @@ const Import: FC = () => {
         description: `Importing ${files.length} file${files.length !== 1 ? 's' : ''}...`,
       });
 
-      await handleMultiFileUpload(files, fileService);
+      const { cancelled } = await handleMultiFileUpload(files, fileService);
 
       const updatedFiles = useImportStore.getState().files;
       const successCount = updatedFiles.filter(f => f.uploadStatus === 'success').length;
       const failedCount = updatedFiles.filter(f => f.uploadStatus === 'failed').length;
+
+      if (cancelled && successCount === 0) {
+        toast({
+          title: "Import cancelled",
+          description: "No files were imported.",
+        });
+        return;
+      }
 
       if (successCount > 0) {
         toast({

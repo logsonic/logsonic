@@ -237,7 +237,59 @@ const docTemplate = `{
                 }
             }
         },
-        "/ingest": {
+        "/ingest/end": {
+            "post": {
+                "description": "End the specified log ingest session and cleanup its resources",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ingest"
+                ],
+                "summary": "End log ingest session",
+                "parameters": [
+                    {
+                        "description": "Session end request with session_id",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.IngestRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.IngestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ingest/logs": {
             "post": {
                 "description": "Ingest log data using existing Grok patterns and store them into the index",
                 "consumes": [
@@ -274,48 +326,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/types.ErrorResponse"
                         }
                     },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/types.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/ingest/end": {
-            "post": {
-                "description": "End the specified log ingest session and cleanup its resources",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "ingest"
-                ],
-                "summary": "End log ingest session",
-                "parameters": [
-                    {
-                        "description": "Session end request with session_id",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/types.IngestRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/types.IngestResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
+                    "413": {
+                        "description": "Request Entity Too Large",
                         "schema": {
                             "$ref": "#/definitions/types.ErrorResponse"
                         }
@@ -362,6 +374,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
                         "schema": {
                             "$ref": "#/definitions/types.ErrorResponse"
                         }
@@ -1290,6 +1308,14 @@ const docTemplate = `{
                     "type": "object",
                     "additionalProperties": true
                 },
+                "multiline": {
+                    "description": "Multiline configures folding of physical lines into logical log\nrecords before pattern matching, for formats where a single log\nstatement spans multiple lines (stack traces, multi-line JSON,\netc). Nil/disabled preserves the historical one-line-per-record\nbehaviour. Folding is applied on /parse (including autosuggest)\nas well as ingest and live tail.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.MultilineConfig"
+                        }
+                    ]
+                },
                 "name": {
                     "type": "string"
                 },
@@ -1399,6 +1425,29 @@ const docTemplate = `{
                 }
             }
         },
+        "types.MultilineConfig": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "header_pattern": {
+                    "description": "HeaderPattern is a regular expression; required when Mode==\"header\".\nA line matching it starts a new record, everything else is folded\ninto the preceding record. Continuation lines are joined with\nspaces (log2grok's JoinMultilineStrings behaviour).",
+                    "type": "string"
+                },
+                "max_bytes": {
+                    "type": "integer"
+                },
+                "max_lines": {
+                    "description": "MaxLines caps continuation lines folded into one record (default\n100). MaxBytes caps the folded record's byte length (default 1MiB).",
+                    "type": "integer"
+                },
+                "mode": {
+                    "description": "\"header\" | \"indent\"",
+                    "type": "string"
+                }
+            }
+        },
         "types.ParseRequest": {
             "type": "object",
             "properties": {
@@ -1481,6 +1530,14 @@ const docTemplate = `{
                 "combined_coverage": {
                     "description": "CombinedCoverage is the fraction of input lines covered by the union\nof all returned patterns (0.0–1.0). It only differs from\nResults[0].Coverage when a multi-pattern set was requested (Multi)\nand more than one pattern was returned. Omitted for single-pattern\nresponses.",
                     "type": "number"
+                },
+                "multiline": {
+                    "description": "Multiline is the folding config used for this suggestion. Set when\nthe caller supplied one, or when /parse auto-detected a common\ncontinuation style (syslog / ISO 8601 / indent) because folding\nproduced a better library match than treating each physical line\nas its own record.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.MultilineConfig"
+                        }
+                    ]
                 },
                 "results": {
                     "type": "array",

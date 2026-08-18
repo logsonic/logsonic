@@ -6,7 +6,7 @@ import { useFileSelectionService } from './FileSelectionService';
 
 const ACCEPTED_TYPES = ['.log', '.txt', '.json'];
 const ACCEPTED_MIME = ['text/plain', 'application/json'];
-const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5 GiB; import itself remains chunked
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -47,7 +47,7 @@ export const FileSelection: FC<LogSourceProvider> = ({
         continue;
       }
       if (file.size > MAX_FILE_SIZE) {
-        errors.push(`"${file.name}" exceeds the 500 MB size limit`);
+        errors.push(`"${file.name}" exceeds the 5 GiB size limit`);
         continue;
       }
       if (file.size === 0) {
@@ -247,7 +247,7 @@ export const FileSelection: FC<LogSourceProvider> = ({
               >
                 .json
               </span>
-              <span style={{ color: 'var(--ls-text-3)' }}>· up to 500 MB each</span>
+              <span style={{ color: 'var(--ls-text-3)' }}>· up to 5 GiB each</span>
             </span>
             <span style={{ marginTop: 8, fontSize: 11.5, color: 'var(--ls-text-3)' }}>
               LogSonic auto-detects the best Grok pattern for each file.

@@ -448,6 +448,7 @@ func TestExpireStaleSessions_FlushesPendingMultiline(t *testing.T) {
 		t.Fatal("session missing after ingest")
 	}
 	session.CreationTime = time.Now().Add(-SessionTimeout - time.Minute)
+	session.LastActivity = session.CreationTime
 	sessionMap[sessionID] = session
 	sessionMapMutex.Unlock()
 

@@ -9,7 +9,7 @@ const statusMeta = {
   failed:    { label: 'Failed',     fg: 'var(--ls-err)',    bg: 'var(--ls-err-soft)',  border: 'color-mix(in srgb, var(--ls-err) 25%, transparent)' },
 } as const;
 
-export const UploadingStep: FC = () => {
+export const UploadingStep: FC<{ onCancel: () => void }> = ({ onCancel }) => {
   const { files } = useImportStore();
 
   const { doneCount, totalCount, overallPct, linesProcessed } = useMemo(() => {
@@ -53,6 +53,23 @@ export const UploadingStep: FC = () => {
         <p style={{ fontSize: 12.5, color: 'var(--ls-text-2)' }}>
           {doneCount} / {totalCount} files complete · {linesProcessed.toLocaleString()} lines processed
         </p>
+        <button
+          type="button"
+          onClick={onCancel}
+          style={{
+            marginTop: 10,
+            height: 30,
+            padding: '0 12px',
+            borderRadius: 6,
+            border: '1px solid var(--ls-border-strong)',
+            background: 'var(--ls-panel)',
+            color: 'var(--ls-text-2)',
+            fontSize: 12,
+            fontWeight: 500,
+          }}
+        >
+          Cancel import
+        </button>
       </div>
 
       {/* Overall progress bar */}

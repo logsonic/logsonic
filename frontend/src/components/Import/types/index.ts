@@ -88,11 +88,17 @@ export interface UploadProgressHookProps {
   detectionResult?: DetectionResult;
 }
 
+export interface MultiFileUploadResult {
+  files: ImportFile[];
+  cancelled: boolean;
+}
+
 export interface UploadProgressHookResult {
   isUploading: boolean;
   uploadProgress: number;
   approxLines: number;
-  handleMultiFileUpload: (files: ImportFile[], fileService: LogSourceProviderService) => Promise<ImportFile[]>;
+  handleMultiFileUpload: (files: ImportFile[], fileService: LogSourceProviderService) => Promise<MultiFileUploadResult>;
+  cancelUpload: () => void;
 }
 
 export interface FileParserHookResult {
@@ -147,6 +153,17 @@ export interface LogSourceProvider {
 export interface LogSourceProviderService {
   name: string;
   // Start the actual import process
-  handleFileImport: (filehandle: object, chunkSize: number, callback: (lines: string[], totalLines: number, next: () => void) => Promise<void>) => Promise<void>;
+  handleFileImport: (
+    filehandle: object,
+    chunkSize: number,
+    callback: (chunk: FileImportChunk) => Promise<void>,
+    signal?: AbortSignal,
+  ) => Promise<void>;
   handleFilePreview: (filehandle: object, onPreviewReadyCallback: (lines: string[]) => void) => Promise<void>;
-} 
+}
+
+export interface FileImportChunk {
+  lines: string[];
+  bytesRead: number;
+  totalBytes: number;
+}
