@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,6 +27,7 @@ type StorageInterface interface {
 	Store(logs []map[string]interface{}, source string) error
 	StoreWithIDs(logs []map[string]interface{}, source string) ([]string, error)
 	Search(query string, startDate, endDate *time.Time, sources []string) ([]map[string]interface{}, time.Duration, error)
+	SearchPage(ctx context.Context, options SearchOptions) (SearchPageResult, error)
 	List() ([]string, error)
 	GetSourceNames() ([]string, error)
 	Clear() error
@@ -103,7 +105,10 @@ func buildIndexMapping() mapping.IndexMapping {
 
 	dateField := bleve.NewDateTimeFieldMapping()
 	dateField.Store = true
-	dateField.Index = false
+	// Timestamp postings enable bounded date-range queries and facets. Older
+	// shards created with Index=false remain readable through SearchPage's
+	// compatibility aggregation path.
+	dateField.Index = true
 	dateField.IncludeInAll = false
 	logMapping.AddFieldMappingsAt("timestamp", dateField)
 

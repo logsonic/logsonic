@@ -2,7 +2,7 @@ import { LogQueryParams, LogResponse } from '@/lib/api-types';
 import { calculateRelativeDateRange } from '@/lib/date-utils';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useGetLogs } from './useApi';
 
 /**
@@ -15,9 +15,17 @@ export const useSearchLogs = (
   const store = useSearchQueryParamsStore();
   const logResultStore = useLogResultStore();
   const { execute: fetchLogs, isLoading: apiLoading, performanceMetrics } = useGetLogs();
+  const activeSearchRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => {
+    activeSearchRef.current?.abort();
+  }, []);
 
   // Create a stable search function that doesn't change on every render
   const searchLogs = useCallback(async () => {
+    activeSearchRef.current?.abort();
+    const controller = new AbortController();
+    activeSearchRef.current = controller;
     try {
       // Set loading state
       logResultStore.setLoading(true);
@@ -48,7 +56,7 @@ export const useSearchLogs = (
       };
       
       // Execute the search
-      const result = await fetchLogs(params);
+      const result = await fetchLogs(params, controller.signal);
       
       if (result) {
         // Update the store with the result
@@ -98,6 +106,9 @@ export const useSearchLogs = (
         return result;
       }
     } catch (error) {
+      if (controller.signal.aborted) {
+        return null;
+      }
       logResultStore.setError(
         error instanceof Error 
           ? error.message 
@@ -105,7 +116,10 @@ export const useSearchLogs = (
       );
       console.error('Error searching logs:', error);
     } finally {
-      logResultStore.setLoading(false);
+      if (activeSearchRef.current === controller) {
+        activeSearchRef.current = null;
+        logResultStore.setLoading(false);
+      }
     }
     
     return null;

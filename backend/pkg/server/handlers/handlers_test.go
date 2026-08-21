@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	storagepkg "logsonic/pkg/storage"
 	"logsonic/pkg/types"
@@ -32,6 +33,7 @@ type mockStorage struct {
 	baseDir     string
 	docCounts   map[string]uint64
 	searchCalls int
+	pageCalls   int
 }
 
 func newMockStorage() *mockStorage {
@@ -69,6 +71,31 @@ func (m *mockStorage) Search(query string, startDate, endDate *time.Time, source
 		return nil, 0, m.searchErr
 	}
 	return m.logs, time.Millisecond, nil
+}
+
+func (m *mockStorage) SearchPage(ctx context.Context, options storagepkg.SearchOptions) (storagepkg.SearchPageResult, error) {
+	m.pageCalls++
+	if err := ctx.Err(); err != nil {
+		return storagepkg.SearchPageResult{}, err
+	}
+	if m.searchErr != nil {
+		return storagepkg.SearchPageResult{}, m.searchErr
+	}
+	logs := m.logs
+	if options.Offset >= len(logs) {
+		logs = []map[string]interface{}{}
+	} else {
+		end := options.Offset + options.Limit
+		if end > len(logs) {
+			end = len(logs)
+		}
+		logs = logs[options.Offset:end]
+	}
+	return storagepkg.SearchPageResult{
+		Logs:       logs,
+		TotalCount: len(m.logs),
+		QueryTime:  time.Millisecond,
+	}, nil
 }
 
 func (m *mockStorage) List() ([]string, error) { return m.listDates, nil }
@@ -897,8 +924,8 @@ func TestHandleReadAll_EmptySourceFilterReturnsNoRows(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", w.Code)
 	}
-	if store.searchCalls != 0 {
-		t.Fatalf("expected empty source filter to skip storage search, got %d calls", store.searchCalls)
+	if store.searchCalls != 0 || store.pageCalls != 0 {
+		t.Fatalf("expected empty source filter to skip storage search, got legacy=%d page=%d calls", store.searchCalls, store.pageCalls)
 	}
 
 	var resp types.LogResponse
@@ -907,6 +934,61 @@ func TestHandleReadAll_EmptySourceFilterReturnsNoRows(t *testing.T) {
 	}
 	if resp.TotalCount != 0 || resp.Count != 0 || len(resp.Logs) != 0 {
 		t.Fatalf("expected empty result, got total=%d count=%d logs=%d", resp.TotalCount, resp.Count, len(resp.Logs))
+	}
+}
+
+func TestHandleReadAll_UsesBoundedTimestampPage(t *testing.T) {
+	h, store := setupHandler(t)
+	store.logs = []map[string]interface{}{{
+		"timestamp": time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC),
+		"_src":      "app.log",
+		"message":   "hello",
+	}}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/logs?_src=app.log&start_date=2024-01-01T00:00:00Z&end_date=2024-12-31T23:59:59Z&limit=10&sort_by=timestamp", nil)
+	w := httptest.NewRecorder()
+
+	h.HandleReadAll(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if store.pageCalls != 1 || store.searchCalls != 0 {
+		t.Fatalf("expected bounded page path, got page=%d legacy=%d", store.pageCalls, store.searchCalls)
+	}
+}
+
+func TestHandleReadAll_RejectsOversizedPage(t *testing.T) {
+	h, store := setupHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/logs?limit=1001", nil)
+	w := httptest.NewRecorder()
+
+	h.HandleReadAll(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if store.pageCalls != 0 || store.searchCalls != 0 {
+		t.Fatal("oversized page reached storage")
+	}
+}
+
+func TestHandleReadAll_ReturnsStableTimeoutError(t *testing.T) {
+	h, store := setupHandler(t)
+	store.searchErr = context.DeadlineExceeded
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/logs?_src=app.log&start_date=2024-01-01T00:00:00Z&end_date=2024-12-31T23:59:59Z&sort_by=timestamp", nil)
+	w := httptest.NewRecorder()
+
+	h.HandleReadAll(w, req)
+
+	if w.Code != http.StatusGatewayTimeout {
+		t.Fatalf("expected 504, got %d: %s", w.Code, w.Body.String())
+	}
+	var response types.ErrorResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Code != "SEARCH_TIMEOUT" {
+		t.Fatalf("error code = %q, want SEARCH_TIMEOUT", response.Code)
 	}
 }
 

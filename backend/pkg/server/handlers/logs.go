@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	storagepkg "logsonic/pkg/storage"
 	"logsonic/pkg/types"
 	"net/http"
 	"sort"
@@ -60,6 +63,16 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+	}
+	if limit > storagepkg.MaxSearchPageSize {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(types.ErrorResponse{
+			Status:  "error",
+			Error:   "Invalid limit parameter",
+			Code:    "INVALID_PARAMETER",
+			Details: fmt.Sprintf("Limit must not exceed %d", storagepkg.MaxSearchPageSize),
+		})
+		return
 	}
 	offset := 0
 	if offsetStr := query.Get("offset"); offsetStr != "" {
@@ -189,38 +202,88 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var allLogs []map[string]interface{}
+	var pageLogs []map[string]interface{}
+	var availableColumns []string
+	var logDistributionEntries []types.LogDistributionEntry
+	var totalCount int
 	var indexQueryTime time.Duration
 	var err error
 
-	// Perform search with full timestamps (including time components)
-	allLogs, indexQueryTime, err = h.storage.Search(searchQuery, &startDate, &endDate, sources)
+	if sortBy == "timestamp" {
+		pageResult, searchErr := h.storage.SearchPage(r.Context(), storagepkg.SearchOptions{
+			Query:     searchQuery,
+			StartDate: startDate,
+			EndDate:   endDate,
+			Sources:   sources,
+			Limit:     limit,
+			Offset:    offset,
+			SortBy:    sortBy,
+			SortOrder: sortOrder,
+		})
+		err = searchErr
+		if err == nil {
+			pageLogs = pageResult.Logs
+			totalCount = pageResult.TotalCount
+			availableColumns = pageResult.AvailableColumns
+			indexQueryTime = pageResult.QueryTime
+			logDistributionEntries = make([]types.LogDistributionEntry, len(pageResult.Distribution))
+			for i, bucket := range pageResult.Distribution {
+				logDistributionEntries[i] = types.LogDistributionEntry{
+					StartTime:    bucket.StartTime.Format(time.RFC3339),
+					EndTime:      bucket.EndTime.Format(time.RFC3339),
+					Count:        bucket.Count,
+					SourceCounts: bucket.SourceCounts,
+				}
+			}
+		}
+	} else {
+		// Arbitrary dynamic fields do not have doc values in existing indexes.
+		// Preserve their legacy behavior until the cursor contract can expose a
+		// bounded supported-sort policy.
+		allLogs, indexQueryTime, err = h.storage.Search(searchQuery, &startDate, &endDate, sources)
+		if err == nil {
+			totalCount = len(allLogs)
+			endIndex := offset + limit
+			if endIndex > totalCount {
+				endIndex = totalCount
+			}
+			if offset >= totalCount {
+				offset = 0
+				endIndex = 0
+			}
+			allLogs, availableColumns = sortLogs(allLogs, sortBy, sortOrder)
+			logDistributionEntries, _ = calculateLogDistribution(allLogs)
+			pageLogs = allLogs[offset:endIndex]
+		}
+	}
 
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		statusCode := http.StatusInternalServerError
+		code := "READ_ERROR"
+		errorMessage := "Failed to read logs"
+		if errors.Is(err, context.DeadlineExceeded) {
+			statusCode = http.StatusGatewayTimeout
+			code = "SEARCH_TIMEOUT"
+			errorMessage = "Log search timed out"
+		} else if errors.Is(err, context.Canceled) {
+			statusCode = http.StatusRequestTimeout
+			code = "SEARCH_CANCELED"
+			errorMessage = "Log search was canceled"
+		}
+		w.WriteHeader(statusCode)
 		json.NewEncoder(w).Encode(types.ErrorResponse{
 			Status:  "error",
-			Error:   "Failed to read logs",
-			Code:    "READ_ERROR",
+			Error:   errorMessage,
+			Code:    code,
 			Details: err.Error(),
 		})
 		return
 	}
 
-	totalCount := len(allLogs)
-	endIndex := offset + limit
-	if endIndex > totalCount {
-		endIndex = totalCount
-	}
 	if offset >= totalCount {
 		offset = 0
-		endIndex = 0
+		pageLogs = []map[string]interface{}{}
 	}
-
-	// Sort logs and get available columns in a single pass
-	allLogs, availableColumns := sortLogs(allLogs, sortBy, sortOrder)
-
-	// Calculate log distribution over time
-	logDistributionEntries, _ := calculateLogDistribution(allLogs)
 
 	totalTime := time.Since(startTime)
 
@@ -232,8 +295,8 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 		TimeTaken:        int(totalTime.Microseconds()),
 		Offset:           offset,
 		Limit:            limit,
-		Count:            len(allLogs[offset:endIndex]),
-		Logs:             allLogs[offset:endIndex],
+		Count:            len(pageLogs),
+		Logs:             pageLogs,
 		SortBy:           sortBy,
 		SortOrder:        sortOrder,
 		Query:            searchQuery,

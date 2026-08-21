@@ -141,8 +141,8 @@ export async function resumeLiveSubscriber(subscriberId: string): Promise<LiveCo
 }
 
 // Log Querying
-export async function getLogs(params?: LogQueryParams): Promise<LogResponse> {
-  return apiRequest<LogResponse>('/logs', 'GET', undefined, params);
+export async function getLogs(params?: LogQueryParams, signal?: AbortSignal): Promise<LogResponse> {
+  return apiRequest<LogResponse>('/logs', 'GET', undefined, params, signal);
 }
 
 export async function clearLogs(): Promise<any> {
