@@ -11,6 +11,7 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { cn } from '@/lib/utils';
 import { useImportStore } from '@/stores/useImportStore';
 import { Settings2 } from 'lucide-react';
 import { FC } from 'react';
@@ -87,25 +88,21 @@ export const IngestSessionOptions: FC = () => {
             </AccordionTrigger>
           </CardHeader>
           <AccordionContent>
-            <CardContent className="pt-3 ">
-
-              <div className="grid grid-cols-1 md:grid-cols-6 gap-x-4 gap-y-0 items-end">
-                
-                {/* Column 1: Smart Decoder */}
-                <div className="space-y-1.5 col-span-2">
+            <CardContent className="pt-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-12 items-start">
+                <div className="space-y-1.5 min-w-0 sm:col-span-2 lg:col-span-3">
                   <Label htmlFor="smart_decoder" className="text-sm font-medium">Smart Decoder</Label>
                   <div className="h-9 flex items-center">
-                    <Switch 
+                    <Switch
                       id="smart_decoder"
-                      checked={sessionOptionsSmartDecoder || false} 
+                      checked={sessionOptionsSmartDecoder || false}
                       onCheckedChange={(checked) => setSessionOptionSmartDecoder(checked)}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">Automatically detects emails, IP addresses and other patterns in your logs</p>
+                  <p className="text-xs text-muted-foreground leading-snug">Automatically detects emails, IP addresses and other patterns in your logs</p>
                 </div>
 
-                {/* Column 2: Timezone */}
-                <div className="space-y-1.5 col-span-1">
+                <div className="space-y-1.5 min-w-0 lg:col-span-3">
                   <Label htmlFor="force_timezone" className="text-sm font-medium">Force Timezone</Label>
                   <TimezoneSelectorCommon
                     selectedTimezone={sessionOptionsTimezone || 'auto'}
@@ -113,28 +110,27 @@ export const IngestSessionOptions: FC = () => {
                     label="Force Timezone"
                     placeholder="Timezone"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">Force the timezone of the logs to a specific timezone</p>
-                </div>      
+                  <p className="text-xs text-muted-foreground leading-snug">Override the timezone used when parsing timestamps</p>
+                </div>
 
-                {/* Column 3: Year */}
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 min-w-0 lg:col-span-2">
                   <Label htmlFor="force_start_year" className="text-sm font-medium">Force Year</Label>
-                  <Input 
+                  <Input
+                    id="force_start_year"
                     type="number"
                     aria-valuemin={1900}
                     aria-valuemax={2050}
-                    value={sessionOptionsYear || ''} 
+                    value={sessionOptionsYear || ''}
                     onChange={(e) => setSessionOptionYear(e.target.value)}
                     className="h-9"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">Force the year of the logs to a specific year</p>
+                  <p className="text-xs text-muted-foreground leading-snug">Override year when logs omit it</p>
                 </div>
-                
-                {/* Column 4: Month */}
-                <div className="space-y-1.5">
+
+                <div className="space-y-1.5 min-w-0 lg:col-span-2">
                   <Label htmlFor="force_start_month" className="text-sm font-medium">Force Month</Label>
-                  <Select 
-                    value={sessionOptionsMonth || ''} 
+                  <Select
+                    value={sessionOptionsMonth || ''}
                     onValueChange={(value) => setSessionOptionMonth(value)}
                   >
                     <SelectTrigger id="force_start_month" className="h-9">
@@ -149,14 +145,13 @@ export const IngestSessionOptions: FC = () => {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground mt-1">Force the month of the logs to a specific month</p>
+                  <p className="text-xs text-muted-foreground leading-snug">Override month when logs omit it</p>
                 </div>
-                
-                {/* Column 5: Day */}
-                <div className="space-y-1.5">
+
+                <div className="space-y-1.5 min-w-0 lg:col-span-2">
                   <Label htmlFor="force_start_day" className="text-sm font-medium">Force Day</Label>
-                  <Select 
-                    value={sessionOptionsDay || ''} 
+                  <Select
+                    value={sessionOptionsDay || ''}
                     onValueChange={(value) => setSessionOptionDay(value)}
                   >
                     <SelectTrigger id="force_start_day" className="h-9">
@@ -171,14 +166,12 @@ export const IngestSessionOptions: FC = () => {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground mt-1">Force the day of the logs to a specific day</p>
+                  <p className="text-xs text-muted-foreground leading-snug">Override day when logs omit it</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-6 gap-x-4 gap-y-0 items-end mt-4 pt-4 border-t">
-
-                {/* Multiline: enable */}
-                <div className="space-y-1.5 col-span-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 items-start mt-4 pt-4 border-t">
+                <div className="space-y-1.5 min-w-0 lg:col-span-3">
                   <Label htmlFor="multiline_enabled" className="text-sm font-medium">Multiline Records</Label>
                   <div className="h-9 flex items-center">
                     <Switch
@@ -196,11 +189,15 @@ export const IngestSessionOptions: FC = () => {
                       }}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">Fold continuation lines (stack traces, wrapped entries) into the log statement they belong to</p>
+                  <p className="text-xs text-muted-foreground leading-snug">Fold continuation lines (stack traces, wrapped entries) into the log statement they belong to</p>
                 </div>
 
-                {/* Multiline: continuation style */}
-                <div className="space-y-1.5 col-span-2">
+                <div className={cn(
+                  'space-y-1.5 min-w-0',
+                  sessionOptionsMultilineEnabled && sessionOptionsMultilineMode === 'header'
+                    ? 'lg:col-span-4'
+                    : 'md:col-span-2 lg:col-span-9',
+                )}>
                   <Label htmlFor="multiline_preset" className="text-sm font-medium">Continuation Style</Label>
                   <Select
                     value={multilinePreset}
@@ -217,12 +214,11 @@ export const IngestSessionOptions: FC = () => {
                       <SelectItem value="custom">Custom regex</SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground mt-1">How to tell a new log statement from a continuation of the previous one</p>
+                  <p className="text-xs text-muted-foreground leading-snug">How to tell a new log statement from a continuation of the previous one</p>
                 </div>
 
-                {/* Multiline: custom header pattern */}
                 {sessionOptionsMultilineEnabled && sessionOptionsMultilineMode === 'header' && (
-                  <div className="space-y-1.5 col-span-2">
+                  <div className="space-y-1.5 min-w-0 md:col-span-2 lg:col-span-5">
                     <Label htmlFor="multiline_header_pattern" className="text-sm font-medium">New-record Pattern</Label>
                     <Input
                       id="multiline_header_pattern"
@@ -231,11 +227,10 @@ export const IngestSessionOptions: FC = () => {
                       placeholder={String.raw`e.g. ^\d{4}-\d{2}-\d{2}`}
                       className="h-9 font-mono text-sm"
                     />
-                    <p className="text-xs text-muted-foreground mt-1">Regex matching the start of a new log statement; every other line joins the previous one</p>
+                    <p className="text-xs text-muted-foreground leading-snug">Regex matching the start of a new log statement; every other line joins the previous one</p>
                   </div>
                 )}
               </div>
-
             </CardContent>
           </AccordionContent>
         </AccordionItem>

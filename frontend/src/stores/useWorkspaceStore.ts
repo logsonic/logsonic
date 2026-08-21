@@ -12,6 +12,7 @@ import {
   updateWorkspace,
 } from '@/lib/api-client';
 import { calculateRelativeDateRange } from '@/lib/date-utils';
+import { normalizeWorkspaceColumnWidths } from '@/lib/workspace-utils';
 import { useColorRuleStore } from '@/stores/useColorRuleStore';
 import {
   SearchQueryParamsStoreState,
@@ -66,7 +67,7 @@ export const buildWorkspaceFromState = (
   sort_by: search.sortBy,
   sort_order: search.sortOrder === 'asc' ? 'asc' : 'desc',
   columns: [...search.selectedColumns],
-  column_widths: { ...search.columnWidths },
+  column_widths: normalizeWorkspaceColumnWidths(search.columnWidths),
   color_rules: colorRules.map(toWorkspaceColorRule),
   facet_fields: existing?.facet_fields ? [...existing.facet_fields] : [],
   visualization: existing?.visualization ?? { type: 'logs', bucket: 'auto' },
@@ -93,7 +94,7 @@ export const applyWorkspaceToCurrentState = (workspace: Workspace) => {
       workspace.columns && workspace.columns.length > 0
         ? workspace.columns
         : search.selectedColumns,
-    columnWidths: workspace.column_widths ?? {},
+    columnWidths: normalizeWorkspaceColumnWidths(workspace.column_widths),
     currentPage: 1,
     ...timeState,
   });

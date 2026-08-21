@@ -295,6 +295,16 @@ definitions:
           Meta contains additional fields to be added to each log entry.
           These fields are merged directly into the JSON output for each log.
         type: object
+      multiline:
+        allOf:
+        - $ref: '#/definitions/types.MultilineConfig'
+        description: |-
+          Multiline configures folding of physical lines into logical log
+          records before pattern matching, for formats where a single log
+          statement spans multiple lines (stack traces, multi-line JSON,
+          etc). Nil/disabled preserves the historical one-line-per-record
+          behaviour. Folding is applied on /parse (including autosuggest)
+          as well as ingest and live tail.
       name:
         type: string
       pattern:
@@ -372,6 +382,28 @@ definitions:
       total_count:
         type: integer
     type: object
+  types.MultilineConfig:
+    properties:
+      enabled:
+        type: boolean
+      header_pattern:
+        description: |-
+          HeaderPattern is a regular expression; required when Mode=="header".
+          A line matching it starts a new record, everything else is folded
+          into the preceding record. Continuation lines are joined with
+          spaces (log2grok's JoinMultilineStrings behaviour).
+        type: string
+      max_bytes:
+        type: integer
+      max_lines:
+        description: |-
+          MaxLines caps continuation lines folded into one record (default
+          100). MaxBytes caps the folded record's byte length (default 1MiB).
+        type: integer
+      mode:
+        description: '"header" | "indent"'
+        type: string
+    type: object
   types.ParseRequest:
     properties:
       custom_patterns:
@@ -447,6 +479,15 @@ definitions:
           and more than one pattern was returned. Omitted for single-pattern
           responses.
         type: number
+      multiline:
+        allOf:
+        - $ref: '#/definitions/types.MultilineConfig'
+        description: |-
+          Multiline is the folding config used for this suggestion. Set when
+          the caller supplied one, or when /parse auto-detected a common
+          continuation style (syslog / ISO 8601 / indent) because folding
+          produced a better library match than treating each physical line
+          as its own record.
       results:
         items:
           $ref: '#/definitions/types.AutosuggestResult'
@@ -757,37 +798,6 @@ paths:
       summary: Get system and storage information
       tags:
       - system
-  /ingest:
-    post:
-      consumes:
-      - application/json
-      description: Ingest log data using existing Grok patterns and store them into
-        the index
-      parameters:
-      - description: Log ingest request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/types.IngestRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/types.IngestResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/types.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/types.ErrorResponse'
-      summary: Ingest log data
-      tags:
-      - ingest
   /ingest/end:
     post:
       consumes:
@@ -811,11 +821,50 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/types.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/types.ErrorResponse'
       summary: End log ingest session
+      tags:
+      - ingest
+  /ingest/logs:
+    post:
+      consumes:
+      - application/json
+      description: Ingest log data using existing Grok patterns and store them into
+        the index
+      parameters:
+      - description: Log ingest request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.IngestRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.IngestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Ingest log data
       tags:
       - ingest
   /ingest/start:
@@ -840,6 +889,10 @@ paths:
             $ref: '#/definitions/types.IngestResponse'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
           schema:
             $ref: '#/definitions/types.ErrorResponse'
         "500":

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"logsonic/pkg/types"
 	"net/http"
@@ -15,9 +16,12 @@ import (
 )
 
 const (
-	DefaultPatternName = "DEFAULT_PATTERN"
-	DefaultPattern     = "%{GREEDYDATA:message}"
-	SessionTimeout     = 60 * time.Minute
+	DefaultPatternName    = "DEFAULT_PATTERN"
+	DefaultPattern        = "%{GREEDYDATA:message}"
+	SessionTimeout        = 60 * time.Minute
+	MaxIngestRequestBytes = 16 * 1024 * 1024
+	MaxIngestLines        = 10_000
+	MaxIngestLineBytes    = 2 * 1024 * 1024
 )
 
 var defaultIngestSessionOptions = types.IngestSessionOptions{
@@ -37,6 +41,7 @@ var defaultIngestSessionOptions = types.IngestSessionOptions{
 type IngestSession struct {
 	Options      types.IngestSessionOptions
 	CreationTime time.Time
+	LastActivity time.Time
 	Decoder      *l2g.Decoder
 	// Seq is a session-wide monotonic line counter shared across every
 	// /ingest call for this session (the session is copied by value out
@@ -53,6 +58,59 @@ type IngestSession struct {
 var sessionMap = make(map[string]IngestSession)
 var sessionMapMutex = &sync.RWMutex{}
 
+func isRequestBodyTooLarge(err error) bool {
+	var maxBytesError *http.MaxBytesError
+	return errors.As(err, &maxBytesError)
+}
+
+func writeIngestBodyError(w http.ResponseWriter, err error) {
+	status := http.StatusBadRequest
+	code := "INVALID_REQUEST"
+	message := "Invalid request body"
+	if isRequestBodyTooLarge(err) {
+		status = http.StatusRequestEntityTooLarge
+		code = "INGEST_BODY_TOO_LARGE"
+		message = "Ingest request body exceeds the configured limit"
+	}
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(types.ErrorResponse{
+		Status:  "error",
+		Error:   message,
+		Code:    code,
+		Details: err.Error(),
+	})
+}
+
+func decodeIngestJSON(w http.ResponseWriter, r *http.Request, target interface{}) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, MaxIngestRequestBytes)
+	if err := json.NewDecoder(r.Body).Decode(target); err != nil {
+		writeIngestBodyError(w, err)
+		return false
+	}
+	return true
+}
+
+func writeIngestLimitError(w http.ResponseWriter, message string) {
+	w.WriteHeader(http.StatusRequestEntityTooLarge)
+	json.NewEncoder(w).Encode(types.ErrorResponse{
+		Status: "error",
+		Error:  message,
+		Code:   "INGEST_LIMIT_EXCEEDED",
+	})
+}
+
+func validateIngestLogs(logs []string) (string, bool) {
+	if len(logs) > MaxIngestLines {
+		return "Ingest request contains too many log lines", false
+	}
+	for _, line := range logs {
+		if len(line) > MaxIngestLineBytes {
+			return "A log line exceeds the configured size limit", false
+		}
+	}
+	return "", true
+}
+
 // @Summary Ingest log data
 // @Description Ingest log data using existing Grok patterns and store them into the index
 // @Tags ingest
@@ -61,8 +119,9 @@ var sessionMapMutex = &sync.RWMutex{}
 // @Param request body types.IngestRequest true "Log ingest request"
 // @Success 200 {object} types.IngestResponse
 // @Failure 400 {object} types.ErrorResponse
+// @Failure 413 {object} types.ErrorResponse
 // @Failure 500 {object} types.ErrorResponse
-// @Router /ingest [post]
+// @Router /ingest/logs [post]
 func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -77,24 +136,29 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req types.IngestRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(types.ErrorResponse{
-			Status:  "error",
-			Error:   "Invalid request body",
-			Code:    "INVALID_REQUEST",
-			Details: err.Error(),
-		})
+	if !decodeIngestJSON(w, r, &req) {
 		return
 	}
 
-	sessionMapMutex.RLock()
+	if message, ok := validateIngestLogs(req.Logs); !ok {
+		writeIngestLimitError(w, message)
+		return
+	}
+
+	// Mark the request as activity while atomically taking the session
+	// snapshot. This prevents the cleanup sweep from expiring an active
+	// upload between session lookup and decoding/storage.
+	sessionMapMutex.Lock()
 	session, exists := sessionMap[req.SessionID]
+	if exists {
+		session.LastActivity = time.Now()
+		sessionMap[req.SessionID] = session
+	}
 	sessionOptions := session.Options
 	sessionDecoder := session.Decoder
 	sessionSeq := session.Seq
 	sessionMultiline := session.Multiline
-	sessionMapMutex.RUnlock()
+	sessionMapMutex.Unlock()
 
 	if !exists || req.SessionID == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -171,6 +235,7 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 // @Param request body types.IngestSessionOptions true "Log ingest session start request"
 // @Success 200 {object} types.IngestResponse
 // @Failure 400 {object} types.ErrorResponse
+// @Failure 413 {object} types.ErrorResponse
 // @Failure 500 {object} types.ErrorResponse
 // @Router /ingest/start [post]
 func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
@@ -187,14 +252,7 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req types.IngestSessionOptions
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(types.ErrorResponse{
-			Status:  "error",
-			Error:   "Invalid request body",
-			Code:    "INVALID_REQUEST",
-			Details: err.Error(),
-		})
+	if !decodeIngestJSON(w, r, &req) {
 		return
 	}
 
@@ -244,6 +302,7 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sessionID := uuid.New().String()
+	now := time.Now()
 
 	sessionOptions := types.IngestSessionOptions{
 		Name:            req.Name,
@@ -265,7 +324,8 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 	sessionMapMutex.Lock()
 	sessionMap[sessionID] = IngestSession{
 		Options:      sessionOptions,
-		CreationTime: time.Now(),
+		CreationTime: now,
+		LastActivity: now,
 		Decoder:      dec,
 		Seq:          new(atomic.Int64),
 		Multiline:    multiline,
@@ -286,6 +346,7 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 // @Param request body types.IngestRequest true "Session end request with session_id"
 // @Success 200 {object} types.IngestResponse
 // @Failure 400 {object} types.ErrorResponse
+// @Failure 413 {object} types.ErrorResponse
 // @Failure 500 {object} types.ErrorResponse
 // @Router /ingest/end [post]
 func (h *Services) HandleIngestEnd(w http.ResponseWriter, r *http.Request) {
@@ -301,8 +362,13 @@ func (h *Services) HandleIngestEnd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, MaxIngestRequestBytes)
 	var req types.IngestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if isRequestBodyTooLarge(err) {
+			writeIngestBodyError(w, err)
+			return
+		}
 		json.NewEncoder(w).Encode(types.IngestResponse{
 			Status: "success",
 		})
@@ -358,7 +424,13 @@ func expireStaleSessions(now time.Time, h *Services) {
 	var expired []expiredSession
 	sessionMapMutex.Lock()
 	for id, session := range sessionMap {
-		if now.Sub(session.CreationTime) > SessionTimeout {
+		lastActivity := session.LastActivity
+		if lastActivity.IsZero() {
+			// Preserve cleanup behavior for sessions created by older binaries
+			// or tests that do not have LastActivity populated.
+			lastActivity = session.CreationTime
+		}
+		if now.Sub(lastActivity) > SessionTimeout {
 			expired = append(expired, expiredSession{id: id, session: session})
 			delete(sessionMap, id)
 		}
