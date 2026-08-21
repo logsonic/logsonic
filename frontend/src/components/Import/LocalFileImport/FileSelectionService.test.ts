@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_CHUNK_BYTES,
   MAX_PHYSICAL_LINE_BYTES,
   READ_RANGE_BYTES,
   readFilePreview,
@@ -56,6 +57,28 @@ describe("streamFileChunks", () => {
 
     await expect(streamFileChunks(file, 10, async () => undefined))
       .rejects.toThrow("2 MiB limit");
+  });
+
+  it("rejects an escaped line that cannot fit in one request", async () => {
+    const file = new File(["\0".repeat(1.5 * 1024 * 1024)], "logs.txt");
+
+    await expect(streamFileChunks(file, 10, async () => undefined))
+      .rejects.toThrow("cannot fit within the 8 MiB request limit");
+  });
+
+  it("keeps an escaped line that fits below the serialized request cap", async () => {
+    const file = new File(["\0".repeat(1024 * 1024)], "logs.txt");
+    const encoder = new TextEncoder();
+    let bodyBytes = 0;
+
+    await streamFileChunks(file, 10, async ({ lines }) => {
+      bodyBytes = encoder.encode(JSON.stringify({
+        logs: lines,
+        session_id: "0".repeat(36),
+      })).byteLength;
+    });
+
+    expect(bodyBytes).toBeLessThanOrEqual(MAX_CHUNK_BYTES);
   });
 });
 

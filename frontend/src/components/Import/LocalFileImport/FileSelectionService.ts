@@ -18,6 +18,32 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw abortError();
 }
 
+const jsonEscapePattern = new RegExp(
+  '["\\\\' + String.fromCharCode(0) + '-' + String.fromCharCode(0x1F) + ']',
+);
+const surrogatePattern = /[\uD800-\uDFFF]/;
+const exactJsonSizeThreshold = 256 * 1024;
+
+function serializedJsonStringByteLength(
+  text: string,
+  utf8Bytes: number,
+  encoder: TextEncoder,
+): number {
+  if (!jsonEscapePattern.test(text) && !surrogatePattern.test(text)) {
+    return utf8Bytes + 2; // surrounding quotes
+  }
+
+  // Avoid materializing a potentially 6x-expanded JSON string for large
+  // escaped lines. The bound is exact for ASCII control characters and a
+  // safe upper bound for all other UTF-16 input. It only makes chunking more
+  // conservative; the request remains below the configured limit.
+  if (text.length > exactJsonSizeThreshold) {
+    return text.length * 6 + 2;
+  }
+
+  return encoder.encode(JSON.stringify(text)).byteLength;
+}
+
 function splitCompleteLines(text: string): { lines: string[]; remainder: string } {
   const parts = text.split("\n");
   const remainder = parts.pop() ?? "";
@@ -70,7 +96,7 @@ export async function streamFileChunks(
   const encoder = new TextEncoder();
   const sessionIDPlaceholder = "0".repeat(36);
   const emptyBody = JSON.stringify({ logs: [], session_id: sessionIDPlaceholder });
-  const bodyPrefixBytes = encoder.encode(emptyBody).byteLength - encoder.encode("[]").byteLength;
+  const bodyPrefixBytes = encoder.encode(emptyBody).byteLength - 2;
   let pendingBodyBytes = bodyPrefixBytes;
 
   while (byteOffset < file.size) {
@@ -96,7 +122,10 @@ export async function streamFileChunks(
       if (lineBytes > MAX_PHYSICAL_LINE_BYTES) {
         throw new Error(`A log line exceeds the ${MAX_PHYSICAL_LINE_BYTES / (1024 * 1024)} MiB limit`);
       }
-      const serializedLineBytes = encoder.encode(JSON.stringify(line)).byteLength;
+      const serializedLineBytes = serializedJsonStringByteLength(line, lineBytes, encoder);
+      if (bodyPrefixBytes + serializedLineBytes > MAX_CHUNK_BYTES) {
+        throw new Error(`A log line cannot fit within the ${MAX_CHUNK_BYTES / (1024 * 1024)} MiB request limit`);
+      }
       const nextBodyBytes = pendingBodyBytes + serializedLineBytes + (pendingLines.length > 0 ? 1 : 0);
       if (pendingLines.length > 0 && (
         pendingLines.length >= chunkSize || nextBodyBytes > bodyPrefixBytes + MAX_CHUNK_BYTES
@@ -122,7 +151,10 @@ export async function streamFileChunks(
     if (lineBytes > MAX_PHYSICAL_LINE_BYTES) {
       throw new Error(`A log line exceeds the ${MAX_PHYSICAL_LINE_BYTES / (1024 * 1024)} MiB limit`);
     }
-    const serializedLineBytes = encoder.encode(JSON.stringify(remainder)).byteLength;
+    const serializedLineBytes = serializedJsonStringByteLength(remainder, lineBytes, encoder);
+    if (bodyPrefixBytes + serializedLineBytes > MAX_CHUNK_BYTES) {
+      throw new Error(`A log line cannot fit within the ${MAX_CHUNK_BYTES / (1024 * 1024)} MiB request limit`);
+    }
     if (pendingLines.length > 0 && (
       pendingLines.length >= chunkSize
       || pendingBodyBytes + serializedLineBytes + 1 > bodyPrefixBytes + MAX_CHUNK_BYTES
