@@ -448,6 +448,18 @@
                         "description": "Optional comma-separated source filter",
                         "name": "_src",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional comma-separated fields to return",
+                        "name": "fields",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include chart distribution metadata (default: true)",
+                        "name": "include_distribution",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1550,6 +1562,21 @@
         "types.SystemInfoResponse": {
             "type": "object",
             "properties": {
+                "app": {
+                    "description": "App identifies the server binary (from goreleaser ldflags). The UI\nprefers this over its own bundle version so a stale app shell or a\nmismatched CLI is visible in the status bar and About page.",
+                    "type": "object",
+                    "properties": {
+                        "build_date": {
+                            "type": "string"
+                        },
+                        "commit": {
+                            "type": "string"
+                        },
+                        "version": {
+                            "type": "string"
+                        }
+                    }
+                },
                 "status": {
                     "type": "string"
                 },

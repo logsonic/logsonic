@@ -499,6 +499,19 @@ definitions:
     type: object
   types.SystemInfoResponse:
     properties:
+      app:
+        description: |-
+          App identifies the server binary (from goreleaser ldflags). The UI
+          prefers this over its own bundle version so a stale app shell or a
+          mismatched CLI is visible in the status bar and About page.
+        properties:
+          build_date:
+            type: string
+          commit:
+            type: string
+          version:
+            type: string
+        type: object
       status:
         type: string
       storage_info:
@@ -960,6 +973,14 @@ paths:
         in: query
         name: _src
         type: string
+      - description: Optional comma-separated fields to return
+        in: query
+        name: fields
+        type: string
+      - description: 'Include chart distribution metadata (default: true)'
+        in: query
+        name: include_distribution
+        type: boolean
       produces:
       - application/json
       responses:

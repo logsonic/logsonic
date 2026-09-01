@@ -54,8 +54,14 @@ const About: FC = () => {
   const storageDir = systemInfo?.storage_info?.storage_directory;
   const storageSize = systemInfo?.storage_info?.storage_size_bytes;
 
+  // Server build identity wins; the bundle's package.json version is only
+  // the fallback while /info has not loaded (or in dev, where both say dev).
+  const serverVersion = systemInfo?.app?.version;
+  const versionLabel = serverVersion && serverVersion !== 'dev' ? serverVersion : `v${pkg.version}`;
+  const commit = systemInfo?.app?.commit;
+
   const staticRows: [string, string][] = [
-    ['Version', `v${pkg.version}`],
+    ['Version', commit ? `${versionLabel} (${commit.slice(0, 12)})` : versionLabel],
     ['License', 'MIT'],
     ['API endpoint', apiBase],
     ['Source', 'github.com/logsonic/logsonic'],

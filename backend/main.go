@@ -14,7 +14,37 @@ import (
 	"time"
 )
 
+// Build metadata. goreleaser injects these via -ldflags "-X main.version=…
+// -X main.commit=… -X main.date=…" (see .goreleaser.yaml); a plain `go build`
+// leaves the defaults, which is how a dev binary identifies itself.
+var (
+	version = "dev"
+	commit  = ""
+	date    = ""
+)
+
+// versionString is the single canonical rendering of the build identity,
+// shared by --version and the /api/v1/info payload.
+func versionString() string {
+	return fmt.Sprintf("logsonic %s (%s, %s, %s, %s/%s)",
+		version, orUnknown(commit), orUnknown(date), runtime.Version(), runtime.GOOS, runtime.GOARCH)
+}
+
+func orUnknown(s string) string {
+	if s == "" {
+		return "unknown"
+	}
+	return s
+}
+
 func main() {
+	// --version / -version: answer before any flag parsing, storage
+	// resolution, or server construction so it works in every context
+	// (packaging validators, doctor, a broken storage dir).
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-version" || os.Args[1] == "version") {
+		fmt.Println(versionString())
+		return
+	}
 	// mcp subcommand: logsonic mcp [--url http://localhost:8080]
 	// Runs the MCP stdio server so AI clients can query LogSonic.
 	// All other args are consumed by the regular server flag set below.
@@ -146,6 +176,9 @@ func main() {
 		AutoPort:      autoPort,
 		RetentionDays: retentionDays,
 		AllowedHosts:  allowedHosts,
+		Version:       version,
+		Commit:        commit,
+		BuildDate:     date,
 	}
 
 	// Try to create the server
@@ -228,6 +261,7 @@ func printUsage() {
 	fmt.Println("  -auto-port        If the port is busy, bind the next free port instead of failing (default true; use -auto-port=false to disable)")
 	fmt.Println("  -retention-days N Delete indexed logs older than N days (0 = keep everything)")
 	fmt.Println("  -allowed-hosts    Comma-separated extra Host header values to accept (only used with a non-loopback -host)")
+	fmt.Println("  -version          Print the build version and exit")
 	fmt.Println("  -help             Show this help message")
 	fmt.Println("\nEnvironment Variables:")
 	fmt.Println("  HOST                  Host address to bind to")

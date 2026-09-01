@@ -82,6 +82,14 @@ type Config struct {
 	// if this is non-empty, so LAN and Docker deployments keep working
 	// unchanged unless the operator opts in. See hostcheck.go.
 	AllowedHosts []string
+
+	// Version, Commit, BuildDate identify the binary (goreleaser ldflags;
+	// "dev" / "" for local builds). Exposed on /api/v1/info so the UI can
+	// show the server's version rather than its own bundle's, which makes an
+	// app-vs-CLI mismatch visible.
+	Version   string
+	Commit    string
+	BuildDate string
 }
 
 type Server struct {
@@ -171,6 +179,7 @@ func NewServer(cfg Config) (*Server, error) {
 
 	// Initialize handler
 	h := handlers.NewHandler(store, cfg.StoragePath)
+	h.Build = handlers.BuildInfo{Version: cfg.Version, Commit: cfg.Commit, BuildDate: cfg.BuildDate}
 	srv := &Server{
 		services: h,
 		store:    store,

@@ -45,6 +45,12 @@ func (h *Services) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	response := types.SystemInfoResponse{
 		Status: "success",
 	}
+	response.App.Version = h.Build.Version
+	if response.App.Version == "" {
+		response.App.Version = "dev"
+	}
+	response.App.Commit = h.Build.Commit
+	response.App.BuildDate = h.Build.BuildDate
 
 	// Define the StorageInfo type for consistent handling
 	type StorageInfoType struct {

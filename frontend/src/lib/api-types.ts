@@ -346,8 +346,15 @@ export interface TokenizerInfo {
   persistent_patterns?: string[];
 }
 
+export interface AppBuildInfo {
+  version?: string;
+  commit?: string;
+  build_date?: string;
+}
+
 export interface SystemInfoResponse {
   status?: string;
+  app?: AppBuildInfo;
   storage_info?: StorageInfo;
   system_info?: SystemInfo;
 }

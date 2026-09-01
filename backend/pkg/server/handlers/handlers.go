@@ -8,11 +8,20 @@ import (
 	"sync"
 )
 
+// BuildInfo identifies the running binary; set by the server from its
+// Config after NewHandler. Zero values render as "dev" / "unknown".
+type BuildInfo struct {
+	Version   string
+	Commit    string
+	BuildDate string
+}
+
 type Services struct {
 	storage storage.StorageInterface
 	Live    *TailManager
 
 	StoragePath string
+	Build       BuildInfo
 
 	// PatternTimestamps persists per-pattern Resolution alongside the
 	// log2grok library. Saved patterns thus restore their last-used

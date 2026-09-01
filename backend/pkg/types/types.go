@@ -190,7 +190,15 @@ type ErrorResponse struct {
 
 // SystemInfoResponse contains detailed information about the system and storage
 type SystemInfoResponse struct {
-	Status      string `json:"status"`
+	Status string `json:"status"`
+	// App identifies the server binary (from goreleaser ldflags). The UI
+	// prefers this over its own bundle version so a stale app shell or a
+	// mismatched CLI is visible in the status bar and About page.
+	App struct {
+		Version   string `json:"version"`
+		Commit    string `json:"commit,omitempty"`
+		BuildDate string `json:"build_date,omitempty"`
+	} `json:"app"`
 	StorageInfo struct {
 		TotalIndices     int      `json:"total_indices"`
 		AvailableDates   []string `json:"available_dates"`
