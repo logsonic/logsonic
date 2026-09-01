@@ -10,6 +10,14 @@ LogSonic is a local-first log analytics app for Windows, Mac, and Linux. One sel
 
 <img src="demo/demo.gif" alt="LogSonic demo: import logs, search them, then livestream rows with pause and resume" width="1000" />
 
+## New in v1.6.0
+
+- **Native macOS app.** Install a signed, notarized, and stapled `Logsonic.app` with Homebrew, then launch it from Applications, Spotlight, Launchpad, or Finder.
+- **Self-contained desktop experience.** The app starts LogSonic on an available loopback port, displays the UI in its own native window, and shuts down the server when you quit.
+- **Desktop controls when you need them.** Open the same session in a browser, inspect the server log, or use the bundled `logsonic` CLI without installing anything else.
+- **Faster large-log exploration.** Search results render before deferred chart metadata, responses can return only visible fields, and long tables keep only nearby rows mounted for smoother scrolling.
+- **Private by default.** The native app keeps its unauthenticated server bound to `127.0.0.1`, so it is not exposed to other devices on your network.
+
 ## Livestream
 
 Stream logs into LogSonic while the browser is open. `logsonic tail` can follow a server-side file or read stdin, publish rows to the UI in real time, keep indexing in the background, and let you pause/resume the browser feed without stopping ingestion.
@@ -32,7 +40,16 @@ Install on macOS with Homebrew:
 ```bash
 brew tap logsonic/logsonic
 brew install logsonic
-logsonic
+open -a Logsonic
+```
+
+Homebrew installs the signed and notarized native app into `/Applications` and also adds the `logsonic` CLI to your path. After installation, you can launch the app from Applications, Spotlight, Launchpad, or Finder. Use `logsonic -open` when you specifically want the browser-based CLI experience.
+
+Upgrade an existing installation with:
+
+```bash
+brew update
+brew upgrade logsonic
 ```
 
 Or download a pre-built binary from [GitHub Releases](https://github.com/logsonic/logsonic/releases), then open the URL printed by the server, usually:
@@ -63,10 +80,11 @@ For Linux, Windows, Docker, source builds, storage locations, and the macOS app 
 
 ## Features
 
+- Native macOS app with an embedded UI, automatic port selection, browser fallback, server logs, and graceful shutdown.
 - Format detection with [log2grok](https://github.com/logsonic/log2grok), including custom saved Grok patterns.
 - Multi-file import with per-file format confirmation.
 - Smart timestamp resolution for logs with missing years, timezones, or dates.
-- Bleve-backed full-text search with field shorthand, regex, exclusions, and boolean operators.
+- Bleve-backed full-text search with field shorthand, regex, exclusions, boolean operators, bounded pagination, and responsive rendering for large result sets.
 - Live tailing from stdin or server-side files.
 - MCP server for AI clients.
 - Saved local workspaces for recurring investigations.
