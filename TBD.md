@@ -8,6 +8,14 @@ Companion artifact (rendered version): https://claude.ai/code/artifact/ce5041ee-
 
 > **Executable work specs live in [`specs/`](specs/README.md)** — one self-contained spec per roadmap item (architecture decisions, step-by-step tasks, API contracts, and test cases), sized for a smaller agent to pick up. Start with [`specs/README.md`](specs/README.md) for the pickup-order table and mandatory dev-environment rules.
 
+## Work progress log
+
+Tracks what has actually been implemented against the pickup order in `specs/README.md`, so the next work session (human or agent) knows where to resume. Entries are dated and reference the spec + commit. Anything not listed here is **not started**. Issues found while implementing are logged in [`ISSUES.md`](ISSUES.md), not here.
+
+| Date | Spec | Status | Summary |
+|------|------|--------|---------|
+| 2026-09-01 | [now-01](specs/now-01-self-hosted-fonts.md) | ✅ Done | Google Fonts import removed; `--ls-font-sans`/`--ls-font-mono` and the Tailwind `fontFamily` config now resolve to the platform system stack. Verified zero `googleapis`/`gstatic` references in source, `index.html`, and a production build's `dist/`; all 177 frontend unit tests pass; eslint clean on every changed line. Commit `8250556` on `dev` (local only, not pushed). One pre-existing, unrelated issue surfaced during verification — see ISSUES.md. |
+
 ## Revision 2 changelog (2026-09-01)
 
 What changed versus revision 1, and why. Everything below is grounded in a read of the current code, not in general product taste.
