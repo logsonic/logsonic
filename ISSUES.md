@@ -6,6 +6,20 @@ Process: every candidate entry goes through the remediation pass in [`specs/WORK
 
 ---
 
+## 2026-09-02 — CI workflows are committed but have never executed (now-11 phase 1)
+
+**Severity:** Medium for confidence, zero for risk. Nothing runs until something is pushed, and the standing rule for this branch is never push.
+
+**What:** `.github/workflows/ci.yml` and `docs.yml` were validated as YAML and every job's *commands* were run on this machine (see the TBD row for the list), but GitHub Actions has never executed them. Runner-environment differences are the usual first-run failures: `actions/setup-go` caching paths, `npx playwright install --with-deps` on Ubuntu, `test-macos-app.sh` on a `macos-latest` image with a different Xcode, the `goreleaser-action` version resolver, and `git diff` behavior on the shallow checkout the `web` job avoids with `fetch-depth: 0`.
+
+**What a human needs to do:** push `dev` (or open a PR from it) and watch the first run. Expect to iterate once or twice on runner details; every job's commands were run locally, and the changed-files lint step's diff logic was exercised locally against real commit ranges from both the repo root and `frontend/` (it initially had a pathspec bug that made it a silent no-op — caught in review, fixed before commit). Until that happens, "CI gate" in the roadmap means "designed and locally verified," not "protecting `main`." Branch protection (required checks `go`, `web`, `swift`, `snapshot`, `e2e`) is a repo setting to flip after the first green run.
+
+**Also noted:** goreleaser's `before.hooks` copy `../README.md` into `backend/README.md`, which is a **tracked** file that is also listed in `.gitignore` — so every snapshot build dirties the working tree with a copy of the root README. Harmless in CI (the Swagger drift check is scoped to `backend/docs/`), confusing locally. Candidate fix: `git rm --cached backend/README.md backend/LICENSE` so the ignore rule actually applies; that belongs in a hygiene commit, not here.
+
+**Two gates are intentionally non-blocking** (`continue-on-error`) in the `web` job until their pre-existing baselines are cleared: `tsc --noEmit` (415 errors, almost all `noUnusedLocals` in `components/ui/*` — the shadcn scaffolding imports every React hook) and eslint on changed files (the 6,272-error baseline from the lint entry below). Both counts land in the job summary so they can be ratcheted; flipping either to blocking is a one-line change once the number is zero.
+
+---
+
 ## 2026-09-02 — GitHub issue #10 reconciliation needs a human to run it (now-07 task 4)
 
 **Severity:** Low. Public-facing housekeeping; nothing in the code depends on it.
@@ -74,7 +88,7 @@ Expected: the app opens on the Import page with `apache.log` listed in the wizar
 
 ## Notes on process (not an issue, for context)
 
-- Work packages so far: `now-01` (Done), `now-09` phase 1 (Partial — phase 2 token is v1.8), `now-07` (Partial 6/7 — only the public GitHub action above is outstanding). The first two were picked up in interactive sessions; the review that produced the older entries is codified as [`specs/WORKFLOW.md`](specs/WORKFLOW.md), and `now-07` was the first package run through it (three advisor gates, consumer sweep, HTTP-level regression test).
+- Work packages so far: `now-01` (Done), `now-09` phase 1 (Partial — phase 2 token is v1.8), `now-07` (Partial 6/7 — only the public GitHub action above is outstanding), `now-11` phase 1 (Partial — the PR gate is committed and locally verified; unexecuted until a push, see above). The first two were picked up in interactive sessions; the review that produced the older entries is codified as [`specs/WORKFLOW.md`](specs/WORKFLOW.md), and `now-07` was the first package run through it (three advisor gates, consumer sweep, HTTP-level regression test).
 - All commits are on the local `dev` branch only — **not pushed to `origin`** per explicit instruction. `origin` has no `dev` branch.
 - No attribution trailers on any commit, per explicit instruction for this repo.
 - `now-09` phase 2 (per-launch bearer token, protecting against other local users on a shared machine) was **not** attempted. "now-09 Partial" must not be read as "the loopback API is authenticated"; it still isn't.
