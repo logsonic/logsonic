@@ -1,38 +1,64 @@
 # Issues for supervisor review
 
-Findings surfaced while implementing roadmap work packages that need a human decision, or that are worth knowing about even though they didn't block the work in question. Newest first. Each entry names the work package it came from and its severity from the implementer's perspective — **not** a claim about how urgent it actually is; that's the supervisor's call.
+Findings surfaced while implementing roadmap work packages that need a human decision, or that are worth knowing about even though they didn't block the work in question. Newest first. Each entry names the work package it came from and its severity from the implementer's perspective — **not** a claim about how urgent it actually is; that's the supervisor's call. Entries that were remediated stay here, marked **Closed**, so the trail is visible.
+
+Process: every candidate entry goes through the remediation pass in [`specs/WORKFLOW.md`](specs/WORKFLOW.md) §5 first (root-cause with a 10-minute budget, measure before choosing, classify fixable-in-scope / fixable-safe / needs-human). Only the third class lands here as an open item.
 
 ---
 
-## 2026-09-01 — Repo-wide eslint/prettier quote-style mismatch (found during now-01)
+## 2026-09-01 — `logsonicfile:` in CSP fixed but unverified in the native app (now-09 review)
 
-**Severity:** Low urgency, but blocks `npm run lint` as a usable pass/fail gate for every future work package.
+**Severity:** Low-medium. The fix is almost certainly right, but "almost certainly" is not the standard for a path that gates dock-drop import in the shipped Mac app.
 
-**What:** `npm run lint` currently reports **6,355 errors** across the frontend, the overwhelming majority of them `prettier/prettier` "replace double quotes with single quotes" on lines I never touched (`vite.config.ts`, `vitest.config.ts`, most of `tailwind.config.ts`, and almost certainly the rest of `src/`, based on the density in `tailwind.config.ts` alone — 1 error roughly every 1–2 lines).
+**What:** The now-09 CSP (`connect-src 'self'`) blocked two fetches the native shell depends on. Both were fixed in commit `1842921` by adding `blob: logsonicfile:` to `connect-src`:
 
-**Why it matters:** The project's own eslint config (via the `prettier/prettier` rule) wants single-quoted strings; the codebase overwhelmingly uses double quotes. That means either the eslint config is wrong for this codebase's actual convention, or the codebase has never been run through `--fix` since prettier was added. Either way, `npm run lint` cannot currently distinguish "this PR introduced a real problem" from "this file has always looked like this" — every future spec's lint step will show thousands of pre-existing failures alongside anything genuinely new.
+- `blob:` — the shell's download hook (`blobDownloadHookJS` in `LogsonicApp.swift`) does `fetch(anchor.href)` on the export blob. **Confirmed both ways** in Chrome against the embedded build: under the old policy a `securitypolicyviolation` event fired with `violatedDirective=connect-src, blockedURI=blob` and the fetch failed; under the new policy the fetch returns 200 with no event.
+- `logsonicfile:` — dock-drop / Finder "Open With" hands the SPA `logsonicfile://<id>` URLs that `FileSelection.tsx` fetches. Same CSP rule (a non-http scheme never matches `'self'`), same fix — but **not verified**: the ad-hoc dev app was built and launched with a file, and the running child served the new header, but the import wizard's state can only be seen on screen (it does not auto-import, so there is no server-side signal), and desktop-control permission is not granted on this machine.
 
-**What I did:** Verified my own three changed files (`index.html`, `frontend/src/index.css`, `tailwind.config.ts`) are lint-clean on every line I touched — confirmed by running eslint scoped to `tailwind.config.ts` and diffing which line numbers still error before/after my edit. I did **not** run `eslint --fix` repo-wide, since that would silently rewrite ~6,000 lines across files unrelated to the font work and make this PR unreviewable.
+**Manual step (30 seconds):**
 
-**Suggested next step:** Either (a) run `eslint --fix` (or `prettier --write`) across the repo as its own dedicated commit with nothing else in it, or (b) change the prettier config to `singleQuote: false` if double quotes are the intended house style. Either fix is out of scope for any single roadmap item — it's infrastructure, not a feature. Candidate spec: fold into `now-11-ci-quality-gate.md`'s CI setup, since CI should not have to swallow 6,355 lint errors as "expected."
+```bash
+# Build the Go binary into a scratch path and pass it as $1: dev-macos-app.sh would
+# otherwise rebuild into backend/logsonic (gitignored, but a stale 68 MB binary there
+# is easy to mistake for a current one later), then build the ad-hoc app.
+go build -C /Users/akashgoswami/src/logsonic/backend -o /tmp/logsonic-scratch/logsonic .
+LOGSONIC_DEV_NO_OPEN=1 bash /Users/akashgoswami/src/logsonic/backend/scripts/dev-macos-app.sh /tmp/logsonic-scratch/logsonic
+open --env STORAGE_PATH=/tmp/logsonic-scratch/store -a /Users/akashgoswami/src/logsonic/backend/dist-dev/Logsonic.app /Users/akashgoswami/src/logsonic/sample-logs/apache.log
+```
+
+(`backend/pkg/static/dist` must already hold a current `npm run build:copy`; the app's own server picks a free port.)
+
+Expected: the app opens on the Import page with `apache.log` listed in the wizard. If instead the page is empty (the fetch was refused), the fallback is to have the shell mark its own requests — `webView.customUserAgent` with a `Logsonic/<version>` token — and skip the CSP header for that user agent in `serveWithMimeType`. Spec `now-08` retires the `logsonicfile:` path entirely, so this is a bridge, not a permanent exception.
 
 ---
 
-## 2026-09-01 — CSP not manually verified in a live browser (now-09)
+## 2026-09-01 — Frontend lint: what's left after the config fix, and one house-style decision (from now-01; remediated in part)
 
-**Severity:** Low — static evidence is strong, but this is a "please click through it once" item, not a "please review my reasoning" item.
+**Closed part (commit `7641db7`):** The original entry blamed a repo-wide quote-style mismatch on the codebase. The root cause was two config files disagreeing: `eslint.config.js` carried an inline `prettier/prettier` options object with `singleQuote: true` while `.prettierrc` said `false`, so `npm run lint` and `npm run format` enforced opposite styles and every line matched one of them. The inline options are gone; `.prettierrc` is now the single source of truth. Which value to keep was measured, not guessed: `singleQuote: false` → 6,352 prettier errors, `true` → 5,425, so `.prettierrc` now says `true` (the codebase leans single, and single is what the lint gate had always enforced). Separately, all 80 `no-undef` errors were Node scripts (`e2e-*.mjs`, `scripts/analyze-imports.js`) linted with browser-only globals; a files-scoped globals block fixed them: 80 → 0.
 
-**What:** now-09 phase 1 added a `Content-Security-Policy` header (`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; ...`) to the SPA's HTML response. I verified statically that the production build emits no inline `<script>` tags (only `<script type="module" src="...">`), which is the thing `script-src 'self'` (no `'unsafe-inline'`) would break if present. I did **not** start the dev servers and click through the app in an actual browser to confirm zero `Refused to ...` console violations end-to-end — the spec's own test table lists this as S7, a Playwright E2E check, which is explicitly deferred to the `now-11-ci-quality-gate.md` work (it needs the embedded build + a browser automation harness, which is its own setup).
+**Open decision — Severity: low urgency, but it keeps `npm run lint` from being a pass/fail gate:**
 
-**What I did:** Confirmed via `grep` on the built `dist/index.html` that no inline scripts exist, confirmed `style-src` includes `'unsafe-inline'` (Radix/Tailwind inject `style="..."` attributes and `<style>` tags at runtime, which this permits), and confirmed `connect-src 'self'` covers the app's only same-origin `fetch`/`EventSource` (SSE) calls by reading the API client code.
+| Category | Count | What it would take |
+|----------|------:|--------------------|
+| `prettier/prettier` drift | 5,425 across 134 of 147 files | One `npm run format` commit. Semantics-preserving and verifiable (vitest + build), but it rewrites most of `src/`, destroys `git blame` continuity, and conflicts with every open feature branch (`v2`, `feat/*`, `live-tailing`, …). |
+| `@typescript-eslint/no-unused-vars` | 537 | Real code deletions — not mechanical. |
+| `import/order` | 286 | `eslint --fix` can do it, but it reorders imports in ~every file (same blame/conflict cost as formatting). |
+| Other (`no-explicit-any` 29, misc.) | ~40 | Case by case. |
 
-**Suggested next step:** Before this ships, run the dev servers (`cd backend && go run . -port 8080`, `cd frontend && PORT=8081 npm run dev`), open the app, and watch DevTools console for CSP violations while exercising import → search → theme toggle → export — the exact S7 flow. If `now-11`'s Playwright network-audit harness lands first, extend it to also assert zero CSP violation messages, per the spec's decision that S7 replaces the manual DevTools step.
+**Recommendation:** decide the format commit together with a branch-merge plan — do it right after the open branches are merged or abandoned, as a single commit with nothing else in it, and have `now-11`'s CI gate enforce lint on *changed files only* until the baseline is zero. Until then, the WORKFLOW.md rule applies: compare per-file error counts before/after, and require zero errors on added lines.
+
+---
+
+## 2026-09-01 — CSP not manually verified in a live browser (now-09) — **Closed**
+
+**Closed 2026-09-01 in the now-09 review.** The embedded build was run against scratch storage, seeded with 300 rows of `sample-logs/apache.log` through the ingest API, and loaded in Chrome with a `securitypolicyviolation` listener installed in-page (the console-messages tool does not surface CSP reports — noted in WORKFLOW.md). No violations observed during interactions (a search, two theme toggles, an export click). Load-time blocks were ruled out functionally rather than by the listener — it was installed after load — because the page rendered, styles applied, and the Recharts histogram drew, which a blocking `script-src`/`style-src` violation would have prevented. The export anchor itself was not observed by the listener harness (the button match may have hit a different control), so the blob-download step was verified separately via the direct blob fetch described in the entry above — which is also how the `blob:` regression was found.
 
 ---
 
 ## Notes on process (not an issue, for context)
 
-- These work packages (`now-01`, `now-09` phase 1) were picked up in a single interactive session per the pickup order in `specs/README.md`, not via a scheduled/recurring agent. TBD.md's "Work progress log" section is the source of truth for what's been implemented; update it (not this file) when a spec is completed.
-- Commits `8250556` (now-01) and `81bbeaa` (now-09 phase 1), plus the roadmap-docs commit and this file's own doc-update commits, are on the local `dev` branch only — **not pushed to `origin`** per explicit instruction. `origin` has no `dev` branch yet.
-- No attribution trailer was added to any commit message, per explicit instruction for this session (this deviates from the standing Claude Code convention of appending `Co-Authored-By`/`Claude-Session` trailers — noted here so the deviation is visible, not because it's a problem).
-- `now-09`'s phase 2 (per-launch bearer token, protecting against other local users on a shared machine) is v1.8 scope and was **not** attempted here — phase 1 only closes the DNS-rebinding gap. Don't read "now-09 done" as "the loopback API is now authenticated"; it still isn't.
+- Work packages so far: `now-01` (Done), `now-09` phase 1 (Partial — phase 2 token is v1.8). Both were picked up in interactive sessions per the pickup order; the review that produced the entries above ran after the second one and is now codified as [`specs/WORKFLOW.md`](specs/WORKFLOW.md).
+- All commits are on the local `dev` branch only — **not pushed to `origin`** per explicit instruction. `origin` has no `dev` branch.
+- No attribution trailers on any commit, per explicit instruction for this repo.
+- `now-09` phase 2 (per-launch bearer token, protecting against other local users on a shared machine) was **not** attempted. "now-09 Partial" must not be read as "the loopback API is authenticated"; it still isn't.
+- Search sanity note for future testers: LogHub's `sample-logs/apache.log` is an Apache *error* log (`[notice] jk2_init() …`), not an access log. Querying `GET` against it returns 0 hits by design; `notice` returns 211. Don't mistake that for a search bug.
