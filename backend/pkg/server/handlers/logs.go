@@ -29,6 +29,8 @@ import (
 // @Param end_date query string false "End date for log retrieval (RFC3339 format)"
 // @Param query query string false "Optional search query to filter logs"
 // @Param _src query string false "Optional comma-separated source filter"
+// @Param fields query string false "Optional comma-separated fields to return"
+// @Param include_distribution query boolean false "Include chart distribution metadata (default: true)"
 // @Success 200 {object} types.LogResponse "Logs with pagination, sorting, and time distribution metadata"
 // @Failure 400 {object} types.ErrorResponse "Bad request due to invalid parameters"
 // @Failure 500 {object} types.ErrorResponse "Internal server error"
@@ -113,6 +115,22 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 
 	// Handle optional search query
 	searchQuery := query.Get("query")
+	requestedFields := parseRequestedFields(query.Get("fields"))
+	includeDistribution := true
+	if raw := query.Get("include_distribution"); raw != "" {
+		parsed, parseErr := strconv.ParseBool(raw)
+		if parseErr != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(types.ErrorResponse{
+				Status:  "error",
+				Error:   "Invalid include_distribution parameter",
+				Code:    "INVALID_PARAMETER",
+				Details: "include_distribution must be true or false",
+			})
+			return
+		}
+		includeDistribution = parsed
+	}
 
 	// Set default date range (1 year ago to now)
 	now := time.Now()
@@ -211,14 +229,16 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 
 	if sortBy == "timestamp" {
 		pageResult, searchErr := h.storage.SearchPage(r.Context(), storagepkg.SearchOptions{
-			Query:     searchQuery,
-			StartDate: startDate,
-			EndDate:   endDate,
-			Sources:   sources,
-			Limit:     limit,
-			Offset:    offset,
-			SortBy:    sortBy,
-			SortOrder: sortOrder,
+			Query:            searchQuery,
+			StartDate:        startDate,
+			EndDate:          endDate,
+			Sources:          sources,
+			Fields:           requestedFields,
+			Limit:            limit,
+			Offset:           offset,
+			SortBy:           sortBy,
+			SortOrder:        sortOrder,
+			SkipDistribution: !includeDistribution,
 		})
 		err = searchErr
 		if err == nil {
@@ -252,7 +272,9 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 				endIndex = 0
 			}
 			allLogs, availableColumns = sortLogs(allLogs, sortBy, sortOrder)
-			logDistributionEntries, _ = calculateLogDistribution(allLogs)
+			if includeDistribution {
+				logDistributionEntries, _ = calculateLogDistribution(allLogs)
+			}
 			pageLogs = allLogs[offset:endIndex]
 		}
 	}
@@ -284,6 +306,9 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 		offset = 0
 		pageLogs = []map[string]interface{}{}
 	}
+	if len(requestedFields) > 0 && len(pageLogs) > 0 {
+		pageLogs = projectLogFields(pageLogs, requestedFields)
+	}
 
 	totalTime := time.Since(startTime)
 
@@ -305,6 +330,47 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 		AvailableColumns: availableColumns,
 		LogDistribution:  logDistributionEntries,
 	})
+}
+
+func parseRequestedFields(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	fields := make([]string, 0)
+	for _, field := range strings.Split(raw, ",") {
+		field = strings.TrimSpace(field)
+		if field == "" || field == "*" || field == "_all" {
+			continue
+		}
+		if _, ok := seen[field]; ok {
+			continue
+		}
+		seen[field] = struct{}{}
+		fields = append(fields, field)
+	}
+	return fields
+}
+
+func projectLogFields(logs []map[string]interface{}, fields []string) []map[string]interface{} {
+	allowed := make(map[string]struct{}, len(fields)+3)
+	for _, field := range fields {
+		allowed[field] = struct{}{}
+	}
+	for _, field := range []string{"_id", "_src", "_raw", "timestamp"} {
+		allowed[field] = struct{}{}
+	}
+	projected := make([]map[string]interface{}, len(logs))
+	for i, log := range logs {
+		row := make(map[string]interface{}, len(allowed))
+		for key, value := range log {
+			if _, ok := allowed[key]; ok {
+				row[key] = value
+			}
+		}
+		projected[i] = row
+	}
+	return projected
 }
 
 // calculateLogDistribution calculates time-based distribution of logs

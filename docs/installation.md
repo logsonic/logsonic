@@ -33,12 +33,20 @@ Linux users should use the pre-built binary, Docker, or build from source.
 Whether installed via Homebrew or from the release `.zip`, **Logsonic.app** lives in `/Applications`.
 
 1. Open it from Applications, Spotlight, Launchpad, or Finder.
-2. The app picks the first free port starting at 8080 and opens the web UI in your default browser.
-3. The app window shows the running server log. Use **Open in Browser** to reopen the UI and **Quit** to stop the server.
+2. The app picks the first free port starting at 8080 and loads the UI in its own window.
+3. Use **View → Server Log** for the Go process output, **View → Open in Browser** to open the same UI in a browser, and **Quit** (or close the window) to stop the server.
 
-Closing only the browser tab leaves the server running. Press `Cmd+Q`, click **Quit**, or close the app window to stop it gracefully.
+Closing the app window stops the server. Press `Cmd+Q` or close the window to shut down gracefully.
 
-The app stores indexed data under `~/Library/Application Support/Logsonic`. The `Logsonic.app` launcher always auto-selects a port and opens the browser. The `logsonic` CLI serves on the first free port starting at `http://localhost:8080` and does not open a browser unless you pass `-open`.
+The app stores indexed data under `~/Library/Application Support/Logsonic`. The `Logsonic.app` launcher always auto-selects a port and shows the UI in-app. To use a browser instead:
+
+```bash
+open -a Logsonic --args --browser
+# or
+LOGSONIC_BROWSER=1 /Applications/Logsonic.app/Contents/MacOS/LogsonicApp
+```
+
+To skip the app window entirely, run the CLI: `logsonic -open` (or `logsonic -browser`). It serves on the first free port starting at `http://localhost:8080`.
 
 ## Pre-Built Binary
 
@@ -82,7 +90,7 @@ Removing the app does not delete indexed data. To purge it, run `brew uninstall 
 
 ### Prerequisites
 
-- Go 1.25.7 or later
+- Go 1.26.6 or later
 - Node.js 20 or later
 - npm
 

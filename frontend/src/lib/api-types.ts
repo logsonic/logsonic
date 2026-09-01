@@ -362,4 +362,8 @@ export interface LogQueryParams {
   end_date?: string;
   query?: string;
   _src?: string;
-} 
+  /** Comma-separated response fields; omitted on the first discovery search. */
+  fields?: string;
+  /** Defer the chart aggregation so the first result rows are not blocked by it. */
+  include_distribution?: boolean;
+}

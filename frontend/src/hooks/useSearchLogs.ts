@@ -1,4 +1,5 @@
 import { LogQueryParams, LogResponse } from '@/lib/api-types';
+import { getLogs } from '@/lib/api-client';
 import { calculateRelativeDateRange } from '@/lib/date-utils';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
@@ -16,14 +17,17 @@ export const useSearchLogs = (
   const logResultStore = useLogResultStore();
   const { execute: fetchLogs, isLoading: apiLoading, performanceMetrics } = useGetLogs();
   const activeSearchRef = useRef<AbortController | null>(null);
+  const activeMetadataRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => {
     activeSearchRef.current?.abort();
+    activeMetadataRef.current?.abort();
   }, []);
 
   // Create a stable search function that doesn't change on every render
   const searchLogs = useCallback(async () => {
     activeSearchRef.current?.abort();
+    activeMetadataRef.current?.abort();
     const controller = new AbortController();
     activeSearchRef.current = controller;
     try {
@@ -46,13 +50,20 @@ export const useSearchLogs = (
       // The backend always expects UTC timestamps regardless of the displayed timezone
       const params : LogQueryParams = {
         query: store.searchQuery,
-        _src: store.sources.join(','),
+        _src: store.sourcesInitialized ? store.sources.join(',') : undefined,
         start_date: startDate.toISOString(), // Already in UTC format
         end_date: endDate.toISOString(), // Already in UTC format
         limit: store.pageSize,
         offset: (store.currentPage - 1) * store.pageSize,
         sort_by: store.sortBy,
-        sort_order: store.sortOrder
+        sort_order: store.sortOrder,
+        // The first request discovers the complete schema. Once columns are
+        // selected, project subsequent responses to the visible fields to
+        // reduce JSON size and client parsing/render work.
+        fields: store.selectedColumns.length > 0
+          ? store.selectedColumns.join(',')
+          : undefined,
+        include_distribution: false,
       };
       
       // Execute the search
@@ -102,6 +113,38 @@ export const useSearchLogs = (
         if (onSearchComplete) {
           onSearchComplete(result);
         }
+
+        // Chart facets roughly double a large-index request and are not needed
+        // to render the first result page. Fetch them after the rows are
+        // visible, then merge only the metadata into the still-current result.
+        const metadataController = new AbortController();
+        activeMetadataRef.current = metadataController;
+        void getLogs({
+          ...params,
+          limit: 1,
+          offset: 0,
+          sort_by: 'timestamp',
+          sort_order: 'desc',
+          fields: 'timestamp,_src',
+          include_distribution: true,
+        }, metadataController.signal).then((metadata) => {
+          if (activeMetadataRef.current !== metadataController) return;
+          const current = useLogResultStore.getState().logData;
+          if (!current) return;
+          useLogResultStore.getState().setLogData({
+            ...current,
+            total_count: metadata.total_count,
+            log_distribution: metadata.log_distribution,
+          });
+        }).catch((metadataError) => {
+          if (!metadataController.signal.aborted) {
+            console.warn('Failed to load log distribution:', metadataError);
+          }
+        }).finally(() => {
+          if (activeMetadataRef.current === metadataController) {
+            activeMetadataRef.current = null;
+          }
+        });
         
         return result;
       }

@@ -4,23 +4,116 @@
 // event loop. Launched directly from a .app bundle it has no Dock presence and
 // macOS flags it "not responding" (Force Quit only — a SIGKILL with no graceful
 // shutdown). This AppKit shell is the bundle's CFBundleExecutable instead: it
-// shows the responsive LogSonic Dock icon and a small status window, runs the Go
-// server (Contents/MacOS/logsonic) as a child, streams its log output, opens the
-// web UI, and on Quit / window-close sends the child SIGINT so it drains the
-// HTTP server and closes its indices cleanly.
+// shows the responsive LogSonic Dock icon, hosts the embedded web UI in a
+// WKWebView, runs the Go server (Contents/MacOS/logsonic) as a child, and on
+// Quit / window-close sends the child SIGINT so it drains the HTTP server and
+// closes its indices cleanly.
+//
+// The SPA is served by the Go process (go:embed). By default the webview loads
+// http://127.0.0.1:<port> so API calls stay same-origin. Pass --browser (or
+// LOGSONIC_BROWSER=1) to open the system browser instead and keep only the
+// server-log window. View → Open in Browser always works. External links leave
+// the app. The CLI (`logsonic -open`) never uses this shell.
 //
 // Build (universal) — see scripts/app-macos.sh:
-//   swiftc -O -target arm64-apple-macos11  LogsonicApp.swift -o app-arm64
-//   swiftc -O -target x86_64-apple-macos11 LogsonicApp.swift -o app-x86_64
+//   swiftc -O -target arm64-apple-macos11  -framework AppKit -framework WebKit \
+//     ListeningURL.swift LogsonicApp.swift -o app-arm64
+//   swiftc -O -target x86_64-apple-macos11 -framework AppKit -framework WebKit \
+//     ListeningURL.swift LogsonicApp.swift -o app-x86_64
 //   lipo -create app-arm64 app-x86_64 -o LogsonicApp
 
 import AppKit
+import Darwin
 import Foundation
+import WebKit
 
 // LogSonic brand purple (#6d5dfc), matching the app icon.
 let brandColor = NSColor(srgbRed: 0x6D / 255.0, green: 0x5D / 255.0, blue: 0xFC / 255.0, alpha: 1)
 let consoleBG = NSColor(srgbRed: 0x17 / 255.0, green: 0x17 / 255.0, blue: 0x1F / 255.0, alpha: 1)
 let consoleFG = NSColor(srgbRed: 0xCF / 255.0, green: 0xD2 / 255.0, blue: 0xDC / 255.0, alpha: 1)
+private let maxConsoleCharacters = 1_000_000
+private let trimmedConsoleCharacters = 750_000
+private let maxBufferedLogLineCharacters = 64 * 1024
+private let maxNativeDropBytes = 512 * 1024 * 1024
+private let maxServerRestarts = 3
+
+private let blobDownloadHookJS = """
+(function() {
+  if (window.__logsonicDownloadHook) return;
+  window.__logsonicDownloadHook = true;
+  function intercept(anchor) {
+    if (!anchor || !anchor.download || !anchor.href || anchor.href.indexOf('blob:') !== 0) return false;
+    var handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.logsonicDownload;
+    if (!handler) return false;
+    fetch(anchor.href).then(function(r) { return r.blob(); }).then(function(blob) {
+      var reader = new FileReader();
+      reader.onloadend = function() {
+        var result = typeof reader.result === 'string' ? reader.result : '';
+        var comma = result.indexOf(',');
+        handler.postMessage({ filename: anchor.download || 'download', data: comma >= 0 ? result.slice(comma + 1) : '' });
+      };
+      reader.readAsDataURL(blob);
+    });
+    return true;
+  }
+  document.addEventListener('click', function(e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[download]') : null;
+    if (intercept(a)) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
+  var proto = HTMLAnchorElement.prototype;
+  var origClick = proto.click;
+  proto.click = function() {
+    if (intercept(this)) return;
+    return origClick.call(this);
+  };
+})();
+"""
+
+final class NativeFileSchemeHandler: NSObject, WKURLSchemeHandler {
+    private var files: [String: URL] = [:]
+    private let lock = NSLock()
+
+    func register(_ file: URL) -> String {
+        let id = UUID().uuidString
+        lock.lock(); files[id] = file; lock.unlock()
+        return id
+    }
+
+    func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        guard let id = urlSchemeTask.request.url?.host else {
+            urlSchemeTask.didFailWithError(NSError(domain: "logsonic", code: 1))
+            return
+        }
+        lock.lock(); let file = files[id]; lock.unlock()
+        guard let file else {
+            urlSchemeTask.didFailWithError(NSError(domain: "logsonic", code: 2))
+            return
+        }
+        do {
+            let attrs = try FileManager.default.attributesOfItem(atPath: file.path)
+            if let size = attrs[.size] as? NSNumber, size.intValue > maxNativeDropBytes {
+                urlSchemeTask.didFailWithError(NSError(domain: "logsonic", code: 3, userInfo: [
+                    NSLocalizedDescriptionKey: "File too large to open via Dock",
+                ]))
+                return
+            }
+            let data = try Data(contentsOf: file, options: .mappedIfSafe)
+            guard let reqURL = urlSchemeTask.request.url else { return }
+            let resp = HTTPURLResponse(url: reqURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
+                "Content-Type": "application/octet-stream",
+                "Access-Control-Allow-Origin": "*",
+                "Content-Length": "\(data.count)",
+            ])!
+            urlSchemeTask.didReceive(resp)
+            urlSchemeTask.didReceive(data)
+            urlSchemeTask.didFinish()
+        } catch {
+            urlSchemeTask.didFailWithError(error)
+        }
+    }
+
+    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
+}
 
 // MARK: - Status pill (colored dot + label in a rounded chip)
 
@@ -64,7 +157,6 @@ final class StatusPill: NSView {
     func set(_ text: String, color: NSColor) {
         label.stringValue = text
         dot.layer?.backgroundColor = color.cgColor
-        // Soft glow ring around the dot.
         dot.layer?.shadowColor = color.cgColor
         dot.layer?.shadowOpacity = 0.9
         dot.layer?.shadowRadius = 3
@@ -74,34 +166,86 @@ final class StatusPill: NSView {
 
 // MARK: - App delegate
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+private func envTrue(_ key: String) -> Bool {
+    switch (ProcessInfo.processInfo.environment[key] ?? "").lowercased() {
+    case "1", "true", "yes", "on": return true
+    default: return false
+    }
+}
+
+private func wantsBrowserUI() -> Bool {
+    if envTrue("LOGSONIC_BROWSER") { return true }
+    return CommandLine.arguments.contains { $0 == "--browser" || $0 == "-browser" }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate, WKScriptMessageHandler {
     private var window: NSWindow!
+    private var webView: WKWebView?
+    private var useBrowser = false
+    private let overlay = NSTextField(labelWithString: "Starting server…")
     private let console = NSTextView()
     private let status = StatusPill()
-    private let urlField = NSTextField(labelWithString: "Starting…")
-    private var openButton: NSButton!
-    private var copyButton: NSButton!
     private var copyLogsButton: NSButton!
+    private var logWindow: NSWindow?
+    private var showLogMenuItem: NSMenuItem!
+    private let nativeFiles = NativeFileSchemeHandler()
+    private var lockFD: Int32 = -1
+    private var loadAttempts = 0
+    private var restartCount = 0
 
-    // Storage info bar
-    private let storagePathLabel = NSTextField(labelWithString: "Index: detecting…")
-    private let storageSizeLabel = NSTextField(labelWithString: "")
-    private var revealButton: NSButton!
     private var storageDir: String?
 
     private var process: Process?
     private var serverURL: String?
+    private var parsedServerURL: URL?
+    private var pendingNativeFilePayloads: [(urls: [String], names: [String])] = []
     private var lineBuffer = ""
     private var quitting = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        useBrowser = wantsBrowserUI()
+        if !acquireInstanceLock() {
+            activateExistingInstance()
+            NSApp.terminate(nil)
+            return
+        }
         buildMenu()
         buildWindow()
         status.set("Starting…", color: .systemOrange)
         startServer()
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        window?.makeKeyAndOrderFront(nil)
+        return true
+    }
+
+    func application(_ sender: NSApplication, openFile filename: String) -> Bool {
+        openNativeFiles([filename])
+        return true
+    }
+
+    func application(_ sender: NSApplication, openFiles filenames: [String]) {
+        openNativeFiles(filenames)
+        sender.reply(toOpenOrPrint: .success)
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if sender === window {
+            NSApp.terminate(nil)
+            return false
+        }
+        return true
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        if notification.object as? NSWindow === logWindow {
+            logWindow = nil
+            showLogMenuItem?.state = .off
+        }
+    }
 
     // MARK: UI construction
 
@@ -116,144 +260,146 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(withTitle: "Quit LogSonic", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
 
-        // Edit menu — the standard selectors route to the first responder (the
-        // console text view), so ⌘C / ⌘A and right-click → Copy work on the logs.
+        let fileItem = NSMenuItem()
+        mainMenu.addItem(fileItem)
+        let fileMenu = NSMenu(title: "File")
+        fileMenu.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose), keyEquivalent: "w")
+        fileItem.submenu = fileMenu
+
         let editItem = NSMenuItem()
         mainMenu.addItem(editItem)
         let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo", action: #selector(UndoManager.undo), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "Redo", action: #selector(UndoManager.redo), keyEquivalent: "Z")
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editMenu.addItem(NSMenuItem.separator())
         editMenu.addItem(withTitle: "Copy All Logs", action: #selector(copyLogs), keyEquivalent: "C")
         editItem.submenu = editMenu
 
+        let viewItem = NSMenuItem()
+        mainMenu.addItem(viewItem)
+        let viewMenu = NSMenu(title: "View")
+        viewMenu.addItem(withTitle: "Reload", action: #selector(reloadUI), keyEquivalent: "r")
+        viewMenu.addItem(withTitle: "Open in Browser", action: #selector(openInBrowser), keyEquivalent: "")
+        viewMenu.addItem(withTitle: "Copy Server URL", action: #selector(copyURL), keyEquivalent: "")
+        viewMenu.addItem(NSMenuItem.separator())
+        let logItem = viewMenu.addItem(withTitle: "Server Log", action: #selector(toggleLogWindow), keyEquivalent: "l")
+        logItem.state = .off
+        logItem.isEnabled = !useBrowser
+        showLogMenuItem = logItem
+        viewMenu.addItem(withTitle: "Reveal Index in Finder", action: #selector(revealInFinder), keyEquivalent: "")
+        viewItem.submenu = viewMenu
+
         NSApp.mainMenu = mainMenu
     }
 
-    private func brandBadge() -> NSView {
-        let badge = NSView()
-        badge.wantsLayer = true
-        badge.layer?.backgroundColor = brandColor.cgColor
-        badge.layer?.cornerRadius = 8
-        badge.translatesAutoresizingMaskIntoConstraints = false
-        badge.layer?.shadowColor = brandColor.cgColor
-        badge.layer?.shadowOpacity = 0.5
-        badge.layer?.shadowRadius = 6
-        badge.layer?.shadowOffset = NSSize(width: 0, height: -1)
-
-        let glyph: NSView
-        let cfg = NSImage.SymbolConfiguration(pointSize: 17, weight: .bold)
-        if let img = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: "LogSonic")?
-            .withSymbolConfiguration(cfg) {
-            let iv = NSImageView(image: img)
-            iv.contentTintColor = .white
-            glyph = iv
-        } else {
-            let l = NSTextField(labelWithString: "⚡")
-            l.font = .systemFont(ofSize: 16, weight: .bold)
-            l.textColor = .white
-            glyph = l
-        }
-        glyph.translatesAutoresizingMaskIntoConstraints = false
-        badge.addSubview(glyph)
-        NSLayoutConstraint.activate([
-            badge.widthAnchor.constraint(equalToConstant: 32),
-            badge.heightAnchor.constraint(equalToConstant: 32),
-            glyph.centerXAnchor.constraint(equalTo: badge.centerXAnchor),
-            glyph.centerYAnchor.constraint(equalTo: badge.centerYAnchor),
-        ])
-        return badge
-    }
-
-    private func makeButton(_ title: String, action: Selector, target: AnyObject, primary: Bool = false) -> NSButton {
-        let b = NSButton(title: title, target: target, action: action)
-        b.bezelStyle = .rounded
-        b.controlSize = .large
-        b.translatesAutoresizingMaskIntoConstraints = false
-        if primary {
-            b.bezelColor = brandColor
-            b.contentTintColor = .white
-            b.keyEquivalent = "\r"
-        }
-        return b
-    }
-
     private func buildWindow() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 740, height: 554),
-                          styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-                          backing: .buffered, defer: false)
+        if useBrowser {
+            window = makeLogWindow(title: "LogSonic")
+            logWindow = window
+            showLogMenuItem?.state = .on
+            window.center()
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1280, height: 800),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
         window.title = "LogSonic"
-        window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
-        window.isMovableByWindowBackground = true
-        window.minSize = NSSize(width: 560, height: 414)
+        window.minSize = NSSize(width: 900, height: 600)
         window.center()
         window.isReleasedWhenClosed = false
+        window.delegate = self
+
+        let config = WKWebViewConfiguration()
+        let controller = config.userContentController
+        controller.add(self, name: "logsonicDownload")
+        controller.addUserScript(WKUserScript(source: blobDownloadHookJS, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.setURLSchemeHandler(nativeFiles, forURLScheme: "logsonicfile")
+
+        let wv = WKWebView(frame: .zero, configuration: config)
+        wv.navigationDelegate = self
+        wv.uiDelegate = self
+        wv.translatesAutoresizingMaskIntoConstraints = false
+        #if DEBUG
+        if #available(macOS 13.3, *) {
+            wv.isInspectable = true
+        }
+        #endif
+        webView = wv
+
+        overlay.font = .systemFont(ofSize: 15, weight: .medium)
+        overlay.textColor = .secondaryLabelColor
+        overlay.alignment = .center
+        overlay.translatesAutoresizingMaskIntoConstraints = false
+
         let root = NSView()
         window.contentView = root
+        root.addSubview(wv)
+        root.addSubview(overlay)
+        NSLayoutConstraint.activate([
+            wv.topAnchor.constraint(equalTo: root.topAnchor),
+            wv.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            wv.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            wv.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            overlay.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            overlay.centerYAnchor.constraint(equalTo: root.centerYAnchor),
+            overlay.leadingAnchor.constraint(greaterThanOrEqualTo: root.leadingAnchor, constant: 24),
+            overlay.trailingAnchor.constraint(lessThanOrEqualTo: root.trailingAnchor, constant: -24),
+        ])
 
-        // --- Header (sits under the transparent titlebar; cleared past traffic lights) ---
-        let header = NSVisualEffectView()
-        header.material = .headerView
-        header.blendingMode = .behindWindow
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func makeLogWindow(title: String = "LogSonic Server Log") -> NSWindow {
+        let win = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 740, height: 420),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        win.title = title
+        win.minSize = NSSize(width: 480, height: 240)
+        win.isReleasedWhenClosed = false
+        win.delegate = self
+
+        let root = NSView()
+        win.contentView = root
+
+        let header = NSView()
         header.translatesAutoresizingMaskIntoConstraints = false
-
-        let badge = brandBadge()
-        let titleLabel = NSTextField(labelWithString: "LogSonic")
-        titleLabel.font = .systemFont(ofSize: 16, weight: .semibold)
-        titleLabel.textColor = .labelColor
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        let subtitle = NSTextField(labelWithString: "Log analytics")
-        subtitle.font = .systemFont(ofSize: 11, weight: .regular)
-        subtitle.textColor = .tertiaryLabelColor
-        subtitle.translatesAutoresizingMaskIntoConstraints = false
-
-        header.addSubview(badge)
-        header.addSubview(titleLabel)
-        header.addSubview(subtitle)
         header.addSubview(status)
-
-        // --- Console (dark, rounded, inset) with a title bar ---
-        let card = NSView()
-        card.wantsLayer = true
-        card.layer?.backgroundColor = consoleBG.cgColor
-        card.layer?.cornerRadius = 10
-        card.layer?.borderWidth = 1
-        card.layer?.borderColor = NSColor.black.withAlphaComponent(0.25).cgColor
-        card.translatesAutoresizingMaskIntoConstraints = false
-
-        let consoleLabel = NSTextField(labelWithString: "Console")
-        consoleLabel.font = .systemFont(ofSize: 11, weight: .semibold)
-        consoleLabel.textColor = NSColor(white: 0.55, alpha: 1)
-        consoleLabel.translatesAutoresizingMaskIntoConstraints = false
 
         let copyLogsButton = NSButton(title: "Copy", target: self, action: #selector(copyLogs))
         copyLogsButton.isBordered = false
         copyLogsButton.font = .systemFont(ofSize: 11, weight: .medium)
-        copyLogsButton.contentTintColor = NSColor(white: 0.7, alpha: 1)
         copyLogsButton.translatesAutoresizingMaskIntoConstraints = false
-        if let img = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Copy logs") {
-            copyLogsButton.image = img
-            copyLogsButton.imagePosition = .imageLeading
-            copyLogsButton.imageHugsTitle = true
-        }
         copyLogsButton.attributedTitle = NSAttributedString(string: "Copy", attributes: [
-            .foregroundColor: NSColor(white: 0.7, alpha: 1),
+            .foregroundColor: NSColor.secondaryLabelColor,
             .font: NSFont.systemFont(ofSize: 11, weight: .medium),
         ])
         self.copyLogsButton = copyLogsButton
+        header.addSubview(copyLogsButton)
 
-        let divider = NSBox()
-        divider.boxType = .separator
-        divider.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(consoleLabel)
-        card.addSubview(copyLogsButton)
-        card.addSubview(divider)
+        let card = NSView()
+        card.wantsLayer = true
+        card.layer?.backgroundColor = consoleBG.cgColor
+        card.layer?.cornerRadius = 8
+        card.translatesAutoresizingMaskIntoConstraints = false
 
         let scroll = NSScrollView()
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
-        scroll.automaticallyAdjustsContentInsets = false
         scroll.translatesAutoresizingMaskIntoConstraints = false
 
         console.isEditable = false
@@ -269,150 +415,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scroll.documentView = console
         card.addSubview(scroll)
 
-        // --- Storage info bar (sits between console card and footer) ---
-        let storageBar = NSView()
-        storageBar.translatesAutoresizingMaskIntoConstraints = false
-
-        let folderIcon = NSImageView(image: NSImage(systemSymbolName: "folder", accessibilityDescription: "Index folder") ?? NSImage())
-        folderIcon.contentTintColor = .tertiaryLabelColor
-        folderIcon.translatesAutoresizingMaskIntoConstraints = false
-
-        storagePathLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        storagePathLabel.textColor = .secondaryLabelColor
-        storagePathLabel.lineBreakMode = .byTruncatingMiddle
-        storagePathLabel.translatesAutoresizingMaskIntoConstraints = false
-        storagePathLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        storagePathLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        storageSizeLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        storageSizeLabel.textColor = .tertiaryLabelColor
-        storageSizeLabel.translatesAutoresizingMaskIntoConstraints = false
-        storageSizeLabel.setContentHuggingPriority(.required, for: .horizontal)
-
-        revealButton = NSButton(title: "Reveal in Finder", target: self, action: #selector(revealInFinder))
-        revealButton.isBordered = false
-        revealButton.font = .systemFont(ofSize: 11, weight: .medium)
-        revealButton.contentTintColor = brandColor
-        revealButton.isEnabled = false
-        revealButton.translatesAutoresizingMaskIntoConstraints = false
-        if let img = NSImage(systemSymbolName: "arrow.up.forward.square", accessibilityDescription: "Reveal") {
-            revealButton.image = img
-            revealButton.imagePosition = .imageLeading
-            revealButton.imageHugsTitle = true
-        }
-
-        storageBar.addSubview(folderIcon)
-        storageBar.addSubview(storagePathLabel)
-        storageBar.addSubview(storageSizeLabel)
-        storageBar.addSubview(revealButton)
-
-        // --- Footer (URL + actions) ---
-        let footer = NSVisualEffectView()
-        footer.material = .titlebar
-        footer.blendingMode = .behindWindow
-        footer.translatesAutoresizingMaskIntoConstraints = false
-
-        let linkIcon = NSImageView(image: NSImage(systemSymbolName: "link", accessibilityDescription: nil) ?? NSImage())
-        linkIcon.contentTintColor = .tertiaryLabelColor
-        linkIcon.translatesAutoresizingMaskIntoConstraints = false
-        urlField.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
-        urlField.textColor = .secondaryLabelColor
-        urlField.lineBreakMode = .byTruncatingMiddle
-        urlField.translatesAutoresizingMaskIntoConstraints = false
-        // Keep the URL at its natural width so the Copy button hugs it; truncate
-        // (rather than push the button away) if the window gets narrow.
-        urlField.setContentHuggingPriority(.required, for: .horizontal)
-        urlField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        copyButton = makeButton("Copy", action: #selector(copyURL), target: self)
-        copyButton.isEnabled = false
-        openButton = makeButton("Open in Browser", action: #selector(openInBrowser), target: self, primary: true)
-        openButton.isEnabled = false
-        let quitButton = makeButton("Quit", action: #selector(NSApplication.terminate(_:)), target: NSApp)
-
-        footer.addSubview(linkIcon)
-        footer.addSubview(urlField)
-        footer.addSubview(copyButton)
-        footer.addSubview(openButton)
-        footer.addSubview(quitButton)
-
         root.addSubview(header)
         root.addSubview(card)
-        root.addSubview(storageBar)
-        root.addSubview(footer)
-
         NSLayoutConstraint.activate([
-            // Header — brand sits BELOW the traffic lights, aligned to the left margin.
-            header.topAnchor.constraint(equalTo: root.topAnchor),
-            header.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            header.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            header.heightAnchor.constraint(equalToConstant: 84),
-            badge.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 18),
-            badge.topAnchor.constraint(equalTo: header.topAnchor, constant: 38), // clear the traffic lights
-            titleLabel.leadingAnchor.constraint(equalTo: badge.trailingAnchor, constant: 10),
-            titleLabel.topAnchor.constraint(equalTo: badge.topAnchor, constant: -1),
-            subtitle.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            subtitle.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 1),
-            status.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -16),
-            status.centerYAnchor.constraint(equalTo: badge.centerYAnchor),
-
-            // Console card
-            card.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 12),
-            card.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
-            card.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -16),
-            // Console title bar
-            consoleLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12),
-            consoleLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: 9),
-            copyLogsButton.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -10),
-            copyLogsButton.centerYAnchor.constraint(equalTo: consoleLabel.centerYAnchor),
-            divider.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 1),
-            divider.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -1),
-            divider.topAnchor.constraint(equalTo: consoleLabel.bottomAnchor, constant: 8),
-            scroll.topAnchor.constraint(equalTo: divider.bottomAnchor),
-            scroll.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 1),
-            scroll.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -1),
-            scroll.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -1),
-
-            // Storage info bar
-            storageBar.topAnchor.constraint(equalTo: card.bottomAnchor, constant: 7),
-            storageBar.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 18),
-            storageBar.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -16),
-            storageBar.heightAnchor.constraint(equalToConstant: 20),
-            folderIcon.leadingAnchor.constraint(equalTo: storageBar.leadingAnchor),
-            folderIcon.centerYAnchor.constraint(equalTo: storageBar.centerYAnchor),
-            folderIcon.widthAnchor.constraint(equalToConstant: 13),
-            storagePathLabel.leadingAnchor.constraint(equalTo: folderIcon.trailingAnchor, constant: 6),
-            storagePathLabel.centerYAnchor.constraint(equalTo: storageBar.centerYAnchor),
-            storageSizeLabel.leadingAnchor.constraint(equalTo: storagePathLabel.trailingAnchor, constant: 8),
-            storageSizeLabel.centerYAnchor.constraint(equalTo: storageBar.centerYAnchor),
-            revealButton.leadingAnchor.constraint(equalTo: storageSizeLabel.trailingAnchor, constant: 12),
-            revealButton.trailingAnchor.constraint(lessThanOrEqualTo: storageBar.trailingAnchor),
-            revealButton.centerYAnchor.constraint(equalTo: storageBar.centerYAnchor),
-
-            // Footer
-            footer.topAnchor.constraint(equalTo: storageBar.bottomAnchor, constant: 7),
-            footer.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            footer.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            footer.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            footer.heightAnchor.constraint(equalToConstant: 60),
-            // Left group: link icon + URL + Copy (Copy sits right next to the link).
-            linkIcon.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: 18),
-            linkIcon.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
-            linkIcon.widthAnchor.constraint(equalToConstant: 14),
-            urlField.leadingAnchor.constraint(equalTo: linkIcon.trailingAnchor, constant: 7),
-            urlField.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
-            copyButton.leadingAnchor.constraint(equalTo: urlField.trailingAnchor, constant: 8),
-            copyButton.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
-            copyButton.trailingAnchor.constraint(lessThanOrEqualTo: openButton.leadingAnchor, constant: -16),
-            // Right group: Open in Browser + Quit.
-            quitButton.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -16),
-            quitButton.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
-            openButton.trailingAnchor.constraint(equalTo: quitButton.leadingAnchor, constant: -8),
-            openButton.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
+            header.topAnchor.constraint(equalTo: root.topAnchor, constant: 10),
+            header.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 14),
+            header.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -14),
+            header.heightAnchor.constraint(equalToConstant: 22),
+            status.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            status.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            copyLogsButton.trailingAnchor.constraint(equalTo: header.trailingAnchor),
+            copyLogsButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            card.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 10),
+            card.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
+            card.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
+            card.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -12),
+            scroll.topAnchor.constraint(equalTo: card.topAnchor),
+            scroll.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            scroll.bottomAnchor.constraint(equalTo: card.bottomAnchor),
         ])
+        return win
+    }
 
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+    @objc private func toggleLogWindow() {
+        if useBrowser { return }
+        if let win = logWindow, win.isVisible {
+            win.close()
+            return
+        }
+        let win = logWindow ?? makeLogWindow()
+        logWindow = win
+        if let main = window {
+            var origin = main.frame.origin
+            origin.y -= 20
+            win.setFrameOrigin(origin)
+        } else {
+            win.center()
+        }
+        win.makeKeyAndOrderFront(nil)
+        showLogMenuItem?.state = .on
     }
 
     // MARK: Log streaming + coloring
@@ -423,6 +465,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let line = String(lineBuffer[..<nl])
             lineBuffer.removeSubrange(lineBuffer.startIndex...nl)
             emit(line + "\n")
+        }
+        // A child process should never emit an unbounded line. Keep malformed
+        // output from growing the app indefinitely while still preserving a
+        // useful prefix in the server log.
+        if lineBuffer.count > maxBufferedLogLineCharacters {
+            let split = lineBuffer.index(lineBuffer.startIndex, offsetBy: maxBufferedLogLineCharacters)
+            emit(String(lineBuffer[..<split]) + "… [line truncated]\n")
+            lineBuffer.removeSubrange(lineBuffer.startIndex..<split)
         }
     }
 
@@ -444,57 +494,271 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .foregroundColor: color,
         ]
         console.textStorage?.append(NSAttributedString(string: line, attributes: attrs))
+        trimConsoleIfNeeded()
         console.scrollToEndOfDocument(nil)
         detectURL(in: line)
     }
 
-    // The server prints "Server listening on http://localhost:PORT" once bound.
+    private func trimConsoleIfNeeded() {
+        guard let storage = console.textStorage, storage.length > maxConsoleCharacters else { return }
+        let overflow = storage.length - trimmedConsoleCharacters
+        let text = storage.string as NSString
+        let searchStart = min(overflow, text.length)
+        let searchLength = min(4_096, text.length - searchStart)
+        let newline = text.range(of: "\n", options: [], range: NSRange(location: searchStart, length: searchLength))
+        let end = newline.location == NSNotFound ? overflow : newline.location + newline.length
+        storage.deleteCharacters(in: NSRange(location: 0, length: min(end, storage.length)))
+        let marker = NSAttributedString(string: "[earlier server logs truncated]\n", attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular),
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ])
+        storage.insert(marker, at: 0)
+    }
+
     private func detectURL(in line: String) {
-        guard serverURL == nil, line.contains("listening"), let r = line.range(of: "http://") else { return }
-        let url = line[r.lowerBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard serverURL == nil, let parsedURL = parseListeningURL(from: line) else {
+            if serverURL == nil, line.contains("Server listening on ") {
+                emit("error: server reported an unsafe or invalid URL\n")
+                overlay.isHidden = false
+                overlay.stringValue = "Server reported an invalid URL"
+            }
+            return
+        }
+        let url = parsedURL.absoluteString
         serverURL = url
-        urlField.stringValue = url
-        urlField.textColor = brandColor
-        copyButton.isEnabled = true
-        openButton.isEnabled = true
-        if let host = url.range(of: "//").map({ String(url[$0.upperBound...]) }) {
-            status.set("Running · \(host)", color: NSColor(srgbRed: 0.30, green: 0.80, blue: 0.44, alpha: 1))
+        parsedServerURL = parsedURL
+        loadAttempts = 0
+        restartCount = 0
+        if let host = parsedURL.host {
+            let shown = parsedURL.port.map { "\(host):\($0)" } ?? host
+            status.set("Running · \(shown)", color: NSColor(srgbRed: 0.30, green: 0.80, blue: 0.44, alpha: 1))
+            window.subtitle = shown
         } else {
             status.set("Running", color: .systemGreen)
         }
-        if let u = URL(string: url) { NSWorkspace.shared.open(u) }
+        if useBrowser {
+            NSWorkspace.shared.open(parsedURL)
+        } else {
+            loadApp(url)
+        }
         fetchStorageInfo(serverURL: url)
     }
 
-    // Fetch storage path and size from /api/v1/info after the server is up.
-    private func fetchStorageInfo(serverURL: String) {
+    private func loadApp(_ url: String) {
+        guard let u = URL(string: url), let webView else { return }
+        overlay.stringValue = "Loading UI…"
+        overlay.isHidden = false
+        loadAttempts += 1
+        webView.load(URLRequest(url: u))
+    }
+
+    // MARK: WKNavigationDelegate
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        overlay.isHidden = true
+        loadAttempts = 0
+        deliverPendingNativeFiles()
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        handleLoadFailure(error)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        handleLoadFailure(error)
+    }
+
+    private func handleLoadFailure(_ error: Error) {
+        if isNavigationCancelError(error) { return }
+        if let url = serverURL, loadAttempts < 8 {
+            overlay.stringValue = "Retrying UI…"
+            overlay.isHidden = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25 * Double(loadAttempts)) { [weak self] in
+                self?.loadApp(url)
+            }
+            return
+        }
+        overlay.isHidden = false
+        overlay.stringValue = "Failed to load UI: \(error.localizedDescription)"
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url, let server = parsedServerURL else {
+            decisionHandler(.cancel)
+            return
+        }
+        let scheme = url.scheme?.lowercased() ?? ""
+        if #available(macOS 11.3, *), navigationAction.shouldPerformDownload, isServerOrigin(url, serverURL: server) || isServerBlob(url, serverURL: server) {
+            decisionHandler(.download)
+            return
+        }
+
+        if scheme == "http" || scheme == "https" {
+            if isServerOrigin(url, serverURL: server) {
+                if navigationAction.targetFrame == nil {
+                    webView.load(URLRequest(url: url))
+                    decisionHandler(.cancel)
+                    return
+                }
+                decisionHandler(.allow)
+            } else {
+                NSWorkspace.shared.open(url)
+                decisionHandler(.cancel)
+            }
+            return
+        }
+
+        if isAllowedAboutURL(url) || isServerBlob(url, serverURL: server) {
+            decisionHandler(.allow)
+            return
+        }
+        if scheme == "logsonicfile" {
+            decisionHandler(.allow)
+            return
+        }
+
+        if ["mailto", "tel"].contains(scheme), NSWorkspace.shared.open(url) {
+            decisionHandler(.cancel)
+            return
+        }
+
+        decisionHandler(.cancel)
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        guard let url = navigationResponse.response.url, let server = parsedServerURL,
+              isServerOrigin(url, serverURL: server) || isServerBlob(url, serverURL: server) else {
+            decisionHandler(.cancel)
+            return
+        }
+        if !navigationResponse.canShowMIMEType {
+            if #available(macOS 11.3, *) {
+                decisionHandler(.download)
+            } else {
+                // WKDownload was added in macOS 11.3. Earlier systems can use
+                // View -> Open in Browser for downloads.
+                decisionHandler(.cancel)
+                openInBrowser()
+            }
+            return
+        }
+        decisionHandler(.allow)
+    }
+
+    @available(macOS 11.3, *)
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        download.delegate = self
+    }
+
+    @available(macOS 11.3, *)
+    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+        download.delegate = self
+    }
+
+    // MARK: WKUIDelegate
+
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let url = navigationAction.request.url, let server = parsedServerURL {
+            if isServerOrigin(url, serverURL: server) {
+                webView.load(URLRequest(url: url))
+            } else if ["http", "https", "mailto", "tel"].contains(url.scheme?.lowercased() ?? "") {
+                NSWorkspace.shared.open(url)
+            }
+        }
+        return nil
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+        presentJavaScriptAlert(message: message, buttons: ["OK"]) { _ in completionHandler() }
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+        presentJavaScriptAlert(message: message, buttons: ["OK", "Cancel"]) { response in
+            completionHandler(response == .alertFirstButtonReturn)
+        }
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (String?) -> Void) {
+        let field = NSTextField(string: defaultText ?? "")
+        let alert = NSAlert()
+        alert.messageText = "LogSonic"
+        alert.informativeText = prompt
+        alert.accessoryView = field
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { response in
+            completionHandler(response == .alertFirstButtonReturn ? field.stringValue : nil)
+        }
+    }
+
+    private func presentJavaScriptAlert(message: String, buttons: [String], completion: @escaping (NSApplication.ModalResponse) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = "LogSonic"
+        alert.informativeText = message
+        for button in buttons {
+            alert.addButton(withTitle: button)
+        }
+        alert.beginSheetModal(for: window, completionHandler: completion)
+    }
+
+    func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+        DispatchQueue.main.async {
+            let panel = NSOpenPanel()
+            panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+            panel.canChooseDirectories = parameters.allowsDirectories
+            panel.canChooseFiles = true
+            panel.begin { result in
+                completionHandler(result == .OK ? panel.urls : nil)
+            }
+        }
+    }
+
+    // MARK: WKDownloadDelegate
+
+    @available(macOS 11.3, *)
+    func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
+        DispatchQueue.main.async {
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = sanitizedDownloadName(suggestedFilename)
+            panel.begin { result in
+                completionHandler(result == .OK ? panel.url : nil)
+            }
+        }
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "logsonicDownload",
+              let body = message.body as? [String: Any],
+              let dataB64 = body["data"] as? String,
+              let data = Data(base64Encoded: dataB64) else { return }
+        let name = sanitizedDownloadName(body["filename"] as? String ?? "download")
+        DispatchQueue.main.async {
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = name
+            panel.begin { result in
+                guard result == .OK, let url = panel.url else { return }
+                try? data.write(to: url, options: .atomic)
+            }
+        }
+    }
+
+    private func fetchStorageInfo(serverURL: String, attempt: Int = 0) {
         guard let url = URL(string: "\(serverURL)/api/v1/info") else { return }
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
-            guard let data = data,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let storageInfo = json["storage_info"] as? [String: Any],
-                  let dir = storageInfo["storage_directory"] as? String else { return }
-            let sizeBytes = storageInfo["storage_size_bytes"] as? Int64 ?? 0
-            DispatchQueue.main.async { self?.updateStorageInfo(dir: dir, sizeBytes: sizeBytes) }
+        URLSession.shared.dataTask(with: url) { [weak self] data, response, _ in
+            let ok = (response as? HTTPURLResponse)?.statusCode == 200
+            if let data, ok,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let storageInfo = json["storage_info"] as? [String: Any],
+               let dir = storageInfo["storage_directory"] as? String {
+                DispatchQueue.main.async { self?.storageDir = dir }
+                return
+            }
+            if attempt < 8 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    self?.fetchStorageInfo(serverURL: serverURL, attempt: attempt + 1)
+                }
+            }
         }.resume()
-    }
-
-    private func updateStorageInfo(dir: String, sizeBytes: Int64) {
-        storageDir = dir
-        storagePathLabel.stringValue = dir
-        storageSizeLabel.stringValue = formatStorageSize(sizeBytes)
-        revealButton.isEnabled = true
-    }
-
-    // Format bytes as human-readable string (KB / MB / GB).
-    private func formatStorageSize(_ bytes: Int64) -> String {
-        let kb = Double(bytes) / 1_024
-        let mb = kb / 1_024
-        let gb = mb / 1_024
-        if gb >= 1 { return String(format: "%.1f GB", gb) }
-        if mb >= 1 { return String(format: "%.1f MB", mb) }
-        if kb >= 1 { return String(format: "%.0f KB", kb) }
-        return "\(bytes) B"
     }
 
     @objc private func revealInFinder() {
@@ -506,11 +770,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let s = serverURL, let u = URL(string: s) { NSWorkspace.shared.open(u) }
     }
 
+    @objc private func reloadUI() {
+        if useBrowser {
+            openInBrowser()
+            return
+        }
+        if let webView, webView.url != nil {
+            webView.reload()
+        } else if let s = serverURL {
+            loadApp(s)
+        }
+    }
+
     @objc private func copyURL() {
         guard let s = serverURL else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(s, forType: .string)
-        flash(copyButton, "Copied")
     }
 
     @objc private func copyLogs() {
@@ -518,14 +793,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !text.isEmpty else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
-        flashLight(copyLogsButton, "Copied")
-    }
-
-    // Briefly swap a button's title to give copy feedback, then restore it.
-    private func flash(_ button: NSButton, _ text: String) {
-        let original = button.title
-        button.title = text
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { button.title = original }
+        if let b = copyLogsButton { flashLight(b, "Copied") }
     }
 
     private func flashLight(_ button: NSButton, _ text: String) {
@@ -537,21 +805,98 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { button.attributedTitle = restore }
     }
 
+    private func acquireInstanceLock() -> Bool {
+        let id = Bundle.main.bundleIdentifier ?? "com.logsonic.app"
+        let path = lockFileURL(bundleIdentifier: id).path
+        let fd = open(path, O_CREAT | O_RDWR, 0o644)
+        if fd < 0 { return true }
+        if flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            close(fd)
+            return false
+        }
+        lockFD = fd
+        return true
+    }
+
+    private func activateExistingInstance() {
+        let id = Bundle.main.bundleIdentifier ?? "com.logsonic.app"
+        NSRunningApplication.runningApplications(withBundleIdentifier: id)
+            .first { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }?
+            .activate(options: [.activateIgnoringOtherApps])
+    }
+
+    private func openNativeFiles(_ filenames: [String]) {
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        guard !useBrowser else {
+            filenames.prefix(8).forEach { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: $0)]) }
+            return
+        }
+        var urls: [String] = []
+        var names: [String] = []
+        for path in filenames {
+            let file = URL(fileURLWithPath: path)
+            let ext = file.pathExtension.lowercased()
+            guard ["log", "txt", "json"].contains(ext) else { continue }
+            let id = nativeFiles.register(file)
+            urls.append("logsonicfile://\(id)")
+            names.append(file.lastPathComponent)
+        }
+        guard !urls.isEmpty, webView != nil else { return }
+        pendingNativeFilePayloads.append((urls: urls, names: names))
+        deliverPendingNativeFiles()
+    }
+
+    private func deliverPendingNativeFiles() {
+        guard serverURL != nil, let webView, !webView.isLoading, !pendingNativeFilePayloads.isEmpty else { return }
+        let payloads = pendingNativeFilePayloads
+        pendingNativeFilePayloads.removeAll()
+        for payload in payloads {
+            deliverNativeFiles(payload.urls, names: payload.names, in: webView)
+        }
+    }
+
+    private func deliverNativeFiles(_ urls: [String], names: [String], in webView: WKWebView) {
+        let urlsJSON = (try? JSONSerialization.data(withJSONObject: urls)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+        let namesJSON = (try? JSONSerialization.data(withJSONObject: names)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+        let js = """
+        window.__logsonicPendingNativeFiles = {urls: \(urlsJSON), names: \(namesJSON)};
+        window.location.hash = '#/import';
+        window.dispatchEvent(new CustomEvent('logsonic-native-files', {detail: window.__logsonicPendingNativeFiles}));
+        """
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
     // MARK: Server child process
 
     private func startServer() {
         guard let exe = Bundle.main.executableURL else {
             emit("error: cannot locate bundle executable\n")
+            overlay.stringValue = "Cannot locate bundle executable"
             return
         }
         let serverPath = exe.deletingLastPathComponent().appendingPathComponent("logsonic")
+        guard FileManager.default.isExecutableFile(atPath: serverPath.path) else {
+            emit("error: bundled server is missing or not executable: \(serverPath.path)\n")
+            status.set("Stopped", color: .systemRed)
+            overlay.stringValue = "Bundled server is missing"
+            toggleLogWindowIfHidden()
+            return
+        }
 
         let p = Process()
         p.executableURL = serverPath
+        // The local API has no network authentication. A desktop launch must
+        // never inherit HOST=0.0.0.0 (or another LAN interface) from the user's
+        // shell. Users who intentionally need a network listener can run the
+        // separately installed CLI.
+        p.arguments = ["-host", "127.0.0.1", "-auto-port=true"]
         var env = ProcessInfo.processInfo.environment
         env["LOGSONIC_AUTO_PORT"] = "1"                   // pick a free port if 8080 is busy
+        env["LOGSONIC_PARENT_PID"] = String(ProcessInfo.processInfo.processIdentifier)
         env.removeValue(forKey: "LOGSONIC_APP")           // GUI owns app behavior
-        env.removeValue(forKey: "LOGSONIC_OPEN_BROWSER")  // GUI opens the browser
+        env.removeValue(forKey: "LOGSONIC_OPEN_BROWSER")  // shell opens the browser when --browser
+        env.removeValue(forKey: "LOGSONIC_BROWSER")
         p.environment = env
 
         let pipe = Pipe()
@@ -559,7 +904,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         p.standardError = pipe
         pipe.fileHandleForReading.readabilityHandler = { [weak self] h in
             let data = h.availableData
-            guard !data.isEmpty, let s = String(data: data, encoding: .utf8) else { return }
+            if data.isEmpty {
+                h.readabilityHandler = nil
+                return
+            }
+            let s = String(decoding: data, as: UTF8.self)
             DispatchQueue.main.async { self?.feed(s) }
         }
         p.terminationHandler = { [weak self] proc in
@@ -569,9 +918,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if !self.lineBuffer.isEmpty { self.emit(self.lineBuffer + "\n"); self.lineBuffer = "" }
                 self.emit("\n[server exited: status \(proc.terminationStatus)]\n")
                 if !self.quitting {
+                    self.serverURL = nil
+                    self.parsedServerURL = nil
+                    if self.restartCount < maxServerRestarts {
+                        self.restartCount += 1
+                        self.status.set("Restarting…", color: .systemOrange)
+                        self.overlay.isHidden = false
+                        self.overlay.stringValue = "Server stopped — restarting (\(self.restartCount)/\(maxServerRestarts))"
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                            guard let self, !self.quitting else { return }
+                            self.startServer()
+                        }
+                        return
+                    }
                     self.status.set("Stopped", color: .systemRed)
-                    self.openButton.isEnabled = false
-                    self.copyButton.isEnabled = false
+                    if !self.useBrowser {
+                        self.overlay.isHidden = false
+                        self.overlay.stringValue = "Server stopped"
+                    }
+                    self.toggleLogWindowIfHidden()
                 }
             }
         }
@@ -581,11 +946,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             emit("error: failed to start server: \(error)\n")
             status.set("Stopped", color: .systemRed)
+            overlay.stringValue = "Failed to start server"
+            toggleLogWindowIfHidden()
+        }
+    }
+
+    private func toggleLogWindowIfHidden() {
+        if logWindow == nil || logWindow?.isVisible == false {
+            toggleLogWindow()
         }
     }
 
     // Quit / window-close → ask the server to shut down gracefully (it handles
-    // SIGINT), wait up to 30s, then finish terminating.
+    // SIGINT), wait slightly longer than its 30-second drain timeout, then
+    // escalate to SIGTERM and finally SIGKILL so the app cannot orphan a server.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let p = process, p.isRunning, !quitting else { return .terminateNow }
         quitting = true
@@ -593,17 +967,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         emit("\nShutting down…\n")
         p.interrupt() // SIGINT
         DispatchQueue.global().async {
-            let deadline = Date().addingTimeInterval(30)
+            let deadline = Date().addingTimeInterval(35)
             while p.isRunning && Date() < deadline { usleep(100_000) }
-            if p.isRunning { p.terminate() } // SIGTERM fallback
+            if p.isRunning {
+                p.terminate() // SIGTERM fallback
+                let termDeadline = Date().addingTimeInterval(5)
+                while p.isRunning && Date() < termDeadline { usleep(100_000) }
+            }
+            if p.isRunning {
+                kill(p.processIdentifier, SIGKILL)
+                p.waitUntilExit()
+            }
             DispatchQueue.main.async { NSApp.reply(toApplicationShouldTerminate: true) }
         }
         return .terminateLater
     }
 }
 
-let app = NSApplication.shared
-let delegate = AppDelegate()
-app.delegate = delegate
-app.setActivationPolicy(.regular) // show the Dock icon
-app.run()
+@main
+enum LogsonicMain {
+    static func main() {
+        if CommandLine.arguments.contains(where: { $0 == "--help" || $0 == "-h" || $0 == "-help" }) {
+            let msg = """
+            Logsonic.app — native macOS shell for LogSonic.
+
+              LogsonicApp [--browser]
+
+              --browser, -browser   Open the UI in the default browser instead of the in-app window
+              LOGSONIC_BROWSER=1    Same as --browser
+
+            To run without this app at all: logsonic -open
+
+            """
+            fputs(msg, stderr)
+            exit(0)
+        }
+
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.setActivationPolicy(.regular) // show the Dock icon
+        app.run()
+    }
+}

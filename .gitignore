@@ -6,5 +6,6 @@ node_modules
 **/.DS_Store
 backend/.release.env
 backend/dist/
+backend/dist-dev/
 backend/LICENSE
 backend/README.md

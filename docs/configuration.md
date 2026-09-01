@@ -8,6 +8,7 @@ LogSonic can be configured with command-line flags or environment variables.
 - `-port`: port to listen on, default `8080`
 - `-storage`: path to storage directory for indices
 - `-open`: open the web UI in your browser once the server starts
+- `-browser`: same as `-open` for the CLI; does not launch Logsonic.app
 - `-auto-port`: if the port is busy, bind the next free port instead of failing; enabled by default, pass `-auto-port=false` to fail instead
 - `-retention-days N`: delete indexed logs older than N days; `0` keeps everything
 - `-help`: show usage information
@@ -18,10 +19,13 @@ LogSonic can be configured with command-line flags or environment variables.
 - `PORT`: port to listen on
 - `STORAGE_PATH`: path to storage directory
 - `LOGSONIC_OPEN_BROWSER`: open the web UI on start (`1`, `true`, `yes`, `on`)
+- `LOGSONIC_BROWSER`: same as `LOGSONIC_OPEN_BROWSER` for the CLI; on **Logsonic.app**, skip the in-app window and open a browser
 - `LOGSONIC_AUTO_PORT`: auto-select a free port if busy (`1`, `true`, `yes`, `on`)
 - `RETENTION_DAYS`: delete indexed logs older than N days
 
-The **Logsonic.app** bundle sets `-open` and auto-port automatically. The CLI also auto-selects the first free port starting at `8080`, but it does not open a browser unless you pass `-open`.
+The **Logsonic.app** bundle shows the UI in an in-app window by default. Pass `--browser` (or `LOGSONIC_BROWSER=1`) to open the system browser instead. The CLI also auto-selects the first free port starting at `8080`, and does not open a browser unless you pass `-open` or `-browser`.
+
+The app wrapper always binds its child server to `127.0.0.1`, even if `HOST` is set in the launch environment. LogSonic's local API is unauthenticated, so network listeners are an explicit CLI-only choice (`logsonic -host 0.0.0.0`).
 
 ## CLI Subcommands
 
@@ -43,8 +47,9 @@ logsonic -host 0.0.0.0 -port 9000
 # Custom storage path
 logsonic -storage /var/logs/storage
 
-# App-style: auto-select a free port and open the browser
+# App-style: auto-select a free port and open the browser (no Logsonic.app window)
 logsonic -open
+logsonic -browser
 
 # Cap on-disk index size
 logsonic -retention-days 30

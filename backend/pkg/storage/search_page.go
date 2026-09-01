@@ -23,16 +23,49 @@ const (
 	maxDistributionBins = 100
 )
 
+// requestedFields keeps internal ordering fields available to the response
+// decoder while allowing the HTTP layer to project large documents down to
+// the columns the user is actually viewing.
+func requestedFields(fields []string) []string {
+	if len(fields) == 0 {
+		return []string{"*"}
+	}
+	seen := make(map[string]struct{}, len(fields)+3)
+	result := make([]string, 0, len(fields)+3)
+	allFields := make([]string, 0, len(fields)+4)
+	allFields = append(allFields, fields...)
+	allFields = append(allFields, "timestamp", "_src", "_raw", "_seq")
+	for _, field := range allFields {
+		field = strings.TrimSpace(field)
+		if field == "" || field == "_all" {
+			continue
+		}
+		if _, ok := seen[field]; ok {
+			continue
+		}
+		seen[field] = struct{}{}
+		result = append(result, field)
+	}
+	return result
+}
+
 // SearchOptions contains every input needed for a bounded log page.
 type SearchOptions struct {
 	Query     string
 	StartDate time.Time
 	EndDate   time.Time
 	Sources   []string
+	// Fields limits the fields materialized into each returned log. An empty
+	// list preserves the legacy behavior and returns every stored field.
+	Fields    []string
 	Limit     int
 	Offset    int
 	SortBy    string
 	SortOrder string
+	// SkipDistribution omits the chart facet from the latency-sensitive page
+	// query. TotalCount remains exact and callers can request distribution in a
+	// follow-up query without delaying the first visible rows.
+	SkipDistribution bool
 }
 
 // SearchDistributionBucket is a bounded aggregation result for the chart.
@@ -148,7 +181,11 @@ func (s *Storage) SearchPage(ctx context.Context, options SearchOptions) (Search
 		baseQuery = bleve.NewConjunctionQuery(baseQuery, timeQuery)
 	}
 	alias := bleve.NewIndexAlias(indexes...)
-	buckets, facetRequest := buildTimeFacet(options.StartDate, options.EndDate)
+	var buckets []SearchDistributionBucket
+	var facetRequest *bleve.FacetRequest
+	if !options.SkipDistribution {
+		buckets, facetRequest = buildTimeFacet(options.StartDate, options.EndDate)
+	}
 
 	remainingOffset := options.Offset
 	var searchAfter []string
@@ -169,12 +206,12 @@ func (s *Storage) SearchPage(ctx context.Context, options SearchOptions) (Search
 		if request.Size > searchScanBatchSize {
 			request.Size = searchScanBatchSize
 		}
-		request.Fields = []string{"*"}
+		request.Fields = requestedFields(options.Fields)
 		request.SortByCustom(timestampSort(options.SortOrder))
 		if len(searchAfter) > 0 {
 			request.SetSearchAfter(searchAfter)
 		}
-		if firstRequest && timestampsIndexed {
+		if firstRequest && timestampsIndexed && !options.SkipDistribution {
 			request.AddFacet("time", facetRequest)
 		}
 
@@ -185,8 +222,12 @@ func (s *Storage) SearchPage(ctx context.Context, options SearchOptions) (Search
 		if firstRequest {
 			candidateTotal = int(searchResult.Total)
 			if timestampsIndexed {
-				applyFacetCounts(buckets, searchResult.Facets["time"], "")
-				result.TotalCount = distributionTotal(buckets)
+				if options.SkipDistribution {
+					result.TotalCount = candidateTotal
+				} else {
+					applyFacetCounts(buckets, searchResult.Facets["time"], "")
+					result.TotalCount = distributionTotal(buckets)
+				}
 			}
 			firstRequest = false
 		}
@@ -223,7 +264,7 @@ func (s *Storage) SearchPage(ctx context.Context, options SearchOptions) (Search
 	// distributions need no second index scan. For multiple sources, bounded
 	// size-zero facet requests preserve the per-source chart breakdown.
 	uniqueSources := deduplicateStrings(options.Sources)
-	if timestampsIndexed {
+	if timestampsIndexed && !options.SkipDistribution {
 		if len(uniqueSources) == 1 {
 			for i := range buckets {
 				if buckets[i].Count > 0 {
@@ -251,7 +292,7 @@ func (s *Storage) SearchPage(ctx context.Context, options SearchOptions) (Search
 				applyFacetCounts(buckets, sourceResult.Facets["time"], source)
 			}
 		}
-	} else {
+	} else if !timestampsIndexed {
 		legacyBuckets, legacyTotal, legacyErr := aggregateLegacyMetadata(
 			ctx, alias, baseQuery, buckets, candidateTotal, options, uniqueSources,
 			rangeCoversSelectedShards(options.StartDate, options.EndDate, selectedDates),
@@ -259,7 +300,9 @@ func (s *Storage) SearchPage(ctx context.Context, options SearchOptions) (Search
 		if legacyErr != nil {
 			return SearchPageResult{}, legacyErr
 		}
-		buckets = legacyBuckets
+		if !options.SkipDistribution {
+			buckets = legacyBuckets
+		}
 		result.TotalCount = legacyTotal
 	}
 
@@ -450,12 +493,12 @@ func scanLegacyMetadata(
 				pastEnd = true
 				break
 			}
+			total++
 			index := distributionBucketIndex(buckets, timestamp)
 			if index < 0 {
 				continue
 			}
 			buckets[index].Count++
-			total++
 			if source, ok := hit.Fields["_src"].(string); ok && source != "" {
 				buckets[index].SourceCounts[source]++
 			}
@@ -530,13 +573,24 @@ func buildPageQuery(queryStr string, sources []string) (query.Query, error) {
 	}
 	sourceQueries := make([]query.Query, 0, len(sources))
 	for _, source := range sources {
-		sourceQueries = append(sourceQueries, &storedPhraseQuery{
-			phrase: source,
-			field:  "_src",
-			boost:  1,
-		})
+		sourceQueries = append(sourceQueries, sourceFilterQuery(source))
 	}
 	return bleve.NewConjunctionQuery(searchQuery, bleve.NewDisjunctionQuery(sourceQueries...)), nil
+}
+
+func sourceFilterQuery(source string) query.Query {
+	// Source identifiers are normally paths or filenames. A conjunctive match
+	// uses the existing _src postings directly; the old phrase verifier fetched
+	// the stored field for every matching document and dominated large searches.
+	// Keep phrase verification for whitespace-bearing labels, where token order
+	// is part of the source identity.
+	if strings.ContainsAny(source, " \t\r\n") {
+		return &storedPhraseQuery{phrase: source, field: "_src", boost: 1}
+	}
+	sourceQuery := bleve.NewMatchQuery(source)
+	sourceQuery.SetField("_src")
+	sourceQuery.SetOperator(query.MatchQueryOperatorAnd)
+	return sourceQuery
 }
 
 func timestampSort(order string) blevesearch.SortOrder {

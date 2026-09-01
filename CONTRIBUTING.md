@@ -18,7 +18,7 @@ LogSonic is a Go backend + React frontend. **For development, always run the two
 
 ### Backend (port 8080)
 
-Requires Go 1.25.7+.
+Requires Go 1.26.6+.
 
 ```bash
 cd backend

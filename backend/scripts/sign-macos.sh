@@ -17,7 +17,8 @@
 set -euo pipefail
 
 artifact="${1:?sign-macos.sh: missing artifact path}"
-identity="${MACOS_SIGN_IDENTITY:-Developer ID Application: Akash Goswami (CW36P52426)}"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+identity="$("$script_dir/signing-identity.sh")"
 
 if file -b "$artifact" | grep -q "Mach-O"; then
   codesign --force --options=runtime --sign "$identity" --timestamp "$artifact"

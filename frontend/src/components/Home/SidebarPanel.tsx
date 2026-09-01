@@ -14,7 +14,7 @@ const sameSources = (a: string[], b: string[]) =>
 
 export const SidebarPanel = () => {
   const { systemInfo, refreshSystemInfo, isLoading, error } = useSystemInfoStore();
-  const { sources , setSources} = useSearchQueryParamsStore();
+  const { sources, sourcesInitialized, setSources, setSourcesInitialized } = useSearchQueryParamsStore();
   const initializedSourcesRef = useRef(false);
   const previousSourceNamesRef = useRef<string[]>([]);
 
@@ -46,9 +46,13 @@ export const SidebarPanel = () => {
       setSources(nextSources);
     }
 
+    if (!sourcesInitialized) {
+      setSourcesInitialized(true);
+    }
+
     initializedSourcesRef.current = true;
     previousSourceNamesRef.current = [...sourceNames];
-  }, [systemInfo, refreshSystemInfo, sources, setSources]);
+  }, [systemInfo, refreshSystemInfo, sources, sourcesInitialized, setSources, setSourcesInitialized]);
 
   // Handle checkbox change
   const handleSourceChange = (source: string, checked: boolean) => {

@@ -135,11 +135,7 @@ func (s *Storage) Search(queryStr string, startDate, endDate *time.Time, sources
 				if len(sources) > 0 {
 					sourceQueries := make([]query.Query, 0, len(sources))
 					for _, source := range sources {
-						sourceQueries = append(sourceQueries, &storedPhraseQuery{
-							phrase: source,
-							field:  "_src",
-							boost:  1,
-						})
+						sourceQueries = append(sourceQueries, sourceFilterQuery(source))
 					}
 					sourceFilter := bleve.NewDisjunctionQuery(sourceQueries...)
 					searchQuery = bleve.NewConjunctionQuery(searchQuery, sourceFilter)

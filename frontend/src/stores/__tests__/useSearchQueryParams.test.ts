@@ -53,6 +53,10 @@ describe("initial state", () => {
     expect(state.selectedColumns).toEqual([]);
     expect(state.mandatoryColumns).toEqual(["timestamp"]);
   });
+
+  it("starts with source discovery pending", () => {
+    expect(useSearchQueryParamsStore.getState().sourcesInitialized).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -37,6 +37,7 @@ func main() {
 	portFlag := flag.String("port", "", "Port to listen on (default: 8080 or PORT env var)")
 	storageFlag := flag.String("storage", "", "Path to storage directory (default: per-user app data dir)")
 	openFlag := flag.Bool("open", false, "Open the web UI in your browser once the server starts")
+	browserFlag := flag.Bool("browser", false, "Same as -open: serve the UI in a browser (does not launch Logsonic.app)")
 	autoPortFlag := flag.Bool("auto-port", true, "If the port is busy, bind the next free port instead of failing")
 	retentionFlag := flag.Int("retention-days", 0, "Delete indexed logs older than N days (0 = keep everything)")
 	helpFlag := flag.Bool("help", false, "Show usage information")
@@ -106,7 +107,7 @@ func main() {
 	// by the GUI (or the -auto-port flag / env). LOGSONIC_APP still enables the
 	// desktop defaults for anyone invoking the binary directly.
 	asApp := envTrue("LOGSONIC_APP")
-	openBrowser := *openFlag || envTrue("LOGSONIC_OPEN_BROWSER") || asApp
+	openBrowser := *openFlag || *browserFlag || envTrue("LOGSONIC_OPEN_BROWSER") || envTrue("LOGSONIC_BROWSER") || asApp
 	autoPort := *autoPortFlag || envTrue("LOGSONIC_AUTO_PORT") || asApp
 
 	retentionDays := *retentionFlag
@@ -119,6 +120,7 @@ func main() {
 	}
 
 	log.Println("Starting server from", host+port, "with storage path", storagePath)
+	watchParentProcess()
 	cfg := server.Config{
 		Host:          host,
 		Port:          port,
@@ -206,6 +208,7 @@ func printUsage() {
 	fmt.Println("  -port string      Port to listen on (default: 8080 or PORT env var)")
 	fmt.Println("  -storage string   Path to storage directory (default: per-user app data dir)")
 	fmt.Println("  -open             Open the web UI in your browser once the server starts")
+	fmt.Println("  -browser          Same as -open (CLI; does not launch the macOS app window)")
 	fmt.Println("  -auto-port        If the port is busy, bind the next free port instead of failing (default true; use -auto-port=false to disable)")
 	fmt.Println("  -retention-days N Delete indexed logs older than N days (0 = keep everything)")
 	fmt.Println("  -help             Show this help message")
@@ -214,6 +217,7 @@ func printUsage() {
 	fmt.Println("  PORT                  Port to listen on")
 	fmt.Println("  STORAGE_PATH          Path to storage directory")
 	fmt.Println("  LOGSONIC_OPEN_BROWSER Open the web UI on start (1/true/yes/on)")
+	fmt.Println("  LOGSONIC_BROWSER      Same as LOGSONIC_OPEN_BROWSER; on Logsonic.app, skip the in-app window")
 	fmt.Println("  LOGSONIC_AUTO_PORT    Auto-select a free port if busy (1/true/yes/on)")
 	fmt.Println("  RETENTION_DAYS        Delete indexed logs older than N days")
 	fmt.Println("\nStorage directory (default):")
@@ -222,6 +226,7 @@ func printUsage() {
 	fmt.Println("  Windows  %APPDATA%\\Logsonic")
 	fmt.Println("\nExamples:")
 	fmt.Println("  logsonic")
-	fmt.Println("  logsonic -open -auto-port")
+	fmt.Println("  logsonic -open")
+	fmt.Println("  logsonic -browser")
 	fmt.Println("  logsonic -host localhost -port 8080 -storage /var/logs/storage -retention-days 30")
 }

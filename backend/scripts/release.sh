@@ -8,7 +8,8 @@
 #
 # Env vars: GITHUB_TOKEN / HOMEBREW_TAP_TOKEN from the environment win over
 # backend/.release.env (gitignored). See backend/scripts/SIGNING.md.
-# Note: Local signing uses Keychain identity (no P12 needed). Notarization is optional.
+# Note: Local signing uses Keychain identity (no P12 needed). Notarization is
+# mandatory for every non-snapshot release, including --skip-publish candidates.
 
 set -euo pipefail
 
@@ -56,8 +57,10 @@ if [ -f "$ENV_FILE" ]; then
   perms=$(stat -f%Lp "$ENV_FILE")
   [ "${perms: -2}" = "00" ] || err ".release.env is world/group-readable ($perms, should be 600)"
 
+  set -a
   # shellcheck disable=SC1090
-  set -a; source "$ENV_FILE"; set +a
+  source "$ENV_FILE"
+  set +a
 
   if [ "$GITHUB_TOKEN_FROM_ENV" = 1 ]; then
     export GITHUB_TOKEN=$GITHUB_TOKEN_PRESERVED
@@ -94,6 +97,17 @@ if [ "$MODE" = "release" ]; then
   fi
   info "GITHUB_TOKEN read from $(token_source "$GITHUB_TOKEN_FROM_ENV")"
   info "HOMEBREW_TAP_TOKEN read from $(token_source "$HOMEBREW_TAP_TOKEN_FROM_ENV")"
+  for required_var in MACOS_NOTARY_ISSUER_ID MACOS_NOTARY_KEY_ID MACOS_NOTARY_KEY; do
+    [ -n "${!required_var:-}" ] || err "$required_var is required for a production macOS artifact"
+  done
+  command -v codesign >/dev/null || err "codesign is required for a production macOS artifact"
+  command -v xcrun >/dev/null || err "xcrun is required for macOS notarization"
+  command -v swiftc >/dev/null || err "swiftc is required to build Logsonic.app"
+  command -v lipo >/dev/null || err "lipo is required to build the universal Logsonic.app launcher"
+  "$BACKEND/scripts/signing-identity.sh" >/dev/null || err "a unique Developer ID Application identity is required"
+  if [[ "$EXTRA_ARGS" != *"--skip=publish"* ]]; then
+    command -v gh >/dev/null || err "gh is required to attach the macOS app before publishing the draft release"
+  fi
 fi
 
 # Validate notary key file if present.
@@ -131,18 +145,12 @@ fi
 # so we zip each signed binary, submit, and let Apple register the binary's CD hash
 # with its online ticket service — the existing .tar.gz archives become Gatekeeper-valid
 # without re-archiving or stapling (stapling only works on .pkg/.dmg/.app bundles).
-# Skipped on snapshot and when notary creds aren't present.
+# Skipped only on snapshot; production preflight above requires notary creds.
 notarize_darwin() {
   if [ "$MODE" = "snapshot" ]; then
     info "skipping notarization (snapshot mode)"
     return
   fi
-  if [ -z "${MACOS_NOTARY_ISSUER_ID:-}" ] || [ -z "${MACOS_NOTARY_KEY_ID:-}" ] || [ -z "${MACOS_NOTARY_KEY:-}" ]; then
-    info "skipping notarization (MACOS_NOTARY_* env vars not set)"
-    return
-  fi
-  command -v xcrun >/dev/null || { info "skipping notarization (xcrun not available)"; return; }
-
   local tmp; tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' RETURN
   local failed=0
@@ -159,7 +167,8 @@ notarize_darwin() {
     fi
 
     info "notarizing $bin"
-    local zip="$tmp/$(basename "$(dirname "$bin")").zip"
+    local zip
+    zip="$tmp/$(basename "$(dirname "$bin")").zip"
     /usr/bin/ditto -c -k --keepParent "$bin" "$zip"
 
     # Submit and capture the result (status, not just success/failure).
@@ -174,9 +183,9 @@ notarize_darwin() {
     if echo "$result" | grep -q "status: Accepted"; then
       info "notarization accepted: $bin"
     elif echo "$result" | grep -q "status: Invalid"; then
-      echo "WARNING: notarization returned 'Invalid' for $bin (may be duplicate submission or other issue)" >&2
+      echo "ERROR: notarization returned 'Invalid' for $bin" >&2
       echo "Full result: $result" >&2
-      # Don't fail the release, but warn — Invalid often means already notarized or caching issue.
+      failed=1
     else
       echo "ERROR: notarization failed for $bin" >&2
       echo "Result: $result" >&2
@@ -196,16 +205,14 @@ notarize_darwin
 # Finder-extracted downloads). The stapled .app carries its notarization ticket,
 # installs into /Applications with no sudo (cask `app` stanza), and symlinks the
 # `logsonic` CLI into the Homebrew prefix. See scripts/app-macos.sh and
-# scripts/publish-cask.sh. Skipped on snapshot and when tooling/creds are absent.
+# scripts/publish-cask.sh. Skipped only on snapshot.
 build_macos_app() {
   if [ "$MODE" = "snapshot" ]; then
     info "skipping .app build (snapshot mode)"
     return
   fi
-  command -v codesign >/dev/null || { info "skipping .app (codesign not available — not macOS?)"; return; }
-
   local ubin="dist/logsonic-universal_darwin_all/logsonic"
-  [ -f "$ubin" ] || { info "skipping .app (universal binary not found at $ubin)"; return; }
+  [ -f "$ubin" ] || err "universal binary not found at $ubin"
 
   local version; version="$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')"
   [ -n "$version" ] || err "build_macos_app: cannot determine version from git tags"
@@ -218,20 +225,19 @@ build_macos_app() {
   # was skipped.
   if [[ "$EXTRA_ARGS" == *"--skip=publish"* ]]; then
     info "publish skipped — .app/zip left at $BACKEND/$zip (not uploaded, cask not published)"
-  elif command -v gh >/dev/null; then
+  else
     local tag; tag="$(git describe --tags --abbrev=0)"
-    info "uploading $zip to release $tag"
+    info "uploading $zip to draft release $tag"
     gh release upload "$tag" "$zip" --clobber
 
+    # GoReleaser deliberately creates a draft. Publish it only after the
+    # standalone app has been signed, notarized, stapled, and attached.
+    info "publishing complete release $tag"
+    gh release edit "$tag" --draft=false
+
     # Publish the cask AFTER the zip is live, so its download URL resolves.
-    if [ -n "${HOMEBREW_TAP_TOKEN:-}" ]; then
-      info "publishing Homebrew cask for $version"
-      scripts/publish-cask.sh "$zip" "$version"
-    else
-      info "HOMEBREW_TAP_TOKEN not set — cask NOT published; macOS brew install will be stale" >&2
-    fi
-  else
-    info "gh not installed — .app zip built at $BACKEND/$zip but NOT uploaded; cask not published" >&2
+    info "publishing Homebrew cask for $version"
+    scripts/publish-cask.sh "$zip" "$version"
   fi
 }
 build_macos_app

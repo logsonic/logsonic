@@ -126,7 +126,10 @@ release:
   github:
     owner: logsonic
     name: logsonic
-  draft: false
+  # Keep the release private until the separately built/notarized macOS app is
+  # uploaded. release.sh publishes the draft only after every platform artifact
+  # is complete, avoiding a public release with a missing standalone app.
+  draft: true
   prerelease: auto
   footer: >-
 

@@ -24,7 +24,7 @@ macOS ships as a signed + notarized + **stapled** `Logsonic.app`, zipped as `log
 
 Import the Apple intermediate CA (`Developer ID Certification Authority` G2) from <https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer>.
 
-**App structure:** the bundle's `CFBundleExecutable` is a native AppKit shell, `LogsonicApp`, compiled by `scripts/app-macos.sh` from [`macos/LogsonicApp.swift`](../macos/LogsonicApp.swift) (so the build also needs **`swiftc`** from the Xcode command line tools — already present wherever `codesign`/`xcrun` are). It shows the responsive LogSonic Dock icon + a log window and runs the Go server `logsonic` (kept at `Contents/MacOS/logsonic`, also the CLI the cask symlinks) as a child, opening the browser and shutting the child down gracefully on Quit. Both inner binaries are signed (hardened runtime) before the bundle.
+**App structure:** the bundle's `CFBundleExecutable` is a native AppKit shell, `LogsonicApp`, compiled by `scripts/app-macos.sh` from [`macos/LogsonicApp.swift`](../macos/LogsonicApp.swift) (so the build also needs **`swiftc`** from the Xcode command line tools — already present wherever `codesign`/`xcrun` are). It hosts the web UI in a `WKWebView`, runs the Go server `logsonic` (kept at `Contents/MacOS/logsonic`, also the CLI the cask symlinks) as a loopback-only child, and shuts the child down gracefully on Quit. Both inner binaries are signed (hardened runtime) before the bundle.
 
 **App icon:** `scripts/app-macos.sh` builds `AppIcon.icns` from `scripts/app-icon.svg` (the LogSonic "blitz" mark only — no wordmark — inset on the Apple icon grid). It renders each icon size with `rsvg-convert` (`brew install librsvg`) for crispness, falling back to downscaling the committed `scripts/app-icon.png` when librsvg isn't installed — so the build never hard-depends on it. To change the icon, edit `app-icon.svg` and regenerate the PNG: `rsvg-convert -w 1024 -h 1024 scripts/app-icon.svg -o scripts/app-icon.png`.
 
@@ -82,10 +82,14 @@ Avoid classic PATs with `repo` scope — they grant write to every repo you own,
 Create `backend/.release.env` (gitignored):
 
 ```sh
-# Apple notarization (optional for local releases, needed for full signed distribution)
+# Apple notarization (required for every non-snapshot release build)
 export MACOS_NOTARY_ISSUER_ID="<UUID from App Store Connect>"
 export MACOS_NOTARY_KEY_ID="<10-char Key ID>"
 export MACOS_NOTARY_KEY="$HOME/.config/logsonic/notary.p8"
+
+# Optional only when the Keychain contains multiple Developer ID identities.
+# With exactly one identity, the release scripts select it automatically.
+export MACOS_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
 
 # GitHub
 export GITHUB_TOKEN="<token from step 5>"
@@ -93,6 +97,8 @@ export HOMEBREW_TAP_TOKEN="<token from step 4>"
 ```
 
 `chmod 600 backend/.release.env` once written.
+
+All three notarization variables are mandatory for non-snapshot release runs. The release script fails before publishing if signing/notarization tools or credentials are unavailable; it never uploads an unnotarized standalone app.
 
 ---
 
@@ -124,6 +130,13 @@ spctl -a -t exec -vvv backend/dist/Logsonic.app                    # → "accept
 xcrun stapler validate backend/dist/Logsonic.app                   # → "The validate action worked!"
 ```
 
+For a credential-free development package check, including an optional real wrapper/API/shutdown smoke test:
+
+```bash
+backend/scripts/test-macos-app.sh
+LOGSONIC_APP_UI_SMOKE=1 backend/scripts/test-macos-app.sh
+```
+
 ---
 
 ## 8. Cut a real release
@@ -136,8 +149,9 @@ backend/scripts/release.sh
 
 `release.sh` will:
 - Build all platforms (GoReleaser); sign the darwin binaries locally via `codesign`
-- Upload the Linux `.tar.gz` + Windows `.zip` + checksums to <https://github.com/logsonic/logsonic/releases>
-- Notarize the darwin binaries, then build + notarize + staple `Logsonic.app`, zip it to `logsonic_<version>_macos.zip`, upload it, and publish `Casks/logsonic.rb` to the tap (`scripts/publish-cask.sh`, which also removes any stale `Formula/logsonic.rb`)
+- Create a draft containing the Linux `.tar.gz` + Windows `.zip` + checksums
+- Notarize the darwin binaries, then build + notarize + staple `Logsonic.app`, zip it to `logsonic_<version>_macos.zip`, and attach it to the draft
+- Publish the complete release, then publish `Casks/logsonic.rb` to the tap (`scripts/publish-cask.sh`, which also removes any stale `Formula/logsonic.rb`)
 
 macOS users install with (the cask resolves automatically — no `--cask` needed):
 
@@ -155,6 +169,6 @@ Linux/Windows: download the `.tar.gz`/`.zip` from the release, use Docker, or bu
 - **`codesign: The specified item could not be found in the keychain`** — the Developer ID cert or key is missing from login keychain. Reimport the `.cer` (double-click in Finder).
 - **`find-identity` shows the cert but 0 valid identities** — missing Apple intermediate CA. Download and import `DeveloperIDG2CA.cer` from <https://www.apple.com/certificateauthority/>.
 - **Notarization returns "Invalid" status** — two common causes: (1) the binary is **not properly Developer ID-signed** (e.g. it's adhoc/linker-signed) — Apple rejects anything not signed with hardened runtime + a Developer ID cert; verify with `codesign -dvv <binary>` that the Authority is `Developer ID Application`, not `adhoc`; or (2) the binary hash was already submitted from a prior run (Apple caches submissions). Pull the detailed log with `xcrun notarytool log <submission-id> --key … --key-id … --issuer …` to see the exact reason. For a clean release, tag a fresh commit and run `release.sh` once.
-- **Logsonic.app shows a Gatekeeper warning** — means notarize+staple didn't complete (the `MACOS_NOTARY_*` env vars were absent, or notarization returned non-Accepted). The `.app` is then signed but not stapled, so it forces an online check. Fix the notary creds and re-cut; verify with `xcrun stapler validate <app>` and `spctl -a -t exec -vvv <app>`.
+- **Release preflight rejects missing `MACOS_NOTARY_*` values** — configure all three credentials and re-run. Unnotarized standalone artifacts are intentionally not created or uploaded.
 - **`brew install logsonic` is stale / 404 on macOS** — the cask wasn't published. Either `HOMEBREW_TAP_TOKEN` was unset during `release.sh`, or `publish-cask.sh` ran before the zip finished uploading. Re-run `scripts/publish-cask.sh backend/dist/logsonic_<version>_macos.zip <version>` once the release asset is live.
 - **`brew install logsonic` installs a formula instead of the cask** — a stale `Formula/logsonic.rb` is still in the tap and shadows the cask. `publish-cask.sh` deletes it on every run; if one lingers from before, remove it from `logsonic/homebrew-logsonic` manually. The tap must contain only `Casks/logsonic.rb`.

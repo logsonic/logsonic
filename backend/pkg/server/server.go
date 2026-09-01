@@ -311,11 +311,20 @@ func (s *Server) Start() error {
 
 	url := fmt.Sprintf("http://%s", net.JoinHostPort(s.config.Host, strconv.Itoa(port)))
 	s.mcpBaseURL.Store(url)
-	fmt.Printf("Server listening on %s\n", url)
 
 	httpServer := &http.Server{
 		Handler: s.router,
 	}
+
+	// Accept connections before announcing the URL so the macOS WKWebView (and
+	// any other client that loads immediately) cannot race an unbound Serve().
+	serverErr := make(chan error, 1)
+	go func() {
+		if err := httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
+			serverErr <- err
+		}
+	}()
+	fmt.Printf("Server listening on %s\n", url)
 
 	// Start session cleanup goroutine; cancel it on shutdown.
 	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
@@ -325,11 +334,10 @@ func (s *Server) Start() error {
 	// Apply retention now and once a day; cancelled on shutdown.
 	s.startRetention(cleanupCtx)
 
-	// Open the web UI once the listener is up (the serve goroutine starts
-	// below, so a short delay avoids racing the first request).
+	// Open the web UI once the listener is up.
 	if s.config.OpenBrowser {
 		go func() {
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(150 * time.Millisecond)
 			if err := openBrowser(url); err != nil {
 				fmt.Fprintf(os.Stderr, "could not open browser (%v) — open %s manually\n", err, url)
 			}
@@ -339,13 +347,6 @@ func (s *Server) Start() error {
 	// Listen for OS signals in the background.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-
-	serverErr := make(chan error, 1)
-	go func() {
-		if err := httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
-			serverErr <- err
-		}
-	}()
 
 	select {
 	case err := <-serverErr:

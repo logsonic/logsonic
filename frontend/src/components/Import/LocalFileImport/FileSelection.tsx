@@ -1,5 +1,5 @@
 import { File as FileIcon, Plus, Trash2, Upload } from 'lucide-react';
-import { FC, useCallback, useRef, useState } from 'react';
+import { FC, useCallback, useEffect, useRef, useState } from 'react';
 import { useImportStore } from '../../../stores/useImportStore';
 import type { LogSourceProvider } from '../types';
 import { useFileSelectionService } from './FileSelectionService';
@@ -130,6 +130,36 @@ export const FileSelection: FC<LogSourceProvider> = ({
     if (droppedFiles.length > 0) {
       await processFiles(droppedFiles);
     }
+  }, [processFiles]);
+
+  useEffect(() => {
+    const w = window as Window & {
+      __logsonicPendingNativeFiles?: { urls: string[]; names: string[] };
+    };
+    const consume = async (detail?: { urls: string[]; names: string[] }) => {
+      if (!detail?.urls?.length) return;
+      w.__logsonicPendingNativeFiles = undefined;
+      const nativeFiles: File[] = [];
+      for (let i = 0; i < detail.urls.length; i += 1) {
+        try {
+          const res = await fetch(detail.urls[i]);
+          if (!res.ok) continue;
+          const blob = await res.blob();
+          nativeFiles.push(new File([blob], detail.names[i] || `file-${i}.log`));
+        } catch {
+          // Keep remaining dropped files if one native URL fails.
+        }
+      }
+      if (nativeFiles.length > 0) await processFiles(nativeFiles);
+    };
+    if (w.__logsonicPendingNativeFiles) {
+      void consume(w.__logsonicPendingNativeFiles);
+    }
+    const onNative = (event: Event) => {
+      void consume((event as CustomEvent<{ urls: string[]; names: string[] }>).detail);
+    };
+    window.addEventListener('logsonic-native-files', onNative);
+    return () => window.removeEventListener('logsonic-native-files', onNative);
   }, [processFiles]);
 
   const handleRemoveFile = (fileId: string) => {

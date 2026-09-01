@@ -106,6 +106,70 @@ func TestSearchPageReturnsBoundedRowsAndExactMetadata(t *testing.T) {
 	}
 }
 
+func TestSearchPageProjectsRequestedFields(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStorage(dir)
+	if err != nil {
+		t.Fatalf("new storage: %v", err)
+	}
+	ts := time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC)
+	if err := store.Store([]map[string]interface{}{{
+		"timestamp": ts, "_raw": "hello", "message": "hello", "status": 200,
+		"secret": "should not be returned", "_src": "app.log",
+	}}, "app.log"); err != nil {
+		t.Fatalf("store logs: %v", err)
+	}
+	result, err := store.SearchPage(context.Background(), SearchOptions{
+		StartDate: ts.Add(-time.Minute), EndDate: ts.Add(time.Minute),
+		Fields: []string{"message"}, Limit: 10, SortBy: "timestamp", SortOrder: "desc",
+	})
+	if err != nil {
+		t.Fatalf("search page: %v", err)
+	}
+	if len(result.Logs) != 1 {
+		t.Fatalf("got %d logs, want 1", len(result.Logs))
+	}
+	if _, ok := result.Logs[0]["secret"]; ok {
+		t.Fatal("projected response contains an unrequested field")
+	}
+	for _, field := range []string{"message", "timestamp", "_src", "_raw", "_id"} {
+		if _, ok := result.Logs[0][field]; !ok {
+			t.Fatalf("projected response missing required field %q", field)
+		}
+	}
+}
+
+func TestSearchPageCanDeferDistributionWithoutLosingExactCount(t *testing.T) {
+	store, _ := setupTestStorage(t)
+	timestamp := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	logs := []map[string]interface{}{
+		{"timestamp": timestamp, "_raw": "first", "_src": "app.log", "message": "first"},
+		{"timestamp": timestamp.Add(time.Minute), "_raw": "second", "_src": "app.log", "message": "second"},
+	}
+	if err := store.Store(logs, "app.log"); err != nil {
+		t.Fatalf("store logs: %v", err)
+	}
+
+	result, err := store.SearchPage(context.Background(), SearchOptions{
+		StartDate:        timestamp.Add(-time.Hour),
+		EndDate:          timestamp.Add(time.Hour),
+		Sources:          []string{"app.log"},
+		Limit:            1,
+		SortBy:           "timestamp",
+		SortOrder:        "desc",
+		SkipDistribution: true,
+	})
+	if err != nil {
+		t.Fatalf("SearchPage: %v", err)
+	}
+	if result.TotalCount != 2 || len(result.Logs) != 1 {
+		t.Fatalf("unexpected deferred result: %#v", result)
+	}
+	if len(result.Distribution) != 0 {
+		t.Fatalf("deferred result included distribution: %#v", result.Distribution)
+	}
+}
+
 func TestSearchPageAscendingUsesSequenceTieBreaker(t *testing.T) {
 	store, _ := setupTestStorage(t)
 	timestamp := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
@@ -202,6 +266,25 @@ func TestSearchPageSupportsLegacyUnindexedTimestampShard(t *testing.T) {
 	}
 	if len(result.Distribution) == 0 || distributionTotal(result.Distribution) != 1 {
 		t.Fatalf("unexpected legacy distribution: %#v", result.Distribution)
+	}
+
+	deferred, err := store.SearchPage(context.Background(), SearchOptions{
+		StartDate:        day.Add(9 * time.Hour),
+		EndDate:          day.Add(11 * time.Hour),
+		Sources:          []string{"legacy.log"},
+		Limit:            10,
+		SortBy:           "timestamp",
+		SortOrder:        "desc",
+		SkipDistribution: true,
+	})
+	if err != nil {
+		t.Fatalf("deferred legacy SearchPage: %v", err)
+	}
+	if deferred.TotalCount != 1 || len(deferred.Logs) != 1 {
+		t.Fatalf("unexpected deferred legacy result: %#v", deferred)
+	}
+	if len(deferred.Distribution) != 0 {
+		t.Fatalf("deferred legacy result included distribution: %#v", deferred.Distribution)
 	}
 
 	wholeDay, err := store.SearchPage(context.Background(), SearchOptions{

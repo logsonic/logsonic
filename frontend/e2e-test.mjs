@@ -73,13 +73,6 @@ async function apiTests() {
     await assert(json.status === 'success', 'Response has status:success');
   });
 
-  await section('API – AI Status', async () => {
-    const r = await fetch(`${API_URL}/ai/status`);
-    await assert(r.ok, 'GET /ai/status returns 200');
-    const json = await r.json();
-    await assert(typeof json.ollama_running === 'boolean', 'ollama_running is boolean');
-    await assert(Array.isArray(json.models_available), 'models_available is array');
-  });
 }
 
 // ─── Browser tests ───────────────────────────────────────────────────────────
@@ -98,7 +91,9 @@ async function browserTests(browser) {
   try {
     // ── Home page ──────────────────────────────────────────────────────────
     await section('Home Page – Load', async () => {
-      await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+      // The home page maintains an SSE live-tail connection, so networkidle is
+      // intentionally never reached. Wait for DOM readiness, then assert the UI.
+      await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
       const title = await page.title();
       await assert(title === 'LogSonic', `Page title is "LogSonic" (got "${title}")`);
     });
@@ -141,7 +136,7 @@ async function browserTests(browser) {
     });
 
     await section('Import Page – Renders', async () => {
-      await page.goto(`${BASE_URL}/#/import`, { waitUntil: 'networkidle', timeout: 10000 });
+      await page.goto(`${BASE_URL}/#/import`, { waitUntil: 'domcontentloaded', timeout: 10000 });
       await page.waitForTimeout(500);
       const content = await page.locator('main, [role="main"], #root > *').count();
       await assert(content > 0, 'Import page content renders');
@@ -155,7 +150,7 @@ async function browserTests(browser) {
 
     // ── Back to home ───────────────────────────────────────────────────────
     await section('Navigation – Back to Home', async () => {
-      await page.goto(`${BASE_URL}/#/`, { waitUntil: 'networkidle', timeout: 10000 });
+      await page.goto(`${BASE_URL}/#/`, { waitUntil: 'domcontentloaded', timeout: 10000 });
       await page.waitForTimeout(500);
       const url = page.url();
       await assert(url.endsWith('/#/') || url.endsWith('/#'), 'Navigated back to home');
@@ -219,7 +214,7 @@ async function browserTests(browser) {
 
     // ── 404 page ───────────────────────────────────────────────────────────
     await section('404 Page – Unknown Route', async () => {
-      await page.goto(`${BASE_URL}/#/definitely-does-not-exist`, { waitUntil: 'networkidle', timeout: 10000 });
+      await page.goto(`${BASE_URL}/#/definitely-does-not-exist`, { waitUntil: 'domcontentloaded', timeout: 10000 });
       await page.waitForTimeout(500);
       const bodyText = await page.locator('body').innerText();
       const has404 = bodyText.toLowerCase().includes('not found') || bodyText.includes('404') || bodyText.includes('page not found');
@@ -227,7 +222,7 @@ async function browserTests(browser) {
     });
 
     // ── Screenshot ─────────────────────────────────────────────────────────
-    await page.goto(`${BASE_URL}/#/`, { waitUntil: 'networkidle', timeout: 10000 });
+    await page.goto(`${BASE_URL}/#/`, { waitUntil: 'domcontentloaded', timeout: 10000 });
     await page.waitForTimeout(1000);
     await page.screenshot({ path: '/tmp/logsonic-e2e.png', fullPage: true });
     console.log('\n  Screenshot saved to /tmp/logsonic-e2e.png');
@@ -253,7 +248,7 @@ async function multiFileImportTests(browser) {
   try {
     // ── Navigate to import page ────────────────────────────────────────────
     await section('Multi-File Import – Navigate to Import Page', async () => {
-      await page.goto(`${BASE_URL}/#/import`, { waitUntil: 'networkidle', timeout: 15000 });
+      await page.goto(`${BASE_URL}/#/import`, { waitUntil: 'domcontentloaded', timeout: 15000 });
       // After the CloudWatch removal, local files are the only ingest source
       // and the wizard renders the dropzone directly — no source picker.
       await page.waitForSelector('text=Drop log files here', { timeout: 10000 });

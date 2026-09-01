@@ -10,6 +10,7 @@ export interface SearchQueryParamsStoreState {
   searchQuery: string; // Actual keywords input by the user
   firstLoad: boolean; //Set when a new file has been ingested and home page opens for the first time
   sources: string[]; // _src filter
+  sourcesInitialized: boolean; // distinguishes startup from an intentional empty selection
   dirty: boolean; // Flag to indicate if the search query has been modified
   isLoading: boolean; // Flag to indicate if the search is in progress
   isRelative: boolean; // Flag to indicate if the time range is relative
@@ -53,6 +54,7 @@ export interface SearchQueryParamsStoreState {
   setSearchQuery: (searchQuery: string) => void;
   setFirstLoad: (firstLoad: boolean) => void;
   setSources: (sources: string[]) => void;
+  setSourcesInitialized: (initialized: boolean) => void;
   setLoading: (isLoading: boolean) => void;
   setResultCount: (resultCount: number) => void;
   setResultQueryLatency: (resultQueryLatency: number) => void;
@@ -159,6 +161,7 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
         searchQuery: initialQuery,
         firstLoad: true,
         sources: [],
+        sourcesInitialized: false,
         dirty: false,
         isLoading: false, 
         isRelative: false,
@@ -208,6 +211,9 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
           if (!areStringArraysEqual(currentState.sources, sources)) {
             set({ sources });
           }
+        },
+        setSourcesInitialized: (sourcesInitialized) => {
+          set({ sourcesInitialized });
         },
         setIsRelative: (isRelative) => {
           const currentState = get();
@@ -657,6 +663,7 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
             firstLoad: true,
             searchQuery: '',
             sources: [],
+            sourcesInitialized: false,
             dirty: false,
             isLoading: false,
             isRelative: true,
@@ -705,6 +712,9 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
         selectedColumns: state.selectedColumns,
         mandatoryColumns: state.mandatoryColumns,
         columnWidths: state.columnWidths,
+        // Source discovery is runtime-only. An empty persisted list must not
+        // be mistaken for an intentional Deselect All before /info resolves.
+        sourcesInitialized: false,
       }),
       onRehydrateStorage: () => (state) => {
         // Convert ISO strings back to Date objects when rehydrating
@@ -712,6 +722,7 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
           state.UTCTimeSince = ensureDate(state.UTCTimeSince);
           state.UTCTimeTo = ensureDate(state.UTCTimeTo);
           state.resultReceviedOn = ensureDate(state.resultReceviedOn);
+          state.sourcesInitialized = false;
           
           // Ensure timestamp values are set
           if (!state.UTCTimeSinceMs) {
@@ -757,19 +768,25 @@ if (typeof window !== 'undefined') {
         // StatusBar listens to systemInfo independently; we just need to know
         // whether storage is empty *at load*.
         import('@/lib/api-client').then(({ getSystemInfo }) => {
-          getSystemInfo(true).then(info => {
+          // Storage mutations invalidate the backend's info cache, so a forced
+          // rescan here only delays startup on large indexes.
+          getSystemInfo().then(info => {
             const empty = (info?.storage_info?.total_log_entries ?? 0) === 0;
             if (empty) {
               const s = useSearchQueryParamsStore.getState();
               if (s.searchQuery) s.clearSearchQuery();
             } else {
               store.syncWithUrlParams();
-              store.triggerSearch();
+              if (!useSearchQueryParamsStore.getState().hasSearched) {
+                store.triggerSearch();
+              }
             }
           }).catch(() => {
             // If system info fails, fall back to old behavior — don't strip.
             store.syncWithUrlParams();
-            if (initialUrlParams.q) store.triggerSearch();
+            if (initialUrlParams.q && !useSearchQueryParamsStore.getState().hasSearched) {
+              store.triggerSearch();
+            }
           });
         });
         return;
@@ -777,7 +794,7 @@ if (typeof window !== 'undefined') {
       store.syncWithUrlParams();
 
       // After syncing, trigger a search if there's a query
-      if (initialUrlParams.q) {
+      if (initialUrlParams.q && !useSearchQueryParamsStore.getState().hasSearched) {
         store.triggerSearch();
       }
     }, 0);

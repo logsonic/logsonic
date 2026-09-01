@@ -1,23 +1,23 @@
 # LogSonic Release Strategy
 
-End-to-end plan for shipping signed `.dmg` (macOS), signed `.exe` installer (Windows), Linux archives, and a Homebrew tap. GoReleaser remains the orchestrator; this doc fills in the wrapping, signing, notarization, and distribution gaps the current `backend/.goreleaser.yaml` does not cover.
+Current release contract plus the longer-term plan for signed Windows installers and expanded Linux packages. GoReleaser remains the orchestrator.
 
 ---
 
 ## 1. Current state
 
-- Build: GoReleaser produces stripped `tar.gz` archives (darwin/linux) and `zip` (windows) for amd64/arm64, plus a `lipo`-merged darwin universal binary, at [`backend/.goreleaser.yaml`](backend/.goreleaser.yaml).
+- Build: GoReleaser produces stripped Linux `tar.gz` and Windows `zip` archives for amd64/arm64. It also builds a `lipo`-merged universal darwin binary used only inside the app bundle; no bare macOS archive is published. See [`backend/.goreleaser.yaml`](backend/.goreleaser.yaml).
 - Frontend: Vite build copied into [backend/pkg/static/dist/](backend/pkg/static/dist/) and embedded via `go:embed`.
-- Runtime: [backend/main.go](backend/main.go) is a CLI that binds `localhost:8080` and prints "open this URL in your browser" — no native window, no menubar item, no auto-launch.
-- Signing: **macOS binaries are signed with a Developer ID Application identity** (Keychain) and the darwin builds are **notarized** with Apple. No `.app` bundle, `.dmg`, or Windows installer/Authenticode yet.
+- Runtime: [backend/main.go](backend/main.go) remains the headless CLI. `Logsonic.app` uses a native AppKit launcher with an embedded `WKWebView`, starts the Go server as a loopback-only child, supports browser fallback, and shuts the child down with the app.
+- Signing: macOS ships as a universal, Developer ID-signed, notarized, and stapled `Logsonic.app` zip. Windows installer/Authenticode is not implemented yet.
 - CI: no `.github/workflows` — releases are run manually from a dev machine via [`backend/scripts/release.sh`](backend/scripts/release.sh).
-- Distribution: GitHub Releases + a **live Homebrew tap** at [`logsonic/homebrew-logsonic`](https://github.com/logsonic/homebrew-logsonic) (`brew install logsonic/logsonic/logsonic`).
+- Distribution: GitHub Releases + a live Homebrew cask at [`logsonic/homebrew-logsonic`](https://github.com/logsonic/homebrew-logsonic) (`brew tap logsonic/logsonic && brew install logsonic`).
 
 ### How macOS signing works today
 
-GoReleaser's `binary_signs` block signs each Mach-O binary in place (before archiving) using the login-Keychain Developer ID identity. The codesign call is wrapped in an external script, [`backend/scripts/sign-macos.sh`](backend/scripts/sign-macos.sh), rather than an inline `sh -c` — GoReleaser runs its own `$`/`${}` expansion over every inline arg string, which would silently blank out a literal `$1` and sign nothing. The script also guards on `file … Mach-O`, so codesign never touches the linux/windows binaries. The universal binary is re-signed by `universal_binaries.hooks.post` after `lipo` strips per-arch signatures.
+GoReleaser build post-hooks sign each Mach-O binary in place using the login-Keychain Developer ID identity. The codesign call is wrapped in [`backend/scripts/sign-macos.sh`](backend/scripts/sign-macos.sh). The universal binary is re-signed by `universal_binaries.hooks.post` after `lipo` strips per-arch signatures.
 
-Notarization runs *after* GoReleaser, in [`backend/scripts/release.sh`](backend/scripts/release.sh): each signed darwin binary is zipped and submitted to `xcrun notarytool`, registering its CD hash with Apple's online ticket service so the existing `.tar.gz` archives become Gatekeeper-valid (no stapling — that only works on `.pkg`/`.dmg`/`.app`).
+[`backend/scripts/release.sh`](backend/scripts/release.sh) keeps the GitHub release as a draft while it builds the app. [`backend/scripts/app-macos.sh`](backend/scripts/app-macos.sh) signs both inner executables and the bundle, submits it to `notarytool`, staples and validates the ticket, then creates `logsonic_<version>_macos.zip`. Only after that asset is uploaded does the driver publish the release and update the cask.
 
 > ⚠️ Pitfall: do **not** set `artifacts: none` on `binary_signs` — that field filters *which artifacts to sign*, and `none` disables the whole pipe (`artifact signing is disabled`), shipping unsigned binaries. `signature: ""` is what prevents a separate `.sig` artifact.
 
@@ -25,13 +25,13 @@ One-time setup (certs, notary API key, tokens, `.release.env`) is documented in 
 
 ### Today's manual flow
 
-Run from a dev machine until CI takes over (§9). Produces signed + notarized darwin archives, plus linux/windows archives, attached to a GitHub Release, and updates the Homebrew tap.
+Run from a dev machine until CI takes over (§9). Produces a notarized/stapled macOS app plus Linux/Windows archives, attaches the complete set to a GitHub Release, and updates the Homebrew tap.
 
 **Prerequisites**
 
 - [GoReleaser](https://goreleaser.com/install/) installed (`brew install goreleaser`).
 - A Developer ID Application cert in your login Keychain (see [SIGNING.md §1](backend/scripts/SIGNING.md)).
-- [`backend/.release.env`](backend/scripts/SIGNING.md) (gitignored, `chmod 600`) exporting `GITHUB_TOKEN`, `HOMEBREW_TAP_TOKEN`, and optionally `MACOS_NOTARY_ISSUER_ID` / `MACOS_NOTARY_KEY_ID` / `MACOS_NOTARY_KEY` for notarization.
+- [`backend/.release.env`](backend/scripts/SIGNING.md) (gitignored, `chmod 600`) exporting `GITHUB_TOKEN`, `HOMEBREW_TAP_TOKEN`, and the required `MACOS_NOTARY_ISSUER_ID` / `MACOS_NOTARY_KEY_ID` / `MACOS_NOTARY_KEY` values for notarization.
 
 **Steps**
 
@@ -54,7 +54,7 @@ Run from a dev machine until CI takes over (§9). Produces signed + notarized da
 
 The driver handles the frontend build (`npm ci && npm run build && npm run build:copy`) and the `cd backend` itself — no manual prep needed.
 
-## 2. Target artifacts (per release)
+## 2. Longer-term target artifacts
 
 | Platform | Artifact | Signed | Notes |
 |---|---|---|---|
@@ -74,26 +74,16 @@ The driver handles the frontend build (`npm ci && npm run build && npm run build
 
 ---
 
-## 3. Native-app wrapper (prerequisite for `.dmg` and signed `.exe`)
+## 3. Native-app wrapper
 
-The binary today is headless. To make a real double-click app we add a small wrapper around `main.go` that:
+The macOS wrapper is implemented in [`backend/macos/LogsonicApp.swift`](backend/macos/LogsonicApp.swift). It:
 
-1. Starts the existing HTTP server in a goroutine (refactor [backend/main.go](backend/main.go) so `Start()` is non-blocking or runs in its own goroutine).
-2. Opens the default browser to `http://localhost:<port>` (try `os/exec` with `open`/`xdg-open`/`rundll32 url.dll,FileProtocolHandler`, or use [`pkg/browser`](https://github.com/pkg/browser)).
-3. Adds a menubar/tray icon with **Open LogSonic**, **Storage folder…**, **About**, **Quit** — use [`fyne.io/systray`](https://github.com/fyne-io/systray) (pure-Go, cross-platform, no CGO needed on macOS/Windows for systray itself but Linux needs `libayatana-appindicator`).
-4. On `Quit`, gracefully shuts down the chi server.
+1. Starts the embedded Go server as a child bound to `127.0.0.1`, with automatic port selection.
+2. Loads the same-origin UI inside `WKWebView`, with an explicit browser-mode fallback.
+3. Supports file import, downloads, JavaScript confirmation dialogs, external-link handoff, server logs, and revealing the storage directory.
+4. Sends `SIGINT` on Quit, waits for graceful shutdown, and escalates safely so the child cannot be orphaned.
 
-Suggested layout:
-
-```
-backend/
-  cmd/
-    logsonic/      # existing CLI entrypoint (headless, for `brew install logsonic`)
-    logsonic-app/  # new GUI wrapper entrypoint (for .app / .exe)
-  pkg/...
-```
-
-Two GoReleaser `builds:` entries — one per entrypoint — keeps the CLI path clean for Homebrew formula users who don't want a tray icon.
+Windows and Linux native GUI/tray wrappers remain future work; current releases on those platforms are headless archives.
 
 ---
 
@@ -502,7 +492,7 @@ Switch from manual `git tag` to a checklist-driven flow:
 - [ ] Bump version in [frontend/package.json](frontend/package.json) and any `version` constant in Go (or read from `runtime/debug.ReadBuildInfo`).
 - [ ] Update `CHANGELOG.md` (GoReleaser already generates one from commits, but a hand-curated highlights section reads better).
 - [ ] Run `cd frontend && npm ci && npm run build && npm run build:copy`.
-- [ ] Smoke-test the embedded binary: `cd backend && go run ./cmd/logsonic-app` — confirm tray icon, browser open, server up.
+- [ ] Run `backend/scripts/test-macos-app.sh` and `LOGSONIC_APP_UI_SMOKE=1 backend/scripts/test-macos-app.sh` — confirm the bundle, in-app UI, loopback API, and shutdown path.
 - [ ] `git tag -a vX.Y.Z -m "Release vX.Y.Z" && git push origin vX.Y.Z`.
 - [ ] Watch the GitHub Action; verify all artifacts uploaded, Homebrew tap PR auto-created/merged.
 - [ ] Download the `.dmg` and `.exe` on a clean machine — no Gatekeeper/SmartScreen warning.

@@ -64,6 +64,8 @@ type LogData = Record<string, any>;
 
 const fixedColumns = ['select', 'expander'];
 const STYLE_CACHE_LIMIT = LIVE_ROW_LIMIT * 2;
+const VIRTUAL_ROW_HEIGHT = 34;
+const VIRTUAL_OVERSCAN = 8;
 
 type RowStyleInfo = {
   className: string;
@@ -244,8 +246,10 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
   const { setSystemInfo } = useSystemInfoStore();
   const { searchLogs } = useSearchLogs();
 
-  const tableRef = useRef<HTMLTableElement>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
   const [tableHeight, setTableHeight] = useState('calc(100vh - 240px)');
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(600);
 
   // Function to calculate optimal table height
   const calculateTableHeight = useCallback(() => {
@@ -281,6 +285,26 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
   useEffect(() => {
     calculateTableHeight();
   }, [store.pageSize, calculateTableHeight]);
+
+  // Keep only rows near the viewport mounted. The surrounding scroll area is
+  // owned by LogViewer, so spacer rows preserve the native table scrollbar
+  // and avoid changing keyboard/selection behavior.
+  useEffect(() => {
+    const wrapper = tableRef.current?.parentElement?.parentElement;
+    if (!wrapper) return;
+
+    const updateViewport = () => setViewportHeight(wrapper.clientHeight || 600);
+    const onScroll = () => setScrollTop(wrapper.scrollTop);
+    updateViewport();
+    onScroll();
+    wrapper.addEventListener('scroll', onScroll, { passive: true });
+    const observer = new ResizeObserver(updateViewport);
+    observer.observe(wrapper);
+    return () => {
+      wrapper.removeEventListener('scroll', onScroll);
+      observer.disconnect();
+    };
+  }, [liveEnabled, logs.length]);
 
   // Extract search tokens from the current query
   const searchTokens = useMemo(() => {
@@ -475,6 +499,23 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
   
   // State for expanded rows
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const virtualization = useMemo(() => {
+    const expandedRows = Object.values(expanded).some(Boolean);
+    if (liveEnabled || expandedRows || logs.length <= 50) {
+      return { start: 0, end: logs.length, top: 0, bottom: 0 };
+    }
+    const firstVisible = Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT));
+    const visibleCount = Math.ceil(viewportHeight / VIRTUAL_ROW_HEIGHT);
+    const start = Math.max(0, firstVisible - VIRTUAL_OVERSCAN);
+    const end = Math.min(logs.length, firstVisible + visibleCount + VIRTUAL_OVERSCAN);
+    return {
+      start,
+      end,
+      top: start * VIRTUAL_ROW_HEIGHT,
+      bottom: Math.max(0, (logs.length - end) * VIRTUAL_ROW_HEIGHT),
+    };
+  }, [expanded, liveEnabled, logs.length, scrollTop, viewportHeight]);
   
   // State for selected rows
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -1212,7 +1253,12 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
               ))}
             </thead>
             <tbody>
-              {table.getRowModel().rows.map(row => {
+              {virtualization.top > 0 && (
+                <tr aria-hidden="true">
+                  <td colSpan={table.getVisibleLeafColumns().length} style={{ height: virtualization.top, padding: 0, border: 0 }} />
+                </tr>
+              )}
+              {table.getRowModel().rows.slice(virtualization.start, virtualization.end).map(row => {
                 const rowStyleInfo = getRowStyles(row.original, row.getIsSelected());
                 
                 return (
@@ -1251,6 +1297,11 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
                   </React.Fragment>
                 );
               })}
+              {virtualization.bottom > 0 && (
+                <tr aria-hidden="true">
+                  <td colSpan={table.getVisibleLeafColumns().length} style={{ height: virtualization.bottom, padding: 0, border: 0 }} />
+                </tr>
+              )}
             </tbody>
           </table>
         </DndContext>

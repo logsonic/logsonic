@@ -34,6 +34,7 @@ type mockStorage struct {
 	docCounts   map[string]uint64
 	searchCalls int
 	pageCalls   int
+	pageOptions storagepkg.SearchOptions
 }
 
 func newMockStorage() *mockStorage {
@@ -75,6 +76,7 @@ func (m *mockStorage) Search(query string, startDate, endDate *time.Time, source
 
 func (m *mockStorage) SearchPage(ctx context.Context, options storagepkg.SearchOptions) (storagepkg.SearchPageResult, error) {
 	m.pageCalls++
+	m.pageOptions = options
 	if err := ctx.Err(); err != nil {
 		return storagepkg.SearchPageResult{}, err
 	}
@@ -954,6 +956,59 @@ func TestHandleReadAll_UsesBoundedTimestampPage(t *testing.T) {
 	}
 	if store.pageCalls != 1 || store.searchCalls != 0 {
 		t.Fatalf("expected bounded page path, got page=%d legacy=%d", store.pageCalls, store.searchCalls)
+	}
+}
+
+func TestHandleReadAllCanDeferDistribution(t *testing.T) {
+	h, store := setupHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/logs?include_distribution=false&limit=10&sort_by=timestamp", nil)
+	w := httptest.NewRecorder()
+
+	h.HandleReadAll(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if !store.pageOptions.SkipDistribution {
+		t.Fatal("include_distribution=false did not defer the storage facet")
+	}
+}
+
+func TestHandleReadAllCanDeferDistributionForDynamicSort(t *testing.T) {
+	h, store := setupHandler(t)
+	store.logs = []map[string]interface{}{{
+		"timestamp": time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC),
+		"message":   "hello",
+	}}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/logs?include_distribution=false&limit=10&sort_by=message", nil)
+	w := httptest.NewRecorder()
+
+	h.HandleReadAll(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response types.LogResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.LogDistribution) != 0 {
+		t.Fatalf("deferred dynamic sort included distribution: %#v", response.LogDistribution)
+	}
+}
+
+func TestHandleReadAllRejectsInvalidIncludeDistribution(t *testing.T) {
+	h, store := setupHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/logs?include_distribution=eventually", nil)
+	w := httptest.NewRecorder()
+
+	h.HandleReadAll(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if store.pageCalls != 0 || store.searchCalls != 0 {
+		t.Fatal("invalid include_distribution reached storage")
 	}
 }
 

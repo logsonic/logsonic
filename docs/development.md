@@ -4,7 +4,7 @@ For development and testing, run the backend and frontend as separate processes.
 
 ## Backend
 
-Go 1.25.7 or later is required. For hot reload:
+Go 1.26.6 or later is required. For hot reload:
 
 ```bash
 go install github.com/air-verse/air@latest

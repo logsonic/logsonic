@@ -1,5 +1,4 @@
 import { Header } from '@/components/Home/Header';
-import LogDistributionChart from '@/components/Home/LogDistributionChart';
 import { LogSearch } from '@/components/Home/LogSearch';
 import { LogViewer } from '@/components/Home/LogViewer/LogViewer';
 import { LeftPanelContent, SIDEBAR_WIDTHS } from '@/components/Home/Sidebar/CollapsiblePanel';
@@ -7,12 +6,49 @@ import { SidebarPanel } from '@/components/Home/SidebarPanel';
 import { LeftRail } from '@/components/Shell/LeftRail';
 import { StatusBar } from '@/components/Shell/StatusBar';
 import { useCollapsiblePanel } from '@/hooks/useCollapsiblePanel';
+import { useLogResultStore } from '@/stores/useLogResultStore';
 import useSearchQueryParamsStore from '@/stores/useSearchQueryParams';
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 
 const SIDEBAR_WIDTH_STORAGE_KEY = 'logsonic-sidebar-width';
 const RAIL_W = 56;
 const TOPBAR_H = 44;
+const LogDistributionChart = lazy(() => import('@/components/Home/LogDistributionChart'));
+
+const ChartLoadingShell = () => (
+  <div
+    style={{
+      height: 76,
+      background: 'var(--ls-panel)',
+      borderBottom: '1px solid var(--ls-border)',
+    }}
+  >
+    <div
+      className="flex items-center px-3 font-semibold uppercase tracking-wider"
+      style={{ height: 28, fontSize: 11, color: 'var(--ls-text-2)' }}
+    >
+      Event distribution
+    </div>
+  </div>
+);
+
+const DeferredLogDistributionChart = () => {
+  const hasFirstPage = useLogResultStore(state => state.logData !== null);
+  const [loadChart, setLoadChart] = useState(false);
+
+  useEffect(() => {
+    if (!hasFirstPage || loadChart) return;
+    const timer = window.setTimeout(() => setLoadChart(true), 250);
+    return () => window.clearTimeout(timer);
+  }, [hasFirstPage, loadChart]);
+
+  if (!loadChart) return <ChartLoadingShell />;
+  return (
+    <Suspense fallback={<ChartLoadingShell />}>
+      <LogDistributionChart />
+    </Suspense>
+  );
+};
 
 const BrandMark = () => (
   <svg
@@ -180,7 +216,7 @@ const Home = () => {
             <LogSearch />
           </div>
 
-          <LogDistributionChart />
+          <DeferredLogDistributionChart />
 
           <div
             className="flex-1 flex flex-col overflow-hidden"
