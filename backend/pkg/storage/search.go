@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"runtime"
 	"sync"
 	"time"
@@ -115,12 +114,9 @@ func (s *Storage) Search(queryStr string, startDate, endDate *time.Time, sources
 				// Prepare the search query
 				var searchQuery query.Query
 				if queryStr != "" {
-					unescapedQueryStr, err := url.PathUnescape(queryStr)
-					if err != nil {
-						resultChan <- indexResult{err: fmt.Errorf("invalid query encoding: %w", err)}
-						return
-					}
-					parsedQuery, err := bleve.NewQueryStringQuery(unescapedQueryStr).Parse()
+					// queryStr arrives already URL-decoded by net/http; decoding
+					// it again here mangled any literal '%' (see now-07).
+					parsedQuery, err := bleve.NewQueryStringQuery(queryStr).Parse()
 					if err != nil {
 						resultChan <- indexResult{err: fmt.Errorf("invalid query: %w", err)}
 						return

@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -557,11 +556,9 @@ func buildPageQuery(queryStr string, sources []string) (query.Query, error) {
 	if queryStr == "" {
 		searchQuery = bleve.NewMatchAllQuery()
 	} else {
-		unescaped, err := url.PathUnescape(queryStr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid query encoding: %w", err)
-		}
-		parsed, err := bleve.NewQueryStringQuery(unescaped).Parse()
+		// queryStr arrives already URL-decoded by net/http; a second decode
+		// here turned message:"100%" into a 500 and a%20b into "a b" (now-07).
+		parsed, err := bleve.NewQueryStringQuery(queryStr).Parse()
 		if err != nil {
 			return nil, fmt.Errorf("invalid query: %w", err)
 		}
