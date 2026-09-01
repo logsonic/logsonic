@@ -20,7 +20,24 @@ export default {
     },
     extend: {
       fontFamily: {
-        montserrat: ['Montserrat', 'sans-serif'],
+        sans: [
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'Segoe UI',
+          'Roboto',
+          'Helvetica Neue',
+          'Arial',
+          'sans-serif',
+        ],
+        mono: [
+          'ui-monospace',
+          'SF Mono',
+          'SFMono-Regular',
+          'Menlo',
+          'Consolas',
+          'Liberation Mono',
+          'monospace',
+        ],
       },
       colors: {
         border: "hsl(var(--border))",
