@@ -82,39 +82,34 @@ swift_build=""
 
 # Build AppIcon.icns. Prefer rendering each iconset size straight from the SVG
 # (crisp at every resolution); fall back to downscaling the pre-rendered PNG when
-# librsvg (rsvg-convert) isn't installed, so the build never hard-depends on it.
-icon_plist_entry=""
-if command -v sips >/dev/null && command -v iconutil >/dev/null; then
-  icon_tmp=$(mktemp -d)
-  iconset="$icon_tmp/AppIcon.iconset"
-  mkdir -p "$iconset"
-  render_ok=1
-  if [[ "$icon_src" == *.svg ]] && command -v rsvg-convert >/dev/null; then
-    for sz in 16 32 64 128 256 512; do
-      rsvg-convert -w "$sz"        -h "$sz"        "$icon_src" -o "$iconset/icon_${sz}x${sz}.png"     || render_ok=0
-      rsvg-convert -w $((sz*2))    -h $((sz*2))    "$icon_src" -o "$iconset/icon_${sz}x${sz}@2x.png"  || render_ok=0
-    done
-  else
-    # Raster fallback: use the supplied PNG, or the committed pre-rendered icon.
-    src_png="$icon_src"; [[ "$src_png" == *.svg ]] && src_png="$icon_png_fallback"
-    if [ -f "$src_png" ]; then
-      for sz in 16 32 64 128 256 512; do
-        sips -z "$sz" "$sz"         "$src_png" --out "$iconset/icon_${sz}x${sz}.png"     >/dev/null
-        sips -z $((sz*2)) $((sz*2)) "$src_png" --out "$iconset/icon_${sz}x${sz}@2x.png" >/dev/null
-      done
-    else
-      render_ok=0
-    fi
-  fi
-  if [ "$render_ok" = 1 ]; then
-    iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
-    icon_plist_entry='
+# librsvg (rsvg-convert) isn't installed. A native release without its icon is a
+# packaging failure, rather than a condition to silently ignore.
+command -v sips >/dev/null || { echo "app-macos.sh: sips is required to build the app icon" >&2; exit 1; }
+command -v iconutil >/dev/null || { echo "app-macos.sh: iconutil is required to build the app icon" >&2; exit 1; }
+icon_tmp=$(mktemp -d)
+iconset="$icon_tmp/AppIcon.iconset"
+mkdir -p "$iconset"
+if [[ "$icon_src" == *.svg ]] && command -v rsvg-convert >/dev/null; then
+  for sz in 16 32 128 256 512; do
+    rsvg-convert -w "$sz" -h "$sz" "$icon_src" -o "$iconset/icon_${sz}x${sz}.png"
+    rsvg-convert -w $((sz*2)) -h $((sz*2)) "$icon_src" -o "$iconset/icon_${sz}x${sz}@2x.png"
+  done
+else
+  # Raster fallback: use the supplied PNG, or the committed pre-rendered icon.
+  src_png="$icon_src"; [[ "$src_png" == *.svg ]] && src_png="$icon_png_fallback"
+  [ -f "$src_png" ] || { echo "app-macos.sh: app icon source not found: $src_png" >&2; exit 1; }
+  for sz in 16 32 128 256 512; do
+    sips -z "$sz" "$sz" "$src_png" --out "$iconset/icon_${sz}x${sz}.png" >/dev/null
+    sips -z $((sz*2)) $((sz*2)) "$src_png" --out "$iconset/icon_${sz}x${sz}@2x.png" >/dev/null
+  done
+fi
+iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
+[ -s "$app/Contents/Resources/AppIcon.icns" ] || { echo "app-macos.sh: failed to create AppIcon.icns" >&2; exit 1; }
+icon_plist_entry='
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>'
-  fi
-  rm -rf "$icon_tmp"
-  icon_tmp=""
-fi
+rm -rf "$icon_tmp"
+icon_tmp=""
 
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

@@ -14,6 +14,7 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 backend_dir="$(cd "$script_dir/.." && pwd)"
 swift_src="$backend_dir/macos/LogsonicApp.swift"
 listening_src="$backend_dir/macos/ListeningURL.swift"
+icon_png="$script_dir/app-icon.png"
 outdir="$backend_dir/dist-dev"
 app="$outdir/Logsonic.app"
 
@@ -26,6 +27,9 @@ fi
 [ -f "$bin" ] || { echo "dev-macos-app.sh: no binary at $bin" >&2; exit 1; }
 [ -f "$swift_src" ] || { echo "dev-macos-app.sh: missing $swift_src" >&2; exit 1; }
 [ -f "$listening_src" ] || { echo "dev-macos-app.sh: missing $listening_src" >&2; exit 1; }
+[ -f "$icon_png" ] || { echo "dev-macos-app.sh: missing $icon_png" >&2; exit 1; }
+command -v sips >/dev/null || { echo "dev-macos-app.sh: sips is required to build the app icon" >&2; exit 1; }
+command -v iconutil >/dev/null || { echo "dev-macos-app.sh: iconutil is required to build the app icon" >&2; exit 1; }
 
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
@@ -36,6 +40,17 @@ swiftc -O -D DEBUG -framework AppKit -framework WebKit \
   -target "$(uname -m)-apple-macos11" \
   "$listening_src" "$swift_src" -o "$app/Contents/MacOS/LogsonicApp"
 chmod 755 "$app/Contents/MacOS/LogsonicApp"
+
+iconset="$outdir/AppIcon.iconset"
+rm -rf "$iconset"
+mkdir -p "$iconset"
+for sz in 16 32 128 256 512; do
+  sips -z "$sz" "$sz" "$icon_png" --out "$iconset/icon_${sz}x${sz}.png" >/dev/null
+  sips -z $((sz*2)) $((sz*2)) "$icon_png" --out "$iconset/icon_${sz}x${sz}@2x.png" >/dev/null
+done
+iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
+rm -rf "$iconset"
+[ -s "$app/Contents/Resources/AppIcon.icns" ] || { echo "dev-macos-app.sh: failed to create AppIcon.icns" >&2; exit 1; }
 
 cat > "$app/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -56,6 +71,8 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 	<string>0.0.0</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>11.0</string>
 	<key>LSApplicationCategoryType</key>
