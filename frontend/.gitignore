@@ -21,3 +21,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# vitest --coverage output (CI uploads it as an artifact)
+coverage

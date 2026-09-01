@@ -2,6 +2,7 @@
 
 > **Drop a log file or livestream one. Search it in seconds. Keep it fully offline. Let your AI agent query it.**
 
+[![CI](https://github.com/logsonic/logsonic/actions/workflows/ci.yml/badge.svg)](https://github.com/logsonic/logsonic/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/logsonic/logsonic?label=release)](https://github.com/logsonic/logsonic/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/logsonic/logsonic?style=social)](https://github.com/logsonic/logsonic/stargazers)

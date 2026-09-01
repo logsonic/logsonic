@@ -1,0 +1,187 @@
+# PR gate (spec: specs/now-11-ci-quality-gate.md, phase 1).
+#
+# Every job's commands were run locally on the branch that introduced this
+# file; the workflow itself first executes on the first push. Two gates are
+# deliberately non-blocking until their pre-existing baselines are cleared
+# (eslint ~6,300 errors, tsc 415 errors -- see ISSUES.md); they still report
+# their counts in the job summary so the numbers can be ratcheted down.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned to the versions the committed backend/docs were generated with and
+  # the baseline was measured against. Bump deliberately, in their own commit.
+  SWAG_VERSION: v1.16.4
+  STATICCHECK_VERSION: v0.8.1
+  NODE_VERSION: "22"
+
+jobs:
+  go:
+    name: Go (vet, staticcheck, race tests, swagger drift, govulncheck)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Placeholder SPA bundle
+        # pkg/static/embed.go has `//go:embed all:dist`; the real bundle is
+        # gitignored, and go:embed of a missing directory is a compile error.
+        # The e2e job builds the real frontend; every other Go job needs only
+        # a file for the pattern to match (dot-files don't count).
+        run: mkdir -p pkg/static/dist && printf '<!doctype html><title>ci placeholder</title>\n' > pkg/static/dist/index.html
+      - run: go build ./...
+      - run: go vet ./...
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@${{ env.STATICCHECK_VERSION }} ./...
+      - name: Tests (race detector)
+        run: go test -race -count=1 ./...
+      - name: Swagger drift
+        run: |
+          go run github.com/swaggo/swag/cmd/swag@${{ env.SWAG_VERSION }} init -g pkg/server/server.go -q
+          if ! git diff --exit-code -- docs/; then
+            echo "::error::backend/docs is out of date. Run: cd backend && swag init -g pkg/server/server.go, then commit."
+            exit 1
+          fi
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  web:
+    name: Web (build, unit tests + coverage, lint/type baselines)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Unit tests with coverage
+        run: npx vitest run --coverage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+          if-no-files-found: ignore
+      - name: Type check (non-blocking until the noUnusedLocals baseline is cleared)
+        continue-on-error: true
+        run: npx tsc --noEmit -p tsconfig.app.json
+      - name: Lint changed files (non-blocking until the prettier/import-order baseline is cleared)
+        continue-on-error: true
+        run: |
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          files=""
+          if [ -n "$base" ] && ! echo "$base" | grep -q '^0*$'; then
+            # working-directory is frontend/, so the pathspec must be resolved
+            # from the repo root (git -C ..) or it silently matches nothing.
+            files=$(git -C .. diff --name-only "$base"...HEAD -- 'frontend/*.ts' 'frontend/*.tsx' | sed 's#^frontend/##' || true)
+          fi
+          if [ -z "$files" ]; then echo "no changed .ts/.tsx files"; exit 0; fi
+          echo "$files"
+          npx eslint $files
+      - name: Baselines to job summary
+        run: |
+          {
+            echo "### Frontend baselines (ratchet these down)"
+            echo '```'
+            echo "eslint (whole tree): $(npx eslint . 2>&1 | grep -E '^✖' || echo 'clean')"
+            echo "tsc errors:          $(npx tsc --noEmit -p tsconfig.app.json 2>&1 | grep -c 'error TS' || true)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: npm audit (non-blocking for the first two releases)
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+  swift:
+    name: macOS shell (compile both arches, ListeningURL tests, ad-hoc app)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Placeholder SPA bundle
+        run: mkdir -p backend/pkg/static/dist && printf '<!doctype html><title>ci placeholder</title>\n' > backend/pkg/static/dist/index.html
+      - name: test-macos-app.sh (no signing identity, no notarization)
+        run: bash backend/scripts/test-macos-app.sh
+
+  snapshot:
+    name: goreleaser snapshot build (linux + windows)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Placeholder SPA bundle
+        run: mkdir -p backend/pkg/static/dist && printf '<!doctype html><title>ci placeholder</title>\n' > backend/pkg/static/dist/index.html
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          workdir: backend
+          # `build --id logsonic` exercises the config, ldflags and the
+          # linux/windows builds. The darwin build id has a codesign post-hook
+          # that needs a Developer ID identity, so it is not built here;
+          # archives/universal binaries are release-pipeline steps and are
+          # covered by the maintainer's `release.sh --snapshot` (phase 2).
+          args: build --snapshot --clean --id logsonic
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-binaries
+          path: backend/dist
+          retention-days: 7
+
+  e2e:
+    name: E2E on the embedded build (network audit + smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - name: Playwright browser
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Build and embed the real frontend
+        run: npm run build && npm run build:copy
+        working-directory: frontend
+      - name: Build the embedded binary
+        run: go build -o /tmp/logsonic-embedded .
+        working-directory: backend
+      - name: Network audit + smoke E2E
+        run: bash .github/scripts/run-e2e.sh /tmp/logsonic-embedded

@@ -1,0 +1,24 @@
+# Docs gate (spec: specs/now-11-ci-quality-gate.md, phase 1).
+# Phase 1 checks that every relative Markdown link resolves. The external-link
+# checker (lychee) and the doc-command executor are phase 2.
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - "**/*.md"
+      - ".github/scripts/check-links.sh"
+      - ".github/workflows/docs.yml"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  links:
+    name: Relative links resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash .github/scripts/check-links.sh

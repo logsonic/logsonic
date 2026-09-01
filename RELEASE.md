@@ -10,7 +10,7 @@ Current release contract plus the longer-term plan for signed Windows installers
 - Frontend: Vite build copied into [backend/pkg/static/dist/](backend/pkg/static/dist/) and embedded via `go:embed`.
 - Runtime: [backend/main.go](backend/main.go) remains the headless CLI. `Logsonic.app` uses a native AppKit launcher with an embedded `WKWebView`, starts the Go server as a loopback-only child, supports browser fallback, and shuts the child down with the app.
 - Signing: macOS ships as a universal, Developer ID-signed, notarized, and stapled `Logsonic.app` zip. Windows installer/Authenticode is not implemented yet.
-- CI: no `.github/workflows` — releases are run manually from a dev machine via [`backend/scripts/release.sh`](backend/scripts/release.sh).
+- CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) gates pull requests (Go vet/staticcheck/race tests/Swagger drift/govulncheck, frontend build + unit tests with coverage, the macOS shell's own validation script on a macOS runner, a goreleaser snapshot build of the Linux/Windows binaries, and a Playwright network audit + smoke run against the embedded build); [`docs.yml`](.github/workflows/docs.yml) checks Markdown links. Releases are still run manually from a dev machine via [`backend/scripts/release.sh`](backend/scripts/release.sh) — signing/notarization secrets are not in CI (see §9).
 - Distribution: GitHub Releases + a live Homebrew cask at [`logsonic/homebrew-logsonic`](https://github.com/logsonic/homebrew-logsonic) (`brew tap logsonic/logsonic && brew install logsonic`).
 
 ### How macOS signing works today
