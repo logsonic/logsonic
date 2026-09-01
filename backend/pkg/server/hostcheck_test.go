@@ -170,8 +170,15 @@ func TestContentSecurityPolicyOnHTMLOnly(t *testing.T) {
 
 	resp := requestWithHost(t, ts, http.MethodGet, "/", "localhost", nil)
 	defer resp.Body.Close()
-	if csp := resp.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") {
+	csp := resp.Header.Get("Content-Security-Policy")
+	if !strings.Contains(csp, "default-src 'self'") {
 		t.Errorf("expected CSP header on /, got %q", csp)
+	}
+	// The native shell fetches blob: (download hook) and logsonicfile:
+	// (dock-drop) URLs from the page; 'self' does not cover either scheme.
+	// Verified in Chrome: connect-src 'self' alone refuses a blob: fetch.
+	if !strings.Contains(csp, "connect-src 'self' blob: logsonicfile:") {
+		t.Errorf("expected connect-src to allow blob: and logsonicfile:, got %q", csp)
 	}
 
 	pingResp := requestWithHost(t, ts, http.MethodGet, "/api/v1/ping", "localhost", nil)
