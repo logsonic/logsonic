@@ -2,6 +2,8 @@
 
 Executable work specs derived from [`TBD.md`](../TBD.md) (revision 2, 2026-09-01). Each file is **self-contained**: an agent should be able to pick up one spec and complete it without reading the others or having any prior session context.
 
+**Read [`WORKFLOW.md`](WORKFLOW.md) before picking any spec.** It is the step-by-step checklist for one work package — consumer sweep for contract changes, advisor gates, artifact-level verification (browser / native app), the remediation pass that runs before anything is logged to `ISSUES.md`, commit rules, and the status vocabulary for `TBD.md`'s work progress log. `/pickup` in Claude Code invokes it.
+
 ## Pickup order & status
 
 Now-horizon is split into **v1.7** (six work packages, ≤ 6 weeks) and **v1.8** (six more). Pick in table order unless the "Depends on" column says otherwise.
