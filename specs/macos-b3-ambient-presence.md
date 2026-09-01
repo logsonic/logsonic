@@ -54,7 +54,7 @@ LogSonic stays useful when its window is closed: an `NSStatusItem` menu-bar extr
 
 - [ ] Full manual matrix on arm64; Swift unit tests green.
 - [ ] No REST polling loops (SSE only, verified by server access logs).
-- [ ] Window-close semantics documented in README/installation docs and release notes.
+- [ ] Window-close semantics documented in README/installation docs and release notes. `docs/installation.md` currently says "Closing the app window stops the server" (still true; now-07 left it deliberately) — this bundle must rewrite that sentence when the stay-alive behavior lands.
 
 ## Out of scope
 

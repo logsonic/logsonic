@@ -6,6 +6,23 @@ Process: every candidate entry goes through the remediation pass in [`specs/WORK
 
 ---
 
+## 2026-09-02 — GitHub issue #10 reconciliation needs a human to run it (now-07 task 4)
+
+**Severity:** Low. Public-facing housekeeping; nothing in the code depends on it.
+
+**What:** Issue #10 (Splunk-style field extraction) is closed on GitHub but unshipped; `specs/now-02-faceted-fields-sidebar.md` is the plan. The spec asks for a fresh tracking issue plus a pointer comment on #10. Creating a public issue on the project's tracker from an unattended session is an outward-facing action, so it was **not** run. `gh` is authenticated on this machine; the two commands are:
+
+```bash
+gh issue create --repo logsonic/logsonic --title "Faceted fields sidebar (supersedes #10)" --body "Tracks specs/now-02-faceted-fields-sidebar.md on the dev branch. Issue #10 (field extraction) was closed without shipping; this issue supersedes it and will close when the sidebar lands."
+gh issue comment 10 --repo logsonic/logsonic --body "Superseded by the tracking issue above (specs/now-02-faceted-fields-sidebar.md). #10 was closed before the feature shipped."
+```
+
+(Replace "above" with the new issue number the first command prints.) Once run, mark now-07 Done in the TBD progress log.
+
+**Also noted during this package:** regenerating Swagger for the new `/info` fields pulled in two `/logs` query parameters (`fields`, `include_distribution`) that were annotated in `handlers/logs.go` but missing from `backend/docs/` — i.e. the committed Swagger had already drifted from the annotations before this session. The regen is in commit `13b3bc1`; `now-11`'s CI drift check is what prevents a recurrence.
+
+---
+
 ## 2026-09-01 — `logsonicfile:` in CSP fixed but unverified in the native app (now-09 review)
 
 **Severity:** Low-medium. The fix is almost certainly right, but "almost certainly" is not the standard for a path that gates dock-drop import in the shipped Mac app.
@@ -57,7 +74,7 @@ Expected: the app opens on the Import page with `apache.log` listed in the wizar
 
 ## Notes on process (not an issue, for context)
 
-- Work packages so far: `now-01` (Done), `now-09` phase 1 (Partial — phase 2 token is v1.8). Both were picked up in interactive sessions per the pickup order; the review that produced the entries above ran after the second one and is now codified as [`specs/WORKFLOW.md`](specs/WORKFLOW.md).
+- Work packages so far: `now-01` (Done), `now-09` phase 1 (Partial — phase 2 token is v1.8), `now-07` (Partial 6/7 — only the public GitHub action above is outstanding). The first two were picked up in interactive sessions; the review that produced the older entries is codified as [`specs/WORKFLOW.md`](specs/WORKFLOW.md), and `now-07` was the first package run through it (three advisor gates, consumer sweep, HTTP-level regression test).
 - All commits are on the local `dev` branch only — **not pushed to `origin`** per explicit instruction. `origin` has no `dev` branch.
 - No attribution trailers on any commit, per explicit instruction for this repo.
 - `now-09` phase 2 (per-launch bearer token, protecting against other local users on a shared machine) was **not** attempted. "now-09 Partial" must not be read as "the loopback API is authenticated"; it still isn't.
