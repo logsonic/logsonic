@@ -131,3 +131,5 @@ Run:
 docker buildx build -t logsonic .
 docker run -p 8080:8080 -v /path/to/logs:/data logsonic
 ```
+
+The image sets `HOST=0.0.0.0` so the server accepts connections from outside the container. LogSonic's [Host-header allow-list](configuration.md#security-model) is skipped by default on any non-loopback bind, including this one, so the container works unchanged: a request with `Host: localhost:8080` from the host machine (or whatever hostname you access the mapped port through) is accepted. Pass `-allowed-hosts` in the container's command if you want that check enforced.

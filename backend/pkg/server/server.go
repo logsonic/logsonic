@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -20,6 +22,7 @@ import (
 	"logsonic/docs"
 	lsmcp "logsonic/pkg/mcp"
 	"logsonic/pkg/server/handlers"
+	"logsonic/pkg/types"
 
 	"logsonic/pkg/static"
 	"logsonic/pkg/storage"
@@ -30,6 +33,14 @@ import (
 	l2g "github.com/logsonic/log2grok/pkg/log2grok"
 	httpSwagger "github.com/swaggo/http-swagger"
 )
+
+// contentSecurityPolicy is applied only to the HTML document response (the
+// SPA shell), not to JSON/SSE responses, which have no script/style
+// execution context for CSP to constrain. It makes the "no network calls"
+// promise browser-enforced: the SPA's own build emits no inline scripts
+// (verified against the Vite output), so script-src 'self' costs nothing and
+// blocks any future accidental third-party script tag outright.
+const contentSecurityPolicy = "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
 
 // @title LogSonic API
 // @version 1.0
@@ -53,6 +64,13 @@ type Config struct {
 	// RetentionDays deletes indexed logs older than N days on startup and once
 	// a day thereafter. 0 disables retention (keep everything).
 	RetentionDays int
+
+	// AllowedHosts extends the Host-header allow-list beyond the fixed
+	// loopback set (localhost/127.0.0.1/::1). It only matters when Host is
+	// non-loopback (e.g. "0.0.0.0"): there, the allow-list is enforced only
+	// if this is non-empty, so LAN and Docker deployments keep working
+	// unchanged unless the operator opts in. See hostcheck.go.
+	AllowedHosts []string
 }
 
 type Server struct {
@@ -127,6 +145,18 @@ func NewServer(cfg Config) (*Server, error) {
 		AllowCredentials: false,
 		MaxAge:           300, // Maximum value not ignored by any of major browsers
 	}))
+
+	// Host-header allow-list. CORS above only stops a cross-origin fetch;
+	// it does nothing against DNS rebinding, where a page on an
+	// attacker-controlled domain that resolves to 127.0.0.1 is loaded
+	// same-origin and can call the API directly. Mounted before MCP, the
+	// live routes, the API group, and the SPA catch-all so every one of
+	// them is protected. See hostcheck.go.
+	if hosts, enforce := allowedHosts(cfg); enforce {
+		r.Use(hostAllowlistMiddleware(hosts))
+	} else if !isLoopbackHost(cfg.Host) {
+		fmt.Fprintf(os.Stderr, "security: binding to non-loopback host %q with no -allowed-hosts configured — Host header checking is disabled; pass -allowed-hosts to enable it\n", cfg.Host)
+	}
 
 	// Initialize handler
 	h := handlers.NewHandler(store, cfg.StoragePath)
@@ -208,6 +238,7 @@ func NewServer(cfg Config) (*Server, error) {
 			}
 
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Content-Security-Policy", contentSecurityPolicy)
 			w.Write(indexData)
 			return
 		}
@@ -237,6 +268,13 @@ func NewServer(cfg Config) (*Server, error) {
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Timeout(cfg.Timeout))
 		r.Use(middleware.ThrottleBacklog(10, 50, 5*time.Second))
+		// Reject a POST/PUT/PATCH that carries a body in anything but JSON —
+		// the classic cross-site vector is a form-encoded POST, which a
+		// browser can send cross-origin without a CORS preflight. Scoped to
+		// this group only, so /live/stdin and /live/events (registered
+		// directly on the root router above, outside this group) are
+		// unaffected.
+		r.Use(requireJSONBody)
 		r.Route("/api/v1", func(r chi.Router) {
 			// Swagger UI endpoint
 			r.Get("/swagger/*", httpSwagger.Handler(
@@ -449,6 +487,47 @@ func parsePort(p string) (int, error) {
 func isAddrInUse(err error) bool {
 	return errors.Is(err, syscall.EADDRINUSE) ||
 		strings.Contains(err.Error(), "address already in use")
+}
+
+// requireJSONBody rejects a POST/PUT/PATCH request that carries a body whose
+// Content-Type is not application/json. Body-less requests of any method
+// (a plain pause/resume POST, a DELETE with no payload) are untouched — this
+// only closes the vector where a request actually has a payload the handler
+// will try to json.Decode.
+func requireJSONBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost, http.MethodPut, http.MethodPatch:
+			if hasRequestBody(r) && !isJSONContentType(r.Header.Get("Content-Type")) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnsupportedMediaType)
+				json.NewEncoder(w).Encode(types.ErrorResponse{
+					Status: "error",
+					Error:  "Request body must be application/json",
+					Code:   "UNSUPPORTED_MEDIA_TYPE",
+				})
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// hasRequestBody reports whether r appears to carry a body. Go sets
+// ContentLength to -1 for a chunked/unknown-length body and to 0 when there
+// is definitively no body; only 0 means "no body".
+func hasRequestBody(r *http.Request) bool {
+	return r.ContentLength != 0
+}
+
+// isJSONContentType reports whether contentType names application/json,
+// ignoring parameters such as a charset (mime.ParseMediaType strips them).
+func isJSONContentType(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	return mediaType == "application/json"
 }
 
 // openBrowser opens url in the user's default browser, per platform. It returns

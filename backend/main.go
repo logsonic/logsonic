@@ -40,6 +40,7 @@ func main() {
 	browserFlag := flag.Bool("browser", false, "Same as -open: serve the UI in a browser (does not launch Logsonic.app)")
 	autoPortFlag := flag.Bool("auto-port", true, "If the port is busy, bind the next free port instead of failing")
 	retentionFlag := flag.Int("retention-days", 0, "Delete indexed logs older than N days (0 = keep everything)")
+	allowedHostsFlag := flag.String("allowed-hosts", "", "Comma-separated Host header values to accept in addition to localhost/127.0.0.1/::1 (only used when -host is not loopback; also LOGSONIC_ALLOWED_HOSTS)")
 	helpFlag := flag.Bool("help", false, "Show usage information")
 
 	// Parse command line arguments
@@ -119,6 +120,20 @@ func main() {
 		}
 	}
 
+	// Extra Host-header values accepted when binding non-loopback. Flag wins
+	// over env, matching every other setting above.
+	allowedHostsRaw := *allowedHostsFlag
+	if allowedHostsRaw == "" {
+		allowedHostsRaw = os.Getenv("LOGSONIC_ALLOWED_HOSTS")
+	}
+	var allowedHosts []string
+	for _, h := range strings.Split(allowedHostsRaw, ",") {
+		h = strings.TrimSpace(h)
+		if h != "" {
+			allowedHosts = append(allowedHosts, h)
+		}
+	}
+
 	log.Println("Starting server from", host+port, "with storage path", storagePath)
 	watchParentProcess()
 	cfg := server.Config{
@@ -130,6 +145,7 @@ func main() {
 		OpenBrowser:   openBrowser,
 		AutoPort:      autoPort,
 		RetentionDays: retentionDays,
+		AllowedHosts:  allowedHosts,
 	}
 
 	// Try to create the server
@@ -211,6 +227,7 @@ func printUsage() {
 	fmt.Println("  -browser          Same as -open (CLI; does not launch the macOS app window)")
 	fmt.Println("  -auto-port        If the port is busy, bind the next free port instead of failing (default true; use -auto-port=false to disable)")
 	fmt.Println("  -retention-days N Delete indexed logs older than N days (0 = keep everything)")
+	fmt.Println("  -allowed-hosts    Comma-separated extra Host header values to accept (only used with a non-loopback -host)")
 	fmt.Println("  -help             Show this help message")
 	fmt.Println("\nEnvironment Variables:")
 	fmt.Println("  HOST                  Host address to bind to")
@@ -220,6 +237,7 @@ func printUsage() {
 	fmt.Println("  LOGSONIC_BROWSER      Same as LOGSONIC_OPEN_BROWSER; on Logsonic.app, skip the in-app window")
 	fmt.Println("  LOGSONIC_AUTO_PORT    Auto-select a free port if busy (1/true/yes/on)")
 	fmt.Println("  RETENTION_DAYS        Delete indexed logs older than N days")
+	fmt.Println("  LOGSONIC_ALLOWED_HOSTS  Comma-separated extra Host header values to accept (non-loopback -host only)")
 	fmt.Println("\nStorage directory (default):")
 	fmt.Println("  macOS    ~/Library/Application Support/Logsonic")
 	fmt.Println("  Linux    $XDG_DATA_HOME/logsonic (or ~/.local/share/logsonic)")
