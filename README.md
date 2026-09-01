@@ -99,8 +99,8 @@ For Linux, Windows, Docker, source builds, storage locations, and the macOS app 
 - [Live Streaming](docs/live-streaming.md): `logsonic tail`, stdin streaming, server-side file following, and demos.
 - [Timestamp Resolution](docs/timestamp-resolution.md): how LogSonic derives real timestamps and when to override.
 - [Development](docs/development.md): local backend/frontend setup, tests, E2E, and Swagger generation.
-- [Architecture](docs/Architecture.md): backend, frontend, storage, and MCP architecture.
-- [Production Readiness Plan](docs/production-readiness-plan.md): bounded import and search, automated releases, secure self-update, rollout gates, and deferred hardening.
+- [Architecture](docs/System_Architecture.md): backend, frontend, storage, ingest, search, and MCP architecture.
+- [Roadmap](ROADMAP.md): the desktop-first principles, what is planned for the next releases, and what is deliberately out of scope.
 - [MCP Setup](mcp/README.md): configure Claude Desktop, Cursor, Windsurf, or another MCP client.
 - [Agent Playbook](mcp/SKILLS.md): query patterns and workflow guidance for AI clients.
 

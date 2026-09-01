@@ -21,7 +21,7 @@ Or run it directly:
 
 ```bash
 cd backend
-go run main.go -port 8080 -auto-port=false
+go run . -port 8080 -auto-port=false
 ```
 
 ## Frontend
