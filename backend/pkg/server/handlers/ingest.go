@@ -24,16 +24,6 @@ const (
 	MaxIngestLineBytes    = 2 * 1024 * 1024
 )
 
-var defaultIngestSessionOptions = types.IngestSessionOptions{
-	Source:          "",
-	SmartDecoder:    false,
-	ForceTimezone:   "",
-	ForceStartYear:  "",
-	ForceStartMonth: "",
-	ForceStartDay:   "",
-	Meta:            nil,
-}
-
 // IngestSession ties one /ingest/start invocation to its compiled
 // log2grok Decoder so subsequent /ingest/logs calls don't recompile the
 // pattern per request. Decoders are immutable + goroutine-safe so we

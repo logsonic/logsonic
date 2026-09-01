@@ -126,7 +126,10 @@ func NewServer(cfg Config) (*Server, error) {
 	// Initialize router with middleware
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	// middleware.RealIP is deliberately not used: it rewrites RemoteAddr from
+	// X-Forwarded-For / X-Real-IP whether or not a trusted proxy set them
+	// (GHSA-3fxj-6jh8-hvhx), and this server has no proxy in front of it —
+	// nothing here reads RemoteAddr except the request logger.
 	// Skip logging for ping route
 	r.Use(middleware.WithValue("skipper", func(r *http.Request) bool {
 		return r.URL.Path == "/api/v1/ping"

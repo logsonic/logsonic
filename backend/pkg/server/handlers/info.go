@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"logsonic/pkg/types"
 	"net/http"
 	"os"
@@ -128,7 +129,7 @@ func (h *Services) HandleInfo(w http.ResponseWriter, r *http.Request) {
 		storagePath = filepath.Clean(storagePath)
 
 		// Add protection against accessing directories outside of the expected area
-		err = filepath.Walk(storagePath, func(path string, info os.FileInfo, walkErr error) error {
+		walkErr := filepath.Walk(storagePath, func(path string, info os.FileInfo, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
 			}
@@ -153,6 +154,11 @@ func (h *Services) HandleInfo(w http.ResponseWriter, r *http.Request) {
 			}
 			return nil
 		})
+		if walkErr != nil {
+			// A partially unreadable storage dir is a diagnostics concern
+			// (now-13), not a reason to fail /info: report what was summed.
+			log.Printf("info: storage size walk incomplete: %v", walkErr)
+		}
 
 		// Create storage info structure
 		storageInfo = StorageInfoType{

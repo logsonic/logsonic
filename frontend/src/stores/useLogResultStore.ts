@@ -18,7 +18,7 @@ interface LogResultState {
  * Store for managing log search results
  * This store is not persisted and is used to share log data between components
  */
-export const useLogResultStore = create<LogResultState>((set, get) => ({
+export const useLogResultStore = create<LogResultState>((set) => ({
   // Initial state
   logData: null,
   error: null,
