@@ -271,3 +271,52 @@ func TestFacetsScanCountsExactlyAcrossBatches(t *testing.T) {
 		t.Fatalf("k facet distinct %d, summed counts %d, want 7 / %d", k.Distinct, total, n)
 	}
 }
+
+// Regression test for a hang found while building now-11's bench harness
+// (backend/bench/): every document shares one timestamp, so the scan's
+// shrinking tail window (`remaining` below facetScanBatchSize once agg.rows
+// nears MaxFacetSampleRows) can land on a page the search-after cursor
+// cannot advance past -- the same already-seen page comes back forever,
+// `len(result.Hits) < request.Size` never fires because the batch is always
+// full, and the loop never reaches MaxFacetSampleRows. Before the fix this
+// spun forever holding s.mu.RLock(); the context timeout is a safety net in
+// case of a regression, not the mechanism the fix relies on -- the fix makes
+// the scan terminate on its own.
+func TestFacetsScanTerminatesOnStuckSearchAfterCursor(t *testing.T) {
+	store, err := NewStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	base := time.Date(2026, 3, 2, 8, 0, 0, 0, time.UTC)
+	const n = MaxFacetSampleRows
+	rows := make([]map[string]interface{}, 0, n)
+	for i := 0; i < n; i++ {
+		// One shared timestamp for every row is the most extreme version of
+		// the tie the production repro hit from a much sparser wraparound.
+		rows = append(rows, map[string]interface{}{"timestamp": base, "_raw": "l", "_src": "tie.log", "_seq": int64(i), "k": fmt.Sprintf("v%d", i%3)})
+	}
+	if _, err := store.StoreWithIDs(rows, "tie.log"); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	f, err := store.Facets(ctx, SearchOptions{StartDate: base.Add(-time.Hour), EndDate: base.Add(time.Hour)})
+	if err != nil {
+		t.Fatalf("Facets did not terminate cleanly: %v", err)
+	}
+	// Termination itself is proven by err == nil inside the context deadline
+	// above. The guard this test exercises may or may not fire depending on
+	// exactly where the stuck cursor lands -- once next-10 fixes the cursor
+	// itself, this scan could legitimately complete all n rows without ever
+	// taking the guard path. What must always hold: a short count is flagged
+	// as sampled (never silently under-reported).
+	if f.ComputedOver < n && !f.Sampled {
+		t.Fatalf("ComputedOver = %d < %d but Sampled = false: a partial scan must report itself as sampled", f.ComputedOver, n)
+	}
+	if f.ComputedOver <= 0 || f.ComputedOver > n {
+		t.Fatalf("ComputedOver = %d, want in (0, %d]", f.ComputedOver, n)
+	}
+}

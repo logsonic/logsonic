@@ -279,16 +279,34 @@ func (s *Storage) Facets(ctx context.Context, options SearchOptions) (*types.Fac
 		if len(result.Hits) == 0 {
 			break
 		}
+		newHits := 0
 		for _, hit := range result.Hits {
 			if _, dup := seen[hit.ID]; dup {
 				continue
 			}
 			seen[hit.ID] = struct{}{}
+			newHits++
 			entry, timestamp, ok := pageHitToLog(hit.ID, hit.Fields)
 			if !ok || timestamp.Before(options.StartDate) || timestamp.After(options.EndDate) {
 				continue
 			}
 			agg.Add(entry)
+		}
+		// A batch that added nothing new means the search-after cursor did
+		// not advance -- observed in practice when a tied sort key sits
+		// exactly at the shrinking tail window (`remaining` below
+		// facetScanBatchSize): the same already-`seen` page comes back
+		// forever, `len(result.Hits) < request.Size` never fires because the
+		// batch is always full, and the loop never reaches
+		// MaxFacetSampleRows. Bail out rather than spin: this is the same
+		// tied-timestamp/unindexed-_seq class of bug as the search-after-seam
+		// entry in ISSUES.md, just surfacing as a hang instead of a
+		// miscount. next-10's cursor-paging fix is the real cure; this stops
+		// the scan from holding s.mu.RLock() forever in the meantime.
+		if newHits == 0 {
+			out := agg.Result()
+			out.Sampled = uint64(agg.rows) < total
+			return out, nil
 		}
 		last := result.Hits[len(result.Hits)-1]
 		searchAfter = last.DecodedSort
