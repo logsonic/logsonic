@@ -6,6 +6,18 @@ Process: every candidate entry goes through the remediation pass in [`specs/WORK
 
 ---
 
+## 2026-09-02 — now-09 phase 2's acceptance criteria depend on two unstarted v1.8 specs (found during now-11 pickup)
+
+**Severity:** Low. Doesn't block anything today; matters the next time someone picks `/pickup` and reads the table literally.
+
+**What:** `specs/README.md`'s pickup table lists `now-09-loopback-security.md`'s "Depends on" as `—`. That's correct for phase 1 (shipped) but not for phase 2 (the per-launch bearer token): `specs/now-09-loopback-security.md`'s own acceptance criteria for phase 2 read "app, CLI (`tail`, `open`, `doctor`), MCP stdio, and browser mode all work without manual token handling" and "`logsonic doctor` (`now-13`) reports allow-list + token status" — `logsonic open` is `now-12` and `logsonic doctor` is `now-13`, both v1.8, both unstarted. Phase 2 cannot close its own acceptance boxes yet. This surfaced while picking a work package this session: a literal "first spec in pickup order that is not Done" reading would have picked now-09 phase 2 next, before its dependencies exist.
+
+**What I did:** did not pick now-09 phase 2; picked now-11 phase 2 instead (next v1.7 row with satisfied deps). Did not edit `specs/README.md`'s table (`specs/*.md` content changes are for factual corrections found *while implementing that spec* — this session implemented now-11, not now-09).
+
+**Suggested next step:** either annotate the now-09 row's "Depends on" column with "phase 2: now-12, now-13" or split now-09 into two rows (phase 1 done; phase 2 as its own row placed after now-13 in pickup order) so a future literal read of the table doesn't reach the same dead end.
+
+---
+
 ## 2026-09-02 — now-08 phase 1 was found uncommitted in the working tree at pickup
 
 **Severity:** Low for the code (reviewed and verified before completing it), but a process gap worth a human's attention: [`specs/WORKFLOW.md`](specs/WORKFLOW.md) §0 preflight says a dirty tree at pickup means stop and report, not continue.
@@ -112,7 +124,8 @@ Expected: the app opens on the Import page with `apache.log` listed in the wizar
 
 ## Notes on process (not an issue, for context)
 
-- Work packages so far: `now-01` (Done), `now-09` phase 1 (Partial — phase 2 token is v1.8), `now-07` (Partial 6/7 — only the public GitHub action above is outstanding), `now-11` phase 1 (Partial — the PR gate is committed and locally verified; unexecuted until a push, see above), `now-02` phases 1–2 (Partial — endpoint and Fields panel done with a self-seeding E2E; phase 3 is the MCP `facets_only` handoff, a latency check at scale, and the `_src`-from-catalog switch after `now-10`). The first two were picked up in interactive sessions; the review that produced the older entries is codified as [`specs/WORKFLOW.md`](specs/WORKFLOW.md), and `now-07` was the first package run through it (three advisor gates, consumer sweep, HTTP-level regression test).
+- Work packages so far: `now-01` (Done), `now-09` phase 1 (Partial — phase 2 token is v1.8), `now-07` (Partial 6/7 — only the public GitHub action above is outstanding), `now-11` phases 1–2a (Partial — the PR gate is committed and locally verified; unexecuted until a push, see above; phase 2b is the nightly bench harness + doc-command executor), `now-02` phases 1–2 (Partial — endpoint and Fields panel done with a self-seeding E2E; phase 3 is the MCP `facets_only` handoff, a latency check at scale, and the `_src`-from-catalog switch after `now-10`), `now-08` phase 1 (Partial — synchronous path-based ingest). The first two were picked up in interactive sessions; the review that produced the older entries is codified as [`specs/WORKFLOW.md`](specs/WORKFLOW.md), and `now-07` was the first package run through it (three advisor gates, consumer sweep, HTTP-level regression test).
+- Three test runners are now in use across the repo: Go's `testing` package, frontend `vitest`, and — as of `now-11` phase 2a — Node's built-in `node:test` for CI-only helper scripts under `.github/scripts/` (zero framework overhead, matches the tiny-script style already used there). Don't introduce a fourth; `.github/scripts/*.test.mjs` run via `node --test <file>` is now the pattern for anything in that directory.
 - All commits are on the local `dev` branch only — **not pushed to `origin`** per explicit instruction. `origin` has no `dev` branch.
 - No attribution trailers on any commit, per explicit instruction for this repo.
 - `now-09` phase 2 (per-launch bearer token, protecting against other local users on a shared machine) was **not** attempted. "now-09 Partial" must not be read as "the loopback API is authenticated"; it still isn't.
