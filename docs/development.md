@@ -86,7 +86,7 @@ Pull requests run [`.github/workflows/ci.yml`](../.github/workflows/ci.yml). Its
 | `web` | `npm ci`, `npm run build`, `vitest run --coverage` (report uploaded as an artifact); `tsc` and `eslint` on changed files are **non-blocking** until their pre-existing baselines are cleared, and the whole-tree counts are written to the job summary |
 | `swift` | `backend/scripts/test-macos-app.sh` on a macOS runner: compiles the shell for both architectures, runs the `ListeningURL` tests, builds and validates an ad-hoc app |
 | `snapshot` | `goreleaser build --snapshot --id logsonic` — the Linux/Windows builds and the release config; the Darwin build needs a signing identity and is not built in CI |
-| `e2e` | builds the real frontend into the embedded binary, then runs `frontend/e2e-network-audit.mjs` (fails on any request that leaves the server's origin) and `frontend/e2e-test.mjs` via `.github/scripts/run-e2e.sh` |
+| `e2e` | builds the real frontend into the embedded binary, then runs `frontend/e2e-network-audit.mjs` (fails on any request that leaves the server's origin), `frontend/e2e-test.mjs`, and `frontend/e2e-facets.mjs` (the Fields panel: click-to-filter, alt-click-to-exclude) via `.github/scripts/run-e2e.sh` |
 
 Every Go job creates a placeholder `backend/pkg/static/dist/index.html` first: the real bundle is gitignored and `//go:embed all:dist` of a missing directory does not compile. Run the same scripts locally with the embedded binary you built:
 

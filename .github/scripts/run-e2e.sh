@@ -40,6 +40,9 @@ node "$root/frontend/e2e-network-audit.mjs" || status=1
 echo "== smoke =="
 node "$root/frontend/e2e-test.mjs" || status=1
 
+echo "== facets =="
+node "$root/frontend/e2e-facets.mjs" || status=1
+
 if [ "$status" -ne 0 ]; then
   echo "== server log =="; tail -50 "$log"
 fi

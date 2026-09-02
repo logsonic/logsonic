@@ -183,5 +183,5 @@ jobs:
       - name: Build the embedded binary
         run: go build -o /tmp/logsonic-embedded .
         working-directory: backend
-      - name: Network audit + smoke E2E
+      - name: Network audit + smoke + facets E2E
         run: bash .github/scripts/run-e2e.sh /tmp/logsonic-embedded

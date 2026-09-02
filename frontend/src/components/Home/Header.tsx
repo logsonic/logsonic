@@ -25,7 +25,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SystemInfoModal from './SystemInfoModal';
 
-type ActiveSection = 'filter' | 'styling' | null;
+// Mirrors SidebarTabId in SidebarPanel.tsx (kept local: this file's import
+// block predates the import/order rule and any new import here fails lint).
+type ActiveSection = 'filter' | 'fields' | 'styling' | null;
 
 interface HeaderProps {
   activeSection?: ActiveSection;
@@ -33,6 +35,7 @@ interface HeaderProps {
 
 const SECTION_LABEL: Record<Exclude<ActiveSection, null>, string> = {
   filter: 'Filter',
+  fields: 'Fields',
   styling: 'Coloring',
 };
 

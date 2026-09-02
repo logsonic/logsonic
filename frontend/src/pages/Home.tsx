@@ -2,10 +2,11 @@ import { Header } from '@/components/Home/Header';
 import { LogSearch } from '@/components/Home/LogSearch';
 import { LogViewer } from '@/components/Home/LogViewer/LogViewer';
 import { LeftPanelContent, SIDEBAR_WIDTHS } from '@/components/Home/Sidebar/CollapsiblePanel';
-import { SidebarPanel } from '@/components/Home/SidebarPanel';
+import { SidebarPanel, type SidebarTabId } from '@/components/Home/SidebarPanel';
 import { LeftRail } from '@/components/Shell/LeftRail';
 import { StatusBar } from '@/components/Shell/StatusBar';
 import { useCollapsiblePanel } from '@/hooks/useCollapsiblePanel';
+import { useFacetStore } from '@/stores/useFacetStore';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import useSearchQueryParamsStore from '@/stores/useSearchQueryParams';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
@@ -83,7 +84,14 @@ const Home = () => {
   const { tabs } = SidebarPanel();
   const { firstLoad, setFirstLoad, triggerSearch } = useSearchQueryParamsStore();
 
-  const [activeTabId, setActiveTabId] = useState<string>('filter');
+  const [activeTabId, setActiveTabId] = useState<SidebarTabId>('filter');
+  const setFacetPanelOpen = useFacetStore((s) => s.setPanelOpen);
+
+  // The Fields panel's facets ride on the deferred metadata request only while
+  // the panel is visible; keep the store informed of that.
+  useEffect(() => {
+    setFacetPanelOpen(!isCollapsed && activeTabId === 'fields');
+  }, [isCollapsed, activeTabId, setFacetPanelOpen]);
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const saved = localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
@@ -119,6 +127,15 @@ const Home = () => {
       togglePanelCollapse();
     } else {
       setActiveTabId('styling');
+      if (isCollapsed) togglePanelCollapse();
+    }
+  }, [activeTabId, isCollapsed, togglePanelCollapse]);
+
+  const toggleFields = useCallback(() => {
+    if (activeTabId === 'fields' && !isCollapsed) {
+      togglePanelCollapse();
+    } else {
+      setActiveTabId('fields');
       if (isCollapsed) togglePanelCollapse();
     }
   }, [activeTabId, isCollapsed, togglePanelCollapse]);
@@ -160,7 +177,7 @@ const Home = () => {
           zIndex: 60,
         }}
       >
-        <Header activeSection={isCollapsed ? null : (activeTabId as 'filter' | 'styling')} />
+        <Header activeSection={isCollapsed ? null : activeTabId} />
       </div>
 
       {/* Nav rail — below the brand */}
@@ -176,8 +193,10 @@ const Home = () => {
       >
         <LeftRail
           filterOpen={!isCollapsed && activeTabId === 'filter'}
+          fieldsOpen={!isCollapsed && activeTabId === 'fields'}
           coloringOpen={!isCollapsed && activeTabId === 'styling'}
           onToggleFilter={toggleFilter}
+          onToggleFields={toggleFields}
           onToggleColoring={toggleColoring}
         />
       </div>
@@ -192,7 +211,7 @@ const Home = () => {
         leftOffset={RAIL_W}
         topOffset={TOPBAR_H}
         activeTabId={activeTabId}
-        onActiveTabChange={setActiveTabId}
+        onActiveTabChange={(id) => setActiveTabId(id as SidebarTabId)}
       />
 
       {/* Main content — offset for rail + sidebar on the left, topbar above */}

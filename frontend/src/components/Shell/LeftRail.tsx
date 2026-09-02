@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { Eye, Filter, List, Settings, Upload, Zap } from 'lucide-react';
+import { Eye, Filter, List, ListFilter, Settings, Upload, Zap } from 'lucide-react';
 import { ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -15,16 +15,20 @@ type RailEntry = {
 interface LeftRailProps {
   /** Optional secondary state (e.g. filter panel open) shown as active when route matches */
   filterOpen?: boolean;
+  fieldsOpen?: boolean;
   coloringOpen?: boolean;
   onToggleFilter?: () => void;
+  onToggleFields?: () => void;
   onToggleColoring?: () => void;
   onToggleTweaks?: () => void;
 }
 
 export const LeftRail = ({
   filterOpen,
+  fieldsOpen,
   coloringOpen,
   onToggleFilter,
+  onToggleFields,
   onToggleColoring,
   onToggleTweaks,
 }: LeftRailProps) => {
@@ -44,11 +48,12 @@ export const LeftRail = ({
         // Return to the plain log view: close any open side panel, then
         // make sure we're on Home.
         if (filterOpen) onToggleFilter?.();
+        else if (fieldsOpen) onToggleFields?.();
         else if (coloringOpen) onToggleColoring?.();
         navigate('/');
       },
       // Only the "default" Home view — not when an overlay panel is open.
-      active: isHome && !filterOpen && !coloringOpen,
+      active: isHome && !filterOpen && !fieldsOpen && !coloringOpen,
     },
     {
       id: 'filter',
@@ -56,6 +61,13 @@ export const LeftRail = ({
       label: 'Filters',
       onClick: () => onToggleFilter?.(),
       active: !!filterOpen && isHome,
+    },
+    {
+      id: 'fields',
+      icon: <ListFilter size={18} strokeWidth={1.7} />,
+      label: 'Fields',
+      onClick: () => onToggleFields?.(),
+      active: !!fieldsOpen && isHome,
     },
     {
       id: 'coloring',
