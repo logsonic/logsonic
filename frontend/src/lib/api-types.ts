@@ -311,6 +311,7 @@ export interface ParseRequest {
   custom_patterns?: Record<string, string>;
   grok_pattern?: string;
   logs?: string[];
+  multi?: boolean;
   session_options?: IngestSessionOptions;
 }
 
@@ -340,12 +341,16 @@ export interface TimestampPreviewResponse {
 
 // Suggest Types
 export interface AutosuggestResult {
+  coverage?: number;
   custom_patterns?: Record<string, string>;
   parsed_logs?: Record<string, any>[];
   pattern?: string;
   pattern_description?: string;
   pattern_name?: string;
   score?: number;
+  timestamp_field?: string;
+  timestamp_layout?: string;
+  timestamp_source?: string;
 }
 
 export interface SuggestResponse {
