@@ -195,6 +195,28 @@ export interface LogDistributionEntry {
 }
 
 
+export interface FacetValue {
+  value: string;
+  count: number;
+  truncated: boolean;
+}
+
+export interface FacetField {
+  name: string;
+  distinct: number;
+  high_cardinality: boolean;
+  values: FacetValue[];
+}
+
+/** Opt-in (include_facets=true) field/value summary of the search window.
+ *  Counts are exact for the `computed_over` rows aggregated; `sampled` means
+ *  the window held more rows than the scan cap and only the newest were used. */
+export interface FacetsResponse {
+  computed_over: number;
+  sampled: boolean;
+  fields: FacetField[];
+}
+
 export interface LogResponse {
   available_columns?: string[];
   count?: number;
@@ -211,6 +233,7 @@ export interface LogResponse {
   time_taken?: number;
   index_query_time?: number;
   total_count?: number;
+  facets?: FacetsResponse;
 }
 
 export interface WorkspaceTime {
@@ -373,4 +396,5 @@ export interface LogQueryParams {
   fields?: string;
   /** Defer the chart aggregation so the first result rows are not blocked by it. */
   include_distribution?: boolean;
+  include_facets?: boolean;
 }

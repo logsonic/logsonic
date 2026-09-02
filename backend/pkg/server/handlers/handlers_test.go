@@ -100,6 +100,10 @@ func (m *mockStorage) SearchPage(ctx context.Context, options storagepkg.SearchO
 	}, nil
 }
 
+func (m *mockStorage) Facets(ctx context.Context, options storagepkg.SearchOptions) (*types.FacetsResponse, error) {
+	return storagepkg.AggregateFacets(m.logs), nil
+}
+
 func (m *mockStorage) List() ([]string, error) { return m.listDates, nil }
 
 func (m *mockStorage) GetSourceNames() ([]string, error) { return m.sourceNames, nil }

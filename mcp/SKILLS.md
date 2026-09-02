@@ -55,6 +55,10 @@ Key gotchas:
 
 If the user says "last hour" / "yesterday" / "last 7 days", compute the absolute window yourself from the current time and pass RFC3339. Don't pass through fuzzy strings — LogSonic won't parse them.
 
+## Facets (field summary of a window)
+
+`GET /api/v1/logs?include_facets=true` (not yet exposed as an MCP tool — that is spec `next-05`) adds a `facets` object: for every parsed field, the distinct-value count and up to 8 top values with counts, computed over the newest rows of the current window (`computed_over`; `sampled: true` when the window exceeded the 20,000-row scan cap). High-cardinality fields (IDs) report only their distinct count. Use it to learn which fields and values exist before writing a `field:value` query instead of paging raw rows.
+
 ## Pagination
 
 Every response includes `count` (rows in this page), `total_count` (rows matching the query overall), and `limit`/`offset` (what you asked for). To page:

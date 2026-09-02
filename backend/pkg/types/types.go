@@ -260,6 +260,32 @@ type LogDistributionEntry struct {
 	SourceCounts map[string]int `json:"source_counts"`
 }
 
+// FacetValue is one value of a faceted field with its count in the window.
+type FacetValue struct {
+	Value     string `json:"value"`
+	Count     int    `json:"count"`
+	Truncated bool   `json:"truncated"`
+}
+
+// FacetField is one parsed field with its distinct-value count and, unless
+// it is high-cardinality (IDs, sequence numbers), its top values.
+type FacetField struct {
+	Name            string       `json:"name"`
+	Distinct        int          `json:"distinct"`
+	HighCardinality bool         `json:"high_cardinality"`
+	Values          []FacetValue `json:"values"`
+}
+
+// FacetsResponse is the opt-in (include_facets=true) field/value summary of
+// the current search window. Counts are exact for the rows aggregated
+// (ComputedOver); when the window held more rows than the scan cap, Sampled
+// is true and the counts describe the newest rows only.
+type FacetsResponse struct {
+	ComputedOver int          `json:"computed_over"`
+	Sampled      bool         `json:"sampled"`
+	Fields       []FacetField `json:"fields"`
+}
+
 // LogResponse represents the response for log retrieval with distribution
 type LogResponse struct {
 	Status           string                   `json:"status"`
@@ -277,6 +303,8 @@ type LogResponse struct {
 	EndDate          string                   `json:"end_date"`
 	AvailableColumns []string                 `json:"available_columns"`
 	LogDistribution  []LogDistributionEntry   `json:"log_distribution"`
+	// Facets is present only when the request asked for include_facets=true.
+	Facets *FacetsResponse `json:"facets,omitempty"`
 }
 
 // WorkspaceTime captures either a relative time range that should be

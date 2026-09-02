@@ -466,6 +466,12 @@ const docTemplate = `{
                         "description": "Include chart distribution metadata (default: true)",
                         "name": "include_distribution",
                         "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include a field/value facet summary of the window (default: false; bounded scan of the newest rows, see facets.computed_over/sampled)",
+                        "name": "include_facets",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1199,6 +1205,57 @@ const docTemplate = `{
                 }
             }
         },
+        "types.FacetField": {
+            "type": "object",
+            "properties": {
+                "distinct": {
+                    "type": "integer"
+                },
+                "high_cardinality": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "values": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.FacetValue"
+                    }
+                }
+            }
+        },
+        "types.FacetValue": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "truncated": {
+                    "type": "boolean"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.FacetsResponse": {
+            "type": "object",
+            "properties": {
+                "computed_over": {
+                    "type": "integer"
+                },
+                "fields": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.FacetField"
+                    }
+                },
+                "sampled": {
+                    "type": "boolean"
+                }
+            }
+        },
         "types.GrokPatternRequest": {
             "description": "Request structure for creating or updating Grok patterns",
             "type": "object",
@@ -1391,6 +1448,14 @@ const docTemplate = `{
                 },
                 "end_date": {
                     "type": "string"
+                },
+                "facets": {
+                    "description": "Facets is present only when the request asked for include_facets=true.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.FacetsResponse"
+                        }
+                    ]
                 },
                 "index_query_time": {
                     "type": "integer"

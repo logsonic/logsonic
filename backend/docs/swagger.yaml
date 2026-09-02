@@ -208,6 +208,39 @@ definitions:
         description: Status will always be "error" for error responses
         type: string
     type: object
+  types.FacetField:
+    properties:
+      distinct:
+        type: integer
+      high_cardinality:
+        type: boolean
+      name:
+        type: string
+      values:
+        items:
+          $ref: '#/definitions/types.FacetValue'
+        type: array
+    type: object
+  types.FacetValue:
+    properties:
+      count:
+        type: integer
+      truncated:
+        type: boolean
+      value:
+        type: string
+    type: object
+  types.FacetsResponse:
+    properties:
+      computed_over:
+        type: integer
+      fields:
+        items:
+          $ref: '#/definitions/types.FacetField'
+        type: array
+      sampled:
+        type: boolean
+    type: object
   types.GrokPatternRequest:
     description: Request structure for creating or updating Grok patterns
     properties:
@@ -352,6 +385,10 @@ definitions:
         type: integer
       end_date:
         type: string
+      facets:
+        allOf:
+        - $ref: '#/definitions/types.FacetsResponse'
+        description: Facets is present only when the request asked for include_facets=true.
       index_query_time:
         type: integer
       limit:
@@ -980,6 +1017,11 @@ paths:
       - description: 'Include chart distribution metadata (default: true)'
         in: query
         name: include_distribution
+        type: boolean
+      - description: 'Include a field/value facet summary of the window (default:
+          false; bounded scan of the newest rows, see facets.computed_over/sampled)'
+        in: query
+        name: include_facets
         type: boolean
       produces:
       - application/json

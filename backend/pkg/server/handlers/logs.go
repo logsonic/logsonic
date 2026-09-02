@@ -31,6 +31,7 @@ import (
 // @Param _src query string false "Optional comma-separated source filter"
 // @Param fields query string false "Optional comma-separated fields to return"
 // @Param include_distribution query boolean false "Include chart distribution metadata (default: true)"
+// @Param include_facets query boolean false "Include a field/value facet summary of the window (default: false; bounded scan of the newest rows, see facets.computed_over/sampled)"
 // @Success 200 {object} types.LogResponse "Logs with pagination, sorting, and time distribution metadata"
 // @Failure 400 {object} types.ErrorResponse "Bad request due to invalid parameters"
 // @Failure 500 {object} types.ErrorResponse "Internal server error"
@@ -131,6 +132,21 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 		}
 		includeDistribution = parsed
 	}
+	includeFacets := false
+	if raw := query.Get("include_facets"); raw != "" {
+		parsed, parseErr := strconv.ParseBool(raw)
+		if parseErr != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(types.ErrorResponse{
+				Status:  "error",
+				Error:   "Invalid include_facets parameter",
+				Code:    "INVALID_PARAMETER",
+				Details: "include_facets must be true or false",
+			})
+			return
+		}
+		includeFacets = parsed
+	}
 
 	// Set default date range (1 year ago to now)
 	now := time.Now()
@@ -225,6 +241,7 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 	var logDistributionEntries []types.LogDistributionEntry
 	var totalCount int
 	var indexQueryTime time.Duration
+	var facets *types.FacetsResponse
 	var err error
 
 	if sortBy == "timestamp" {
@@ -241,6 +258,17 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 			SkipDistribution: !includeDistribution,
 		})
 		err = searchErr
+		if err == nil && includeFacets {
+			// Opt-in bounded scan of the window (not the page): see
+			// storage.Facets for why the counts are per-window, capped, and
+			// reported through computed_over / sampled.
+			facets, err = h.storage.Facets(r.Context(), storagepkg.SearchOptions{
+				Query:     searchQuery,
+				StartDate: startDate,
+				EndDate:   endDate,
+				Sources:   sources,
+			})
+		}
 		if err == nil {
 			pageLogs = pageResult.Logs
 			totalCount = pageResult.TotalCount
@@ -262,6 +290,10 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 		// bounded supported-sort policy.
 		allLogs, indexQueryTime, err = h.storage.Search(searchQuery, &startDate, &endDate, sources)
 		if err == nil {
+			if includeFacets {
+				// The legacy path already holds the whole window in memory.
+				facets = storagepkg.AggregateFacets(allLogs)
+			}
 			totalCount = len(allLogs)
 			endIndex := offset + limit
 			if endIndex > totalCount {
@@ -329,6 +361,7 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 		EndDate:          endDate.Format(time.RFC3339),
 		AvailableColumns: availableColumns,
 		LogDistribution:  logDistributionEntries,
+		Facets:           facets,
 	})
 }
 

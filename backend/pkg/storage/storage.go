@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"logsonic/pkg/types"
+
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/index/upsidedown/store/goleveldb"
 	"github.com/blevesearch/bleve/v2/mapping"
@@ -28,6 +30,7 @@ type StorageInterface interface {
 	StoreWithIDs(logs []map[string]interface{}, source string) ([]string, error)
 	Search(query string, startDate, endDate *time.Time, sources []string) ([]map[string]interface{}, time.Duration, error)
 	SearchPage(ctx context.Context, options SearchOptions) (SearchPageResult, error)
+	Facets(ctx context.Context, options SearchOptions) (*types.FacetsResponse, error)
 	List() ([]string, error)
 	GetSourceNames() ([]string, error)
 	Clear() error
