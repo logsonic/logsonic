@@ -2,6 +2,7 @@ import {
   GrokPatternRequest,
   GrokPatternResponse,
   IngestFileRequest,
+  IngestFileResponse,
   IngestRequest,
   IngestResponse,
   IngestSessionOptions,
@@ -128,8 +129,9 @@ export async function ingestLogs(request: IngestRequest, signal?: AbortSignal): 
   return apiRequest<IngestResponse>('/ingest/logs', 'POST', request, undefined, signal);
 }
 
-export async function ingestFile(request: IngestFileRequest): Promise<IngestResponse> {
-  return apiRequest<IngestResponse>('/ingestFile', 'POST', request);
+/** Server-side ingest by absolute path (spec now-08). Synchronous: resolves when the file is stored. */
+export async function ingestFile(request: IngestFileRequest): Promise<IngestFileResponse> {
+  return apiRequest<IngestFileResponse>('/ingest/file', 'POST', request);
 }
 
 export async function pauseLiveSubscriber(subscriberId: string): Promise<LiveControlResponse> {

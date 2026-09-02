@@ -283,6 +283,52 @@
                 }
             }
         },
+        "/ingest/file": {
+            "post": {
+                "description": "Read a log file the server can access (absolute path; gzip and zstd are detected by magic bytes) into an existing ingest session, optionally with its rotated siblings. Synchronous in this release: the response arrives when the file has been stored.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ingest"
+                ],
+                "summary": "Ingest a file by path",
+                "parameters": [
+                    {
+                        "description": "Session and absolute path",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.IngestFileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.IngestFileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/ingest/logs": {
             "post": {
                 "description": "Ingest log data using existing Grok patterns and store them into the index",
@@ -1304,6 +1350,67 @@
                 },
                 "status": {
                     "description": "Status of the operation",
+                    "type": "string"
+                }
+            }
+        },
+        "types.IngestFileRequest": {
+            "type": "object",
+            "properties": {
+                "include_rotated": {
+                    "description": "IncludeRotated also ingests app.log.N / app-YYYY-MM-DD.log siblings,\noldest first, under the same session and source.",
+                    "type": "boolean"
+                },
+                "log_file_name": {
+                    "description": "Deprecated: use Path.",
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "session_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.IngestFileResponse": {
+            "type": "object",
+            "properties": {
+                "bytes_read": {
+                    "description": "on-disk bytes consumed (compressed for gz/zst)",
+                    "type": "integer"
+                },
+                "compression": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "failed": {
+                    "type": "integer"
+                },
+                "lines": {
+                    "description": "physical lines read across members",
+                    "type": "integer"
+                },
+                "members": {
+                    "description": "every file read, in order",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "path": {
+                    "description": "canonical path of the base file",
+                    "type": "string"
+                },
+                "processed": {
+                    "type": "integer"
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "status": {
                     "type": "string"
                 }
             }

@@ -62,7 +62,6 @@ const contentSecurityPolicy = "default-src 'self'; img-src 'self' data: blob:; s
 type Config struct {
 	Port        string
 	StoragePath string
-	WorkDir     string // Directory where log files are stored
 	Timeout     time.Duration
 	Host        string
 
@@ -286,6 +285,15 @@ func NewServer(cfg Config) (*Server, error) {
 	// security headers, and CORS from the root router.
 	r.Get("/api/v1/live/events", h.HandleLiveEvents)
 	r.Post("/api/v1/live/stdin", h.HandleLiveStdin)
+	// Path-based ingest reads whole files server-side; a large file legitimately
+	// outlives the API timeout, so it lives with the long-lived routes. Phase 1
+	// is synchronous (spec now-08); phase 2 makes it a job with SSE progress.
+	// It is a mutating JSON route like the ones in the timeout group below, so
+	// it still needs the now-09 JSON-only body requirement (the group's
+	// requireJSONBody doesn't reach here) — applied directly to this one route
+	// rather than pulling it into the timeout group it was deliberately kept
+	// out of.
+	r.With(requireJSONBody).Post("/api/v1/ingest/file", h.HandleIngestFile)
 
 	// Set up API routes
 	r.Group(func(r chi.Router) {

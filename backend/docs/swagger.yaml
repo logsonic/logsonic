@@ -284,6 +284,50 @@ definitions:
         description: Status of the operation
         type: string
     type: object
+  types.IngestFileRequest:
+    properties:
+      include_rotated:
+        description: |-
+          IncludeRotated also ingests app.log.N / app-YYYY-MM-DD.log siblings,
+          oldest first, under the same session and source.
+        type: boolean
+      log_file_name:
+        description: 'Deprecated: use Path.'
+        type: string
+      path:
+        type: string
+      session_id:
+        type: string
+    type: object
+  types.IngestFileResponse:
+    properties:
+      bytes_read:
+        description: on-disk bytes consumed (compressed for gz/zst)
+        type: integer
+      compression:
+        type: string
+      error:
+        type: string
+      failed:
+        type: integer
+      lines:
+        description: physical lines read across members
+        type: integer
+      members:
+        description: every file read, in order
+        items:
+          type: string
+        type: array
+      path:
+        description: canonical path of the base file
+        type: string
+      processed:
+        type: integer
+      session_id:
+        type: string
+      status:
+        type: string
+    type: object
   types.IngestRequest:
     properties:
       logs:
@@ -880,6 +924,39 @@ paths:
           schema:
             $ref: '#/definitions/types.ErrorResponse'
       summary: End log ingest session
+      tags:
+      - ingest
+  /ingest/file:
+    post:
+      consumes:
+      - application/json
+      description: 'Read a log file the server can access (absolute path; gzip and
+        zstd are detected by magic bytes) into an existing ingest session, optionally
+        with its rotated siblings. Synchronous in this release: the response arrives
+        when the file has been stored.'
+      parameters:
+      - description: Session and absolute path
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.IngestFileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.IngestFileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Ingest a file by path
       tags:
       - ingest
   /ingest/logs:

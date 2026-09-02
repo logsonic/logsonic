@@ -89,10 +89,31 @@ type ParseRequest struct {
 	Multi bool `json:"multi,omitempty"`
 }
 
-// IngestFileRequest represents the structure of the file-based ingest API request
+// IngestFileRequest asks the server to ingest a file it can read by absolute
+// path into an existing ingest session (spec now-08). LogFileName is the
+// pre-1.7 name of the same field, accepted for one release.
 type IngestFileRequest struct {
-	LogFileName string `json:"log_file_name"`
-	SessionID   string `json:"session_id,omitempty"`
+	SessionID string `json:"session_id"`
+	Path      string `json:"path"`
+	// Deprecated: use Path.
+	LogFileName string `json:"log_file_name,omitempty"`
+	// IncludeRotated also ingests app.log.N / app-YYYY-MM-DD.log siblings,
+	// oldest first, under the same session and source.
+	IncludeRotated bool `json:"include_rotated,omitempty"`
+}
+
+// IngestFileResponse reports what a path-based ingest read and stored.
+type IngestFileResponse struct {
+	Status      string   `json:"status"`
+	Path        string   `json:"path"`    // canonical path of the base file
+	Members     []string `json:"members"` // every file read, in order
+	Compression string   `json:"compression,omitempty"`
+	Processed   int      `json:"processed"`
+	Failed      int      `json:"failed"`
+	Lines       int      `json:"lines"`      // physical lines read across members
+	BytesRead   int64    `json:"bytes_read"` // on-disk bytes consumed (compressed for gz/zst)
+	SessionID   string   `json:"session_id"`
+	Error       string   `json:"error,omitempty"`
 }
 
 type IngestResponse struct {

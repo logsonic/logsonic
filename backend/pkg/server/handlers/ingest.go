@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
+	"logsonic/pkg/ingestfile"
 	"logsonic/pkg/types"
 	"net/http"
 	"sync"
@@ -21,8 +23,76 @@ const (
 	SessionTimeout        = 60 * time.Minute
 	MaxIngestRequestBytes = 16 * 1024 * 1024
 	MaxIngestLines        = 10_000
-	MaxIngestLineBytes    = 2 * 1024 * 1024
+	// MaxIngestLineBytes is shared with the path-based reader so both ingest
+	// routes reject the same input.
+	MaxIngestLineBytes = ingestfile.MaxLineBytes
 )
+
+// Errors returned by ingestBatch, mapped to HTTP statuses by its callers.
+var (
+	errInvalidSession = errors.New("invalid or missing session ID")
+)
+
+// multilineError wraps a folding failure so callers can return 400 with the
+// folder's message rather than a generic 500.
+type multilineError struct{ err error }
+
+func (e *multilineError) Error() string { return e.err.Error() }
+func (e *multilineError) Unwrap() error { return e.err }
+
+// ingestBatch is the one decode-and-store path for a session: it marks the
+// session active, folds multiline records, decodes with the session's
+// compiled pattern, stamps `_seq`, and stores. Both the chunk endpoint
+// (/ingest/logs) and the path endpoint (/ingest/file) call it, which is what
+// keeps their stored documents identical.
+func (h *Services) ingestBatch(sessionID string, lines []string) (processed, failed int, err error) {
+	// Mark the request as activity while atomically taking the session
+	// snapshot. This prevents the cleanup sweep from expiring an active
+	// upload between session lookup and decoding/storage.
+	sessionMapMutex.Lock()
+	session, exists := sessionMap[sessionID]
+	if exists {
+		session.LastActivity = time.Now()
+		sessionMap[sessionID] = session
+	}
+	sessionOptions := session.Options
+	sessionDecoder := session.Decoder
+	sessionSeq := session.Seq
+	sessionMultiline := session.Multiline
+	sessionMapMutex.Unlock()
+
+	if !exists || sessionID == "" {
+		return 0, 0, errInvalidSession
+	}
+
+	logs := lines
+	if sessionMultiline != nil {
+		folded, foldErr := sessionMultiline.Feed(lines)
+		if foldErr != nil {
+			return 0, 0, &multilineError{err: foldErr}
+		}
+		logs = folded
+	}
+	if len(logs) == 0 {
+		// Batch was entirely absorbed into a still-open multiline record;
+		// nothing to decode/store yet.
+		return 0, 0, nil
+	}
+
+	// DecodeConcurrent fans the regex work across NumCPU goroutines for
+	// large batches and transparently falls back to serial Decode below
+	// its internal threshold (~512 lines). The Decoder is goroutine-safe
+	// and output order is preserved, so this is a drop-in replacement
+	// for Decode that scales ingest throughput on multi-core boxes.
+	results := sessionDecoder.DecodeConcurrent(logs, 0)
+	jsonOutput, successCount, failedCount, _ := postProcess(results, sessionOptions, sessionSeq)
+
+	if err := h.storage.Store(jsonOutput, sessionOptions.Source); err != nil {
+		return 0, 0, fmt.Errorf("failed to store logs: %w", err)
+	}
+	h.InvalidateInfoCache()
+	return successCount, failedCount, nil
+}
 
 // IngestSession ties one /ingest/start invocation to its compiled
 // log2grok Decoder so subsequent /ingest/logs calls don't recompile the
@@ -135,84 +205,41 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Mark the request as activity while atomically taking the session
-	// snapshot. This prevents the cleanup sweep from expiring an active
-	// upload between session lookup and decoding/storage.
-	sessionMapMutex.Lock()
-	session, exists := sessionMap[req.SessionID]
-	if exists {
-		session.LastActivity = time.Now()
-		sessionMap[req.SessionID] = session
-	}
-	sessionOptions := session.Options
-	sessionDecoder := session.Decoder
-	sessionSeq := session.Seq
-	sessionMultiline := session.Multiline
-	sessionMapMutex.Unlock()
-
-	if !exists || req.SessionID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(types.ErrorResponse{
-			Status: "error",
-			Error:  "Invalid or missing session ID",
-			Code:   "INVALID_SESSION",
-		})
-		return
-	}
-
-	logs := req.Logs
-	if sessionMultiline != nil {
-		folded, err := sessionMultiline.Feed(req.Logs)
-		if err != nil {
+	processed, failed, err := h.ingestBatch(req.SessionID, req.Logs)
+	if err != nil {
+		var mlErr *multilineError
+		switch {
+		case errors.Is(err, errInvalidSession):
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(types.ErrorResponse{
+				Status: "error",
+				Error:  "Invalid or missing session ID",
+				Code:   "INVALID_SESSION",
+			})
+		case errors.As(err, &mlErr):
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(types.ErrorResponse{
 				Status:  "error",
 				Error:   "Failed to fold multiline records",
 				Code:    "MULTILINE_ERROR",
+				Details: mlErr.err.Error(),
+			})
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(types.ErrorResponse{
+				Status:  "error",
+				Error:   "Failed to store logs",
+				Code:    "STORAGE_ERROR",
 				Details: err.Error(),
 			})
-			return
 		}
-		logs = folded
-	}
-
-	if len(logs) == 0 {
-		// Batch was entirely absorbed into a still-open multiline record;
-		// nothing to decode/store yet.
-		json.NewEncoder(w).Encode(types.IngestResponse{
-			Status:    "success",
-			Processed: 0,
-			Failed:    0,
-			SessionID: req.SessionID,
-		})
 		return
 	}
-
-	// DecodeConcurrent fans the regex work across NumCPU goroutines for
-	// large batches and transparently falls back to serial Decode below
-	// its internal threshold (~512 lines). The Decoder is goroutine-safe
-	// and output order is preserved, so this is a drop-in replacement
-	// for Decode that scales ingest throughput on multi-core boxes.
-	results := sessionDecoder.DecodeConcurrent(logs, 0)
-	jsonOutput, successCount, failedCount, _ := postProcess(results, sessionOptions, sessionSeq)
-
-	if err := h.storage.Store(jsonOutput, sessionOptions.Source); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(types.ErrorResponse{
-			Status:  "error",
-			Error:   "Failed to store logs",
-			Code:    "STORAGE_ERROR",
-			Details: err.Error(),
-		})
-		return
-	}
-
-	h.InvalidateInfoCache()
 
 	json.NewEncoder(w).Encode(types.IngestResponse{
 		Status:    "success",
-		Processed: successCount,
-		Failed:    failedCount,
+		Processed: processed,
+		Failed:    failed,
 		SessionID: req.SessionID,
 	})
 }

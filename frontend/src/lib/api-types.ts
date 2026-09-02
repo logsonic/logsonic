@@ -34,8 +34,26 @@ export interface IngestRequest {
 }
 
 export interface IngestFileRequest {
+  session_id: string;
+  /** Absolute path to a file the server can read; gzip/zstd detected by magic bytes. */
+  path: string;
+  /** @deprecated pre-1.7 name of `path`; accepted for one release. */
   log_file_name?: string;
-  session_id?: string;
+  /** Also ingest app.log.N / app-YYYY-MM-DD.log siblings, oldest first. */
+  include_rotated?: boolean;
+}
+
+export interface IngestFileResponse {
+  status: string;
+  path: string;
+  members: string[];
+  compression?: string;
+  processed: number;
+  failed: number;
+  lines: number;
+  bytes_read: number;
+  session_id: string;
+  error?: string;
 }
 
 export interface IngestResponse {

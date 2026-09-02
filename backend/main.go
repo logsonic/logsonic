@@ -118,12 +118,6 @@ func main() {
 		storagePath = p
 	}
 
-	// Get working directory for defaults
-	workDir, err := os.Getwd()
-	if err != nil {
-		log.Fatalf("failed to get working directory: %v", err)
-	}
-
 	// The macOS .app launches with no flags and cwd "/". Its Info.plist sets
 	// LSEnvironment LOGSONIC_APP=1, which LaunchServices injects ONLY on
 	// double-click — never when the bundled binary is run from a terminal (e.g.
@@ -170,7 +164,6 @@ func main() {
 		Host:          host,
 		Port:          port,
 		StoragePath:   storagePath,
-		WorkDir:       workDir,
 		Timeout:       60 * time.Second,
 		OpenBrowser:   openBrowser,
 		AutoPort:      autoPort,
