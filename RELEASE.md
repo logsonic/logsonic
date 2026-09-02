@@ -475,7 +475,7 @@ The pragmatic split: macOS job builds + signs Mac + Linux + Homebrew tap; Window
 You asked specifically about this. The realistic options:
 
 1. **Self-fund + use the project as a write-off.** $99/yr Apple + ~$120/yr Azure Trusted Signing = ~$220/yr. Smallest path, full control.
-2. **SignPath Foundation** — free Authenticode code signing for OSS projects ([signpath.org/foundation](https://signpath.org/foundation)). They hold the certificate, you submit builds via their GitHub Action. Eligibility: OSS license (MIT works), public repo, no monetization tied to the signed binaries. Strongest free option for Windows.
+2. **SignPath Foundation** — free Authenticode code signing for OSS projects ([signpath.org](https://signpath.org/)). They hold the certificate, you submit builds via their GitHub Action. Eligibility: OSS license (MIT works), public repo, no monetization tied to the signed binaries. Strongest free option for Windows.
 3. **MacOS notarization has no free equivalent.** Apple does not offer a foundation program. Some OSS projects sidestep this by distributing through Homebrew Cask (which uses a Developer-signed binary if provided, or falls back to `xattr -d com.apple.quarantine`) and leaving the `.dmg` unsigned with install instructions. Acceptable for a beta; not great for non-technical users.
 4. **GitHub Sponsors / Open Collective to cover certs.** Several OSS projects (e.g., Inkscape, Krita) fund their signing certs this way.
 5. **sigstore/cosign for checksums** — free, keyless signing of release artifacts via OIDC. Does not replace OS signing (Gatekeeper/SmartScreen ignore it) but proves provenance for security-conscious users and integrates well with SLSA.
