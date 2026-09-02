@@ -1,6 +1,8 @@
-# Docs gate (spec: specs/now-11-ci-quality-gate.md, phase 1).
-# Phase 1 checks that every relative Markdown link resolves. The external-link
-# checker (lychee) and the doc-command executor are phase 2.
+# Docs gate (spec: specs/now-11-ci-quality-gate.md, phase 1 + phase 2 external
+# links). The doc-command executor (phase 2, second half) is still open: the
+# documented commands include long-running servers (`go run .`, `npm run
+# dev`), so "execute them" needs a start->probe->kill design, not the tiny
+# script this file's other checks are -- tracked in TBD.md, not attempted here.
 name: Docs
 
 on:
@@ -8,12 +10,16 @@ on:
     paths:
       - "**/*.md"
       - ".github/scripts/check-links.sh"
+      - ".github/lychee.toml"
       - ".github/workflows/docs.yml"
   push:
     branches: [main]
 
 permissions:
   contents: read
+
+env:
+  LYCHEE_VERSION: 0.24.2
 
 jobs:
   links:
@@ -22,3 +28,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash .github/scripts/check-links.sh
+
+  external-links:
+    name: External links resolve (lychee)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install lychee
+        run: |
+          curl -sSL -o /tmp/lychee.tar.gz \
+            "https://github.com/lycheeverse/lychee/releases/download/lychee-v${{ env.LYCHEE_VERSION }}/lychee-x86_64-unknown-linux-gnu.tar.gz"
+          mkdir -p /tmp/lychee-extract
+          tar -xzf /tmp/lychee.tar.gz -C /tmp/lychee-extract
+          sudo mv /tmp/lychee-extract/lychee-x86_64-unknown-linux-gnu/lychee /usr/local/bin/lychee
+          lychee --version
+      - name: lychee
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          lychee --config .github/lychee.toml \
+            README.md ROADMAP.md CONTRIBUTING.md TBD.md ISSUES.md RELEASE.md \
+            docs/*.md specs/*.md mcp/*.md
