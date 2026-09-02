@@ -2,6 +2,19 @@
 
 For development and testing, run the backend and frontend as separate processes. The embedded build (`build:copy` plus single binary) is for releases. In dev mode, the frontend talks to the backend at `http://localhost:8080` via CORS.
 
+## First-time setup
+
+The backend embeds the built frontend (`backend/pkg/static/dist`, gitignored) via `//go:embed all:dist`. On a fresh clone that directory doesn't exist yet, so `go build`/`go run .`/`./scripts/dev.sh` all fail to compile with `pattern all:dist: no matching files found` until it exists at least once:
+
+```bash
+cd frontend
+npm ci
+npm run build
+npm run build:copy
+```
+
+After that one-time build, backend-only iteration (`go run .`, `./scripts/dev.sh`) works without rebuilding the frontend again — dev mode serves the frontend from Vite instead, so the embedded copy only needs to exist, not be current.
+
 ## Backend
 
 Go 1.26.6 or later is required. For hot reload:
