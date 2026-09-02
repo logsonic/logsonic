@@ -6,6 +6,18 @@ Process: every candidate entry goes through the remediation pass in [`specs/WORK
 
 ---
 
+## 2026-09-02 — `SearchPage` duplicates rows at search-after seams when timestamps tie (found during now-02)
+
+**Severity:** P1 correctness. User-visible: any page whose internal scan crosses a 1,000-row seam inside a run of ≥50 tied timestamps can repeat rows already shown **and shifts every later page**, because the rows skipped past the seam are miscounted. `total_count` comes from the time facet, not the scan, so it stays right — the visible symptom is pages that don't add up to the total. Every `DEFAULT_PATTERN` (no-timestamp) import produces such runs, since whole chunks get the same ingest second. Not a crash, not data loss; wrong rows on a page.
+
+**What:** `storage.SearchPage` walks the window in search-after batches of 1,000 sorted by `timestampSort` (`timestamp`, `_seq`, doc ID). With 2,500 rows in which each second holds 50, paging with `limit=1000` returns **2,600 rows with 100 duplicated document IDs** — exactly one tied-timestamp group re-read at each of the two seams. Reproducer: `backend/pkg/storage/search_page_seams_test.go`, committed with a `t.Skip` naming this entry; remove the skip when fixed. Found because the facet scan (same cursor) counted 2,002 on a 2,000-row window; the facet scan now dedupes by document ID so its counts are exact regardless.
+
+**Likely cause (not yet proven):** `_seq` is stored but deliberately not indexed (`seqField.Index = false` in `buildIndexMapping`, from the index-size work), so the `_seq` sort key is "missing" for every document and cannot disambiguate the cursor; the trailing doc-ID key should, but the observed re-reads say the search-after value for it is not being applied. One thing to verify first: Bleve sorts from indexed terms / doc values, not from stored fields, so a `SortField` on a stored-but-unindexed field may not sort *at all* — in which case the `_seq` tiebreak has never worked and every tied-timestamp ordering has been doc-ID order (lexicographic: seq 10 before seq 9), i.e. the "preserve log order" intent of commit f502233 may not hold either. The mapping comment ("persist it so it round-trips for sorting") would then be wrong and should be corrected with the fix. Two candidate fixes, both `next-10` storage-hardening territory: (a) make search-after resume on `(timestamp, docID)` only and verify Bleve honours the doc-ID cursor; (b) index `_seq` (costs index bytes; needs the migration story for old shards). The spec's "cursor-paged sort on any field" work in `next-10` has to solve this anyway — recommend pulling that item forward.
+
+**Why not fixed here:** outside the facets package's scope and time box; the fix touches the paging path every search uses and needs its own verification (the seam test plus the existing `SearchPage` tests with >1,000 rows).
+
+---
+
 ## 2026-09-02 — CI workflows are committed but have never executed (now-11 phase 1)
 
 **Severity:** Medium for confidence, zero for risk. Nothing runs until something is pushed, and the standing rule for this branch is never push.
@@ -88,7 +100,7 @@ Expected: the app opens on the Import page with `apache.log` listed in the wizar
 
 ## Notes on process (not an issue, for context)
 
-- Work packages so far: `now-01` (Done), `now-09` phase 1 (Partial — phase 2 token is v1.8), `now-07` (Partial 6/7 — only the public GitHub action above is outstanding), `now-11` phase 1 (Partial — the PR gate is committed and locally verified; unexecuted until a push, see above). The first two were picked up in interactive sessions; the review that produced the older entries is codified as [`specs/WORKFLOW.md`](specs/WORKFLOW.md), and `now-07` was the first package run through it (three advisor gates, consumer sweep, HTTP-level regression test).
+- Work packages so far: `now-01` (Done), `now-09` phase 1 (Partial — phase 2 token is v1.8), `now-07` (Partial 6/7 — only the public GitHub action above is outstanding), `now-11` phase 1 (Partial — the PR gate is committed and locally verified; unexecuted until a push, see above), `now-02` phase 1 (Partial — facets endpoint done; the sidebar UI is phase 2). The first two were picked up in interactive sessions; the review that produced the older entries is codified as [`specs/WORKFLOW.md`](specs/WORKFLOW.md), and `now-07` was the first package run through it (three advisor gates, consumer sweep, HTTP-level regression test).
 - All commits are on the local `dev` branch only — **not pushed to `origin`** per explicit instruction. `origin` has no `dev` branch.
 - No attribution trailers on any commit, per explicit instruction for this repo.
 - `now-09` phase 2 (per-launch bearer token, protecting against other local users on a shared machine) was **not** attempted. "now-09 Partial" must not be read as "the loopback API is authenticated"; it still isn't.

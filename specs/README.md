@@ -89,7 +89,7 @@ cd frontend && npm run lint          # eslint
 # There is NO CI yet — now-11 adds it. Until then, run the above before every PR.
 ```
 
-Sample data for manual testing lives in `sample-logs/` (apache.log, linux-syslog.log, java-stacktrace.log, docker.log, app-json.log, bgl-supercomputer.log ≈ large-file case, …).
+Sample data for manual testing lives in `sample-logs/` (apache.log, linux-syslog.log, java-stacktrace.log, docker.log, app-json.log, bgl-supercomputer.log — **only 2,000 lines / 317 KB, not a large-file case**; generate a corpus for anything performance-related, …).
 
 ### Codebase map (anchors used across specs)
 
