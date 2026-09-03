@@ -1,7 +1,7 @@
 import { DEFAULT_PATTERN, sessionMultilineOption, useImportStore } from '@/stores/useImportStore';
 import { Check, ChevronDown, ChevronRight, AlertTriangle, File, Loader2, RefreshCw, Search } from 'lucide-react';
 import { FC, useCallback, useEffect, useRef, useState } from 'react';
-import { parseLogs, suggestPatterns } from '../../../lib/api-client';
+import { parseLogs, previewFile, suggestPatterns } from '../../../lib/api-client';
 import { GrokPatternRequest } from '@/lib/api-types';
 import type { DetectionResult, ImportFile, Pattern } from '../types';
 import { extractFields } from '../utils/patternUtils';
@@ -517,29 +517,45 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
 
   const detectPatternForFile = useCallback(async (file: ImportFile): Promise<Partial<ImportFile>> => {
     // Native-path files (spec now-08) have no browser File to read a
-    // preview from -- that's phase 5's job (POST /parse/preview-file).
-    // Nothing constructs one of these yet, so this is an unreachable
-    // guard today, not a real detection path.
-    if (!file.file) {
-      return {
-        detectionStatus: 'failed',
-        detectionError: 'Pattern detection for native-path files is not implemented yet',
-        selectedPattern: DEFAULT_PATTERN,
-        isCustomPattern: true,
-      };
-    }
+    // preview from -- fetch the first N lines from the server instead.
+    // Browser-selected files keep the existing local read.
+    const sourceMtimeIso = file.sourceMTime
+      ?? (file.file?.lastModified ? new Date(file.file.lastModified).toISOString() : undefined);
     try {
       // Read preview if not already done
       let previewLines = file.previewLines;
+      // approxLines: the browser path keeps previewLines.length (existing
+      // behavior, existing tests -- it's whatever readFilePreview already
+      // extrapolated from a 1 MB local read); the native path uses the
+      // server's own approx_lines, which is buffering-independent (fixed
+      // in now-08 phase 3 after a bufio peek-buffer bug made byte-read
+      // counts lie for small files) -- the two estimates aren't worth
+      // reconciling into one formula this phase.
+      let approxLines = previewLines.length;
       if (previewLines.length === 0) {
-        previewLines = await new Promise<string[]>((resolve) => {
-          fileService.handleFilePreview(file.file, (lines) => {
-            resolve(lines);
+        if (file.nativePath) {
+          const preview = await previewFile({ path: file.nativePath });
+          previewLines = preview.lines;
+          approxLines = preview.approx_lines;
+        } else if (file.file) {
+          previewLines = await new Promise<string[]>((resolve) => {
+            fileService.handleFilePreview(file.file!, (lines) => {
+              resolve(lines);
+            });
           });
-        });
+          approxLines = previewLines.length;
+        } else {
+          // Every ImportFile has exactly one of file / nativePath set (see
+          // the type's own doc comment); this is defense against that
+          // invariant breaking, not an expected runtime path.
+          return {
+            detectionStatus: 'failed',
+            detectionError: 'This file has neither browser content nor a native path to read a preview from',
+            selectedPattern: DEFAULT_PATTERN,
+            isCustomPattern: true,
+          };
+        }
       }
-
-      const approxLines = previewLines.length;
 
       const multiline = sessionMultilineOption({
         sessionOptionsMultilineEnabled,
@@ -572,7 +588,7 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
           grok_pattern: bestMatch.pattern,
           custom_patterns: bestMatch.custom_patterns || {},
           session_options: {
-            source_mtime: file.file.lastModified ? new Date(file.file.lastModified).toISOString() : undefined,
+            source_mtime: sourceMtimeIso,
             multiline: detectedMultiline?.enabled ? detectedMultiline : multiline,
           },
         });
@@ -586,8 +602,8 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
             setFileTimestampInference(file.id, parseResponse.timestamp_inference);
             setTimestampInference(parseResponse.timestamp_inference);
           }
-          if (file.file.lastModified) {
-            setSourceMTime(new Date(file.file.lastModified).toISOString());
+          if (sourceMtimeIso) {
+            setSourceMTime(sourceMtimeIso);
           }
           // Match a server pattern if possible
           const matchingPattern = availablePatterns.find(p => p.pattern === bestMatch.pattern);

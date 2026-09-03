@@ -1,6 +1,6 @@
 import { File as FileIcon, Plus, Trash2, Upload } from 'lucide-react';
 import { FC, useCallback, useEffect, useRef, useState } from 'react';
-import { useImportStore } from '../../../stores/useImportStore';
+import { basenameOfPath, useImportStore } from '../../../stores/useImportStore';
 import type { LogSourceProvider } from '../types';
 import { useFileSelectionService } from './FileSelectionService';
 
@@ -29,7 +29,7 @@ export const FileSelection: FC<LogSourceProvider> = ({
   onFilePreview,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { error, files, addFiles, removeFile, setMetadata, setSelectedFileName, setSelectedFileHandle, setFilePreviewBuffer, setSourceMTime } = useImportStore();
+  const { error, files, addFiles, addNativePathFiles, removeFile, setMetadata, setSelectedFileName, setSelectedFileHandle, setFilePreviewBuffer, setSourceMTime } = useImportStore();
   const fileService = useFileSelectionService();
   const [isDragOver, setIsDragOver] = useState(false);
   const [fileErrors, setFileErrors] = useState<string[]>([]);
@@ -132,35 +132,63 @@ export const FileSelection: FC<LogSourceProvider> = ({
     }
   }, [processFiles]);
 
+  // Native drops/Open-With from the macOS shell (spec now-08): the shell
+  // hands over absolute paths -- no browser File object, no bytes crossing
+  // into the webview -- so this is a separate path from processFiles above,
+  // which only ever handles real File objects.
+  const processNativePaths = useCallback((paths: string[], mtimes?: (string | null)[]) => {
+    const existingPaths = new Set(files.map(f => f.nativePath).filter((p): p is string => !!p));
+    const errors: string[] = [];
+    const validPaths: string[] = [];
+    const validMtimes: (string | null)[] = [];
+    paths.forEach((path, i) => {
+      if (existingPaths.has(path)) {
+        errors.push(`"${basenameOfPath(path)}" is already added`);
+        return;
+      }
+      existingPaths.add(path);
+      validPaths.push(path);
+      validMtimes.push(mtimes?.[i] ?? null);
+    });
+
+    setFileErrors(errors);
+    if (validPaths.length === 0) return;
+
+    const wasEmpty = files.length === 0;
+    addNativePathFiles(validPaths, validMtimes);
+
+    const primaryName = basenameOfPath(validPaths[0]);
+    if (wasEmpty) {
+      setMetadata({ _src: `file.${primaryName}` });
+      setSelectedFileName(primaryName);
+      setSourceMTime(validMtimes[0] ?? null);
+      void onFileSelect(primaryName);
+    }
+    // No browser-side preview to hand up (FileAnalyzingStep reads one via
+    // POST /parse/preview-file once detection runs) -- this call exists to
+    // trigger the wizard's step transition, same as the "files added to an
+    // existing list" branch in processFiles above.
+    onFilePreview([], primaryName);
+  }, [files, addNativePathFiles, setMetadata, setSelectedFileName, setSourceMTime, onFileSelect, onFilePreview]);
+
   useEffect(() => {
     const w = window as Window & {
-      __logsonicPendingNativeFiles?: { urls: string[]; names: string[] };
+      __logsonicPendingNativeFiles?: { paths: string[]; mtimes?: (string | null)[] };
     };
-    const consume = async (detail?: { urls: string[]; names: string[] }) => {
-      if (!detail?.urls?.length) return;
+    const consume = (detail?: { paths?: string[]; mtimes?: (string | null)[] }) => {
+      if (!detail?.paths?.length) return;
       w.__logsonicPendingNativeFiles = undefined;
-      const nativeFiles: File[] = [];
-      for (let i = 0; i < detail.urls.length; i += 1) {
-        try {
-          const res = await fetch(detail.urls[i]);
-          if (!res.ok) continue;
-          const blob = await res.blob();
-          nativeFiles.push(new File([blob], detail.names[i] || `file-${i}.log`));
-        } catch {
-          // Keep remaining dropped files if one native URL fails.
-        }
-      }
-      if (nativeFiles.length > 0) await processFiles(nativeFiles);
+      processNativePaths(detail.paths, detail.mtimes);
     };
     if (w.__logsonicPendingNativeFiles) {
-      void consume(w.__logsonicPendingNativeFiles);
+      consume(w.__logsonicPendingNativeFiles);
     }
     const onNative = (event: Event) => {
-      void consume((event as CustomEvent<{ urls: string[]; names: string[] }>).detail);
+      consume((event as CustomEvent<{ paths?: string[]; mtimes?: (string | null)[] }>).detail);
     };
     window.addEventListener('logsonic-native-files', onNative);
     return () => window.removeEventListener('logsonic-native-files', onNative);
-  }, [processFiles]);
+  }, [processNativePaths]);
 
   const handleRemoveFile = (fileId: string) => {
     removeFile(fileId);

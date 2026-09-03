@@ -145,7 +145,7 @@ interface ImportState {
 
   // --- Multi-file actions ---
   addFiles: (newFiles: File[]) => void;
-  addNativePathFiles: (paths: string[]) => void;
+  addNativePathFiles: (paths: string[], mtimes?: (string | null)[]) => void;
   removeFile: (fileId: string) => void;
   setActiveFileId: (fileId: string | null) => void;
   updateFile: (fileId: string, updates: Partial<ImportFile>) => void;
@@ -302,12 +302,13 @@ export const useImportStore = create<ImportState>((set, get) => ({
   // Native-path files (spec now-08 phase 5's FileSelection.tsx wiring is
   // the only intended caller): fileSize/previewLines/approxLines are left
   // at zero/empty here since getting them means an extra request
-  // (POST /parse/preview-file) the caller makes once, not per store call;
-  // sourceMTime is null since the browser has no stat() for a path the
-  // native shell handed over -- a future phase could thread the shell's
-  // own mtime through if it turns out to matter for timestamp anchoring.
-  addNativePathFiles: (paths: string[]) => {
-    const importFiles: ImportFile[] = paths.map(path => ({
+  // (POST /parse/preview-file) the caller makes once, not per store call.
+  // `mtimes[i]` (already ISO 8601, from the macOS shell's own stat() of
+  // the path -- the browser has none) anchors year-less/2-digit-year
+  // timestamps the same way a browser File's lastModified does; missing
+  // or shorter than `paths` falls back to null per entry, same as before.
+  addNativePathFiles: (paths: string[], mtimes?: (string | null)[]) => {
+    const importFiles: ImportFile[] = paths.map((path, i) => ({
       id: generateFileId(),
       nativePath: path,
       fileName: basenameOfPath(path),
@@ -330,7 +331,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
       timestampInference: null,
       timestampOverrides: {},
       timestampConfirmed: false,
-      sourceMTime: null,
+      sourceMTime: mtimes?.[i] ?? null,
     }));
     set(state => ({ files: [...state.files, ...importFiles] }));
   },

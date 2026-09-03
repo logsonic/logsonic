@@ -4,7 +4,7 @@
 
 1. Start LogSonic and open `http://localhost:8080`.
 2. Click **Import** in the left rail.
-3. Drop one or many `.log`, `.txt`, or `.json` files into the file picker.
+3. Drop one or many `.log`, `.txt`, or `.json` files into the file picker. In the macOS app, you can also drop a file onto the Dock icon or use Finder's "Open With" — the app hands the server the file's path, and the server reads it from disk (gzip and zstd are detected automatically), so there's no size limit and no browser round-trip.
 4. LogSonic auto-detects the format for each file with [log2grok](https://github.com/logsonic/log2grok). If detection succeeds, the wizard shows a **Pattern found** badge with a coverage score. If not, paste a custom Grok pattern and test it inline against a sample.
 5. Confirm timestamp resolution and click **Import**. Files are indexed in parallel and become searchable as soon as ingestion completes.
 

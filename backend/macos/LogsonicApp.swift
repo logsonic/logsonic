@@ -34,7 +34,6 @@ let consoleFG = NSColor(srgbRed: 0xCF / 255.0, green: 0xD2 / 255.0, blue: 0xDC /
 private let maxConsoleCharacters = 1_000_000
 private let trimmedConsoleCharacters = 750_000
 private let maxBufferedLogLineCharacters = 64 * 1024
-private let maxNativeDropBytes = 512 * 1024 * 1024
 private let maxServerRestarts = 3
 
 private let blobDownloadHookJS = """
@@ -91,7 +90,13 @@ final class NativeFileSchemeHandler: NSObject, WKURLSchemeHandler {
         }
         do {
             let attrs = try FileManager.default.attributesOfItem(atPath: file.path)
-            if let size = attrs[.size] as? NSNumber, size.intValue > maxNativeDropBytes {
+            // now-08: the primary Dock-drop/Open-With path no longer uses this
+            // handler at all (see openNativeFiles) -- paths go straight to the
+            // server instead. This handler is kept only as a --browser-mode
+            // fallback and still does a full Data(contentsOf:) read below, so
+            // the cap stays; inlined since deleting the named constant was the
+            // spec's ask, not deleting the guard it protects.
+            if let size = attrs[.size] as? NSNumber, size.intValue > 512 * 1024 * 1024 {
                 urlSchemeTask.didFailWithError(NSError(domain: "logsonic", code: 3, userInfo: [
                     NSLocalizedDescriptionKey: "File too large to open via Dock",
                 ]))
@@ -198,7 +203,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var process: Process?
     private var serverURL: String?
     private var parsedServerURL: URL?
-    private var pendingNativeFilePayloads: [(urls: [String], names: [String])] = []
+    private var pendingNativeFilePayloads: [(paths: [String], mtimes: [String?])] = []
     private var lineBuffer = ""
     private var quitting = false
 
@@ -832,18 +837,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             filenames.prefix(8).forEach { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: $0)]) }
             return
         }
-        var urls: [String] = []
-        var names: [String] = []
+        // now-08: hand over absolute paths, not logsonicfile:// URLs -- no
+        // per-file registration, no extension guard (the server sniffs
+        // gzip/zstd by magic bytes and rejects what it can't read), no size
+        // cap (that was only needed for the old whole-file in-memory read).
+        // A path whose stat fails (e.g. a temp file already cleaned up by
+        // whatever handed it to us) is dropped here rather than forwarded
+        // to a server round trip that can only reject it.
+        var paths: [String] = []
+        var mtimes: [String?] = []
         for path in filenames {
-            let file = URL(fileURLWithPath: path)
-            let ext = file.pathExtension.lowercased()
-            guard ["log", "txt", "json"].contains(ext) else { continue }
-            let id = nativeFiles.register(file)
-            urls.append("logsonicfile://\(id)")
-            names.append(file.lastPathComponent)
+            guard let attrs = try? FileManager.default.attributesOfItem(atPath: path) else { continue }
+            paths.append(path)
+            if let date = attrs[.modificationDate] as? Date {
+                mtimes.append(ISO8601DateFormatter().string(from: date))
+            } else {
+                mtimes.append(nil)
+            }
         }
-        guard !urls.isEmpty, webView != nil else { return }
-        pendingNativeFilePayloads.append((urls: urls, names: names))
+        guard !paths.isEmpty, webView != nil else { return }
+        pendingNativeFilePayloads.append((paths: paths, mtimes: mtimes))
         deliverPendingNativeFiles()
     }
 
@@ -852,15 +865,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         let payloads = pendingNativeFilePayloads
         pendingNativeFilePayloads.removeAll()
         for payload in payloads {
-            deliverNativeFiles(payload.urls, names: payload.names, in: webView)
+            deliverNativePaths(payload.paths, mtimes: payload.mtimes, in: webView)
         }
     }
 
-    private func deliverNativeFiles(_ urls: [String], names: [String], in webView: WKWebView) {
-        let urlsJSON = (try? JSONSerialization.data(withJSONObject: urls)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
-        let namesJSON = (try? JSONSerialization.data(withJSONObject: names)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+    private func deliverNativePaths(_ paths: [String], mtimes: [String?], in webView: WKWebView) {
+        let pathsJSON = (try? JSONSerialization.data(withJSONObject: paths)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+        // NSNull round-trips through JSONSerialization as JSON null, unlike a
+        // Swift Optional, which JSONSerialization refuses to serialize at all.
+        let mtimesJSON = (try? JSONSerialization.data(withJSONObject: mtimes.map { ($0 as Any?) ?? NSNull() })).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
         let js = """
-        window.__logsonicPendingNativeFiles = {urls: \(urlsJSON), names: \(namesJSON)};
+        window.__logsonicPendingNativeFiles = {paths: \(pathsJSON), mtimes: \(mtimesJSON)};
         window.location.hash = '#/import';
         window.dispatchEvent(new CustomEvent('logsonic-native-files', {detail: window.__logsonicPendingNativeFiles}));
         """
