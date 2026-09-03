@@ -91,21 +91,57 @@ Pass `--headed` to open a visible browser window.
 
 ## Continuous integration
 
-Pull requests run [`.github/workflows/ci.yml`](../.github/workflows/ci.yml). Its jobs mirror the commands above, so a green local run is a green CI run:
+Three workflows, not one — `ci.yml` is the PR gate; `docs.yml` and `nightly.yml` run on their own triggers.
+
+### `ci.yml` — on every PR and push to `main`
+
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml). Its jobs mirror the commands above, so a green local run is a green CI run:
 
 | Job | What it runs |
 |-----|--------------|
 | `go` | `go build`, `go vet`, `staticcheck` (pinned), `go test -race ./...`, a Swagger drift check (`swag init` must produce no diff under `backend/docs/`), `govulncheck` |
 | `web` | `npm ci`, `npm run build`, `vitest run --coverage` (report uploaded as an artifact); `tsc` and `eslint` on changed files are **non-blocking** until their pre-existing baselines are cleared, and the whole-tree counts are written to the job summary |
+| `api-types` | `node .github/scripts/check-api-types.mjs` (+ its own `node --test`) — checks every Go JSON field name in `backend/pkg/types/types.go` appears as a property name *somewhere* in `frontend/src/lib/api-types.ts`, on any interface. **Warn-only for now** (blocking after one release, per the spec): it's a name-presence check, not a structural one — it can't tell a field mirrored on the wrong interface from a correct mirror, only catch a name missing everywhere |
 | `swift` | `backend/scripts/test-macos-app.sh` on a macOS runner: compiles the shell for both architectures, runs the `ListeningURL` tests, builds and validates an ad-hoc app |
 | `snapshot` | `goreleaser build --snapshot --id logsonic` — the Linux/Windows builds and the release config; the Darwin build needs a signing identity and is not built in CI |
 | `e2e` | builds the real frontend into the embedded binary, then runs `frontend/e2e-network-audit.mjs` (fails on any request that leaves the server's origin), `frontend/e2e-test.mjs`, and `frontend/e2e-facets.mjs` (the Fields panel: click-to-filter, alt-click-to-exclude) via `.github/scripts/run-e2e.sh` |
 
-Every Go job creates a placeholder `backend/pkg/static/dist/index.html` first: the real bundle is gitignored and `//go:embed all:dist` of a missing directory does not compile. Run the same scripts locally with the embedded binary you built:
+Every Go job creates a placeholder `backend/pkg/static/dist/index.html` first: the real bundle is gitignored and `//go:embed all:dist` of a missing directory does not compile. Run the same script locally with the embedded binary you built:
 
 ```bash
 bash .github/scripts/run-e2e.sh /path/to/logsonic-embedded 8080
+```
+
+### `docs.yml` — on a PR touching `*.md` or the checks themselves, and on push to `main`
+
+[`.github/workflows/docs.yml`](../.github/workflows/docs.yml) is scoped to doc/script changes (path filters on the `pull_request` trigger), not every PR — a code-only change doesn't re-run it.
+
+| Job | What it runs |
+|-----|--------------|
+| `links` | `.github/scripts/check-links.sh` — every relative Markdown link in `README.md`/`docs/*.md`/`specs/*.md`/etc. resolves to a real file |
+| `external-links` | `lychee` against the same file set as `links` — every external `http(s)://` link resolves |
+| `dev-commands` | `.github/scripts/check-dev-commands.sh` — actually runs the four bootstrap commands this doc's own "First-time setup"/"Backend"/"Frontend"/"Tests" sections tell a new contributor to type (`npm ci`, `go run . -port 8080 -auto-port=false`, `PORT=8081 npm run dev`, `npm run test`), grepped verbatim out of this file first so a doc edit that changes the wording fails loudly instead of silently testing stale text |
+
+Run the same checks locally:
+
+```bash
 bash .github/scripts/check-links.sh
+bash .github/scripts/check-dev-commands.sh
+```
+
+### `nightly.yml` — 03:00 UTC schedule + manual dispatch, never on a PR
+
+[`.github/workflows/nightly.yml`](../.github/workflows/nightly.yml) runs work too slow for a PR gate.
+
+| Job | What it runs |
+|-----|--------------|
+| `bench` | [`backend/bench/`](../backend/bench/), the §8-budget harness, at full scale (a 10M-line corpus, 365 real day-indices) — import throughput, term/facets/histogram search latency, storage-open time — written to `bench.json` and uploaded as an artifact; compared against a committed `backend/bench/baseline.json` if one exists (none does yet — no run has happened on a real runner, so there is nothing honest to compare against). Also runs the `BenchmarkIndexSize*` Go benchmark |
+| `e2e-full` | the same `.github/scripts/run-e2e.sh` driver `ci.yml`'s `e2e` job uses, on the same schedule as `bench` rather than every PR |
+
+Run the bench harness locally at a smaller scale (the full 10M-line run takes long enough that a nightly cadence, not a dev loop, is the point):
+
+```bash
+cd backend && go run ./bench -out bench/output/bench.json
 ```
 
 ## API Documentation
