@@ -13,6 +13,8 @@ import {
   LogResponse,
   ParseRequest,
   ParseResponse,
+  PreviewFileRequest,
+  PreviewFileResponse,
   SuggestResponse,
   SystemInfoResponse,
   TimestampPreviewRequest,
@@ -195,6 +197,16 @@ export async function duplicateWorkspace(id: string): Promise<WorkspaceResponse>
 // Log Parsing
 export async function parseLogs(request: ParseRequest): Promise<ParseResponse> {
   return apiRequest<ParseResponse>('/parse', 'POST', request);
+}
+
+/**
+ * Preview the first few lines of a file by absolute path (spec now-08),
+ * without an ingest session. For a native drop (a path, not a browser
+ * File), this is how the wizard gets a preview -- the wizard wiring that
+ * calls it is not built yet.
+ */
+export async function previewFile(request: PreviewFileRequest): Promise<PreviewFileResponse> {
+  return apiRequest<PreviewFileResponse>('/parse/preview-file', 'POST', request);
 }
 
 // Live timestamp re-preview for the import wizard's knob panel.

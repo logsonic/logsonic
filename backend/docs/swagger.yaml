@@ -582,6 +582,27 @@ definitions:
           timestamps in this sample. Drives the wizard's diagnostic chip
           and live preview. Empty when no logs were provided.
     type: object
+  types.PreviewFileRequest:
+    properties:
+      lines:
+        description: Lines caps how many lines to read; default 100, capped server-side.
+        type: integer
+      path:
+        type: string
+    type: object
+  types.PreviewFileResponse:
+    properties:
+      approx_lines:
+        type: integer
+      compressed:
+        type: string
+      lines:
+        items:
+          type: string
+        type: array
+      size_bytes:
+        type: integer
+    type: object
   types.SuggestResponse:
     properties:
       combined_coverage:
@@ -1253,6 +1274,39 @@ paths:
       summary: Parse logs or suggest patterns
       tags:
       - parsing
+  /parse/preview-file:
+    post:
+      consumes:
+      - application/json
+      description: Read the first few lines of a file the server can access (absolute
+        path; gzip and zstd detected by magic bytes), without creating an ingest session.
+        Used by the native-drop wizard flow, which only ever has a path, not a browser
+        File to read.
+      parameters:
+      - description: Absolute path and optional line count
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.PreviewFileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.PreviewFileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Preview a file by path
+      tags:
+      - ingest
   /ping:
     get:
       description: Check if the API is running

@@ -81,6 +81,25 @@ export interface IngestJobActionResponse {
   status: string;
 }
 
+/** Read the first few lines of a file by absolute path, without creating an
+ * ingest session -- the native-drop wizard flow uses this instead of a
+ * browser File read, since a native drop only ever has a path. */
+export interface PreviewFileRequest {
+  path: string;
+  /** Caps how many lines to read; default 100, capped server-side. */
+  lines?: number;
+}
+
+export interface PreviewFileResponse {
+  lines: string[];
+  /** Exact once the whole file fit within the requested `lines`; otherwise
+   * an estimate for an uncompressed file, or just the count of lines
+   * actually returned (a lower bound) for a compressed one. */
+  approx_lines: number;
+  compressed?: string;
+  size_bytes: number;
+}
+
 export interface IngestResponse {
   error?: string;
   failed?: number;

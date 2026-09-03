@@ -137,6 +137,31 @@ type IngestJobsListResponse struct {
 	Jobs []IngestJob `json:"jobs"`
 }
 
+// PreviewFileRequest asks for the first few lines of a file by absolute
+// path, without creating an ingest session (spec now-08's "Preview by path
+// too" decision) -- the native-drop wizard flow uses this instead of a
+// browser File read, since a native drop only ever gets a path.
+type PreviewFileRequest struct {
+	Path string `json:"path"`
+	// Lines caps how many lines to read; default 100, capped server-side.
+	Lines int `json:"lines,omitempty"`
+}
+
+// PreviewFileResponse is the first N lines plus enough to estimate the
+// file's shape without reading all of it. ApproxLines is exact once the
+// whole file fit within the requested Lines; otherwise, for an uncompressed
+// file, it's extrapolated from the sample's average bytes-per-line against
+// SizeBytes; for a compressed file it's only the count of lines actually
+// returned (a lower bound), since the on-disk size is the compressed size
+// and the true line count depends on a compression ratio this endpoint
+// doesn't know without decompressing the whole file.
+type PreviewFileResponse struct {
+	Lines       []string `json:"lines"`
+	ApproxLines int64    `json:"approx_lines"`
+	Compressed  string   `json:"compressed,omitempty"`
+	SizeBytes   int64    `json:"size_bytes"`
+}
+
 // IngestJobActionResponse is the body of DELETE /ingest/jobs/{id}.
 type IngestJobActionResponse struct {
 	Status string `json:"status"` // "cancelling", or the job's terminal state if it had already finished

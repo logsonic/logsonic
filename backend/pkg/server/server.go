@@ -323,6 +323,7 @@ func NewServer(cfg Config) (*Server, error) {
 
 			// Parse endpoints
 			r.Post("/parse", h.HandleParse)
+			r.Post("/parse/preview-file", h.HandlePreviewFile)
 			r.Post("/timestamp/preview", h.HandleTimestampPreview)
 			r.Route("/logs", func(r chi.Router) {
 				r.Get("/", h.HandleReadAll)
