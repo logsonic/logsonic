@@ -6,6 +6,26 @@ Process: every candidate entry goes through the remediation pass in [`specs/WORK
 
 ---
 
+## 2026-09-03 — H5 (memory-bounded 200 MB import) exceeds its 150 MB budget; root cause is `pkg/storage`, not `pkg/ingestfile` (now-08 phase 7)
+
+**Severity:** P2 — a real, measured budget miss, but on a spec that describes a desktop-first *comfort* target (§8), not a crash or correctness defect. No size cap exists on this path either way (that's the point of now-08); this finding is the first data on what the storage layer actually costs at large-single-file scale, not evidence that large imports fail.
+
+**What:** new `TestIngestFileMemoryBounded` (`backend/pkg/server/ingest_file_memory_test.go`, commit `177e998`, off by default — `LOGSONIC_RUN_MEMORY_TEST=1 go test ./pkg/server -run TestIngestFileMemoryBounded -v`) ingests a generated 200 MB / 1,653,374-line single-day file through `POST /ingest/file` and samples `runtime.MemStats` every 250 ms while polling `GET /ingest/jobs` to a terminal state. Measured: **peak `HeapInuse` delta 319–322 MB** across two runs of the committed test (an earlier 10 ms-poll draft, since rewritten, saw 328 MB — cited separately since it isn't the shipped code), well over spec now-08's H5 budget of 150 MB.
+
+**Root-cause check (§5 step 1, both hypotheses measured, not guessed):** `HeapInuse` includes GC-uncollected garbage, which under default `GOGC=100` can run to ~2x the true live set — so the number alone doesn't say whether this is a real storage-layer cost or just pacer slack. Reran with `GODEBUG=gctrace=1`, first against the `go test` wrapper (which turned out to interleave the compiler's own GC trace with the test binary's — a methodology bug caught before trusting the number: a `go test -c` precompiled binary run standalone gives one clean trace). In that clean run: the live heap immediately after each GC cycle (`gc N ... A->B->C MB`, C = live) started at **9 MB** (the test's own explicit `runtime.GC()` baseline call, visible as the trace's one `(forced)` line) and peaked at **200 MB**, ~3 seconds before the job finished — a **191 MB live-set delta**, itself over the 150 MB budget, confirming this is not a GC-tuning artifact.
+
+But the full trace is **not** a steady climb to that peak — plotting every 25th GC cycle shows the live heap bouncing between a ~25–70 MB floor and periodic spikes (125 MB at 1.5s in a nearly-empty index, up to 357→108 MB and 200 MB in the run's final third), i.e. a bursty working set tied to Bleve scorch's background segment-merge cycle, not a value that climbs and stays up. By the time the process exited (3s after the 200 MB peak, essentially as the job itself finished) it had already fallen to 53 MB — a transient spike, not retained memory. What *does* track with total index size is the spike magnitude: later merges (more documents already indexed) produce bigger spikes than earlier ones — consistent with the same "does Bleve's per-batch/per-merge cost scale with total index size" open question the now-11 bench harness already flagged for `search_term_facets` (see that row in TBD.md), surfacing again here for writes instead of reads.
+
+`pkg/ingestfile`'s own contract — a line iterator plus a caller-controlled 10k-line batch — is confirmed bounded (`reader_test.go` R1–R9 unchanged, and `ingest_jobs.go`'s `runIngestFileJob` flushes every `ingestFileBatchLines` lines, never accumulating lines across batches); all 1.65M synthetic rows land on one calendar day since none of the fixture's lines carry a parseable timestamp, so this is specifically the single-day, high-volume case.
+
+**Why this isn't classified as fixable-in-scope:** now-08 owns `pkg/ingestfile` and the job runner, not `pkg/storage`'s Bleve/scorch configuration; tuning scorch's merge behavior during a large batched write is a storage-engine change with its own cost/correctness tradeoffs that a P0-priority now-08 phase shouldn't decide unilaterally. It's also not obviously fixable by the intuitive lever: since the spikes track scorch's *merge* cycle rather than the writer's own per-`Batch()` footprint, shrinking `ingestFileBatchLines` would trigger the same merge machinery more often and could make peak memory worse, not better — the opposite of what it looks like it should do.
+
+**Suggested next step:** `next-10-storage-engine-hardening.md` (or a dedicated follow-up) should reproduce with `TestIngestFileMemoryBounded` (gated behind `LOGSONIC_RUN_MEMORY_TEST=1`) and measure scorch's merge-planner behavior (segment count/size thresholds, merge concurrency) *before* touching batch size, given the batch-size lever's direction is unclear from this trace alone. Numbers to compare against: 319–322 MB peak `HeapInuse` / 191 MB peak live-set (9→200 MB, bursty not sustained) at 1,653,374 rows in one day-index; 150 MB is the current spec target.
+
+**Acceptance box:** now-08's "Memory bounded (H5)" box stays open — measured and over budget, not silently marked done.
+
+---
+
 ## 2026-09-03 — Native Dock-drop verification is manual-pending; >512 MB acceptance box unverified (now-08 phase 5)
 
 **Severity:** P2 — not a defect, a verification gap. The change itself compiles, type-checks, and builds/validates cleanly (`backend/scripts/test-macos-app.sh` green, both architectures).
