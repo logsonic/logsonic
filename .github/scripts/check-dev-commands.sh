@@ -89,6 +89,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# A dev server left running from an earlier invocation on this machine (or a
+# self-hosted runner reused across jobs) would answer the poll below in
+# place of the command actually being tested, so a real bind failure in
+# `go run .` could pass silently -- WORKFLOW.md's own preflight calls this
+# out ("stale dev servers cause false failures"); this is that same class,
+# just a false success instead of a false failure. Clear both ports before
+# anything starts, not just on the way out.
+kill_port "$BACKEND_PORT"
+kill_port "$FRONTEND_PORT"
+
 poll() {
   # poll <url> <timeout-seconds>
   local url="$1" timeout="$2" waited=0
