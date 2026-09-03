@@ -6,6 +6,46 @@ Process: every candidate entry goes through the remediation pass in [`specs/WORK
 
 ---
 
+## 2026-09-03 — `e2e-comprehensive.mjs`'s placeholder-based search-input locator breaks once the input is focused — **fixed** (now-03)
+
+**What:** `LogSearch.tsx`'s search `<Input>` changes its `placeholder` attribute on focus (from `"Search logs… (/ or ⌘K)"` to `'Try level:error or "connection timeout"'`), so any Playwright locator matching `input[placeholder*="Search logs" i]` stops resolving to any element the instant the input is focused. Similarly, `WorkspaceMenu.tsx`'s trigger button's accessible name switches from `"Workspace"` to the active workspace's name once one is loaded, breaking `getByRole('button', {name: 'Workspace'})` the same way. Every existing check in `e2e-comprehensive.mjs` happened to query these locators only once, before the state change; now-03's new check is the first to fill/press/apply repeatedly across a focus change and a workspace-load, and hung for the full default timeout on the very first action after the state flipped.
+
+**Fix:** added a stable `aria-label="Search logs"` to the search `<Input>` and `aria-label="Workspace menu"` to the workspace trigger button — both incidental small accessibility improvements as well as test-stability fixes. Updated all locator references in `e2e-comprehensive.mjs` (including the two pre-existing checks that used the old `Workspace`-by-text locator) to match on these instead.
+
+**Verified:** now-03's new check passes twice in a row against a clean storage dir; the pre-existing "workspace can be saved and deleted" check is unaffected by this change (it was independently broken by the issue below, now fixed).
+
+## 2026-09-03 — Deleting the active workspace left its saved queries in the (unrelated) next workspace someone saved — **fixed** (now-03)
+
+**What:** `useWorkspaceStore.ts`'s `deleteWorkspace` cleared `activeWorkspaceId` when the deleted workspace was active, but never cleared `useSavedQueryDraftStore` (this package's own new store). Its saved queries stayed in the draft after the workspace behind them was gone, so the next `saveCurrentWorkspace` call — for an unrelated, brand-new workspace — silently inherited them, since `saveCurrentWorkspace` always reads the current draft into `buildWorkspaceFromState`.
+
+**Found while:** adding now-03's new E2E check, which stars a query, saves a workspace, then deletes it as its own cleanup step — this is the first code path to exercise workspace-delete with a non-empty saved-query draft. The pre-existing "workspace can be saved and deleted with confirmation" check, run immediately afterward in the same script, started failing (its "Save as" click intermittently hit a detaching element) once this leak was present in the shared page's state.
+
+**Fix:** `deleteWorkspace` now also calls `useSavedQueryDraftStore.getState().setAll([])` when the deleted workspace was the active one (`backend/pkg/workspaces/store.go` untouched — this is a frontend-only state-management gap). `isWorkspaceDirty(undefined, …)` already short-circuits to `false` with no active workspace, so this couldn't surface as a phantom-dirty indicator, only as the silent data leak described above.
+
+**Verified:** two new vitest cases in `useWorkspaceStore.test.ts` (`deleteWorkspace` describe block) — deleting the active workspace clears the draft, deleting a non-active one leaves it untouched. `e2e-comprehensive.mjs`'s pre-existing workspace check now passes consistently (2/2 clean runs) once combined with the fix below.
+
+## 2026-09-03 — now-03's new E2E check's own popover interactions destabilized the next check's DOM — **fixed** (now-03)
+
+**What:** Even after the draft-leak fix above, `e2e-comprehensive.mjs`'s pre-existing "workspace can be saved and deleted" check still intermittently timed out clicking "Save as" or the delete ✕ — the failure point moved between runs, and the exact element reported "not stable" / "detached from the DOM, retrying". Removing now-03's new check from the script (leaving everything else, including the leak fix, in place) made the pre-existing check pass cleanly every time; putting the check back reintroduced the flake. So the interference was real and specific to running now-03's check first, not environmental.
+
+**Root cause (isolated, not fully explained):** now-03's check opens and closes the search-input's Radix popover, the saved-query star popover, and the workspace popover three separate times (save, load+apply, delete) plus a full `page.reload()`, all on the same `page` object every other check shares. Neither a 2–4s settle wait nor explicitly waiting for the "Workspace deleted" toast to finish its exit animation resolved it, so the residue is not simply a slow-to-dismiss toast; it is some state left on the shared page by that many stacked Radix popover open/close cycles that the next check's popover interactions then hit.
+
+**Fix:** rather than continue reverse-engineering Radix's internals under budget, now-03's new check runs on its own `browser.newPage()` (navigated to the same app, same backend/session) and closes that page when done, so nothing it does can leave residue for the next check to inherit. This is the appropriate scope for now-03: the check is now provably self-contained, and the actual mechanism (if it recurs in a future check that also chains several popovers) is left for whoever hits it next.
+
+**Verified:** full `e2e-comprehensive.mjs` run twice in a row against a clean storage dir: 7/8 checks pass consistently, including both "history recall…" (new) and "workspace can be saved and deleted" (pre-existing, previously flaky). Only "import redirects back to the home view" remains failing — see the next entry, confirmed unrelated.
+
+## 2026-09-03 — `e2e-comprehensive.mjs`'s "import redirects back to the home view" check is flaky in this dev environment, unrelated to now-03
+
+**What:** This one check fails **deterministically** (every run, not intermittently) against a freshly built backend + `vite` dev server on this machine: `page.waitForURL(/#\/$/)` resolves, but an immediate, un-waited `.count()` on the search input reads 0 because the home view hasn't finished mounting yet (confirmed via a standalone probe: the input appears ~0.5–1s later).
+
+**Root cause, confirmed not caused by this package:** re-ran the pristine, unmodified `e2e-comprehensive.mjs` from `dev` HEAD (via `git stash`, verifying both the script AND the running app were unmodified) against a clean backend storage dir — the failure reproduced identically with zero now-03 changes present.
+
+**Why this isn't classified as fixable-in-scope:** now-03 doesn't own this check's assertion or the timing it depends on; the check simply needs a wait instead of an instant `.count()`, which is a one-line, unscoped fix to a check that pre-dates this package and isn't part of its acceptance criteria.
+
+**What I did instead:** kept now-03's own new check independent of this one (it does its own explicit wait for the search input via `getByRole`), confirmed passing reliably on its own. This one pre-existing failure remains open for whoever next touches `e2e-comprehensive.mjs`.
+
+---
+
 ## 2026-09-03 — H5 (memory-bounded 200 MB import) exceeds its 150 MB budget; root cause is `pkg/storage`, not `pkg/ingestfile` (now-08 phase 7)
 
 **Severity:** P2 — a real, measured budget miss, but on a spec that describes a desktop-first *comfort* target (§8), not a crash or correctness defect. No size cap exists on this path either way (that's the point of now-08); this finding is the first data on what the storage layer actually costs at large-single-file scale, not evidence that large imports fail.
