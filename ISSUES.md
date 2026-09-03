@@ -6,6 +6,44 @@ Process: every candidate entry goes through the remediation pass in [`specs/WORK
 
 ---
 
+## 2026-09-03 — `/ingest/end` while a path-ingest job is still running (now-08 phase 2)
+
+**Severity:** Low today (no UI calls either endpoint yet), but a real race once the wizard wires phase 2 up in a later phase.
+
+**What:** `POST /ingest/file` now returns before the file is read (202, job model). If a caller calls `POST /ingest/end` for that session before the job reaches a terminal state, `HandleIngestEnd` deletes the session from `sessionMap` immediately; the job's next `ingestBatch` call then fails with `errInvalidSession`, and the job finishes in state `error` with whatever rows were stored before that point kept (nothing is rolled back — same partial-success semantics as any other mid-job failure). The spec's own text ("`POST /ingest/end` closes the session as today") says not to change this behavior, so it wasn't changed; the swagger description on `HandleIngestFile` now states the ordering rule explicitly ("call `POST /ingest/end` only after the job reaches a terminal state") as the interim contract.
+
+**Two ways to close this properly, not implemented here:**
+1. Leave it as a documented caller responsibility (current state) — cheapest, matches the spec's literal instruction, but relies on every future caller (the wizard in phase 3, `now-04` folder watch, `now-12` CLI) reading the docstring rather than the type system.
+2. Make `HandleIngestEnd` return 409 when any job for that session is still `running`, so a caller that gets the ordering wrong fails loudly instead of silently losing the tail of a file. This is new behavior beyond what the spec asked for, so it's a product decision, not a bug fix — recommended if phase 3's wizard doesn't fully own not calling `end` early (e.g. a "cancel and reset" button that ends the session unconditionally).
+
+**Suggested next step:** decide before phase 3 wires the wizard to path-ingest; whichever way, the wizard's cancel/reset flow needs to know about it.
+
+---
+
+## 2026-09-03 — path-ingest jobs share `TailManager`'s not-awaited shutdown-drain gap (now-08 phase 2)
+
+**Severity:** Low-medium. Pre-existing, not introduced here, but now has a second occupant.
+
+**What:** `Server.Start()`'s shutdown sequence is: cancel `cleanupCtx` → `httpServer.Shutdown(ctx)` (30s drain) → `CloseStorage()`. Cancelling `cleanupCtx` triggers `TailManager.Shutdown()` in a goroutine off `<-ctx.Done()` (see `TailManager.Start`), which is never awaited before `CloseStorage()` runs — `TailSource.Stop()` blocks up to 5s per source, but nothing blocks `Start()`'s own flow on it. Path-ingest jobs (this session's work) derive their context from the same `cleanupCtx` (via `Services.ingestJobsCtx`, wired by the new `StartIngestJobs`), so cancelling it propagates to every running job's context automatically — cooperative, checked on the job's next `reader.Next()` call — but is equally not awaited before `CloseStorage()`. In both cases, one in-flight `StoreWithIDs` batch (up to 10k lines) can legitimately still be running when the Bleve indices are closed underneath it.
+
+**Why not fixed here:** this session's H6 test (`TestIngestFileCancelledByServerShutdownContext`) only proves a job's context is cancelled by the parent context — it does not exercise the real `Start()`/signal/`Shutdown()` sequence, so it doesn't prove indices close cleanly around an in-flight batch. Fixing the underlying gap means changing the shutdown sequence both `TailManager` and the ingest-job registry now share, which is bigger than this package's scope and risks the same class of regression `now-09`'s consumer sweep exists to catch (a shared, load-bearing sequence with two callers now instead of one).
+
+**Suggested next step:** a `next-10`- or `now-13`-adjacent fix: give both `TailManager` and the ingest-job registry a `Shutdown(ctx) error` that `Start()` actually calls and awaits (with a bounded timeout) before `CloseStorage()`, rather than firing-and-forgetting off a goroutine.
+
+---
+
+## 2026-09-03 — `docs/live-streaming.md` documents no SSE event schema, existing or new (now-08 phase 2)
+
+**Severity:** Informational.
+
+**What:** `specs/README.md`'s shared conventions say "New SSE event types go in `types.go` beside the existing live events and are documented in `docs/live-streaming.md`." The new `ingest_progress` event was added to `types.go` per that rule, but not documented in `docs/live-streaming.md` — checked, and that doc does not describe the wire schema of any of the four existing events (`hello`/`rows`/`skipped`/`source_status`) either; it's a CLI/demo-usage guide, not a protocol reference. Documenting `ingest_progress` alone, in a doc that documents no other event, would be inconsistent and imply a completeness the doc doesn't have.
+
+**What I did:** deferred the doc update to phase 3 (wizard UI wiring), where `ingest_progress` gets a real consumer and the documentation can describe both together, rather than write an isolated paragraph now.
+
+**Suggested next step:** either write phase 3's doc paragraph as planned, or — if a supervisor wants full protocol docs sooner — treat "document all five SSE events in `docs/live-streaming.md`" as its own small hygiene task, independent of any one spec.
+
+---
+
 ## 2026-09-02 — now-02's Performance criterion passes by architecture, not by speed (tracking correction found at now-08 pickup)
 
 **Severity:** Informational / low. No code change; corrects how a previous row characterized an already-known number.
