@@ -195,7 +195,7 @@ func statMembersTotal(members []string) int64 {
 // waiting for any of the file to be read. The job's context (and therefore
 // job.cancel) is created here, before the goroutine starts, so a DELETE
 // that lands the instant after this call returns is never racing an unset
-// job.cancel -- see ISSUES.md.
+// job.cancel.
 func (h *Services) startIngestFileJob(sessionID, canonicalPath string, members []string, compression string) *ingestJob {
 	ctx, cancel := context.WithTimeout(h.ingestJobsCtx, ingestJobWallClock)
 	job := &ingestJob{
