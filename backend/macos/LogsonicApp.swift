@@ -15,11 +15,29 @@
 // server-log window. View → Open in Browser always works. External links leave
 // the app. The CLI (`logsonic -open`) never uses this shell.
 //
+// macos-b1 "visible nativeness" (unified titlebar, native-detection contract,
+// appearance-follow, window memory) — see DragStrip.swift for the window-drag
+// decision function and its own header comment for the JS/Swift split:
+//   - Titlebar: transparent + .fullSizeContentView, traffic lights inset over
+//     the web header. Drag-by-header works via an injected mousedown hook
+//     (dragStripHookJS) that posts to the "logsonicDrag" message handler,
+//     since WKWebView swallows native mouse events.
+//   - `window.__LOGSONIC_NATIVE__` is injected at document start
+//     (nativeContractJS) so the frontend can detect the shell.
+//   - Appearance: NSApp.effectiveAppearance is observed via KVO; changes are
+//     pushed into the page (`window.__logsonicSetSystemAppearance`) and drive
+//     the window/webview background directly (no white flash before the SPA
+//     paints). The page posts back via "logsonicTheme" whenever its own
+//     resolved theme changes (explicit user choice), so the window stays in
+//     sync even when not following the system.
+//   - Both windows persist their frame via NSWindow.setFrameAutosaveName
+//     ("main" / "serverLog").
+//
 // Build (universal) — see scripts/app-macos.sh:
 //   swiftc -O -target arm64-apple-macos11  -framework AppKit -framework WebKit \
-//     ListeningURL.swift LogsonicApp.swift -o app-arm64
+//     ListeningURL.swift DragStrip.swift LogsonicApp.swift -o app-arm64
 //   swiftc -O -target x86_64-apple-macos11 -framework AppKit -framework WebKit \
-//     ListeningURL.swift LogsonicApp.swift -o app-x86_64
+//     ListeningURL.swift DragStrip.swift LogsonicApp.swift -o app-x86_64
 //   lipo -create app-arm64 app-x86_64 -o LogsonicApp
 
 import AppKit
@@ -31,6 +49,14 @@ import WebKit
 let brandColor = NSColor(srgbRed: 0x6D / 255.0, green: 0x5D / 255.0, blue: 0xFC / 255.0, alpha: 1)
 let consoleBG = NSColor(srgbRed: 0x17 / 255.0, green: 0x17 / 255.0, blue: 0x1F / 255.0, alpha: 1)
 let consoleFG = NSColor(srgbRed: 0xCF / 255.0, green: 0xD2 / 255.0, blue: 0xDC / 255.0, alpha: 1)
+// macos-b1 no-white-flash colors, matching frontend/src/index.css's
+// `--background` token as actually rendered: the unlayered
+// `[data-theme="dark"] { --background: 240 6% 6% }` bridge rule wins the
+// cascade over @layer base's `.dark { --background: 222.2 84% 4.9% }`
+// (unlayered always beats layered at equal specificity). Kept in sync by
+// hand -- there is no build-time bridge between the two files.
+let appBackgroundLight = NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
+let appBackgroundDark = NSColor(srgbRed: 0x0E / 255.0, green: 0x0E / 255.0, blue: 0x10 / 255.0, alpha: 1)
 private let maxConsoleCharacters = 1_000_000
 private let trimmedConsoleCharacters = 750_000
 private let maxBufferedLogLineCharacters = 64 * 1024
@@ -67,6 +93,47 @@ private let blobDownloadHookJS = """
   };
 })();
 """
+
+// The window-drag strip height, in CSS px. Matches frontend/src/index.css's
+// --ls-topbar-h (44px), not the spec's original 52px placeholder -- kept in
+// sync by hand, same caveat as the background colors above.
+let dragStripHeight: CGFloat = 44
+
+// WKWebView swallows native mouse events, so a CSS-only drag region isn't
+// possible. This hooks document-level mousedown: if it's within the top
+// strip and not on an interactive element (or an element/ancestor marked
+// data-native-drag="false"), it posts to the "logsonicDrag" handler with the
+// DOM's own click count so Swift can tell a drag from a double-click zoom.
+// The strip-height/interactivity check happens here in JS (Swift has no
+// visibility into the DOM); dragStripAction() in DragStrip.swift still makes
+// the final drag-vs-zoom call so there is one tested decision function, not
+// two copies of the "clickCount >= 2" rule.
+private let dragStripHookJS = """
+(function() {
+  if (window.__logsonicDragHook) return;
+  window.__logsonicDragHook = true;
+  var STRIP_HEIGHT = \(Int(dragStripHeight));
+  var INTERACTIVE_TAGS = { BUTTON: 1, INPUT: 1, A: 1, SELECT: 1, TEXTAREA: 1 };
+  document.addEventListener('mousedown', function(e) {
+    if (e.button !== 0 || e.clientY < 0 || e.clientY >= STRIP_HEIGHT) return;
+    var el = e.target;
+    while (el && el !== document.body) {
+      if (INTERACTIVE_TAGS[el.tagName] || (el.getAttribute && el.getAttribute('data-native-drag') === 'false')) return;
+      el = el.parentElement;
+    }
+    var handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.logsonicDrag;
+    if (handler) handler.postMessage({ clickCount: e.detail || 1 });
+  }, true);
+})();
+"""
+
+// Injected once at document start so the frontend can detect the shell
+// before any application code runs (macos-b1's native-detection contract).
+private func nativeContractJS(shellVersion: String) -> String {
+    """
+    window.__LOGSONIC_NATIVE__ = { platform: 'macos', shellVersion: \(String(reflecting: shellVersion)), token: undefined };
+    """
+}
 
 final class NativeFileSchemeHandler: NSObject, WKURLSchemeHandler {
     private var files: [String: URL] = [:]
@@ -207,6 +274,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var lineBuffer = ""
     private var quitting = false
 
+    // macos-b1: the last real left-mouse-down the UI process saw, captured
+    // via a local event monitor. WKWebView's IPC hop means NSApp.currentEvent
+    // at the moment a "logsonicDrag" message arrives is not reliably the
+    // originating mousedown -- performDrag(with:) needs a genuine one.
+    private var lastMouseDown: NSEvent?
+    private var appearanceObservation: NSKeyValueObservation?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         useBrowser = wantsBrowserUI()
         if !acquireInstanceLock() {
@@ -214,8 +288,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             NSApp.terminate(nil)
             return
         }
+        NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            self?.lastMouseDown = event
+            return event
+        }
         buildMenu()
         buildWindow()
+        observeAppearance()
         status.set("Starting…", color: .systemOrange)
         startServer()
     }
@@ -308,6 +387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             logWindow = window
             showLogMenuItem?.state = .on
             window.center()
+            window.setFrameAutosaveName("main")
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -325,16 +405,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         window.isReleasedWhenClosed = false
         window.delegate = self
 
+        // Unified titlebar: traffic lights float over the web header instead
+        // of a separate title bar strip. The web header pads itself left so
+        // its own content clears the buttons (frontend .is-native-macos CSS).
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.styleMask.insert(.fullSizeContentView)
+        window.setFrameAutosaveName("main")
+
+        let dark = isDarkAppearance(NSApp.effectiveAppearance)
+        window.backgroundColor = dark ? appBackgroundDark : appBackgroundLight
+
         let config = WKWebViewConfiguration()
         let controller = config.userContentController
         controller.add(self, name: "logsonicDownload")
+        controller.add(self, name: "logsonicDrag")
+        controller.add(self, name: "logsonicTheme")
         controller.addUserScript(WKUserScript(source: blobDownloadHookJS, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        controller.addUserScript(WKUserScript(source: dragStripHookJS, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+        controller.addUserScript(WKUserScript(
+            source: nativeContractJS(shellVersion: version),
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
         config.setURLSchemeHandler(nativeFiles, forURLScheme: "logsonicfile")
 
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.navigationDelegate = self
         wv.uiDelegate = self
         wv.translatesAutoresizingMaskIntoConstraints = false
+        // No white/black flash before the SPA paints its own background:
+        // let the window's own (appearance-matched) color show through.
+        wv.setValue(false, forKey: "drawsBackground")
+        if #available(macOS 12.0, *) {
+            wv.underPageBackgroundColor = dark ? appBackgroundDark : appBackgroundLight
+        }
         #if DEBUG
         if #available(macOS 13.3, *) {
             wv.isInspectable = true
@@ -449,14 +555,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             win.close()
             return
         }
+        let isNewWindow = logWindow == nil
         let win = logWindow ?? makeLogWindow()
         logWindow = win
-        if let main = window {
-            var origin = main.frame.origin
-            origin.y -= 20
-            win.setFrameOrigin(origin)
-        } else {
-            win.center()
+        if isNewWindow {
+            // setFrameAutosaveName restores a prior session's frame and
+            // reports whether it found one -- only fall back to positioning
+            // under the main window when there's nothing to restore.
+            let restored = win.setFrameAutosaveName("serverLog")
+            if !restored {
+                if let main = window {
+                    var origin = main.frame.origin
+                    origin.y -= 20
+                    win.setFrameOrigin(origin)
+                } else {
+                    win.center()
+                }
+            }
         }
         win.makeKeyAndOrderFront(nil)
         showLogMenuItem?.state = .on
@@ -732,8 +847,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == "logsonicDownload",
-              let body = message.body as? [String: Any],
+        switch message.name {
+        case "logsonicDownload":
+            handleDownloadMessage(message)
+        case "logsonicDrag":
+            handleDragMessage(message)
+        case "logsonicTheme":
+            handleThemeMessage(message)
+        default:
+            break
+        }
+    }
+
+    private func handleDownloadMessage(_ message: WKScriptMessage) {
+        guard let body = message.body as? [String: Any],
               let dataB64 = body["data"] as? String,
               let data = Data(base64Encoded: dataB64) else { return }
         let name = sanitizedDownloadName(body["filename"] as? String ?? "download")
@@ -743,6 +870,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             panel.begin { result in
                 guard result == .OK, let url = panel.url else { return }
                 try? data.write(to: url, options: .atomic)
+            }
+        }
+    }
+
+    // dragStripHookJS has already confirmed the mousedown was in the strip
+    // and on a non-interactive target -- this only needs to decide drag vs.
+    // zoom (dragStripAction's y/stripHeight branches are exercised by its
+    // unit tests, not by this already-filtered call site).
+    private func handleDragMessage(_ message: WKScriptMessage) {
+        let clickCount = (message.body as? [String: Any])?["clickCount"] as? Int ?? 1
+        let action = dragStripAction(y: 0, stripHeight: dragStripHeight, targetIsInteractive: false, clickCount: clickCount)
+        switch action {
+        case .zoom:
+            window.zoom(nil)
+        case .drag:
+            // performDrag(with:) requires a genuine mouse-down NSEvent for
+            // this window; NSApp.currentEvent by the time this IPC message
+            // arrives is not reliable (see lastMouseDown's declaration).
+            guard let event = lastMouseDown, event.window === window else { return }
+            window.performDrag(with: event)
+        case .none:
+            break
+        }
+    }
+
+    // The page calls window.__logsonicNotifyTheme (see useThemeStore.ts)
+    // whenever its resolved theme changes, including an explicit user choice
+    // that isn't following the system -- keeps the window background (which
+    // paints before the SPA does, e.g. on resize) in sync either way.
+    private func handleThemeMessage(_ message: WKScriptMessage) {
+        guard let effective = message.body as? String else { return }
+        let dark = effective == "dark"
+        applyBackgroundColor(dark: dark)
+    }
+
+    private func applyBackgroundColor(dark: Bool) {
+        window.backgroundColor = dark ? appBackgroundDark : appBackgroundLight
+        if #available(macOS 12.0, *) {
+            webView?.underPageBackgroundColor = dark ? appBackgroundDark : appBackgroundLight
+        }
+    }
+
+    private func isDarkAppearance(_ appearance: NSAppearance) -> Bool {
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    }
+
+    // Observes NSApp.effectiveAppearance (System Settings' light/dark/auto)
+    // and pushes it into the page so a theme in 'auto' mode follows it live,
+    // plus updates the window/webview background directly and immediately
+    // (not waiting on the page's own JS round trip).
+    private func observeAppearance() {
+        applyBackgroundColor(dark: isDarkAppearance(NSApp.effectiveAppearance))
+        appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, change in
+            guard let self, let appearance = change.newValue else { return }
+            let dark = self.isDarkAppearance(appearance)
+            DispatchQueue.main.async {
+                self.applyBackgroundColor(dark: dark)
+                self.webView?.evaluateJavaScript(
+                    "window.__logsonicSetSystemAppearance && window.__logsonicSetSystemAppearance('\(dark ? "dark" : "light")');"
+                )
             }
         }
     }

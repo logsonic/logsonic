@@ -17,6 +17,8 @@ backend_dir="$(cd "$script_dir/.." && pwd)"
 swift_src="$backend_dir/macos/LogsonicApp.swift"
 listening_src="$backend_dir/macos/ListeningURL.swift"
 url_tests="$backend_dir/macos/ListeningURLTests.swift"
+dragstrip_src="$backend_dir/macos/DragStrip.swift"
+dragstrip_tests="$backend_dir/macos/DragStripTests.swift"
 tmp_dir="$(mktemp -d)"
 wrapper_pid=""
 
@@ -37,10 +39,14 @@ echo "running ListeningURL unit + throughput tests"
 swiftc -O "$listening_src" "$url_tests" -o "$tmp_dir/listening-url-tests"
 "$tmp_dir/listening-url-tests"
 
+echo "running DragStrip unit tests"
+swiftc -O "$dragstrip_src" "$dragstrip_tests" -o "$tmp_dir/dragstrip-tests"
+"$tmp_dir/dragstrip-tests"
+
 echo "type-checking standalone launcher (arm64 + x86_64)"
 for arch in arm64 x86_64; do
   swiftc -typecheck -O -framework AppKit -framework WebKit \
-    -target "$arch-apple-macos11" "$listening_src" "$swift_src"
+    -target "$arch-apple-macos11" "$listening_src" "$dragstrip_src" "$swift_src"
 done
 
 echo "building bundled backend"

@@ -132,6 +132,13 @@ html, body {
   text-rendering: optimizeLegibility;
 }
 
+/* macos-b1: the brand cell / topbar / nav rail double as the window's drag
+   region (see dragStripHookJS in LogsonicApp.swift) -- text selection there
+   fights with dragging. Scoped to chrome only, never log content. */
+.is-native-macos .ls-native-chrome {
+  user-select: none;
+}
+
 /* Search-metadata chips (sources / query / range). Token-based so they
    work across light + dark themes without per-class overrides. */
 .ls-meta-label {

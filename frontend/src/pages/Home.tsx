@@ -6,6 +6,7 @@ import { SidebarPanel, type SidebarTabId } from '@/components/Home/SidebarPanel'
 import { LeftRail } from '@/components/Shell/LeftRail';
 import { StatusBar } from '@/components/Shell/StatusBar';
 import { useCollapsiblePanel } from '@/hooks/useCollapsiblePanel';
+import { isNativeShell } from '@/lib/native';
 import { useFacetStore } from '@/stores/useFacetStore';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import useSearchQueryParamsStore from '@/stores/useSearchQueryParams';
@@ -14,6 +15,11 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 const SIDEBAR_WIDTH_STORAGE_KEY = 'logsonic-sidebar-width';
 const RAIL_W = 56;
 const TOPBAR_H = 44;
+// Traffic lights are inset over the top-left corner in the native shell
+// (macos-b1) -- only the brand cell + topbar's left edge widen to clear
+// them; the vertical icon rail below the topbar and everything under it
+// stay at RAIL_W, so only the very top row gets the inset.
+const NATIVE_BRAND_CELL_W = 78;
 const LogDistributionChart = lazy(() => import('@/components/Home/LogDistributionChart'));
 
 const ChartLoadingShell = () => (
@@ -76,13 +82,15 @@ const BrandMark = () => (
  * Home page using the redesign shell:
  *   "brand  topbar"
  *   "nav    main"
- * Brand sits in the top-left 56×44 cell. The topbar spans the rest of the
- * top row, and the nav rail / main content sit below.
+ * Brand sits in the top-left 56×44 cell (78×44 in the native macOS shell,
+ * clearing the inset traffic lights — macos-b1). The topbar spans the rest
+ * of the top row, and the nav rail / main content sit below, always at 56px.
  */
 const Home = () => {
   const { isCollapsed, toggleCollapse: togglePanelCollapse } = useCollapsiblePanel(true);
   const { tabs } = SidebarPanel();
   const { firstLoad, setFirstLoad, triggerSearch } = useSearchQueryParamsStore();
+  const brandCellWidth = isNativeShell() ? NATIVE_BRAND_CELL_W : RAIL_W;
 
   const [activeTabId, setActiveTabId] = useState<SidebarTabId>('filter');
   const setFacetPanelOpen = useFacetStore((s) => s.setPanelOpen);
@@ -145,13 +153,17 @@ const Home = () => {
       className="h-screen overflow-hidden"
       style={{ background: 'var(--ls-bg-1)', color: 'var(--ls-text)' }}
     >
-      {/* Brand cell — top-left 56×44, with right + bottom borders */}
+      {/* Brand cell — top-left 56×44 (78×44 native, clearing the inset
+          traffic lights), with right + bottom borders. Not a button/input/
+          etc, so it's draggable by default under the native drag-strip hook. */}
       <div
+        data-native-drag="true"
+        className="ls-native-chrome"
         style={{
           position: 'fixed',
           top: 0,
           left: 0,
-          width: RAIL_W,
+          width: brandCellWidth,
           height: TOPBAR_H,
           borderRight: '1px solid var(--ls-border)',
           borderBottom: '1px solid var(--ls-border)',
@@ -166,10 +178,11 @@ const Home = () => {
 
       {/* Topbar — spans the row right of the brand */}
       <div
+        className="ls-native-chrome"
         style={{
           position: 'fixed',
           top: 0,
-          left: RAIL_W,
+          left: brandCellWidth,
           right: 0,
           height: TOPBAR_H,
           background: 'var(--ls-panel)',
@@ -182,6 +195,7 @@ const Home = () => {
 
       {/* Nav rail — below the brand */}
       <div
+        className="ls-native-chrome"
         style={{
           position: 'fixed',
           top: TOPBAR_H,
