@@ -62,6 +62,13 @@ export function generateFileId(): string {
   return `file-${Date.now()}-${++fileIdCounter}`;
 }
 
+// The browser has no path.basename; a native path can be POSIX or Windows
+// (spec now-08 requires both to work), so split on either separator.
+export function basenameOfPath(path: string): string {
+  const parts = path.split(/[\\/]/);
+  return parts[parts.length - 1] || path;
+}
+
 interface ImportState {
   // Upload step tracking
   currentStep: UploadStep;
@@ -138,6 +145,7 @@ interface ImportState {
 
   // --- Multi-file actions ---
   addFiles: (newFiles: File[]) => void;
+  addNativePathFiles: (paths: string[]) => void;
   removeFile: (fileId: string) => void;
   setActiveFileId: (fileId: string | null) => void;
   updateFile: (fileId: string, updates: Partial<ImportFile>) => void;
@@ -287,6 +295,42 @@ export const useImportStore = create<ImportState>((set, get) => ({
       // it here so the resolver can anchor against the file's mtime
       // instead of falling back to wall-clock now.
       sourceMTime: file.lastModified ? new Date(file.lastModified).toISOString() : null,
+    }));
+    set(state => ({ files: [...state.files, ...importFiles] }));
+  },
+
+  // Native-path files (spec now-08 phase 5's FileSelection.tsx wiring is
+  // the only intended caller): fileSize/previewLines/approxLines are left
+  // at zero/empty here since getting them means an extra request
+  // (POST /parse/preview-file) the caller makes once, not per store call;
+  // sourceMTime is null since the browser has no stat() for a path the
+  // native shell handed over -- a future phase could thread the shell's
+  // own mtime through if it turns out to matter for timestamp anchoring.
+  addNativePathFiles: (paths: string[]) => {
+    const importFiles: ImportFile[] = paths.map(path => ({
+      id: generateFileId(),
+      nativePath: path,
+      fileName: basenameOfPath(path),
+      fileSize: 0,
+      previewLines: [],
+      approxLines: 0,
+      detectedPattern: null,
+      selectedPattern: null,
+      isCustomPattern: false,
+      customPattern: null,
+      customPatternTokens: {},
+      detectionStatus: 'pending',
+      detectionError: null,
+      parsedLogs: [],
+      uploadStatus: 'pending',
+      uploadProgress: 0,
+      uploadError: null,
+      totalLinesProcessed: 0,
+      sessionOptions: { ...DEFAULT_SESSION_OPTIONS },
+      timestampInference: null,
+      timestampOverrides: {},
+      timestampConfirmed: false,
+      sourceMTime: null,
     }));
     set(state => ({ files: [...state.files, ...importFiles] }));
   },

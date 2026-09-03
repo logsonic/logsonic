@@ -516,6 +516,18 @@ export const FileAnalyzingStep: FC<FileAnalyzingStepProps> = ({
   // --- Multi-file pattern detection ---
 
   const detectPatternForFile = useCallback(async (file: ImportFile): Promise<Partial<ImportFile>> => {
+    // Native-path files (spec now-08) have no browser File to read a
+    // preview from -- that's phase 5's job (POST /parse/preview-file).
+    // Nothing constructs one of these yet, so this is an unreachable
+    // guard today, not a real detection path.
+    if (!file.file) {
+      return {
+        detectionStatus: 'failed',
+        detectionError: 'Pattern detection for native-path files is not implemented yet',
+        selectedPattern: DEFAULT_PATTERN,
+        isCustomPattern: true,
+      };
+    }
     try {
       // Read preview if not already done
       let previewLines = file.previewLines;

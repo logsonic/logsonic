@@ -1,10 +1,29 @@
 import { useCallback, useEffect, useRef } from 'react';
 
-import { useIngestEnd, useIngestLogs, useIngestStart } from '@/hooks/useApi';
-import { IngestSessionOptions } from '@/lib/api-types';
+import {
+  useCancelIngestJob,
+  useIngestEnd,
+  useIngestFile,
+  useIngestLogs,
+  useIngestStart,
+  useListIngestJobs,
+} from '@/hooks/useApi';
+import { IngestJob, IngestSessionOptions } from '@/lib/api-types';
 import { sessionMultilineOption, useImportStore } from '@/stores/useImportStore';
 import type { ImportFile, MultiFileUploadResult, UploadProgressHookResult } from '../types';
 import { LogSourceProviderService } from '../types';
+
+// How often a native-path import polls GET /ingest/jobs for progress. The
+// backend broadcasts "ingest_progress" over SSE every 250ms (spec now-08
+// phase 2), but this phase polls instead of subscribing -- a wizard
+// progress bar doesn't need that resolution, and wiring the SSE listener
+// (useLogStream.ts) is deferred to phase 5 alongside the UI that would
+// actually benefit from push updates.
+export const NATIVE_JOB_POLL_INTERVAL_MS = 500;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 export const useUpload = (): UploadProgressHookResult => {
   const {
@@ -18,7 +37,15 @@ export const useUpload = (): UploadProgressHookResult => {
   const ingestStartApi = useIngestStart();
   const ingestLogsApi = useIngestLogs();
   const ingestEndApi = useIngestEnd();
+  const ingestFileApi = useIngestFile();
+  const listIngestJobsApi = useListIngestJobs();
+  const cancelIngestJobApi = useCancelIngestJob();
   const activeAbortController = useRef<AbortController | null>(null);
+  // The in-flight path-ingest job, if any -- cancelUpload needs this to
+  // tell the backend to actually stop reading, not just abandon the
+  // browser-side poll (aborting the fetch here does not cancel the
+  // server-side goroutine that is still reading the file).
+  const activeJobIdRef = useRef<string | null>(null);
 
   useEffect(() => () => {
     activeAbortController.current?.abort();
@@ -71,7 +98,7 @@ export const useUpload = (): UploadProgressHookResult => {
             force_start_month: importFile.sessionOptions.month || undefined,
             force_start_day: importFile.sessionOptions.day || undefined,
             source_mtime: importFile.sourceMTime
-              ?? (importFile.file.lastModified ? new Date(importFile.file.lastModified).toISOString() : undefined),
+              ?? (importFile.file?.lastModified ? new Date(importFile.file.lastModified).toISOString() : undefined),
             timestamp_config: fileTsConfig,
             meta: { _src: `file.${importFile.fileName}` },
             multiline: sessionMultilineOption(useImportStore.getState()),
@@ -85,26 +112,72 @@ export const useUpload = (): UploadProgressHookResult => {
           currentSessionID = startResponse.session_id;
           let handledLines = 0;
 
-          // Step 2: Stream file chunks. The reader invokes the callback only
-          // after the previous request resolves, keeping memory bounded and
-          // preserving source order.
-          await fileService.handleFileImport(importFile.file, 10000, async ({ lines, bytesRead, totalBytes }) => {
-            const requestBody = {
-              logs: lines,
+          if (importFile.nativePath) {
+            // Step 2 (native path, spec now-08): hand the path to the
+            // server and poll the job instead of streaming chunks -- no
+            // file bytes ever cross into the browser.
+            const fileResponse = await ingestFileApi.execute({
               session_id: currentSessionID,
-            };
-
-            const response = await ingestLogsApi.execute(requestBody, abortController.signal);
-            if (response.status !== 'success') {
-              throw new Error('Failed to ingest chunk');
+              path: importFile.nativePath,
+            });
+            if (fileResponse.status !== 'accepted' || !fileResponse.job_id) {
+              throw new Error('Failed to start path-based ingest job');
             }
+            activeJobIdRef.current = fileResponse.job_id;
 
-            handledLines += lines.length;
-            const progress = totalBytes > 0
-              ? Math.min(99, Math.floor((bytesRead / totalBytes) * 100))
-              : 0;
-            updateFile(importFile.id, { uploadProgress: progress, totalLinesProcessed: handledLines });
-          }, abortController.signal);
+            let job: IngestJob | null = null;
+            do {
+              if (abortController.signal.aborted) {
+                throw new Error('Import cancelled');
+              }
+              await sleep(NATIVE_JOB_POLL_INTERVAL_MS);
+              const jobsResponse = await listIngestJobsApi.execute();
+              const found = jobsResponse.jobs.find(j => j.job_id === fileResponse.job_id);
+              if (!found) {
+                throw new Error('Ingest job disappeared from the registry');
+              }
+              job = found;
+              const progress = job.bytes_total
+                ? Math.min(99, Math.floor((job.bytes_read / job.bytes_total) * 100))
+                : 0;
+              updateFile(importFile.id, { uploadProgress: progress, totalLinesProcessed: job.rows_stored });
+            } while (job.state === 'running');
+
+            if (job.state === 'cancelled') {
+              throw new Error('Import cancelled');
+            }
+            if (job.state === 'error') {
+              throw new Error(job.error || 'Path-based ingest job failed');
+            }
+            handledLines = job.rows_stored;
+          } else {
+            if (!importFile.file) {
+              // Every ImportFile has exactly one of file / nativePath set
+              // (see the type's own doc comment); this is defense against
+              // that invariant breaking, not an expected runtime path.
+              throw new Error('This file has neither browser content nor a native path to import');
+            }
+            // Step 2 (browser File, unchanged): stream chunks. The reader
+            // invokes the callback only after the previous request
+            // resolves, keeping memory bounded and preserving source order.
+            await fileService.handleFileImport(importFile.file, 10000, async ({ lines, bytesRead, totalBytes }) => {
+              const requestBody = {
+                logs: lines,
+                session_id: currentSessionID,
+              };
+
+              const response = await ingestLogsApi.execute(requestBody, abortController.signal);
+              if (response.status !== 'success') {
+                throw new Error('Failed to ingest chunk');
+              }
+
+              handledLines += lines.length;
+              const progress = totalBytes > 0
+                ? Math.min(99, Math.floor((bytesRead / totalBytes) * 100))
+                : 0;
+              updateFile(importFile.id, { uploadProgress: progress, totalLinesProcessed: handledLines });
+            }, abortController.signal);
+          }
 
           // Step 3: End session. Cleanup is repeated in finally only when
           // this call itself fails, because /ingest/end is idempotent.
@@ -128,6 +201,7 @@ export const useUpload = (): UploadProgressHookResult => {
           });
           results.push({ ...importFile, uploadStatus: 'failed', uploadError: errorMsg });
         } finally {
+          activeJobIdRef.current = null;
           // Always close the session created for this file, including when
           // reading, upload, decoding, or storage fails.
           if (currentSessionID) {
@@ -154,11 +228,25 @@ export const useUpload = (): UploadProgressHookResult => {
     ingestStartApi,
     ingestLogsApi,
     ingestEndApi,
+    ingestFileApi,
+    listIngestJobsApi,
   ]);
 
   const cancelUpload = useCallback(() => {
     activeAbortController.current?.abort();
-  }, []);
+    // Aborting the fetch above only stops the browser from waiting on it;
+    // a running path-ingest job keeps reading on the server until told to
+    // stop. Fire-and-forget: the poll loop is already unblocked by the
+    // abort signal and will throw before it would have looked at the
+    // cancel result anyway.
+    const jobId = activeJobIdRef.current;
+    if (jobId) {
+      cancelIngestJobApi.execute(jobId).catch(() => {
+        // Best-effort; the job will still time out on its own 6h ceiling
+        // if this request is lost, and the wizard has already moved on.
+      });
+    }
+  }, [cancelIngestJobApi]);
 
   return {
     isUploading,

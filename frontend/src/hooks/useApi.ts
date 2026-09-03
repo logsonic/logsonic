@@ -80,6 +80,14 @@ export function useIngestFile() {
   return useApi(api.ingestFile);
 }
 
+export function useListIngestJobs() {
+  return useApi(api.listIngestJobs);
+}
+
+export function useCancelIngestJob() {
+  return useApi(api.cancelIngestJob);
+}
+
 export function useParseLogs() {
   return useApi(api.parseLogs);
 }

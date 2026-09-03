@@ -32,7 +32,16 @@ export type FileUploadStatus = 'pending' | 'uploading' | 'success' | 'failed';
 
 export interface ImportFile {
   id: string;
-  file: File;
+  // Exactly one of file / nativePath is set. file: a browser-selected or
+  // dropped File, read and chunk-uploaded as today. nativePath: an
+  // absolute server-readable path (spec now-08), ingested via
+  // POST /ingest/file + job polling instead -- no bytes ever cross into
+  // the browser. Phase 4 wires the nativePath upload branch only; nothing
+  // constructs a nativePath-backed ImportFile yet (that's phase 5's
+  // FileSelection.tsx wiring), so this is additive and doesn't change
+  // behavior for any file selected today.
+  file?: File;
+  nativePath?: string;
   fileName: string;
   fileSize: number;
   previewLines: string[];
