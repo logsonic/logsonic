@@ -6,6 +6,41 @@ Process: every candidate entry goes through the remediation pass in [`specs/WORK
 
 ---
 
+## 2026-09-03 — Native Dock-drop verification is manual-pending; >512 MB acceptance box unverified (now-08 phase 5)
+
+**Severity:** P2 — not a defect, a verification gap. The change itself compiles, type-checks, and builds/validates cleanly (`backend/scripts/test-macos-app.sh` green, both architectures).
+
+**What:** now-08 phase 5 changed `LogsonicApp.swift`'s `openNativeFiles` (Dock drop + Finder "Open With") to hand the server absolute paths instead of registering each file behind a `logsonicfile://` URL, and removed the 512 MB cap that only existed to bound the old `Data(contentsOf:)` full-buffer read. This session has no desktop-control permission to actually launch the built app and observe the result, so two things are asserted by reading code and running the non-interactive build/validate script, not by watching it happen:
+
+1. A real Dock drop or Finder "Open With" reaches the wizard at step 2 with the file's basename shown and no `logsonicfile://` request in the webview.
+2. A file over 512 MB (the old cap) now succeeds, since the size guard on that code path is gone.
+
+**What I did:** ran `backend/scripts/test-macos-app.sh` (ListeningURL tests green, both arches type-check, ad-hoc app builds and passes codesign validation) and read every call site touched by the change. That's a strong signal but not the same as watching the app.
+
+**Suggested next step (manual-pending, same shape as now-09's `logsonicfile:` review entry):** `backend/scripts/test-macos-app.sh` already built and validated `backend/dist-dev/Logsonic.app` this session — reuse it rather than rebuilding:
+
+```
+open --env STORAGE_PATH=<scratch dir> -a backend/dist-dev/Logsonic.app <path-to-a-log-file>
+```
+
+Expected: the app activates, the wizard opens on step 2 (Analyzing) with the dropped file's basename, `Pattern found` (or a manual-selection prompt for an unrecognized format), and the webview issues no `logsonicfile://` request. Covers the spec's own **macOS manual** row's first two sub-claims (Dock drop within 1s with visible progress and working cancel; Finder "Open With" on a `.gz`) and its own **E2E** row's wizard-rendering half (progress renders, rows searchable, `_src` correct — the API-level gzip-through-`/ingest/file` half is already covered by phase 2's `H4` test). For the size box specifically, repeat with a generated file over 512 MB. The macOS manual row's third sub-claim ("`--browser` mode still uses the scheme handler") cannot pass under any run of this command — see the next entry.
+
+Do not mark the ">512 MB drop" or "native app functional end-to-end" acceptance boxes verified until someone with desktop-control access on this machine runs the above and confirms.
+
+---
+
+## 2026-09-03 — `NativeFileSchemeHandler` has no live caller in either mode (now-08 phase 5)
+
+**Severity:** Informational — a spec-vs-code discrepancy, not a regression this session introduced.
+
+**What:** `specs/now-08-native-path-import.md`'s design decisions say "`NativeFileSchemeHandler` stays for browser-mode fallback only" after the shell switches its primary Dock-drop/Open-With delivery to paths. Checked directly: `openNativeFiles`'s `--browser`-mode branch (`guard !useBrowser else { ...activateFileViewerSelecting...; return }`) has never called `nativeFiles.register()` — in browser mode the shell just reveals the dropped files in Finder for the user to pick up manually, both before and after this session's change. The embedded-webview branch was the *only* caller of `.register()`, and phase 5 moved it to `deliverNativePaths` instead. So after this change, `NativeFileSchemeHandler`'s `.register()` method has zero call sites in either mode — the class, its `config.setURLSchemeHandler(nativeFiles, forURLScheme: "logsonicfile")` registration, and the `scheme == "logsonicfile"` navigation-policy allowance are all still in the file (kept per the spec's explicit "stays," not deleted), but nothing exercises them.
+
+**Why this isn't classified as a gap to fix here:** the spec describes an intended state ("stays for browser-mode fallback") that the code never actually implemented — browser mode's fallback has always been Finder-select, not the scheme handler. The spec's own **macOS manual** test row (`specs/now-08-native-path-import.md` line 93) asserts as a pass criterion that "`--browser` mode still uses the scheme handler" — a claim about behavior the code has never had, in this session or before it, further evidence the spec's browser-mode assumption predates what was actually built. Choosing between "delete the now-dead class + its two registration sites" and "wire browser mode to actually use it as the spec originally intended" is a product decision (does `--browser` mode need in-page file delivery at all, given Finder-select already works?), not something to guess at while landing an unrelated path-handoff change.
+
+**Suggested next step:** a human decides one of: (a) delete `NativeFileSchemeHandler`, its `setURLSchemeHandler` registration, and the `logsonicfile` navigation-policy allowance as dead code, or (b) wire `--browser` mode to actually deliver dropped files through it (would need a way to inject JS into a system-browser tab, which doesn't obviously exist), or (c) correct the spec's wording to match the code's actual, longstanding browser-mode behavior. No functional change results from any of the three until decided.
+
+---
+
 ## 2026-09-03 — `/parse/preview-file` reads any path with no session (now-08 phase 3)
 
 **Severity:** Informational — not a regression, recorded so it doesn't look like an oversight later.
