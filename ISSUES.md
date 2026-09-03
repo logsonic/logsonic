@@ -6,6 +6,27 @@ Process: every candidate entry goes through the remediation pass in [`specs/WORK
 
 ---
 
+## 2026-09-03 — M1–M10 visual/interactive checks are manual-pending (macos-b1)
+
+**Severity:** P2 — not a defect, a verification gap. The change itself compiles warning-clean on both architectures and the full non-interactive build/validate/smoke pipeline passes.
+
+**What:** `specs/macos-b1-visible-nativeness.md`'s entire manual-check table (M1 no-white-flash on dark launch, M2 traffic-light overlay + working buttons, M3 drag-by-header vs. no-drag-on-controls vs. double-click-zoom, M4 live appearance-follow in `auto` mode, M5 explicit theme choice overrides + persists across relaunch, M6 browser-mode has none of the native CSS/two-state toggle, M7 fullscreen/split-view, M8 regression sweep of Dock drop/downloads/quit-SIGINT, M9 `logsonic -open` CLI path, M10 window-frame memory across quit/relaunch for both windows) requires actually looking at and interacting with the running app. This session has no desktop-control permission, so none of these were watched happen — they're asserted only by reading the code and by the non-interactive checks below, same shape as now-08 phase 5's and now-09's prior manual-pending entries.
+
+**What I did instead:** `bash backend/scripts/test-macos-app.sh` (both-arch `-typecheck` clean, `-warnings-as-errors` clean, `ListeningURL` + new `DragStrip` unit tests green, ad-hoc build + codesign + plist validation) and `LOGSONIC_APP_UI_SMOKE=1 bash backend/scripts/test-macos-app.sh` (real headless launch, confirmed loopback-only binding, clean AppKit-path quit via `osascript`) both pass. Also traced every call site of the new `logsonicDrag`/`logsonicTheme` message handlers, `setFrameAutosaveName` calls, and the `NSApp.effectiveAppearance` KVO observer by hand.
+
+**Suggested next step (manual-pending, same shape as now-09's `logsonicfile:` review entry and now-08 phase 5's Dock-drop entry):**
+
+```
+bash backend/scripts/test-macos-app.sh   # rebuilds and validates backend/dist-dev/Logsonic.app
+open --env STORAGE_PATH=<scratch dir> backend/dist-dev/Logsonic.app
+```
+
+Then walk the M1–M10 table in `specs/macos-b1-visible-nativeness.md` directly against the running app (System Settings → Appearance for M4; quit/relaunch via Cmd-Q and reopen for M5/M10; `View → Open in Browser` for M6; the existing Dock-drop/download/quit checks for M8; `logsonic -open` from a terminal for M9). Do not mark the spec's "All manual checks M1–M9 pass" acceptance box verified until someone with desktop-control access on this machine runs the above and confirms each row.
+
+**Process note:** `specs/WORKFLOW.md`'s advisor gates 2 and 3 (remediation-pass review of the diff/tests, and review of this TBD/ISSUES text) could not run this session — the `advisor` tool reported itself temporarily overloaded on every attempt. Substituted a manual line-by-line re-read of the full `git diff` (all 10 changed files plus the 5 new ones) against the spec's design decisions before committing. This is a gap in process, not in the change itself; flagging it so it isn't mistaken for a skipped step.
+
+---
+
 ## 2026-09-03 — `e2e-comprehensive.mjs`'s placeholder-based search-input locator breaks once the input is focused — **fixed** (now-03)
 
 **What:** `LogSearch.tsx`'s search `<Input>` changes its `placeholder` attribute on focus (from `"Search logs… (/ or ⌘K)"` to `'Try level:error or "connection timeout"'`), so any Playwright locator matching `input[placeholder*="Search logs" i]` stops resolving to any element the instant the input is focused. Similarly, `WorkspaceMenu.tsx`'s trigger button's accessible name switches from `"Workspace"` to the active workspace's name once one is loaded, breaking `getByRole('button', {name: 'Workspace'})` the same way. Every existing check in `e2e-comprehensive.mjs` happened to query these locators only once, before the state change; now-03's new check is the first to fill/press/apply repeatedly across a focus change and a workspace-load, and hung for the full default timeout on the very first action after the state flipped.
