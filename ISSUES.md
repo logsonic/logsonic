@@ -6,6 +6,18 @@ Process: every candidate entry goes through the remediation pass in [`specs/WORK
 
 ---
 
+## 2026-09-03 — `/parse/preview-file` reads any path with no session (now-08 phase 3)
+
+**Severity:** Informational — not a regression, recorded so it doesn't look like an oversight later.
+
+**What:** `POST /api/v1/parse/preview-file` returns the contents (first N lines) of any absolute path the server process can read, with no ingest session required — by the spec's own design ("without creating an ingest session"), since the native-drop wizard flow needs a preview before it has anywhere to put a session ID. This is a real file-content-disclosure surface for anyone who can reach the loopback API, same class of thing `now-09`'s Host allow-list and CSP already defend against for the browser vector, and the same shape of surface `POST /live/files` (`HandleLiveFileStart`) already has — checked directly (`grep -n "HandleLiveFileStart" backend/pkg/server/server.go`, then `live.go:800-822`): it decodes a `path` field from the JSON body and calls `h.Live.StartFile(req.Path, req.Options)` with no session lookup at all, so it's sessionless in exactly the same way.
+
+**Why this isn't classified as a gap to fix here:** `now-08`'s own phase-1 review closed a *different* problem on `/ingest/file` — a cross-origin form POST could probe path existence via the error response, with no CORS preflight required, because that route sat outside the JSON-only middleware group at the time. `/parse/preview-file` is inside the standard `/api/v1` group from the start, so it already has that JSON-only protection; the thing being recorded here is different — it's that any same-origin caller (or, once `now-09` phase 2 lands, a token-bearing one) can read arbitrary file contents by path, which is the intended feature (a local, unauthenticated, loopback-bound server that reads local files is the whole product), not a defect specific to this endpoint. TBD.md §5 already states the accepted policy for path-based ingestion ("Path-based ingest reads any file the user can read": "any absolute readable path"); this endpoint follows the same policy for a read-only preview instead of a full ingest. The mitigation already on the roadmap is `now-09`'s Host allow-list (stops the browser-DNS-rebinding vector, already shipped) and, in phase 2 (unstarted, blocked on `now-12`/`now-13`), a per-launch bearer token (stops any other local process/user).
+
+**Suggested next step:** none specific to this endpoint. When `now-09` phase 2's token lands, it covers this the same way it covers every other endpoint; no per-endpoint fix is warranted in the meantime.
+
+---
+
 ## 2026-09-03 — `/ingest/end` while a path-ingest job is still running (now-08 phase 2)
 
 **Severity:** Low today (no UI calls either endpoint yet), but a real race once the wizard wires phase 2 up in a later phase.
