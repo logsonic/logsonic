@@ -267,7 +267,7 @@ describe('useUpload — native-path files (spec now-08, SSE progress)', () => {
     expect(uploadResult.files[0].uploadError).toBe('Import cancelled');
   });
 
-  it('cancelling gives up after the fallback window if the job never reports a terminal state', async () => {
+  it("cancelling gives up after the fallback window with its own distinct message, not the generic 'Import cancelled'", async () => {
     vi.useFakeTimers();
     try {
       ingestFile.mockResolvedValue({
@@ -295,7 +295,13 @@ describe('useUpload — native-path files (spec now-08, SSE progress)', () => {
       const uploadResult = await uploadPromise;
 
       expect(uploadResult.files[0].uploadStatus).toBe('failed');
-      expect(uploadResult.files[0].uploadError).toBe('Import cancelled');
+      // Distinct from a normal cancel (now-08 phase 9): this is the rare
+      // case where the DELETE failed or its broadcast was lost, and the
+      // job may still be running server-side -- a plain "Import cancelled"
+      // here would misreport that as a normal, clean cancel.
+      expect(uploadResult.files[0].uploadError).toBe(
+        'Import cancel timed out waiting for the job to stop'
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -370,5 +376,41 @@ describe('useUpload — browser File files (unchanged)', () => {
     expect(ingestFile).not.toHaveBeenCalled();
     expect(uploadResult.files[0].uploadStatus).toBe('success');
     expect(uploadResult.files[0].totalLinesProcessed).toBe(2);
+  });
+
+  it("a cancelled fetch flattens to the generic message, not the browser's raw AbortError text", async () => {
+    let rejectImport: (err: unknown) => void = () => {};
+    const fileService = {
+      name: 'test',
+      handleFileImport: vi.fn(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectImport = reject;
+          })
+      ),
+      handleFilePreview: vi.fn(),
+    };
+
+    const { result } = renderHook(() => useUpload());
+    const browserFile = new File(['a\n'], 'browser.log');
+    const importFile = makeImportFile({ id: 'file-3', fileName: 'browser.log', file: browserFile });
+
+    const uploadPromise = result.current.handleMultiFileUpload([importFile], fileService);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    act(() => {
+      result.current.cancelUpload();
+      // The fetch this path actually uses would reject with the browser's
+      // own inconsistently-worded AbortError once its AbortSignal fires --
+      // simulate that directly rather than plumbing a real fetch through
+      // the mock file service.
+      rejectImport(new DOMException('The operation was aborted.', 'AbortError'));
+    });
+    const uploadResult = await uploadPromise;
+
+    expect(uploadResult.files[0].uploadStatus).toBe('failed');
+    expect(uploadResult.files[0].uploadError).toBe('Import cancelled');
   });
 });

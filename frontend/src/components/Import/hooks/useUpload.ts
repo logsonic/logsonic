@@ -186,9 +186,25 @@ export const useUpload = (): UploadProgressHookResult => {
 
           results.push({ ...importFile, uploadStatus: 'success', totalLinesProcessed: handledLines });
         } catch (error) {
-          const errorMsg = abortController.signal.aborted
-            ? 'Import cancelled'
-            : error instanceof Error ? error.message : 'Upload failed';
+          // A cancelled browser-file fetch throws the browser's own AbortError
+          // (an unhelpful, inconsistently-worded native message), so an abort
+          // normally gets the friendly override below. A message starting
+          // with "Import cancel" is already ours -- the normal cancel thrown
+          // either here or by waitForIngestJob ("Import cancelled"), or that
+          // wait's own fallback-timeout rejection -- so it's kept as-is
+          // instead of being flattened to the generic text (now-08 phase 9).
+          // This depends on that literal prefix: changing the wording in
+          // either place without updating the other silently reverts this.
+          // waitForIngestJob's "Ingest job disappeared from the registry"
+          // rejection doesn't match the prefix and still gets the generic
+          // override post-abort -- fine, since a gone job is definitely
+          // stopped either way.
+          const hasOwnCancelMessage = error instanceof Error && error.message.startsWith('Import cancel');
+          const errorMsg = hasOwnCancelMessage
+            ? (error as Error).message
+            : abortController.signal.aborted
+              ? 'Import cancelled'
+              : error instanceof Error ? error.message : 'Upload failed';
           updateFile(importFile.id, {
             uploadStatus: 'failed',
             uploadError: errorMsg,

@@ -48,11 +48,9 @@ const ABORT_FALLBACK_MS = 5000;
  * before the job has actually stopped reading it (see TBD.md's now-08 row,
  * phase 8). Only after ABORT_FALLBACK_MS with nothing does it give up and
  * reject with its own distinct message, covering a failed DELETE or a lost
- * broadcast -- distinct because the caller (useUpload.ts) currently
- * flattens every rejection here to "Import cancelled" once its own abort
- * signal fired, which would misreport this specific case as a normal
- * cancel when the job may still be running; recorded as a phase 9 item,
- * not fixed here.
+ * broadcast -- distinct so useUpload.ts (now-08 phase 9) can tell this case
+ * apart from a normal cancel and not misreport a job that may still be
+ * running as a clean, completed cancellation.
  */
 export function waitForIngestJob(
   jobId: string,
