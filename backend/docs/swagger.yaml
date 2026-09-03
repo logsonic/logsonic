@@ -301,32 +301,64 @@ definitions:
     type: object
   types.IngestFileResponse:
     properties:
-      bytes_read:
-        description: on-disk bytes consumed (compressed for gz/zst)
-        type: integer
-      compression:
+      job_id:
         type: string
-      error:
-        type: string
-      failed:
-        type: integer
-      lines:
-        description: physical lines read across members
-        type: integer
       members:
-        description: every file read, in order
+        description: every file that will be read, in order
         items:
           type: string
         type: array
       path:
         description: canonical path of the base file
         type: string
-      processed:
+      status:
+        description: '"accepted"'
+        type: string
+    type: object
+  types.IngestJob:
+    properties:
+      bytes_read:
+        type: integer
+      bytes_total:
+        type: integer
+      compression:
+        type: string
+      error:
+        type: string
+      job_id:
+        type: string
+      lines:
+        type: integer
+      members:
+        items:
+          type: string
+        type: array
+      path:
+        type: string
+      rate_lines_per_s:
+        type: number
+      rows_failed:
+        type: integer
+      rows_stored:
         type: integer
       session_id:
         type: string
-      status:
+      state:
         type: string
+    type: object
+  types.IngestJobActionResponse:
+    properties:
+      status:
+        description: '"cancelling", or the job''s terminal state if it had already
+          finished'
+        type: string
+    type: object
+  types.IngestJobsListResponse:
+    properties:
+      jobs:
+        items:
+          $ref: '#/definitions/types.IngestJob'
+        type: array
     type: object
   types.IngestRequest:
     properties:
@@ -930,10 +962,14 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Read a log file the server can access (absolute path; gzip and
-        zstd are detected by magic bytes) into an existing ingest session, optionally
-        with its rotated siblings. Synchronous in this release: the response arrives
-        when the file has been stored.'
+      description: Start ingesting a log file the server can access (absolute path;
+        gzip and zstd are detected by magic bytes) into an existing ingest session,
+        optionally with its rotated siblings. Accepted immediately (202); the read
+        runs in the background. Poll GET /ingest/jobs or listen for "ingest_progress"
+        on GET /live/events for progress and the final state. Call POST /ingest/end
+        only after the job reaches a terminal state (done|cancelled|error) -- ending
+        the session while the job is still running fails its next batch with an invalid-session
+        error.
       parameters:
       - description: Session and absolute path
         in: body
@@ -944,19 +980,53 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "202":
+          description: Accepted
           schema:
             $ref: '#/definitions/types.IngestFileResponse'
         "400":
           description: Bad Request
           schema:
             $ref: '#/definitions/types.ErrorResponse'
-        "500":
-          description: Internal Server Error
+      summary: Ingest a file by path
+      tags:
+      - ingest
+  /ingest/jobs:
+    get:
+      description: List every path-based ingest job started this server run (running
+        or finished), for a UI reconnecting to a job it lost SSE contact with.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.IngestJobsListResponse'
+      summary: List path-ingest jobs
+      tags:
+      - ingest
+  /ingest/jobs/{id}:
+    delete:
+      description: Cancel a running path-based ingest job. A no-op (200, the job's
+        own terminal state) if it already finished.
+      parameters:
+      - description: Job ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.IngestJobActionResponse'
+        "404":
+          description: Not Found
           schema:
             $ref: '#/definitions/types.ErrorResponse'
-      summary: Ingest a file by path
+      summary: Cancel a path-ingest job
       tags:
       - ingest
   /ingest/logs:

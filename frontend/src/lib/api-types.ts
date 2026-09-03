@@ -43,17 +43,42 @@ export interface IngestFileRequest {
   include_rotated?: boolean;
 }
 
+/** The 202 response to POST /ingest/file: the job has been accepted and
+ * started in the background. Progress and the final result arrive via
+ * IngestJob, either polled from GET /ingest/jobs or pushed as
+ * "ingest_progress" SSE events on GET /live/events. */
 export interface IngestFileResponse {
+  /** "accepted" */
   status: string;
+  job_id: string;
+  path: string;
+  members: string[];
+}
+
+/** The live or final state of one path-based ingest. */
+export interface IngestJob {
+  job_id: string;
+  session_id: string;
   path: string;
   members: string[];
   compression?: string;
-  processed: number;
-  failed: number;
-  lines: number;
   bytes_read: number;
-  session_id: string;
+  bytes_total?: number;
+  lines: number;
+  rows_stored: number;
+  rows_failed: number;
+  rate_lines_per_s: number;
+  state: 'running' | 'done' | 'cancelled' | 'error';
   error?: string;
+}
+
+export interface IngestJobsListResponse {
+  jobs: IngestJob[];
+}
+
+export interface IngestJobActionResponse {
+  /** "cancelling", or the job's terminal state if it had already finished */
+  status: string;
 }
 
 export interface IngestResponse {

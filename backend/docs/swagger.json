@@ -285,7 +285,7 @@
         },
         "/ingest/file": {
             "post": {
-                "description": "Read a log file the server can access (absolute path; gzip and zstd are detected by magic bytes) into an existing ingest session, optionally with its rotated siblings. Synchronous in this release: the response arrives when the file has been stored.",
+                "description": "Start ingesting a log file the server can access (absolute path; gzip and zstd are detected by magic bytes) into an existing ingest session, optionally with its rotated siblings. Accepted immediately (202); the read runs in the background. Poll GET /ingest/jobs or listen for \"ingest_progress\" on GET /live/events for progress and the final state. Call POST /ingest/end only after the job reaches a terminal state (done|cancelled|error) -- ending the session while the job is still running fails its next batch with an invalid-session error.",
                 "consumes": [
                     "application/json"
                 ],
@@ -308,8 +308,8 @@
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "202": {
+                        "description": "Accepted",
                         "schema": {
                             "$ref": "#/definitions/types.IngestFileResponse"
                         }
@@ -319,9 +319,58 @@
                         "schema": {
                             "$ref": "#/definitions/types.ErrorResponse"
                         }
+                    }
+                }
+            }
+        },
+        "/ingest/jobs": {
+            "get": {
+                "description": "List every path-based ingest job started this server run (running or finished), for a UI reconnecting to a job it lost SSE contact with.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ingest"
+                ],
+                "summary": "List path-ingest jobs",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.IngestJobsListResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ingest/jobs/{id}": {
+            "delete": {
+                "description": "Cancel a running path-based ingest job. A no-op (200, the job's own terminal state) if it already finished.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ingest"
+                ],
+                "summary": "Cancel a path-ingest job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Job ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.IngestJobActionResponse"
+                        }
                     },
-                    "500": {
-                        "description": "Internal Server Error",
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/types.ErrorResponse"
                         }
@@ -1376,25 +1425,11 @@
         "types.IngestFileResponse": {
             "type": "object",
             "properties": {
-                "bytes_read": {
-                    "description": "on-disk bytes consumed (compressed for gz/zst)",
-                    "type": "integer"
-                },
-                "compression": {
+                "job_id": {
                     "type": "string"
-                },
-                "error": {
-                    "type": "string"
-                },
-                "failed": {
-                    "type": "integer"
-                },
-                "lines": {
-                    "description": "physical lines read across members",
-                    "type": "integer"
                 },
                 "members": {
-                    "description": "every file read, in order",
+                    "description": "every file that will be read, in order",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -1404,14 +1439,76 @@
                     "description": "canonical path of the base file",
                     "type": "string"
                 },
-                "processed": {
+                "status": {
+                    "description": "\"accepted\"",
+                    "type": "string"
+                }
+            }
+        },
+        "types.IngestJob": {
+            "type": "object",
+            "properties": {
+                "bytes_read": {
+                    "type": "integer"
+                },
+                "bytes_total": {
+                    "type": "integer"
+                },
+                "compression": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "job_id": {
+                    "type": "string"
+                },
+                "lines": {
+                    "type": "integer"
+                },
+                "members": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "path": {
+                    "type": "string"
+                },
+                "rate_lines_per_s": {
+                    "type": "number"
+                },
+                "rows_failed": {
+                    "type": "integer"
+                },
+                "rows_stored": {
                     "type": "integer"
                 },
                 "session_id": {
                     "type": "string"
                 },
-                "status": {
+                "state": {
                     "type": "string"
+                }
+            }
+        },
+        "types.IngestJobActionResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "description": "\"cancelling\", or the job's terminal state if it had already finished",
+                    "type": "string"
+                }
+            }
+        },
+        "types.IngestJobsListResponse": {
+            "type": "object",
+            "properties": {
+                "jobs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.IngestJob"
+                    }
                 }
             }
         },

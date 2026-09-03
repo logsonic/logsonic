@@ -3,6 +3,8 @@ import {
   GrokPatternResponse,
   IngestFileRequest,
   IngestFileResponse,
+  IngestJobActionResponse,
+  IngestJobsListResponse,
   IngestRequest,
   IngestResponse,
   IngestSessionOptions,
@@ -129,9 +131,23 @@ export async function ingestLogs(request: IngestRequest, signal?: AbortSignal): 
   return apiRequest<IngestResponse>('/ingest/logs', 'POST', request, undefined, signal);
 }
 
-/** Server-side ingest by absolute path (spec now-08). Synchronous: resolves when the file is stored. */
+/**
+ * Server-side ingest by absolute path (spec now-08 phase 2). Resolves as
+ * soon as the job is accepted (202) -- it does not wait for the file to be
+ * read. Track progress with listIngestJobs() or the "ingest_progress" SSE
+ * event on the live stream; the wizard wiring that consumes those is not
+ * built yet (phase 3).
+ */
 export async function ingestFile(request: IngestFileRequest): Promise<IngestFileResponse> {
   return apiRequest<IngestFileResponse>('/ingest/file', 'POST', request);
+}
+
+export async function listIngestJobs(signal?: AbortSignal): Promise<IngestJobsListResponse> {
+  return apiRequest<IngestJobsListResponse>('/ingest/jobs', 'GET', undefined, undefined, signal);
+}
+
+export async function cancelIngestJob(jobId: string): Promise<IngestJobActionResponse> {
+  return apiRequest<IngestJobActionResponse>(`/ingest/jobs/${encodeURIComponent(jobId)}`, 'DELETE');
 }
 
 export async function pauseLiveSubscriber(subscriberId: string): Promise<LiveControlResponse> {

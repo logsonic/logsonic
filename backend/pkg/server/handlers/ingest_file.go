@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	"logsonic/pkg/ingestfile"
@@ -15,14 +14,13 @@ import (
 const ingestFileBatchLines = MaxIngestLines
 
 // @Summary Ingest a file by path
-// @Description Read a log file the server can access (absolute path; gzip and zstd are detected by magic bytes) into an existing ingest session, optionally with its rotated siblings. Synchronous in this release: the response arrives when the file has been stored.
+// @Description Start ingesting a log file the server can access (absolute path; gzip and zstd are detected by magic bytes) into an existing ingest session, optionally with its rotated siblings. Accepted immediately (202); the read runs in the background. Poll GET /ingest/jobs or listen for "ingest_progress" on GET /live/events for progress and the final state. Call POST /ingest/end only after the job reaches a terminal state (done|cancelled|error) -- ending the session while the job is still running fails its next batch with an invalid-session error.
 // @Tags ingest
 // @Accept json
 // @Produce json
 // @Param request body types.IngestFileRequest true "Session and absolute path"
-// @Success 200 {object} types.IngestFileResponse
+// @Success 202 {object} types.IngestFileResponse
 // @Failure 400 {object} types.ErrorResponse
-// @Failure 500 {object} types.ErrorResponse
 // @Router /ingest/file [post]
 func (h *Services) HandleIngestFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -52,8 +50,9 @@ func (h *Services) HandleIngestFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve the member list first so a bad path fails before any row is
-	// stored. Open validates absolute / exists / not-a-directory.
+	// Resolve the member list before responding, so a bad path still fails
+	// with a synchronous 400 rather than surfacing only as a job error.
+	// Open validates absolute / exists / not-a-directory.
 	probe, err := ingestfile.Open(r.Context(), path)
 	if err != nil {
 		// Every Open failure (not absolute, not found, unreadable, a
@@ -74,80 +73,15 @@ func (h *Services) HandleIngestFile(w http.ResponseWriter, r *http.Request) {
 		members = expanded
 	}
 
-	resp := types.IngestFileResponse{
-		Status:      "success",
-		Path:        info.CanonicalPath,
-		Members:     members,
-		Compression: string(info.Compression),
-		SessionID:   req.SessionID,
-	}
+	job := h.startIngestFileJob(req.SessionID, info.CanonicalPath, members, string(info.Compression))
 
-	for _, member := range members {
-		reader, openErr := ingestfile.Open(r.Context(), member)
-		if openErr != nil {
-			resp.Status = "error"
-			resp.Error = "cannot open " + member + ": " + openErr.Error()
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(resp)
-			return
-		}
-		batch := make([]string, 0, ingestFileBatchLines)
-		flush := func() error {
-			if len(batch) == 0 {
-				return nil
-			}
-			processed, failed, ingestErr := h.ingestBatch(req.SessionID, batch)
-			batch = batch[:0]
-			if ingestErr != nil {
-				return ingestErr
-			}
-			resp.Processed += processed
-			resp.Failed += failed
-			return nil
-		}
-		var readErr error
-		for {
-			line, ok, nextErr := reader.Next()
-			if nextErr != nil {
-				readErr = nextErr
-				break
-			}
-			if !ok {
-				break
-			}
-			batch = append(batch, line)
-			if len(batch) == ingestFileBatchLines {
-				if ingestErr := flush(); ingestErr != nil {
-					readErr = ingestErr
-					break
-				}
-			}
-		}
-		if readErr == nil {
-			readErr = flush()
-		}
-		resp.Lines += reader.Lines()
-		resp.BytesRead += reader.BytesRead()
-		reader.Close()
-		if readErr != nil {
-			resp.Status = "error"
-			resp.Error = member + ": " + readErr.Error()
-			status := http.StatusInternalServerError
-			var tooLong *ingestfile.LineTooLongError
-			var mlErr *multilineError
-			switch {
-			case errors.Is(readErr, errInvalidSession):
-				status = http.StatusBadRequest
-			case errors.As(readErr, &tooLong), errors.As(readErr, &mlErr):
-				status = http.StatusBadRequest
-			}
-			w.WriteHeader(status)
-			json.NewEncoder(w).Encode(resp)
-			return
-		}
-	}
-
-	json.NewEncoder(w).Encode(resp)
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(types.IngestFileResponse{
+		Status:  "accepted",
+		JobID:   job.id,
+		Path:    info.CanonicalPath,
+		Members: members,
+	})
 }
 
 func writeIngestFileError(w http.ResponseWriter, status int, code, message, details string) {

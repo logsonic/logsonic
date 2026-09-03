@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"log"
 	"logsonic/pkg/storage"
 	"logsonic/pkg/timeresolve"
@@ -32,6 +33,14 @@ type Services struct {
 	storageInfoCache any
 	infoCacheMutex   sync.RWMutex
 	cacheValid       bool
+
+	// ingestJobsCtx is the parent context for every path-ingest job's
+	// per-job timeout (see StartIngestJobs). It defaults to
+	// context.Background() so handler tests that never call Start()/
+	// StartIngestJobs still work; the real server replaces it with the
+	// same cleanupCtx that StartLive gets, so a shutdown cancels running
+	// jobs the same way it cancels tail sources.
+	ingestJobsCtx context.Context
 }
 
 // NewHandler wires up the HTTP service surface. Pattern + decode logic
@@ -55,9 +64,20 @@ func NewHandler(storage storage.StorageInterface, storagePath string) *Services 
 		Workspaces:        workspaceStore,
 		storageInfoCache:  nil,
 		cacheValid:        false,
+		ingestJobsCtx:     context.Background(),
 	}
 	svc.Live = NewTailManager(storage, svc.InvalidateInfoCache)
 	return svc
+}
+
+// StartIngestJobs wires the server's shutdown context into path-ingest jobs
+// started after this call: each job's own context is derived from ctx (see
+// ingest_jobs.go), so cancelling ctx (server shutdown) cancels every running
+// job the same way it cancels tail sources -- cooperatively, on the job's
+// next read, not awaited here. That mirrors TailManager.Start, which has the
+// same not-awaited-before-storage-close property; see ISSUES.md.
+func (s *Services) StartIngestJobs(ctx context.Context) {
+	s.ingestJobsCtx = ctx
 }
 
 // CloseStorage cleanly shuts down all open Bleve indices.

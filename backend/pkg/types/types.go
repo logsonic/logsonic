@@ -102,18 +102,44 @@ type IngestFileRequest struct {
 	IncludeRotated bool `json:"include_rotated,omitempty"`
 }
 
-// IngestFileResponse reports what a path-based ingest read and stored.
+// IngestFileResponse is the immediate 202 response to POST /ingest/file: the
+// job has been accepted and started in the background (spec now-08 phase 2).
+// Progress and the final result arrive via IngestJob, either polled from
+// GET /ingest/jobs or pushed as "ingest_progress" SSE events on
+// GET /live/events.
 type IngestFileResponse struct {
-	Status      string   `json:"status"`
-	Path        string   `json:"path"`    // canonical path of the base file
-	Members     []string `json:"members"` // every file read, in order
-	Compression string   `json:"compression,omitempty"`
-	Processed   int      `json:"processed"`
-	Failed      int      `json:"failed"`
-	Lines       int      `json:"lines"`      // physical lines read across members
-	BytesRead   int64    `json:"bytes_read"` // on-disk bytes consumed (compressed for gz/zst)
-	SessionID   string   `json:"session_id"`
-	Error       string   `json:"error,omitempty"`
+	Status  string   `json:"status"` // "accepted"
+	JobID   string   `json:"job_id"`
+	Path    string   `json:"path"`    // canonical path of the base file
+	Members []string `json:"members"` // every file that will be read, in order
+}
+
+// IngestJob reports the live or final state of one path-based ingest
+// (spec now-08 phase 2). State is one of running|done|cancelled|error.
+type IngestJob struct {
+	JobID         string   `json:"job_id"`
+	SessionID     string   `json:"session_id"`
+	Path          string   `json:"path"`
+	Members       []string `json:"members"`
+	Compression   string   `json:"compression,omitempty"`
+	BytesRead     int64    `json:"bytes_read"`
+	BytesTotal    int64    `json:"bytes_total,omitempty"`
+	Lines         int64    `json:"lines"`
+	RowsStored    int64    `json:"rows_stored"`
+	RowsFailed    int64    `json:"rows_failed"`
+	RateLinesPerS float64  `json:"rate_lines_per_s"`
+	State         string   `json:"state"`
+	Error         string   `json:"error,omitempty"`
+}
+
+// IngestJobsListResponse is the body of GET /ingest/jobs.
+type IngestJobsListResponse struct {
+	Jobs []IngestJob `json:"jobs"`
+}
+
+// IngestJobActionResponse is the body of DELETE /ingest/jobs/{id}.
+type IngestJobActionResponse struct {
+	Status string `json:"status"` // "cancelling", or the job's terminal state if it had already finished
 }
 
 type IngestResponse struct {

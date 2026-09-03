@@ -384,6 +384,33 @@ func (m *TailManager) publishStatus(sourceID, status, message string) {
 	}
 }
 
+// publishBroadcast sends event to every subscriber regardless of
+// sourceFilter, for events that aren't tied to a tail source (ingest-job
+// progress). Unlike publishRows/publishStatus it also bypasses a
+// subscriber's pause flag: pause is a row-feed concept for live tail, and a
+// paused SSE connection must still see a job reach done/cancelled/error, or
+// GET /ingest/jobs is the only way it would ever learn the job finished.
+func (m *TailManager) publishBroadcast(name string, data interface{}) {
+	event := liveEvent{name: name, data: data}
+
+	m.mu.RLock()
+	subscribers := make([]*liveSubscriber, 0, len(m.subscribers))
+	for _, sub := range m.subscribers {
+		subscribers = append(subscribers, sub)
+	}
+	m.mu.RUnlock()
+
+	for _, sub := range subscribers {
+		select {
+		case sub.ch <- event:
+		default:
+			// Best-effort like every other live event: a full buffer means a
+			// slow consumer, and there is no "skipped" counter for job
+			// events. GET /ingest/jobs is the reconciliation path.
+		}
+	}
+}
+
 func (s *liveSubscriber) enqueue(event liveEvent, sourceID string, rowCount int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

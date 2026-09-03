@@ -285,15 +285,6 @@ func NewServer(cfg Config) (*Server, error) {
 	// security headers, and CORS from the root router.
 	r.Get("/api/v1/live/events", h.HandleLiveEvents)
 	r.Post("/api/v1/live/stdin", h.HandleLiveStdin)
-	// Path-based ingest reads whole files server-side; a large file legitimately
-	// outlives the API timeout, so it lives with the long-lived routes. Phase 1
-	// is synchronous (spec now-08); phase 2 makes it a job with SSE progress.
-	// It is a mutating JSON route like the ones in the timeout group below, so
-	// it still needs the now-09 JSON-only body requirement (the group's
-	// requireJSONBody doesn't reach here) — applied directly to this one route
-	// rather than pulling it into the timeout group it was deliberately kept
-	// out of.
-	r.With(requireJSONBody).Post("/api/v1/ingest/file", h.HandleIngestFile)
 
 	// Set up API routes
 	r.Group(func(r chi.Router) {
@@ -322,6 +313,13 @@ func NewServer(cfg Config) (*Server, error) {
 			r.Post("/ingest/logs", h.HandleIngest)
 			r.Post("/ingest/start", h.HandleIngestStart)
 			r.Post("/ingest/end", h.HandleIngestEnd)
+			// Path-based ingest (spec now-08). The route itself returns in
+			// milliseconds (202, job accepted) so — unlike /live/stdin and
+			// /live/events above — it belongs in the normal timeout group;
+			// the read runs on its own goroutine past this request's return.
+			r.Post("/ingest/file", h.HandleIngestFile)
+			r.Get("/ingest/jobs", h.HandleListIngestJobs)
+			r.Delete("/ingest/jobs/{id}", h.HandleCancelIngestJob)
 
 			// Parse endpoints
 			r.Post("/parse", h.HandleParse)
@@ -399,6 +397,8 @@ func (s *Server) Start() error {
 	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
 	handlers.StartSessionCleanup(cleanupCtx, s.services)
 	s.services.StartLive(cleanupCtx)
+	s.services.StartIngestJobs(cleanupCtx)
+	handlers.StartIngestJobCleanup(cleanupCtx)
 
 	// Apply retention now and once a day; cancelled on shutdown.
 	s.startRetention(cleanupCtx)
