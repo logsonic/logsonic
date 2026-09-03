@@ -10,8 +10,16 @@ declare global {
       shellVersion: string;
       token?: string; // filled by now-09 phase 2
     };
-    // Shell -> page: called when NSApp.effectiveAppearance changes (and
-    // once at load) so a theme in 'auto' mode can follow the OS.
+    // The real system appearance at the moment the page started loading,
+    // injected alongside __LOGSONIC_NATIVE__ (same document-start script,
+    // so it's set before any module code runs). Swift only calls
+    // __logsonicSetSystemAppearance below on a *change* -- without this,
+    // a store default has to guess at mount time, and guessing 'light'
+    // shows the wrong theme under 'auto' when the OS is already dark at
+    // launch (found live, 2026-09-03).
+    __LOGSONIC_INITIAL_APPEARANCE__?: NativeAppearance;
+    // Shell -> page: called when NSApp.effectiveAppearance changes after
+    // load, so a theme in 'auto' mode can keep following the OS.
     __logsonicSetSystemAppearance?: (appearance: NativeAppearance) => void;
     // Page -> shell: called whenever the effective (resolved) theme
     // changes, so the native window background can repaint before the

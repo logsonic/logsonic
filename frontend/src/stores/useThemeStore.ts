@@ -35,6 +35,14 @@ function defaultTheme(): Theme {
   return isNativeShell() ? 'auto' : 'light';
 }
 
+// The real system appearance at launch, from the document-start injection
+// (see native.ts) -- NOT from __logsonicSetSystemAppearance, which only
+// fires on a later *change*. Falling back to 'light' only ever matters in
+// the browser, where 'auto' isn't reachable and this value is unused.
+function initialSystemAppearance(): EffectiveTheme {
+  return (typeof window !== 'undefined' && window.__LOGSONIC_INITIAL_APPEARANCE__) || 'light';
+}
+
 function resolveEffective(theme: Theme, systemAppearance: EffectiveTheme): EffectiveTheme {
   return theme === 'auto' ? systemAppearance : theme;
 }
@@ -53,8 +61,8 @@ export const useThemeStore = create<ThemeState>()(
   persist(
     (set, get) => ({
       theme: defaultTheme(),
-      systemAppearance: 'light',
-      effectiveTheme: resolveEffective(defaultTheme(), 'light'),
+      systemAppearance: initialSystemAppearance(),
+      effectiveTheme: resolveEffective(defaultTheme(), initialSystemAppearance()),
       setTheme: (theme) => {
         const effective = resolveEffective(theme, get().systemAppearance);
         applyEffectiveTheme(effective);
@@ -97,7 +105,8 @@ export const useThemeStore = create<ThemeState>()(
 );
 
 // The shell calls this directly (not through React) whenever
-// NSApp.effectiveAppearance changes, and once at load.
+// NSApp.effectiveAppearance changes after load -- the load-time value comes
+// from initialSystemAppearance() above instead.
 if (typeof window !== 'undefined') {
   window.__logsonicSetSystemAppearance = (appearance) => {
     useThemeStore.getState().setSystemAppearance(appearance);

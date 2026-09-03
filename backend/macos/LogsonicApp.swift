@@ -129,9 +129,19 @@ private let dragStripHookJS = """
 
 // Injected once at document start so the frontend can detect the shell
 // before any application code runs (macos-b1's native-detection contract).
-private func nativeContractJS(shellVersion: String) -> String {
+//
+// initialAppearance is read here, not pushed later: useThemeStore's initial
+// state has to pick some value for systemAppearance before any Swift code
+// can run JS in the page, and observeAppearance() only calls back into JS
+// on a *change* (see its own comment) -- if the OS is already dark at
+// launch, a hardcoded 'light' initial value would show the wrong theme
+// under 'auto' until the user toggles System Settings at least once. Found
+// live (desktop-control session, 2026-09-03): launching with the OS already
+// in dark mode left the SPA showing its light theme.
+private func nativeContractJS(shellVersion: String, initialAppearance: String) -> String {
     """
     window.__LOGSONIC_NATIVE__ = { platform: 'macos', shellVersion: \(String(reflecting: shellVersion)), token: undefined };
+    window.__LOGSONIC_INITIAL_APPEARANCE__ = \(String(reflecting: initialAppearance));
     """
 }
 
@@ -425,7 +435,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         controller.addUserScript(WKUserScript(source: dragStripHookJS, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
         controller.addUserScript(WKUserScript(
-            source: nativeContractJS(shellVersion: version),
+            source: nativeContractJS(shellVersion: version, initialAppearance: dark ? "dark" : "light"),
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))

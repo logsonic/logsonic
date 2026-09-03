@@ -19,7 +19,18 @@ const TOPBAR_H = 44;
 // (macos-b1) -- only the brand cell + topbar's left edge widen to clear
 // them; the vertical icon rail below the topbar and everything under it
 // stay at RAIL_W, so only the very top row gets the inset.
-const NATIVE_BRAND_CELL_W = 78;
+//
+// TRAFFIC_LIGHT_ZONE_W is dead space reserved for the OS-drawn traffic
+// lights themselves (~20-72px from the window edge by default for a
+// .fullSizeContentView window; no API exposes the exact cluster width, so
+// this is a measured-generous estimate, not a constant Apple documents).
+// The brand mark must not be centered across that whole span -- verified
+// live (desktop-control session, 2026-09-03) that doing so lands the
+// zoom button directly on the icon. Fixed by right-aligning the icon in
+// the extra width added past the reserved zone instead.
+const TRAFFIC_LIGHT_ZONE_W = 78;
+const NATIVE_BRAND_CELL_W = 124;
+const BRAND_ICON_W = 26; // must match BrandMark's own width/height below
 const LogDistributionChart = lazy(() => import('@/components/Home/LogDistributionChart'));
 
 const ChartLoadingShell = () => (
@@ -60,8 +71,8 @@ const DeferredLogDistributionChart = () => {
 const BrandMark = () => (
   <svg
     aria-hidden
-    width={26}
-    height={26}
+    width={BRAND_ICON_W}
+    height={BRAND_ICON_W}
     viewBox="0 0 100 100"
     xmlns="http://www.w3.org/2000/svg"
     style={{ display: 'block' }}
@@ -82,15 +93,17 @@ const BrandMark = () => (
  * Home page using the redesign shell:
  *   "brand  topbar"
  *   "nav    main"
- * Brand sits in the top-left 56×44 cell (78×44 in the native macOS shell,
- * clearing the inset traffic lights — macos-b1). The topbar spans the rest
- * of the top row, and the nav rail / main content sit below, always at 56px.
+ * Brand sits in the top-left 56×44 cell (124×44 in the native macOS shell —
+ * the first 78px reserved for the inset traffic lights, the icon
+ * right-aligned in the rest — macos-b1). The topbar spans the rest of the
+ * top row, and the nav rail / main content sit below, always at 56px.
  */
 const Home = () => {
   const { isCollapsed, toggleCollapse: togglePanelCollapse } = useCollapsiblePanel(true);
   const { tabs } = SidebarPanel();
   const { firstLoad, setFirstLoad, triggerSearch } = useSearchQueryParamsStore();
-  const brandCellWidth = isNativeShell() ? NATIVE_BRAND_CELL_W : RAIL_W;
+  const native = isNativeShell();
+  const brandCellWidth = native ? NATIVE_BRAND_CELL_W : RAIL_W;
 
   const [activeTabId, setActiveTabId] = useState<SidebarTabId>('filter');
   const setFacetPanelOpen = useFacetStore((s) => s.setPanelOpen);
@@ -168,8 +181,16 @@ const Home = () => {
           borderRight: '1px solid var(--ls-border)',
           borderBottom: '1px solid var(--ls-border)',
           background: 'var(--ls-panel)',
-          display: 'grid',
-          placeItems: 'center',
+          display: 'flex',
+          alignItems: 'center',
+          // Centering across the full width would land the icon on top of
+          // the traffic lights in native mode (verified live) -- push it
+          // past TRAFFIC_LIGHT_ZONE_W instead, with an 8px safety margin
+          // past that estimate since no API exposes the exact cluster
+          // width. Browser mode has no reserved zone, so centering the
+          // full (narrower) cell is correct there.
+          justifyContent: native ? 'flex-end' : 'center',
+          paddingRight: native ? brandCellWidth - TRAFFIC_LIGHT_ZONE_W - 8 - BRAND_ICON_W : 0,
           zIndex: 70,
         }}
       >
