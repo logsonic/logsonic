@@ -51,6 +51,24 @@ logsonic tail -f /tmp/logsonic-live.log --source synthetic --grok "$PATTERN" --s
 python3 demo/logsonic-event-generator.py --rate 10 --output /tmp/logsonic-live.log
 ```
 
+## SSE Events On `GET /api/v1/live/events`
+
+`GET /api/v1/live/events` is a single shared Server-Sent Events stream (an optional `?source_id=` narrows the `rows`/`source_status` events below to one live-tail source; it does not affect `ingest_progress`).
+
+- **`ingest_progress`** — a snapshot of a native-path file import (`POST /api/v1/ingest/file`, see [Getting Started](getting-started.md)), sent to *every* connected subscriber regardless of `source_id` — a file import isn't a live-tail source, so there's nothing sensible to filter it by. Fires at most every 250 ms while a job is running, and again at every member boundary (a rotated set has more than one file) and state change:
+
+  ```json
+  {
+    "job_id": "…", "session_id": "…", "path": "/abs/app.log", "members": ["…"],
+    "bytes_read": 12345, "bytes_total": 67890,
+    "lines": 100, "rows_stored": 98, "rows_failed": 2,
+    "rate_lines_per_s": 4200.5,
+    "state": "running"
+  }
+  ```
+
+  `state` is `running`, `done`, `cancelled`, or `error` (with an `error` string field then present). `bytes_total`/`bytes_read` are the *compressed* stream's size for a gzip/zstd file, since that's what the reader can actually measure; for an uncompressed file `bytes_total` is the on-disk size, but `bytes_read` can jump straight to it on the first read for a file under 64 KB (the reader's own peek buffer reads that much in one shot), so don't treat early progress percentages as exact for small files. The wizard's own progress bar (`UploadingStep.tsx`) uses this event instead of polling `GET /api/v1/ingest/jobs`.
+
 ## Streaming Demo
 
 The combined demo shows import/search and Livestream in one UI recording: it imports sample logs, searches them, starts a live stdin stream, clicks Pause/Resume, and verifies that streamed rows are searchable.

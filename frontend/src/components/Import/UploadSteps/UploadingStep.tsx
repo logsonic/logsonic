@@ -203,6 +203,22 @@ export const UploadingStep: FC<{ onCancel: () => void }> = ({ onCancel }) => {
                   }}
                 >
                   {f.totalLinesProcessed.toLocaleString()} lines ingested
+                  {/* Native-path uploads only: the chunk-upload path has no
+                      server-side rate to report (progress there comes from
+                      the browser's own read loop, not an ingest_progress
+                      SSE snapshot). */}
+                  {f.nativePath && f.ingestRateLinesPerS ? ` · ${Math.round(f.ingestRateLinesPerS).toLocaleString()} lines/s` : ''}
+                </div>
+              )}
+              {!!f.rowsFailed && f.rowsFailed > 0 && (
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 10.5,
+                    color: 'var(--ls-warn)',
+                  }}
+                >
+                  {f.rowsFailed.toLocaleString()} row{f.rowsFailed === 1 ? '' : 's'} failed to parse
                 </div>
               )}
               {f.uploadStatus === 'failed' && f.uploadError && (

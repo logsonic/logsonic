@@ -66,6 +66,12 @@ export interface ImportFile {
   uploadProgress: number;
   uploadError: string | null;
   totalLinesProcessed: number;
+  // Native-path uploads only (spec now-08 phase 6): populated from the
+  // "ingest_progress" SSE event's IngestJob snapshot, which the chunk
+  // upload path has no equivalent of. undefined for a browser File
+  // upload -- UploadingStep only renders these when nativePath is set.
+  ingestRateLinesPerS?: number;
+  rowsFailed?: number;
 
   // Per-file session options
   sessionOptions: FileSessionOptions;

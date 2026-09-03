@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { NATIVE_JOB_POLL_INTERVAL_MS, useUpload } from '../useUpload';
+import { useUpload } from '../useUpload';
 
 import type { ImportFile } from '../../types';
 import type { IngestJob } from '@/lib/api-types';
@@ -25,7 +25,32 @@ vi.mock('@/lib/api-client', () => ({
   ingestFile,
   listIngestJobs,
   cancelIngestJob,
+  liveEventsURL: () => 'http://localhost:8080/api/v1/live/events',
 }));
+
+// Same MockEventSource shape as useLogStream.test.tsx, so ingestJobEvents.ts
+// (which opens its own EventSource against the same endpoint) is exercised
+// against real event dispatch rather than a stubbed promise.
+class MockEventSource {
+  static instances: MockEventSource[] = [];
+  onerror: (() => void) | null = null;
+  close = vi.fn();
+  listeners: Record<string, Array<(event: MessageEvent) => void>> = {};
+
+  constructor(public url: string) {
+    MockEventSource.instances.push(this);
+  }
+
+  addEventListener(type: string, listener: (event: MessageEvent) => void) {
+    this.listeners[type] = [...(this.listeners[type] || []), listener];
+  }
+
+  emit(type: string, data: unknown) {
+    for (const listener of this.listeners[type] || []) {
+      listener({ data: JSON.stringify(data) } as MessageEvent);
+    }
+  }
+}
 
 function makeImportFile(overrides: Partial<ImportFile>): ImportFile {
   return {
@@ -81,105 +106,106 @@ const noopFileService = { name: 'test', handleFileImport: vi.fn(), handleFilePre
 
 beforeEach(() => {
   useImportStore.getState().reset();
+  MockEventSource.instances = [];
+  vi.stubGlobal('EventSource', MockEventSource);
   // resetAllMocks (not clearAllMocks): clearAllMocks only wipes call
   // history, not queued mockResolvedValueOnce values or a prior test's
-  // mockResolvedValue -- either would leak into the next test and was
-  // caught here (tests passed in isolation, failed as a suite).
+  // mockResolvedValue -- either would leak into the next test.
   vi.resetAllMocks();
   ingestStart.mockResolvedValue({ status: 'success', session_id: 'sid-1' });
   ingestEnd.mockResolvedValue({ status: 'success' });
 });
 
 afterEach(() => {
-  vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
-describe('useUpload — native-path files (spec now-08)', () => {
-  it('starts a job, polls to done, and never calls the chunk-upload API', async () => {
-    vi.useFakeTimers();
+describe('useUpload — native-path files (spec now-08, SSE progress)', () => {
+  it('starts a job, follows it to done over SSE, and never calls the chunk-upload API', async () => {
     ingestFile.mockResolvedValue({
       status: 'accepted',
       job_id: 'job-1',
       path: '/abs/app.log',
       members: ['/abs/app.log'],
     });
-    listIngestJobs
-      .mockResolvedValueOnce({
-        jobs: [job({ state: 'running', bytes_read: 500, rows_stored: 40 })],
-      })
-      .mockResolvedValueOnce({
-        jobs: [job({ state: 'done', bytes_read: 1000, rows_stored: 100 })],
-      });
 
     const { result } = renderHook(() => useUpload());
     const importFile = makeImportFile({ nativePath: '/abs/app.log' });
 
     const uploadPromise = result.current.handleMultiFileUpload([importFile], noopFileService);
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(NATIVE_JOB_POLL_INTERVAL_MS);
-      await vi.advanceTimersByTimeAsync(NATIVE_JOB_POLL_INTERVAL_MS);
+      await Promise.resolve(); // let ingestStart/ingestFile settle before the EventSource exists
+    });
+    const es = MockEventSource.instances[0];
+    act(() => {
+      es.emit('ingest_progress', job({ state: 'running', bytes_read: 500, lines: 40 }));
+      es.emit(
+        'ingest_progress',
+        job({ state: 'done', bytes_read: 1000, lines: 100, rows_stored: 100 })
+      );
     });
     const uploadResult = await uploadPromise;
 
     expect(ingestFile).toHaveBeenCalledWith({ session_id: 'sid-1', path: '/abs/app.log' });
     expect(ingestLogs).not.toHaveBeenCalled();
     expect(ingestEnd).toHaveBeenCalledWith('sid-1');
+    expect(es.close).toHaveBeenCalled();
     expect(uploadResult.files[0].uploadStatus).toBe('success');
     expect(uploadResult.files[0].totalLinesProcessed).toBe(100);
   });
 
-  it('maps in-progress job snapshots to store progress before completion', async () => {
-    vi.useFakeTimers();
+  it('maps a running snapshot to store progress, rate, and rowsFailed before completion', async () => {
     ingestFile.mockResolvedValue({
       status: 'accepted',
       job_id: 'job-1',
       path: '/abs/app.log',
       members: ['/abs/app.log'],
     });
-    listIngestJobs
-      .mockResolvedValueOnce({
-        jobs: [job({ state: 'running', bytes_read: 250, bytes_total: 1000, rows_stored: 10 })],
-      })
-      .mockResolvedValueOnce({
-        jobs: [job({ state: 'done', bytes_read: 1000, rows_stored: 100 })],
-      });
 
     const { result } = renderHook(() => useUpload());
     const importFile = makeImportFile({ nativePath: '/abs/app.log' });
-    // updateFile (what the poll loop calls) only updates a file already
+    // updateFile (what the SSE handler calls) only updates a file already
     // in the store's files array by id -- seed it, the way the real
     // wizard's addNativePathFiles would.
     useImportStore.setState({ files: [importFile] });
 
     const uploadPromise = result.current.handleMultiFileUpload([importFile], noopFileService);
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(NATIVE_JOB_POLL_INTERVAL_MS);
+      await Promise.resolve();
     });
-    // After exactly one poll, the store should reflect the "running"
-    // snapshot's progress (250/1000 = 25%), not 0 and not 100 yet.
-    expect(
-      useImportStore.getState().files.find((f) => f.id === importFile.id)?.uploadProgress
-    ).toBe(25);
-    expect(
-      useImportStore.getState().files.find((f) => f.id === importFile.id)?.totalLinesProcessed
-    ).toBe(10);
+    const es = MockEventSource.instances[0];
+    act(() => {
+      es.emit(
+        'ingest_progress',
+        job({
+          state: 'running',
+          bytes_read: 250,
+          bytes_total: 1000,
+          lines: 10,
+          rows_failed: 1,
+          rate_lines_per_s: 42,
+        })
+      );
+    });
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(NATIVE_JOB_POLL_INTERVAL_MS);
+    const updated = () => useImportStore.getState().files.find((f) => f.id === importFile.id);
+    expect(updated()?.uploadProgress).toBe(25);
+    expect(updated()?.totalLinesProcessed).toBe(10);
+    expect(updated()?.ingestRateLinesPerS).toBe(42);
+    expect(updated()?.rowsFailed).toBe(1);
+
+    act(() => {
+      es.emit('ingest_progress', job({ state: 'done', bytes_read: 1000, lines: 100 }));
     });
     await uploadPromise;
   });
 
   it('reports the job error on job state "error"', async () => {
-    vi.useFakeTimers();
     ingestFile.mockResolvedValue({
       status: 'accepted',
       job_id: 'job-1',
       path: '/abs/app.log',
       members: ['/abs/app.log'],
-    });
-    listIngestJobs.mockResolvedValueOnce({
-      jobs: [job({ state: 'error', error: 'disk read failed at line 42' })],
     });
 
     const { result } = renderHook(() => useUpload());
@@ -187,7 +213,11 @@ describe('useUpload — native-path files (spec now-08)', () => {
 
     const uploadPromise = result.current.handleMultiFileUpload([importFile], noopFileService);
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(NATIVE_JOB_POLL_INTERVAL_MS);
+      await Promise.resolve();
+    });
+    const es = MockEventSource.instances[0];
+    act(() => {
+      es.emit('ingest_progress', job({ state: 'error', error: 'disk read failed at line 42' }));
     });
     const uploadResult = await uploadPromise;
 
@@ -195,8 +225,7 @@ describe('useUpload — native-path files (spec now-08)', () => {
     expect(uploadResult.files[0].uploadError).toBe('disk read failed at line 42');
   });
 
-  it('cancelling calls cancelIngestJob for the in-flight job and marks the file failed', async () => {
-    vi.useFakeTimers();
+  it('cancelling calls cancelIngestJob and resolves the wait immediately via the abort signal', async () => {
     ingestFile.mockResolvedValue({
       status: 'accepted',
       job_id: 'job-1',
@@ -204,34 +233,62 @@ describe('useUpload — native-path files (spec now-08)', () => {
       members: ['/abs/app.log'],
     });
     cancelIngestJob.mockResolvedValue({ status: 'cancelling' });
-    // The job never reports "done" in this test -- cancellation is what
-    // ends the loop, via the abort signal the poll loop checks each
-    // iteration, not via a "cancelled" state from the server.
+
+    const { result } = renderHook(() => useUpload());
+    const importFile = makeImportFile({ nativePath: '/abs/app.log' });
+
+    const uploadPromise = result.current.handleMultiFileUpload([importFile], noopFileService);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const es = MockEventSource.instances[0];
+
+    act(() => {
+      result.current.cancelUpload();
+    });
+    const uploadResult = await uploadPromise;
+
+    expect(cancelIngestJob).toHaveBeenCalledWith('job-1');
+    expect(es.close).toHaveBeenCalled();
+    expect(uploadResult.files[0].uploadStatus).toBe('failed');
+    expect(uploadResult.files[0].uploadError).toBe('Import cancelled');
+  });
+
+  it('reconciles via GET /ingest/jobs on "hello", closing the race between the 202 and the SSE connect', async () => {
+    ingestFile.mockResolvedValue({
+      status: 'accepted',
+      job_id: 'job-1',
+      path: '/abs/app.log',
+      members: ['/abs/app.log'],
+    });
     listIngestJobs.mockResolvedValue({
-      jobs: [job({ state: 'running', bytes_read: 100, rows_stored: 5 })],
+      jobs: [job({ state: 'done', bytes_read: 1000, lines: 100 })],
     });
 
     const { result } = renderHook(() => useUpload());
     const importFile = makeImportFile({ nativePath: '/abs/app.log' });
 
     const uploadPromise = result.current.handleMultiFileUpload([importFile], noopFileService);
-    // Let the job start and one poll happen so activeJobIdRef is set.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(NATIVE_JOB_POLL_INTERVAL_MS);
+      await Promise.resolve();
     });
+    const es = MockEventSource.instances[0];
 
+    // A job that already finished by the time the EventSource's first
+    // "hello" arrives (a real race: the job can complete between the 202
+    // response and this connection reaching the server) must still
+    // resolve -- no ingest_progress event is required.
     act(() => {
-      result.current.cancelUpload();
+      es.emit('hello', { subscriber_id: 'sub-1', source_ids: [] });
     });
-
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(NATIVE_JOB_POLL_INTERVAL_MS);
+      await Promise.resolve();
+      await Promise.resolve();
     });
     const uploadResult = await uploadPromise;
 
-    expect(cancelIngestJob).toHaveBeenCalledWith('job-1');
-    expect(uploadResult.files[0].uploadStatus).toBe('failed');
-    expect(uploadResult.files[0].uploadError).toBe('Import cancelled');
+    expect(listIngestJobs).toHaveBeenCalledTimes(1);
+    expect(uploadResult.files[0].uploadStatus).toBe('success');
   });
 });
 
@@ -264,7 +321,6 @@ describe('useUpload — browser File files (unchanged)', () => {
 
     expect(fileService.handleFileImport).toHaveBeenCalled();
     expect(ingestFile).not.toHaveBeenCalled();
-    expect(listIngestJobs).not.toHaveBeenCalled();
     expect(uploadResult.files[0].uploadStatus).toBe('success');
     expect(uploadResult.files[0].totalLinesProcessed).toBe(2);
   });
