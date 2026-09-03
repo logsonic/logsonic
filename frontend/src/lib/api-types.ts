@@ -321,6 +321,17 @@ export interface WorkspaceVisualization {
   bucket?: string;
 }
 
+// SavedQuery is one starred query+time+source snapshot inside a Workspace
+// (spec now-03). Mirrors backend/pkg/types/types.go's SavedQuery.
+export interface SavedQuery {
+  id: string;
+  name: string;
+  query?: string;
+  time?: WorkspaceTime;
+  sources?: string[];
+  created_at: string;
+}
+
 export interface Workspace {
   id?: string;
   name: string;
@@ -336,6 +347,7 @@ export interface Workspace {
   facet_fields?: string[];
   visualization: WorkspaceVisualization;
   favorite?: boolean;
+  saved_queries?: SavedQuery[];
   created_at?: string;
   updated_at?: string;
 }

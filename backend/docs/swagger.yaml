@@ -603,6 +603,23 @@ definitions:
       size_bytes:
         type: integer
     type: object
+  types.SavedQuery:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      query:
+        type: string
+      sources:
+        items:
+          type: string
+        type: array
+      time:
+        $ref: '#/definitions/types.WorkspaceTime'
+    type: object
   types.SuggestResponse:
     properties:
       combined_coverage:
@@ -722,6 +739,15 @@ definitions:
         type: string
       query:
         type: string
+      saved_queries:
+        description: |-
+          SavedQueries are named query+time+source snapshots a user starred
+          while investigating in this workspace (spec now-03). Omitted (not an
+          empty array) on a workspace with none, so a pre-now-03 workspace file
+          unmarshals with a nil slice, not a JSON parse error.
+        items:
+          $ref: '#/definitions/types.SavedQuery'
+        type: array
       sort_by:
         type: string
       sort_order:

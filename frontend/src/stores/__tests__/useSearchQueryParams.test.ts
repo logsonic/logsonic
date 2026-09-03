@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useSearchQueryParamsStore } from "../useSearchQueryParams";
+import { useQueryHistoryStore } from "../useQueryHistoryStore";
 
 /**
  * Tests for useSearchQueryParamsStore (Zustand store)
@@ -12,6 +13,7 @@ import { useSearchQueryParamsStore } from "../useSearchQueryParams";
 // Reset store to default state before each test
 beforeEach(() => {
   useSearchQueryParamsStore.getState().resetStore();
+  useQueryHistoryStore.getState().clear();
 });
 
 // ---------------------------------------------------------------------------
@@ -293,5 +295,34 @@ describe("resetStore", () => {
     expect(state.firstLoad).toBe(true);
     expect(state.isRelative).toBe(true);
     expect(state.relativeValue).toBe("last-10-years");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Query history (spec now-03): triggerSearch is the one place every real
+// search execution passes through, so history-push is hooked there.
+// ---------------------------------------------------------------------------
+
+describe("query history integration", () => {
+  it("triggerSearch pushes an executed non-empty query to history", () => {
+    useSearchQueryParamsStore.getState().setSearchQuery("level:error");
+    useSearchQueryParamsStore.getState().triggerSearch();
+
+    const { entries } = useQueryHistoryStore.getState();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].query).toBe("level:error");
+  });
+
+  it("triggerSearch does not push an empty query (default/no-query loads)", () => {
+    useSearchQueryParamsStore.getState().triggerSearch();
+    expect(useQueryHistoryStore.getState().entries).toHaveLength(0);
+  });
+
+  it("carries the current sources into the history entry", () => {
+    useSearchQueryParamsStore.getState().setSearchQuery("level:error");
+    useSearchQueryParamsStore.getState().setSources(["app.log"]);
+    useSearchQueryParamsStore.getState().triggerSearch();
+
+    expect(useQueryHistoryStore.getState().entries[0].sources).toEqual(["app.log"]);
   });
 });

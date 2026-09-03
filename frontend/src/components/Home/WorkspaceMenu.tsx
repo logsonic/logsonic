@@ -11,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { useColorRuleStore } from '@/stores/useColorRuleStore';
+import { useSavedQueryDraftStore } from '@/stores/useSavedQueryDraftStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { isWorkspaceDirty, useWorkspaceStore } from '@/stores/useWorkspaceStore';
 
@@ -31,6 +32,7 @@ export const WorkspaceMenu = () => {
   } = useWorkspaceStore();
   const search = useSearchQueryParamsStore();
   const colorRules = useColorRuleStore((state) => state.colorRules);
+  const savedQueries = useSavedQueryDraftStore((state) => state.savedQueries);
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
@@ -53,7 +55,7 @@ export const WorkspaceMenu = () => {
     () => workspaces.find((workspace) => workspace.id === activeWorkspaceId),
     [workspaces, activeWorkspaceId]
   );
-  const dirty = isWorkspaceDirty(activeWorkspace, search, colorRules);
+  const dirty = isWorkspaceDirty(activeWorkspace, search, colorRules, savedQueries);
   const triggerLabel = activeWorkspace?.name || 'Workspace';
   const filteredWorkspaces = useMemo(() => {
     const filter = workspaceFilter.trim().toLowerCase();
@@ -143,6 +145,7 @@ export const WorkspaceMenu = () => {
       <PopoverTrigger asChild>
         <button
           type="button"
+          aria-label="Workspace menu"
           className="inline-flex h-6 max-w-[240px] items-center gap-1.5 rounded-[5px] border px-2 text-xs font-medium transition-colors"
           style={{
             background: open ? 'var(--ls-bg-2)' : 'transparent',

@@ -11,7 +11,7 @@ You cannot:
 - Tail logs in real time — every query is a snapshot.
 - Query data outside the range LogSonic has indexed.
 
-You can create and reopen saved investigation workspaces. Workspaces store local query state, time range, sources, columns, coloring, and visualization mode under the user's LogSonic storage directory.
+You can create and reopen saved investigation workspaces. Workspaces store local query state, time range, sources, columns, coloring, visualization mode, and any saved queries under the user's LogSonic storage directory.
 
 ## The standard workflow
 

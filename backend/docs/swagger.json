@@ -1877,6 +1877,32 @@
                 }
             }
         },
+        "types.SavedQuery": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "query": {
+                    "type": "string"
+                },
+                "sources": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "time": {
+                    "$ref": "#/definitions/types.WorkspaceTime"
+                }
+            }
+        },
         "types.SuggestResponse": {
             "type": "object",
             "properties": {
@@ -2039,6 +2065,13 @@
                 },
                 "query": {
                     "type": "string"
+                },
+                "saved_queries": {
+                    "description": "SavedQueries are named query+time+source snapshots a user starred\nwhile investigating in this workspace (spec now-03). Omitted (not an\nempty array) on a workspace with none, so a pre-now-03 workspace file\nunmarshals with a nil slice, not a JSON parse error.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.SavedQuery"
+                    }
                 },
                 "sort_by": {
                     "type": "string"

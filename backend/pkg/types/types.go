@@ -423,8 +423,28 @@ type Workspace struct {
 	FacetFields   []string               `json:"facet_fields,omitempty"`
 	Visualization WorkspaceVisualization `json:"visualization"`
 	Favorite      bool                   `json:"favorite"`
-	CreatedAt     string                 `json:"created_at"`
-	UpdatedAt     string                 `json:"updated_at"`
+	// SavedQueries are named query+time+source snapshots a user starred
+	// while investigating in this workspace (spec now-03). Omitted (not an
+	// empty array) on a workspace with none, so a pre-now-03 workspace file
+	// unmarshals with a nil slice, not a JSON parse error.
+	SavedQueries []SavedQuery `json:"saved_queries,omitempty"`
+	CreatedAt    string       `json:"created_at"`
+	UpdatedAt    string       `json:"updated_at"`
+}
+
+// SavedQuery is one starred query+time+source snapshot inside a Workspace
+// (spec now-03). CreatedAt is a string, matching Workspace's own
+// CreatedAt/UpdatedAt convention (RFC3339Nano via the frontend or
+// pkg/workspaces/store.go's nowString()), not time.Time -- this struct is
+// always built client-side and round-tripped, never parsed from a
+// less-structured source that would need time.Time's stricter unmarshaling.
+type SavedQuery struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Query     string         `json:"query,omitempty"`
+	Time      *WorkspaceTime `json:"time,omitempty"`
+	Sources   []string       `json:"sources,omitempty"`
+	CreatedAt string         `json:"created_at"`
 }
 
 type WorkspaceListResponse struct {
