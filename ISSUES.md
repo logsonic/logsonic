@@ -8,7 +8,7 @@ Process: every candidate entry goes through the remediation pass in [`specs/WORK
 
 ## 2026-09-03 — M1–M10 visual/interactive checks are manual-pending (macos-b1)
 
-**Severity:** P2 — not a defect, a verification gap. The change itself compiles warning-clean on both architectures and the full non-interactive build/validate/smoke pipeline passes.
+**Severity:** P2 — opened as a verification gap; walking M1/M2 live surfaced two real defects (see *Partially remediated* below). The change itself compiles warning-clean on both architectures and the full non-interactive build/validate/smoke pipeline passes.
 
 **What:** `specs/macos-b1-visible-nativeness.md`'s entire manual-check table (M1 no-white-flash on dark launch, M2 traffic-light overlay + working buttons, M3 drag-by-header vs. no-drag-on-controls vs. double-click-zoom, M4 live appearance-follow in `auto` mode, M5 explicit theme choice overrides + persists across relaunch, M6 browser-mode has none of the native CSS/two-state toggle, M7 fullscreen/split-view, M8 regression sweep of Dock drop/downloads/quit-SIGINT, M9 `logsonic -open` CLI path, M10 window-frame memory across quit/relaunch for both windows) requires actually looking at and interacting with the running app. This session has no desktop-control permission, so none of these were watched happen — they're asserted only by reading the code and by the non-interactive checks below, same shape as now-08 phase 5's and now-09's prior manual-pending entries.
 
@@ -22,6 +22,14 @@ open --env STORAGE_PATH=<scratch dir> backend/dist-dev/Logsonic.app
 ```
 
 Then walk the M1–M10 table in `specs/macos-b1-visible-nativeness.md` directly against the running app (System Settings → Appearance for M4; quit/relaunch via Cmd-Q and reopen for M5/M10; `View → Open in Browser` for M6; the existing Dock-drop/download/quit checks for M8; `logsonic -open` from a terminal for M9). Do not mark the spec's "All manual checks M1–M9 pass" acceptance box verified until someone with desktop-control access on this machine runs the above and confirms each row.
+
+**Partially remediated 2026-09-03** — a later desktop-control session found two real defects: **M1**, dark-launch showed the light theme until System Settings' appearance was toggled once (`NSApp.observe(\.effectiveAppearance, options: [.new])` never fires at load, so `useThemeStore` had nothing but a hardcoded `'light'` to seed `systemAppearance` with); **M2**, centering the brand icon across the full 78px traffic-light zone landed it on the zoom button. No outcome for M3–M10 was recorded from that session, so treat them as still manual-pending, not as passed. Root cause + fix for M1/M2 in commit `3a843ad` (`window.__LOGSONIC_INITIAL_APPEARANCE__` injected in the document-start script; icon right-aligned past the reserved zone) — verified by a new module-init regression test (asserts both store state and the DOM `data-theme` attribute), full vitest 254/254, eslint clean on touched lines, `test-macos-app.sh` (which already rebuilt `backend/dist-dev/Logsonic.app` with the fix in it), and `go build`/`go vet`. The *fixes* were not re-watched live in the turn that committed them (no desktop-control grant then) — fixed, unverified:
+
+```
+open --env STORAGE_PATH=<scratch dir> backend/dist-dev/Logsonic.app
+```
+
+with System Settings → Appearance toggled to dark *before* first launch. Expected: the first painted frame is already the dark theme, with no light frame before it (M1); the brand mark sits entirely to the right of the zoom button with a visible gap (M2). This entry stays open until M3–M10 are walked.
 
 **Process note:** `specs/WORKFLOW.md`'s advisor gates 2 and 3 (remediation-pass review of the diff/tests, and review of this TBD/ISSUES text) could not run this session — the `advisor` tool reported itself temporarily overloaded on every attempt. Substituted a manual line-by-line re-read of the full `git diff` (all 10 changed files plus the 5 new ones) against the spec's design decisions before committing. This is a gap in process, not in the change itself; flagging it so it isn't mistaken for a skipped step.
 
