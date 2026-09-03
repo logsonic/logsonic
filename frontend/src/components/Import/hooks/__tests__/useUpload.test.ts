@@ -225,7 +225,7 @@ describe('useUpload — native-path files (spec now-08, SSE progress)', () => {
     expect(uploadResult.files[0].uploadError).toBe('disk read failed at line 42');
   });
 
-  it('cancelling calls cancelIngestJob and resolves the wait immediately via the abort signal', async () => {
+  it("cancelling calls cancelIngestJob and waits for the job's own cancelled snapshot before ending the session", async () => {
     ingestFile.mockResolvedValue({
       status: 'accepted',
       job_id: 'job-1',
@@ -246,12 +246,59 @@ describe('useUpload — native-path files (spec now-08, SSE progress)', () => {
     act(() => {
       result.current.cancelUpload();
     });
+    // Aborting alone must not end the session before the job has actually
+    // stopped (now-08 phase 8: ending mid-flush surfaces as job state
+    // "error", not "cancelled") -- ingestEnd only fires once the job's own
+    // terminal snapshot arrives below.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(ingestEnd).not.toHaveBeenCalled();
+
+    act(() => {
+      es.emit('ingest_progress', job({ state: 'cancelled' }));
+    });
     const uploadResult = await uploadPromise;
 
     expect(cancelIngestJob).toHaveBeenCalledWith('job-1');
     expect(es.close).toHaveBeenCalled();
+    expect(ingestEnd).toHaveBeenCalledWith('sid-1');
     expect(uploadResult.files[0].uploadStatus).toBe('failed');
     expect(uploadResult.files[0].uploadError).toBe('Import cancelled');
+  });
+
+  it('cancelling gives up after the fallback window if the job never reports a terminal state', async () => {
+    vi.useFakeTimers();
+    try {
+      ingestFile.mockResolvedValue({
+        status: 'accepted',
+        job_id: 'job-1',
+        path: '/abs/app.log',
+        members: ['/abs/app.log'],
+      });
+      cancelIngestJob.mockResolvedValue({ status: 'cancelling' });
+
+      const { result } = renderHook(() => useUpload());
+      const importFile = makeImportFile({ nativePath: '/abs/app.log' });
+
+      const uploadPromise = result.current.handleMultiFileUpload([importFile], noopFileService);
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      act(() => {
+        result.current.cancelUpload();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      const uploadResult = await uploadPromise;
+
+      expect(uploadResult.files[0].uploadStatus).toBe('failed');
+      expect(uploadResult.files[0].uploadError).toBe('Import cancelled');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('reconciles via GET /ingest/jobs on "hello", closing the race between the 202 and the SSE connect', async () => {

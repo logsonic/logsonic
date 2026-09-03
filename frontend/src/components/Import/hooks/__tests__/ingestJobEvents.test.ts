@@ -103,14 +103,58 @@ describe('waitForIngestJob', () => {
     await expect(promise).resolves.toMatchObject({ state: 'done' });
   });
 
-  it('rejects immediately and closes the EventSource when the signal aborts', async () => {
+  it("does not reject immediately on abort once a job is running -- it waits for the terminal snapshot the caller's own DELETE should produce", async () => {
+    vi.useFakeTimers();
+    try {
+      const controller = new AbortController();
+      const promise = waitForIngestJob('job-1', vi.fn(), controller.signal);
+      const es = MockEventSource.instances[0];
+
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(es.close).not.toHaveBeenCalled();
+
+      // The job's own "cancelled" broadcast (driven by the caller's DELETE,
+      // independent of this signal) still resolves the wait normally.
+      es.emit('ingest_progress', job({ state: 'cancelled' }));
+      await expect(promise).resolves.toMatchObject({ state: 'cancelled' });
+      expect(es.close).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up and rejects after the fallback window if no terminal snapshot ever arrives post-abort', async () => {
+    vi.useFakeTimers();
+    try {
+      const controller = new AbortController();
+      const promise = waitForIngestJob('job-1', vi.fn(), controller.signal);
+      const es = MockEventSource.instances[0];
+
+      controller.abort();
+      // Attach the rejection handler before advancing the fake clock, so
+      // there's no window where the rejection is briefly unhandled.
+      const assertion = expect(promise).rejects.toThrow(
+        'Import cancel timed out waiting for the job to stop'
+      );
+      await vi.advanceTimersByTimeAsync(5000);
+      await assertion;
+      expect(es.close).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still resolves via a "hello" reconcile after abort, if it lands before the fallback fires', async () => {
+    listIngestJobs.mockResolvedValue({ jobs: [job({ state: 'cancelled' })] });
     const controller = new AbortController();
     const promise = waitForIngestJob('job-1', vi.fn(), controller.signal);
     const es = MockEventSource.instances[0];
 
     controller.abort();
+    es.emit('hello', { subscriber_id: 'sub-1', source_ids: [] });
 
-    await expect(promise).rejects.toThrow('Import cancelled');
+    await expect(promise).resolves.toMatchObject({ state: 'cancelled' });
     expect(es.close).toHaveBeenCalledTimes(1);
   });
 

@@ -10,6 +10,15 @@ import { IngestJob } from '@/lib/api-types';
 // live tail's row stream on the same page.
 const INGEST_ONLY_SOURCE_FILTER = '__ingest_jobs_only__';
 
+// How long to keep waiting, past an abort, for the job's own terminal
+// broadcast before giving up. DELETE /ingest/jobs/{id} cancels the job's
+// context and the reader checks it on every line (pkg/ingestfile.Reader.Next),
+// so "cancelled" normally arrives within milliseconds -- this bounds the
+// wait for the rare case the DELETE request itself failed or its broadcast
+// was lost (an EventSource gap; the "hello" reconcile below still covers a
+// reconnect).
+const ABORT_FALLBACK_MS = 5000;
+
 /**
  * Waits for one ingest job to reach a terminal state (done|cancelled|error)
  * over the live SSE stream, calling onProgress for every "running" snapshot
@@ -29,6 +38,21 @@ const INGEST_ONLY_SOURCE_FILTER = '__ingest_jobs_only__';
  * in that list at all, it's gone from the registry (past its 1h
  * post-completion retention, or the server restarted and lost it) --
  * reject rather than hang, the same as the poll loop this replaced did.
+ *
+ * Aborting `signal` before a job ever started rejects immediately (nothing
+ * to wait for). Aborting once a job is running does NOT reject immediately:
+ * the caller is expected to have already told the server to stop (a DELETE
+ * on the job, e.g. useUpload's cancelUpload) independently of this signal,
+ * and this still waits for that job's own terminal snapshot -- normally
+ * "cancelled" within milliseconds -- so the caller doesn't end its session
+ * before the job has actually stopped reading it (see TBD.md's now-08 row,
+ * phase 8). Only after ABORT_FALLBACK_MS with nothing does it give up and
+ * reject with its own distinct message, covering a failed DELETE or a lost
+ * broadcast -- distinct because the caller (useUpload.ts) currently
+ * flattens every rejection here to "Import cancelled" once its own abort
+ * signal fired, which would misreport this specific case as a normal
+ * cancel when the job may still be running; recorded as a phase 9 item,
+ * not fixed here.
  */
 export function waitForIngestJob(
   jobId: string,
@@ -43,11 +67,16 @@ export function waitForIngestJob(
 
     const es = new EventSource(`${liveEventsURL()}?source_id=${INGEST_ONLY_SOURCE_FILTER}`);
     let settled = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
     const cleanup = () => {
       settled = true;
       es.close();
       signal.removeEventListener('abort', onAbort);
+      if (fallbackTimer !== null) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
     };
 
     const settle = (job: IngestJob) => {
@@ -56,10 +85,24 @@ export function waitForIngestJob(
       resolve(job);
     };
 
+    // Cancelling the caller's own operation (useUpload's cancelUpload)
+    // already sends DELETE /ingest/jobs/{id} independently of this signal --
+    // rejecting instantly here, before the job has actually stopped, is
+    // what let a still-running goroutine's session get ended out from under
+    // it (flagged in TBD.md's now-08 phase 6 note and confirmed by code
+    // reading: runIngestFileJob's flush() has no ctx check around its
+    // ingestBatch call, so a session ended mid-flush surfaces as job state
+    // "error" instead of "cancelled"). So: don't settle on abort. Let the
+    // job's own terminal snapshot (from the DELETE-driven cancellation)
+    // resolve normally through handleSnapshot below; only give up after
+    // ABORT_FALLBACK_MS with nothing.
     const onAbort = () => {
-      if (settled) return;
-      cleanup();
-      reject(new Error('Import cancelled'));
+      if (settled || fallbackTimer !== null) return;
+      fallbackTimer = setTimeout(() => {
+        if (settled) return;
+        cleanup();
+        reject(new Error('Import cancel timed out waiting for the job to stop'));
+      }, ABORT_FALLBACK_MS);
     };
     signal.addEventListener('abort', onAbort);
 
