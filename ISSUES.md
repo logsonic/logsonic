@@ -6,7 +6,32 @@ Process: every candidate entry goes through the remediation pass in [`specs/WORK
 
 ---
 
-## 2026-09-03 — M1–M10 visual/interactive checks are manual-pending (macos-b1)
+## 2026-09-07 — Dropping a file on the app *window* does nothing; only the Dock icon and Finder "Open With" import (found during macos-b1's M1–M10 walk)
+
+**Severity:** P2 — user-visible and discoverability-costing (dragging onto the window someone is looking at is the more obvious gesture than aiming at the Dock icon), but not a defect against any spec: nothing was broken, this was never built. No data risk, and two working paths exist (Dock icon, Finder "Open With", plus the Import page's own drop zone).
+
+**What:** With the app open on the search view, dragging a log file anywhere onto the window produces no import wizard, no error, and no visible feedback — the drop is silently swallowed. The same file dropped on the Dock icon imports normally.
+
+**Root cause, confirmed in code (two independent layers, both would need fixing):**
+
+1. **The native window is not a drag destination.** `grep -nE "registerForDraggedTypes|NSDraggingDestination|performDragOperation|draggingEntered" backend/macos/*.swift` returns nothing — the shell implements no AppKit drag-destination protocol at all. Its only file-delivery entry points are `application(_:openFile:)` (`LogsonicApp.swift:317`) and `application(_:openFiles:)` (`:322`), both routing to `openNativeFiles` (`:1030`) → `deliverNativePaths` (`:1069`). Those fire for the Dock icon, Finder "Open With", and `open -a` — never for a drop onto the window's own content area.
+2. **The web layer has no window-level drop handler either.** The only `onDrop`/`onDragOver` pairs in `frontend/src/` are `Import/LocalFileImport/FileSelection.tsx:233-235` (the wizard's file-selection step) and `Import/UploadSteps/CustomPatternSelector.tsx:326-333`. On any other route — Home/search, where a user is most likely to drop — there is no target, so the WKWebView falls through to its default handling and `decidePolicyFor` (`LogsonicApp.swift:715-727`) cancels the resulting non-server-origin navigation. That cancellation is why the failure is silent rather than destructive: the SPA is never replaced by the file's contents.
+
+**Why this is a gap, not a regression:** no spec covers dropping on the window. `specs/macos-b1-visible-nativeness.md`'s M8 asserts only "Dock drag-drop import still works", and `specs/macos-b2-menus-finder.md`'s "paths, not bytes" decision covers Dock drops and `NSOpenPanel` picks. Neither `now-08` nor `macos-b1` regressed anything here: `git log -S registerForDraggedTypes -- backend/macos/` returns no commits, so the shell has never had a drag destination in this repo's history.
+
+**Second-order note for whoever implements it:** even today's working in-window path (dropping onto the Import wizard's own drop zone) goes through the browser `File`/`DataTransfer` route, so bytes are read in-page in 8 MB chunks by `FileSelectionService` — it does **not** use `now-08`'s `POST /ingest/file` path handoff, and so still carries the in-browser read cost that `now-08` retired for Dock drops. A window drop implemented at the AppKit layer would get paths for free (`NSFilenamesPboardType` → the existing `openNativeFiles`); one implemented only in the web layer would inherit the byte-reading path. The AppKit layer is the right one.
+
+**Suggested next step (needs a human — it expands a spec's scope):** add to `specs/macos-b2-menus-finder.md`'s goal 2 ("paths, not bytes"), which already owns shell file delivery, roughly:
+
+- `registerForDraggedTypes([.fileURL])` on the window's content view (or a thin `NSView` overlay), with `draggingEntered`/`draggingUpdated` returning `.copy` and a visible drop highlight;
+- `performDragOperation` reading the file URLs off the pasteboard and calling the existing `openNativeFiles(paths)` — the same entry point the Dock uses, so the path handoff, the retired 512 MB cap, and directory handling all come along unchanged;
+- a manual check row alongside M8 ("drop a file on the window, not the Dock: wizard opens on step 2 with the file's basename").
+
+Alternatively it belongs in `macos-b3` if b2's scope is already full. Not fixed here: the macos-b1 package was complete and committed, this is new behavior against a different spec's scope, and inventing scope on the way past is what WORKFLOW §5 classifies as needs-human.
+
+---
+
+## 2026-09-03 — M1–M10 visual/interactive checks are manual-pending (macos-b1) — **Closed**
 
 **Severity:** P2 — opened as a verification gap; walking M1/M2 live surfaced two real defects (see *Partially remediated* below). The change itself compiles warning-clean on both architectures and the full non-interactive build/validate/smoke pipeline passes.
 
@@ -29,7 +54,7 @@ Then walk the M1–M10 table in `specs/macos-b1-visible-nativeness.md` directly 
 open --env STORAGE_PATH=<scratch dir> backend/dist-dev/Logsonic.app
 ```
 
-with System Settings → Appearance toggled to dark *before* first launch. Expected: the first painted frame is already the dark theme, with no light frame before it (M1); the brand mark sits entirely to the right of the zoom button with a visible gap (M2). This entry stays open until M3–M10 are walked.
+with System Settings → Appearance toggled to dark *before* first launch. Expected: the first painted frame is already the dark theme, with no light frame before it (M1); the brand mark sits entirely to the right of the zoom button with a visible gap (M2). **Closed 2026-09-07** — the maintainer walked the full M1–M10 table live on arm64 against `backend/dist-dev/Logsonic.app` (confirmed current with `3a843ad` first: both the bundled Go binary and the Swift shell contain `__LOGSONIC_INITIAL_APPEARANCE__`, and the embedded `pkg/static/dist` assets carry the same build stamp, so the walk exercised the fixed build and not a stale one). **All ten pass**, which closes both halves of this entry: the M1/M2 fixes' "fixed, unverified" caveat (both watched live this time) and M3–M10, which had never been observed. `macos-b1` is marked ✅ Done in TBD.md; the spec's acceptance box takes the "M1–M9 on arm64 + successful x86_64 compile" branch of its own wording, since no Intel machine is available here. One new finding came out of the same walk — dropping a file on the app *window* imports nothing — filed as its own entry at the top of this file, not as a reopening of this one.
 
 **Process note:** `specs/WORKFLOW.md`'s advisor gates 2 and 3 (remediation-pass review of the diff/tests, and review of this TBD/ISSUES text) could not run this session — the `advisor` tool reported itself temporarily overloaded on every attempt. Substituted a manual line-by-line re-read of the full `git diff` (all 10 changed files plus the 5 new ones) against the spec's design decisions before committing. This is a gap in process, not in the change itself; flagging it so it isn't mistaken for a skipped step.
 
@@ -95,7 +120,7 @@ But the full trace is **not** a steady climb to that peak — plotting every 25t
 
 ---
 
-## 2026-09-03 — Native Dock-drop verification is manual-pending; >512 MB acceptance box unverified (now-08 phase 5)
+## 2026-09-03 — Native Dock-drop verification is manual-pending; >512 MB acceptance box unverified (now-08 phase 5) — **Closed**
 
 **Severity:** P2 — not a defect, a verification gap. The change itself compiles, type-checks, and builds/validates cleanly (`backend/scripts/test-macos-app.sh` green, both architectures).
 
@@ -114,7 +139,7 @@ open --env STORAGE_PATH=<scratch dir> -a backend/dist-dev/Logsonic.app <path-to-
 
 Expected: the app activates, the wizard opens on step 2 (Analyzing) with the dropped file's basename, `Pattern found` (or a manual-selection prompt for an unrecognized format), and the webview issues no `logsonicfile://` request. Covers the spec's own **macOS manual** row's first two sub-claims (Dock drop within 1s with visible progress and working cancel; Finder "Open With" on a `.gz`) and its own **E2E** row's wizard-rendering half (progress renders, rows searchable, `_src` correct — the API-level gzip-through-`/ingest/file` half is already covered by phase 2's `H4` test). For the size box specifically, repeat with a generated file over 512 MB. The macOS manual row's third sub-claim ("`--browser` mode still uses the scheme handler") cannot pass under any run of this command — see the next entry.
 
-Do not mark the ">512 MB drop" or "native app functional end-to-end" acceptance boxes verified until someone with desktop-control access on this machine runs the above and confirms.
+**Closed 2026-09-07** — the maintainer ran both drops live on arm64. A Dock drop of `sample-logs/apache.log` reaches the wizard as described, and a purpose-built 669 MB `big-apache.log` (real Apache lines, at `/tmp/logsonic-manual-check/`) was accepted and imported where the 512 MB cap would previously have refused it outright, so this is a positive test of the removal and not just an absence of errors. now-08's acceptance box (3) is closed in TBD.md; box (4) (H5, memory bounded) is untouched by this and still fails, see the entry above. Caveat on what was verified: the maintainer reported the check as passing against the instruction "drag it onto the Dock icon; it should import" — no `rows_stored` count, completion timestamp, or memory reading was captured. So what closes here is "a >512 MB file is accepted and imports rather than being refused by a size guard", not a throughput, completion-time, or memory claim.
 
 ---
 
