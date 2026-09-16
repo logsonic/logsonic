@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"log"
+	"sort"
 
 	"logsonic/pkg/catalog"
 	"logsonic/pkg/types"
@@ -63,6 +64,41 @@ func (h *Services) recordStored(b storedBatch) {
 	}
 }
 
+// storeRecorded is Store + recordStored under the read side of
+// catalogSync, so a rebuild cannot slip between the two (see Services).
+// b.Rows is what gets stored; b.Opts.Source is the _src it is stored under.
+func (h *Services) storeRecorded(rows []map[string]interface{}, b storedBatch) error {
+	h.catalogSync.RLock()
+	defer h.catalogSync.RUnlock()
+	if err := h.storage.Store(rows, b.Opts.Source); err != nil {
+		return err
+	}
+	h.recordStored(b)
+	return nil
+}
+
+// reconcileSource re-reads one source's days from the index. Record adds
+// what each batch wrote, but Bleve upserts by document ID, so the same
+// lines imported twice into one source — `logsonic open x.log` run twice,
+// two concurrent opens, a re-upload — are stored once while the counter
+// says twice. Called when a session ends: one _src facet per day the
+// source spans, nothing when the source has no entry.
+func (h *Services) reconcileSource(name string) {
+	if h.Catalog == nil {
+		return
+	}
+	entry, err := h.Catalog.Get(name)
+	if err != nil || len(entry.DayRows) == 0 {
+		return
+	}
+	days := make([]string, 0, len(entry.DayRows))
+	for day := range entry.DayRows {
+		days = append(days, day)
+	}
+	sort.Strings(days)
+	h.rebuildCatalog(days...)
+}
+
 // catalogSources is the /info view of the catalog: the compatibility name
 // list plus the per-source row counts. Both are non-nil so the JSON is []
 // rather than null on an empty store.
@@ -86,6 +122,8 @@ func (h *Services) rebuildCatalog(days ...string) {
 	if h.Catalog == nil {
 		return
 	}
+	h.catalogSync.Lock()
+	defer h.catalogSync.Unlock()
 	if err := h.Catalog.Rebuild(days...); err != nil {
 		// Logged, not surfaced: the operation itself succeeded, and the
 		// next startup or POST /sources/rebuild reconciles again.

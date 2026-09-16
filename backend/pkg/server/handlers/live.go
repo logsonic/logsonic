@@ -40,6 +40,10 @@ type TailManager struct {
 	// onStored is called after every successful StoreWithIDs with what was
 	// stored; the Services wires it to recordStored (catalog + info cache).
 	onStored func(storedBatch)
+	// storeGuard, when set, is held (read side) across StoreWithIDs +
+	// onStored so a catalog rebuild never runs between the two; see
+	// Services.catalogSync.
+	storeGuard *sync.RWMutex
 
 	mu          sync.RWMutex
 	sources     map[string]*TailSource
@@ -747,6 +751,10 @@ func (s *TailSource) processFoldedLines(lines []string) error {
 		return nil
 	}
 
+	if g := s.manager.storeGuard; g != nil {
+		g.RLock()
+		defer g.RUnlock()
+	}
 	ids, err := s.manager.storage.StoreWithIDs(parsed, s.opts.Source)
 	if err != nil {
 		return err

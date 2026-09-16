@@ -98,14 +98,13 @@ func (h *Services) ingestBatch(sessionID string, lines []string) (processed, fai
 	results := sessionDecoder.DecodeConcurrent(logs, 0)
 	jsonOutput, successCount, failedCount, _ := postProcess(results, sessionOptions, sessionSeq)
 
-	if err := h.storage.Store(jsonOutput, sessionOptions.Source); err != nil {
-		return 0, 0, fmt.Errorf("failed to store logs: %w", err)
-	}
-	h.recordStored(storedBatch{
+	if err := h.storeRecorded(jsonOutput, storedBatch{
 		Opts: sessionOptions, Origin: sessionOrigin,
 		ImportID: sessionID, ImportJobID: sessionJobID,
 		Lines: logs, Rows: jsonOutput,
-	})
+	}); err != nil {
+		return 0, 0, fmt.Errorf("failed to store logs: %w", err)
+	}
 	return successCount, failedCount, nil
 }
 
@@ -464,6 +463,7 @@ func (h *Services) endIngestSession(sessionID string) {
 	sessionMapMutex.Unlock()
 	if exists {
 		h.flushSessionMultiline(session, sessionID)
+		h.reconcileSource(effectiveSource(session.Options))
 	}
 }
 
@@ -529,15 +529,13 @@ func (h *Services) flushSessionMultiline(session IngestSession, sessionID string
 	if len(jsonOutput) == 0 {
 		return
 	}
-	if err := h.storage.Store(jsonOutput, session.Options.Source); err != nil {
-		log.Printf("ingest: failed to store trailing multiline record for session %s: %v", sessionID, err)
-		return
-	}
-	h.recordStored(storedBatch{
+	if err := h.storeRecorded(jsonOutput, storedBatch{
 		Opts: session.Options, Origin: session.Origin,
 		ImportID: sessionID, ImportJobID: session.JobID,
 		Lines: final, Rows: jsonOutput,
-	})
+	}); err != nil {
+		log.Printf("ingest: failed to store trailing multiline record for session %s: %v", sessionID, err)
+	}
 }
 
 // expireStaleSessions removes sessions older than SessionTimeout and

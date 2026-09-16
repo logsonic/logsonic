@@ -53,6 +53,13 @@ type Services struct {
 	// same cleanupCtx that StartLive gets, so a shutdown cancels running
 	// jobs the same way it cancels tail sources.
 	ingestJobsCtx context.Context
+
+	// catalogSync keeps a catalog rebuild from observing a batch that is
+	// already in the index but not yet recorded: every write path holds
+	// the read side across Store + recordStored, rebuildCatalog takes the
+	// write side. Without it a reconcile that lands in that gap counts
+	// the batch twice (once from the index, once from Record).
+	catalogSync sync.RWMutex
 }
 
 // NewHandler wires up the HTTP service surface. Pattern + decode logic
@@ -88,6 +95,7 @@ func NewHandler(storage storage.StorageInterface, storagePath string) *Services 
 		ingestJobsCtx:     context.Background(),
 	}
 	svc.Live = NewTailManager(storage, svc.recordStored)
+	svc.Live.storeGuard = &svc.catalogSync
 	watches, err := watch.Open(storagePath, watch.Deps{
 		Follower:       watchDeps{svc},
 		Importer:       watchDeps{svc},

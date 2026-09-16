@@ -389,3 +389,59 @@ func TestSourceRoutesDecodeEncodedNames(t *testing.T) {
 		}
 	}
 }
+
+// The same file imported twice into one source — `logsonic open x.log`
+// run twice, or two opens racing — is stored once (Bleve upserts by doc
+// ID) but Record counted both passes, so the catalog said 2× rows until
+// the next rebuild. Ending a session reconciles the source from the
+// index. Sequential and concurrent passes both end at the index count
+// (boundary pass, 2026-09-16).
+func TestSameFileTwiceKeepsCatalogAtIndexCount(t *testing.T) {
+	_, ts := newTestServer(t, Config{Host: "localhost", Port: ":0"})
+	path := filepath.Join(t.TempDir(), "twice.log")
+	if err := os.WriteFile(path, []byte(strings.Join(timedLines([]string{"2026-03-01", "2026-03-02"}, 3000), "\n")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	importOnce := func(source string) (string, types.IngestJob) {
+		sid := startTimedSession(t, ts, source)
+		status, accepted := ingestFile(t, ts, sid, path, false)
+		if status != http.StatusAccepted {
+			t.Fatalf("ingest/file: %d", status)
+		}
+		return sid, pollIngestJob(t, ts, accepted.JobID, 10*time.Second)
+	}
+	check := func(source string, stage string) {
+		t.Helper()
+		var entry types.SourceEntry
+		do(t, ts, http.MethodGet, "/api/v1/sources/"+source, nil, &entry)
+		if n := totalFor(t, ts, source); entry.Rows != int64(n) || n != 6000 || entry.DayRows["2026-03-01"] != 3000 {
+			t.Fatalf("%s: catalog %d (day_rows %v) vs index %d", stage, entry.Rows, entry.DayRows, n)
+		}
+	}
+
+	// Sequential: second pass overwrites every document.
+	for i := 0; i < 2; i++ {
+		sid, job := importOnce("seq.log")
+		if job.State != "done" || job.RowsStored != 6000 {
+			t.Fatalf("pass %d: %+v", i, job)
+		}
+		endSession(t, ts, sid)
+	}
+	check("seq.log", "after two sequential imports")
+
+	// Concurrent: both jobs run at once; whichever session ends last
+	// reconciles after every batch has landed.
+	sidA := startTimedSession(t, ts, "conc.log")
+	sidB := startTimedSession(t, ts, "conc.log")
+	_, accA := ingestFile(t, ts, sidA, path, false)
+	_, accB := ingestFile(t, ts, sidB, path, false)
+	if job := pollIngestJob(t, ts, accA.JobID, 10*time.Second); job.State != "done" {
+		t.Fatalf("job A: %+v", job)
+	}
+	if job := pollIngestJob(t, ts, accB.JobID, 10*time.Second); job.State != "done" {
+		t.Fatalf("job B: %+v", job)
+	}
+	endSession(t, ts, sidA)
+	endSession(t, ts, sidB)
+	check("conc.log", "after two concurrent imports")
+}

@@ -86,6 +86,10 @@ func TestC6_InfoNeverScansForSourceNames(t *testing.T) {
 		return out
 	}
 
+	// Ending each session reconciles that source from the index (one
+	// SourceStats per day it spans); /info must add nothing to that.
+	base := store.sourceStats.Load()
+
 	// A cold call (cache invalidated by the ingests) and a forced refresh
 	// both build the storage section without touching SourceStats.
 	first := info(false)
@@ -96,7 +100,7 @@ func TestC6_InfoNeverScansForSourceNames(t *testing.T) {
 		t.Fatalf("sources: %+v", s)
 	}
 	info(true)
-	if n := store.sourceStats.Load(); n != 0 {
+	if n := store.sourceStats.Load() - base; n != 0 {
 		t.Fatalf("/info made %d SourceStats calls; the catalog must answer from memory", n)
 	}
 
@@ -115,7 +119,7 @@ func TestC6_InfoNeverScansForSourceNames(t *testing.T) {
 	if p95 > 20*time.Millisecond {
 		t.Errorf("warm /info p95 %s > 20 ms budget", p95)
 	}
-	if n := store.sourceStats.Load(); n != 0 {
+	if n := store.sourceStats.Load() - base; n != 0 {
 		t.Fatalf("warm loop made %d SourceStats calls", n)
 	}
 }
