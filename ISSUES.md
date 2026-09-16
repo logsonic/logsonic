@@ -38,14 +38,26 @@ Alternatively it belongs in `macos-b3` if b2's scope is already full. Not fixed 
 **Severity:** Low each; recorded so phase 3's UI and any operator know the edges.
 
 1. **In-flight browser chunk upload.** `DELETE /sources/{name}` refuses (409) while a live tail or a running path-ingest job writes the source, but a browser upload in progress is only a session with a recent `LastActivity` — no server-side handle to check. Its next chunk stores rows that survive the delete. The wizard is the only such client; phase 3 should disable the delete row while its own import runs.
-2. **Stale catalog days.** The delete iterates the entry's `days`. Rows on a day the catalog doesn't list — which an unclean exit can cause, see the next entry — stay, and the response can't say so. `POST /sources/rebuild` first is the remedy; phase 3's dialog could offer it.
+2. **Stale catalog days.** The delete iterates the entry's `days`. Rows on a day the catalog doesn't list stay, and the response can't say so. An unclean exit used to cause this (see *An unclean exit silently lags the catalog* below, Closed 2026-09-16); after 2b's marker there is no known cause, and this item stays only as the rationale for `POST /sources/rebuild` being the remedy a phase-3 dialog could offer.
 3. **Re-import gap.** Between the 202 and the job's first stored batch the source is absent from `GET /sources`, `/info` and the `_src` facet (the entry was deleted and is recreated by `Record`). Phase 3's panel should render "re-importing" from `GET /ingest/jobs` rather than let the row vanish. Also: the auto-ended session's trailing multiline record is flushed after `job.finish`, so it isn't in that job's `rows_stored` (same as a client calling `/ingest/end`).
 
 `storage.RemoveDay` closes an index under the storage lock exactly as `PruneOlderThan`/`Clear` do; a `StoreWithIDs` already holding that handle sees the same closed-index error those two can cause today (method comment says so).
 
 ---
 
-## 2026-09-16 — An unclean exit silently lags the catalog; nothing repairs it until a manual rebuild (now-10 phase 1 design)
+## 2026-09-16 — `-retention-days 0` cannot disable a `RETENTION_DAYS` env value; `config.json` now can (found during now-10 phase 2b)
+
+**Severity:** Low, pre-existing, with a workaround as of 2b.
+
+**What:** `backend/main.go` treats `-retention-days 0` (the flag's default) as "unset" and falls through to `RETENTION_DAYS`, so a user with the env variable set has no flag that says "keep everything" — `0` is silently replaced by the env value. Phase 2b's precedence puts `<storage>/config.json` above both, and `retention_days: 0` there *is* an explicit off switch (`PUT /api/v1/storage {"retention_days": 0}` or the phase-3 settings page), so the case is now reachable, just not from the flag.
+
+**Not fixed because:** making the flag distinguish "not passed" from "passed 0" changes CLI semantics (`flag.Int` can't; it needs a sentinel default or `flag.Visit`), and with the config.json switch available it is the maintainer's call whether that is worth a behavior change. Documented in `docs/configuration.md`'s precedence list as the three sources in order; the flag/env quirk is not called out there because it predates this spec.
+
+---
+
+## 2026-09-16 — An unclean exit silently lags the catalog; nothing repairs it until a manual rebuild (now-10 phase 1 design) — **Closed**
+
+**Closed 2026-09-16** by now-10 phase 2b (`b3c1b6f`), option (a): `sources.json.dirty` is created at `Open` and removed only by a clean `Close`; found at the next `Open` it forces a full rebuild, which is saved immediately. `TestUncleanExitMarkerForcesRebuild`; observed on the real binary (marker present while running, gone after SIGINT). The marker is created at `Open`, so every unclean exit triggers the rebuild wherever the crash landed (including between a `Store` committing and its `Record`); item 2 of the per-source-delete entry ("stale catalog days") has no known cause after this and is kept only as the rationale for `POST /sources/rebuild`.
 
 **Severity:** Low. Affects only what `/info`, the Sources panel and per-source delete *report*; the index itself is unaffected.
 
