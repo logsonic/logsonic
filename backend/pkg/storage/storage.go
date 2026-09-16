@@ -218,12 +218,20 @@ func (s *Storage) getOrCreateIndex(date string) (bleve.Index, error) {
 
 // BuildDocID returns the Bleve document ID used for a row. It is shared by
 // StoreWithIDs and live publishing so callers do not duplicate ID semantics.
+//
+// The seq is zero-padded because the ID is also the sort tie-breaker: _seq
+// is stored but not indexed (no doc values), so SearchPage's SortField on
+// it falls through to Bleve's final SortDocID, and IDs compare as strings.
+// Unpadded, twelve rows at one timestamp came back 1, 10, 11, 12, 2, 3, …
+// (found by now-12's O2). Twelve digits keep string order equal to numeric
+// order up to 10^12 rows per session; rows written before this change keep
+// their old IDs and their old tie order.
 func BuildDocID(log map[string]interface{}, source string, fallbackSeq int) string {
 	seqID := int64(fallbackSeq)
 	if v, ok := log["_seq"].(int64); ok {
 		seqID = v
 	}
-	return fmt.Sprintf("%d-%s-%d", log["timestamp"].(time.Time).UnixNano(), source, seqID)
+	return fmt.Sprintf("%d-%s-%012d", log["timestamp"].(time.Time).UnixNano(), source, seqID)
 }
 
 // Store saves the parsed log data to appropriate daily indices.
