@@ -145,58 +145,6 @@ private func nativeContractJS(shellVersion: String, initialAppearance: String) -
     """
 }
 
-final class NativeFileSchemeHandler: NSObject, WKURLSchemeHandler {
-    private var files: [String: URL] = [:]
-    private let lock = NSLock()
-
-    func register(_ file: URL) -> String {
-        let id = UUID().uuidString
-        lock.lock(); files[id] = file; lock.unlock()
-        return id
-    }
-
-    func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
-        guard let id = urlSchemeTask.request.url?.host else {
-            urlSchemeTask.didFailWithError(NSError(domain: "logsonic", code: 1))
-            return
-        }
-        lock.lock(); let file = files[id]; lock.unlock()
-        guard let file else {
-            urlSchemeTask.didFailWithError(NSError(domain: "logsonic", code: 2))
-            return
-        }
-        do {
-            let attrs = try FileManager.default.attributesOfItem(atPath: file.path)
-            // now-08: the primary Dock-drop/Open-With path no longer uses this
-            // handler at all (see openNativeFiles) -- paths go straight to the
-            // server instead. This handler is kept only as a --browser-mode
-            // fallback and still does a full Data(contentsOf:) read below, so
-            // the cap stays; inlined since deleting the named constant was the
-            // spec's ask, not deleting the guard it protects.
-            if let size = attrs[.size] as? NSNumber, size.intValue > 512 * 1024 * 1024 {
-                urlSchemeTask.didFailWithError(NSError(domain: "logsonic", code: 3, userInfo: [
-                    NSLocalizedDescriptionKey: "File too large to open via Dock",
-                ]))
-                return
-            }
-            let data = try Data(contentsOf: file, options: .mappedIfSafe)
-            guard let reqURL = urlSchemeTask.request.url else { return }
-            let resp = HTTPURLResponse(url: reqURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
-                "Content-Type": "application/octet-stream",
-                "Access-Control-Allow-Origin": "*",
-                "Content-Length": "\(data.count)",
-            ])!
-            urlSchemeTask.didReceive(resp)
-            urlSchemeTask.didReceive(data)
-            urlSchemeTask.didFinish()
-        } catch {
-            urlSchemeTask.didFailWithError(error)
-        }
-    }
-
-    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
-}
-
 // MARK: - Status pill (colored dot + label in a rounded chip)
 
 final class StatusPill: NSView {
@@ -270,7 +218,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var copyLogsButton: NSButton!
     private var logWindow: NSWindow?
     private var showLogMenuItem: NSMenuItem!
-    private let nativeFiles = NativeFileSchemeHandler()
     private var lockFD: Int32 = -1
     private var loadAttempts = 0
     private var restartCount = 0
@@ -439,7 +386,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
-        config.setURLSchemeHandler(nativeFiles, forURLScheme: "logsonicfile")
 
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.navigationDelegate = self
@@ -739,10 +685,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
 
         if isAllowedAboutURL(url) || isServerBlob(url, serverURL: server) {
-            decisionHandler(.allow)
-            return
-        }
-        if scheme == "logsonicfile" {
             decisionHandler(.allow)
             return
         }

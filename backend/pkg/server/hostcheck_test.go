@@ -174,11 +174,15 @@ func TestContentSecurityPolicyOnHTMLOnly(t *testing.T) {
 	if !strings.Contains(csp, "default-src 'self'") {
 		t.Errorf("expected CSP header on /, got %q", csp)
 	}
-	// The native shell fetches blob: (download hook) and logsonicfile:
-	// (dock-drop) URLs from the page; 'self' does not cover either scheme.
-	// Verified in Chrome: connect-src 'self' alone refuses a blob: fetch.
-	if !strings.Contains(csp, "connect-src 'self' blob: logsonicfile:") {
-		t.Errorf("expected connect-src to allow blob: and logsonicfile:, got %q", csp)
+	// The native shell fetches blob: (download hook) URLs from the page;
+	// 'self' does not cover that scheme. Verified in Chrome: connect-src
+	// 'self' alone refuses a blob: fetch. logsonicfile: was removed with the
+	// scheme handler once now-08 switched dock-drops to paths.
+	if !strings.Contains(csp, "connect-src 'self' blob:;") {
+		t.Errorf("expected connect-src to allow blob: (and nothing else), got %q", csp)
+	}
+	if strings.Contains(csp, "logsonicfile") {
+		t.Errorf("logsonicfile: scheme should no longer be in the CSP, got %q", csp)
 	}
 
 	pingResp := requestWithHost(t, ts, http.MethodGet, "/api/v1/ping", "localhost", nil)

@@ -56,7 +56,7 @@ Go types go in `pkg/types/types.go` (`IngestFileRequest` updated, `IngestJob`, `
 2. `handlers/ingest_file.go`: job registry (`map[jobID]*job`, mutex), `HandleIngestFile` (validate → resolve → spawn goroutine → 202), `HandleListIngestJobs`, `HandleCancelIngestJob`, `HandlePreviewFile`. The goroutine reads batches of 10k lines and calls the *same* decode/store function `HandleIngest` uses — refactor that body into `ingestLines(session, lines) (processed, failed, err)` so both paths share it. Publish `ingest_progress` via the hub. Attach jobs to the cleanup ctx (`StartLive` pattern).
 3. Routes in `server.go`; swaggo; regen.
 4. Frontend: `api-types.ts`, `api-client.ts` (fix `ingestFile`, add jobs + preview-file), `useLogStream.ts` learns `ingest_progress`, `useImportStore` gets `nativePaths`, wizard step components branch on native paths; `UploadingStep.tsx` renders progress from SSE (rows/s, bytes, ETA, current member) with a Cancel that calls the job DELETE.
-5. macOS shell: paths instead of scheme URLs (see decision list); remove the size cap and extension guard; keep the scheme handler for `--browser` mode.
+5. macOS shell: paths instead of scheme URLs (see decision list); remove the size cap and extension guard. (*Corrected 2026-09-16:* the spec originally said "keep the scheme handler for `--browser` mode", but `--browser` mode never used it — it reveals dropped files in Finder — so the handler was dead after this step and was deleted; see ISSUES.md.)
 6. Docs: `docs/getting-started.md` (native drop of large/compressed files), `docs/configuration.md` (no new flags), `docs/live-streaming.md` (new SSE event).
 
 ## Test cases
@@ -90,7 +90,7 @@ Go types go in `pkg/types/types.go` (`IngestFileRequest` updated, `IngestJob`, `
 
 **E2E:** drop `sample-logs/bgl-supercomputer.log` gzipped (`gzip -k`) through the native path in the wizard (dev harness can call the API directly) → progress renders → rows searchable → `_src` correct.
 
-**macOS manual:** drag a 1 GB file onto the Dock → import starts within 1 s, progress visible, cancel works, no memory spike in Activity Monitor; Finder "Open With" on a `.gz` works; `--browser` mode still uses the scheme handler.
+**macOS manual:** drag a 1 GB file onto the Dock → import starts within 1 s, progress visible, cancel works, no memory spike in Activity Monitor; Finder "Open With" on a `.gz` works; `--browser` mode still reveals the dropped file in Finder (*corrected 2026-09-16* — it never used the scheme handler).
 
 ## Manual validation
 

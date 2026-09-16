@@ -41,17 +41,16 @@ import (
 // (verified against the Vite output), so script-src 'self' costs nothing and
 // blocks any future accidental third-party script tag outright.
 //
-// connect-src deliberately lists two non-http schemes. 'self' does NOT
-// cover them (CSP matches 'self' by scheme+origin, and a blob:/custom-scheme
-// URL has a different scheme), and both are fetched by the app itself:
-//   - blob:  the macOS shell's download hook (LogsonicApp.swift,
-//     blobDownloadHookJS) does fetch(anchor.href) on the export blob to hand
-//     it to NSSavePanel. Verified in Chrome: without blob: here the fetch is
-//     refused with violatedDirective=connect-src.
-//   - logsonicfile:  the shell's dock-drop / Finder "Open With" path hands
-//     the SPA logsonicfile://<id> URLs that FileSelection.tsx fetches to
-//     read the dropped bytes (retired by spec now-08, kept until then).
-const contentSecurityPolicy = "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' blob: logsonicfile:; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+// connect-src deliberately lists one non-http scheme. 'self' does NOT
+// cover it (CSP matches 'self' by scheme+origin, and a blob: URL has a
+// different scheme), and it is fetched by the app itself: the macOS shell's
+// download hook (LogsonicApp.swift, blobDownloadHookJS) does
+// fetch(anchor.href) on the export blob to hand it to NSSavePanel. Verified
+// in Chrome: without blob: here the fetch is refused with
+// violatedDirective=connect-src. (A second scheme, logsonicfile:, was
+// listed here until now-08 replaced the shell's byte handoff with paths;
+// the scheme handler was deleted with it.)
+const contentSecurityPolicy = "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' blob:; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
 
 // @title LogSonic API
 // @version 1.0
