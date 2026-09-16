@@ -7,12 +7,31 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 
 	"logsonic/pkg/catalog"
 	"logsonic/pkg/types"
 
 	"github.com/go-chi/chi/v5"
 )
+
+// sourceNameParam is the {name} segment as the client meant it. chi hands
+// back the raw segment when the request carried an escaped path (Go sets
+// URL.RawPath only when the path does not round-trip through its canonical
+// escaping — "a%2Fb.log" does, "100%25.log" does not), so a source named
+// "a/b.log" or "x?y=1" would otherwise be looked up percent-encoded and
+// 404. Unescape only in that case: on the plain path chi already returns
+// the decoded name, and unescaping it again would turn a literal "%" in a
+// name into an error.
+func sourceNameParam(r *http.Request) string {
+	raw := chi.URLParam(r, "name")
+	if r.URL.RawPath != "" {
+		if name, err := url.PathUnescape(raw); err == nil {
+			return name
+		}
+	}
+	return raw
+}
 
 // @Summary List sources
 // @Description Every source in the catalog (<storage>/sources.json): origin, pattern, rows, bytes, timestamp span, the day-indices holding it, and its import history. Maintained on the ingest write path; see POST /sources/rebuild to reconcile with the indices.
@@ -45,7 +64,7 @@ func (h *Services) HandleGetSource(w http.ResponseWriter, r *http.Request) {
 		writeCatalogUnavailable(w)
 		return
 	}
-	name := chi.URLParam(r, "name")
+	name := sourceNameParam(r)
 	entry, err := h.Catalog.Get(name)
 	if err != nil {
 		if errors.Is(err, catalog.ErrNotFound) {
@@ -199,7 +218,7 @@ func (h *Services) HandleDeleteSource(w http.ResponseWriter, r *http.Request) {
 		writeCatalogUnavailable(w)
 		return
 	}
-	name := chi.URLParam(r, "name")
+	name := sourceNameParam(r)
 	entry, err := h.Catalog.Get(name)
 	if err != nil {
 		writeSourceNotFound(w, name)
@@ -243,7 +262,7 @@ func (h *Services) HandleRenameSource(w http.ResponseWriter, r *http.Request) {
 		writeCatalogUnavailable(w)
 		return
 	}
-	name := chi.URLParam(r, "name")
+	name := sourceNameParam(r)
 	var req types.SourceRenameRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -290,7 +309,7 @@ func (h *Services) HandleReimportSource(w http.ResponseWriter, r *http.Request) 
 		writeCatalogUnavailable(w)
 		return
 	}
-	name := chi.URLParam(r, "name")
+	name := sourceNameParam(r)
 	entry, err := h.Catalog.Get(name)
 	if err != nil {
 		writeSourceNotFound(w, name)

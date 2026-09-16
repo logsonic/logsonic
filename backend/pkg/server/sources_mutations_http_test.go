@@ -358,3 +358,34 @@ func TestSourceFacetComesFromCatalog(t *testing.T) {
 		t.Errorf("other facets stay window-scoped: %+v", level)
 	}
 }
+
+// A source named with characters that must be percent-encoded in a path
+// ("/", "?", "&", "="), and one with a literal "%" that round-trips
+// unencoded, resolve on every /sources/{name} route. chi returns the raw
+// segment for the first kind and the decoded one for the second; the
+// handlers must not 404 either (boundary pass, 2026-09-16).
+func TestSourceRoutesDecodeEncodedNames(t *testing.T) {
+	_, ts := newTestServer(t, Config{Host: "localhost", Port: ":0"})
+	for _, name := range []string{"a/b.log", "x?y=1&z=2", "100%.log"} {
+		sid := startTimedSession(t, ts, name)
+		postChunk(t, ts, sid, timedLines([]string{"2026-03-01"}, 3))
+		endSession(t, ts, sid)
+		path := "/api/v1/sources/" + url.PathEscape(name)
+
+		var entry types.SourceEntry
+		if code := do(t, ts, http.MethodGet, path, nil, &entry); code != 200 || entry.Name != name || entry.Rows != 3 {
+			t.Fatalf("GET %s: %d %+v", path, code, entry)
+		}
+		if code := do(t, ts, http.MethodPatch, path, map[string]any{"display_name": "renamed"}, &entry); code != 200 || entry.DisplayName != "renamed" {
+			t.Fatalf("PATCH %s: %d %+v", path, code, entry)
+		}
+		var errResp types.ErrorResponse
+		if code := do(t, ts, http.MethodPost, path+"/reimport", nil, &errResp); code != 400 || errResp.Code != "SOURCE_NOT_REIMPORTABLE" {
+			t.Fatalf("reimport %s (upload origin): %d %+v", path, code, errResp)
+		}
+		var del types.SourceDeleteResponse
+		if code := do(t, ts, http.MethodDelete, path, nil, &del); code != 200 || del.RowsDeleted != 3 {
+			t.Fatalf("DELETE %s: %d %+v", path, code, del)
+		}
+	}
+}
