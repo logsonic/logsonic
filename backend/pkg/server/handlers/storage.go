@@ -117,8 +117,12 @@ func (h *Services) HandlePutStorage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.Retention.Set(req.RetentionDays); err != nil {
+		details := err.Error()
+		if h.Retention.cfg != nil {
+			details += " — check that " + h.Retention.cfg.Path() + " is writable"
+		}
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(types.ErrorResponse{Status: "error", Error: "Failed to save retention", Code: "STORAGE_SAVE_ERROR", Details: err.Error() + " — check that " + h.Retention.cfg.Path() + " is writable"})
+		json.NewEncoder(w).Encode(types.ErrorResponse{Status: "error", Error: "Failed to save retention", Code: "STORAGE_SAVE_ERROR", Details: details})
 		return
 	}
 	resp, err := h.storageResponse()
