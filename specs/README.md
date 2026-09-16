@@ -106,7 +106,7 @@ Sample data for manual testing lives in `sample-logs/` (apache.log, linux-syslog
 - `backend/pkg/workspaces/store.go` — file-backed workspace persistence (the pattern every new JSON state file copies; next-10 adds `pkg/atomicfile`).
 - `backend/pkg/timeresolve/` — timestamp inference; `backend/pkg/tokenizer/` — smart-decoder regexes (masking precedent for next-03).
 - `backend/main.go` + `tail_cli.go` + `parentwatch.go` — CLI entry (`mcp`, `tail` subcommands; flags `-host -port -storage -open -browser -auto-port -retention-days`; **no `--version`** — now-07), parent-process watchdog. Default storage: `~/Library/Application Support/Logsonic` / `%APPDATA%\Logsonic` / `$XDG_DATA_HOME/logsonic`.
-- Swagger: handlers carry `// @Summary` etc. annotations; docs are generated into `backend/docs/`. **New/changed endpoints must update annotations and regenerate** (`swag init -g pkg/server/server.go`; now-11 checks drift in CI).
+- Swagger: handlers carry `// @Summary` etc. annotations; docs are generated into `backend/docs/`. **New/changed endpoints must update annotations and regenerate** (`go run github.com/swaggo/swag/cmd/swag@v1.16.4 init -g pkg/server/server.go` — the version CI pins; now-11 checks drift in CI).
 - Release: `backend/.goreleaser.yaml`, `backend/scripts/` (incl. `app-macos.sh`, `release.sh`, `sign-macos.sh`), `RELEASE.md`. **No CI workflows exist** (now-11).
 
 **Frontend** (React 18, TS, Vite, Zustand, Radix, Tailwind, cmdk already a dependency):

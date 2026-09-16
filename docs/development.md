@@ -156,6 +156,5 @@ Regenerate Swagger docs after API changes:
 
 ```bash
 cd backend
-go install github.com/swaggo/swag/cmd/swag@latest
-swag init -g pkg/server/server.go
+go run github.com/swaggo/swag/cmd/swag@v1.16.4 init -g pkg/server/server.go   # the version CI pins; a locally installed swag can differ
 ```

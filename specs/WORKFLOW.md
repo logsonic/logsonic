@@ -50,7 +50,7 @@ Invoke it as `/pickup` in Claude Code (a local pointer to this file), once per p
 ## 3. Implement
 
 - [ ] Follow the spec's step order. Match surrounding code style; comment only non-obvious constraints.
-- [ ] Every new behavior gets a test in the same commit (Go handler/unit test, vitest, Swift unit test where the logic is pure). Every new endpoint gets swaggo annotations + `swag init -g pkg/server/server.go`; every DTO change is mirrored in `frontend/src/lib/api-types.ts`.
+- [ ] Every new behavior gets a test in the same commit (Go handler/unit test, vitest, Swift unit test where the logic is pure). Every new endpoint gets swaggo annotations + `go run github.com/swaggo/swag/cmd/swag@v1.16.4 init -g pkg/server/server.go` (the version CI pins — a locally installed `swag` produced a different `format:` for `map[string]int64` at the "same" version and failed the drift check on PR #35); every DTO change is mirrored in `frontend/src/lib/api-types.ts`.
 - [ ] New JSON state files under `<storage>` are written atomically and carry a `version`.
 - [ ] Error messages follow the standard: *what* failed, *which* file/line/pattern/field, *what to do*.
 

@@ -58,7 +58,7 @@ jobs:
         run: |
           go run github.com/swaggo/swag/cmd/swag@${{ env.SWAG_VERSION }} init -g pkg/server/server.go -q
           if ! git diff --exit-code -- docs/; then
-            echo "::error::backend/docs is out of date. Run: cd backend && swag init -g pkg/server/server.go, then commit."
+            echo "::error::backend/docs is out of date. Run: cd backend && go run github.com/swaggo/swag/cmd/swag@${{ env.SWAG_VERSION }} init -g pkg/server/server.go, then commit. (A locally installed swag binary can differ even at the same version.)"
             exit 1
           fi
       - name: govulncheck
