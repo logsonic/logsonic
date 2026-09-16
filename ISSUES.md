@@ -287,7 +287,9 @@ Expected: the app activates, the wizard opens on step 2 (Analyzing) with the dro
 
 ---
 
-## 2026-09-02 — GitHub issue #10 reconciliation needs a human to run it (now-07 task 4)
+## 2026-09-02 — GitHub issue #10 reconciliation needs a human to run it (now-07 task 4) — **Closed**
+
+**Closed 2026-09-16** — the maintainer ran both commands: tracking issue #34 created, pointer comment posted on #10 (confirmed via `gh issue list` and `gh issue view 10`). now-07 is marked Done in TBD.md.
 
 **Severity:** Low. Public-facing housekeeping; nothing in the code depends on it.
 
