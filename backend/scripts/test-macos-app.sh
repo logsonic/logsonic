@@ -68,9 +68,9 @@ codesign --verify --strict --verbose=2 "$launcher"
 codesign --verify --strict --verbose=2 "$server"
 
 "$launcher" --help >"$tmp_dir/launcher-help.txt" 2>&1
-rg -q -- "--browser" "$tmp_dir/launcher-help.txt"
+grep -qE -- "--browser" "$tmp_dir/launcher-help.txt"
 "$server" -help >"$tmp_dir/server-help.txt" 2>&1
-rg -q -- "-browser" "$tmp_dir/server-help.txt"
+grep -qE -- "-browser" "$tmp_dir/server-help.txt"
 
 # The production packager must fail closed when notarization is unavailable.
 if env -u MACOS_NOTARY_ISSUER_ID -u MACOS_NOTARY_KEY_ID -u MACOS_NOTARY_KEY \
@@ -79,7 +79,7 @@ if env -u MACOS_NOTARY_ISSUER_ID -u MACOS_NOTARY_KEY_ID -u MACOS_NOTARY_KEY \
   echo "test-macos-app.sh: release packager accepted missing notarization credentials" >&2
   exit 1
 fi
-rg -q "refusing to create an unnotarized release app" "$tmp_dir/release-guard.err"
+grep -qE "refusing to create an unnotarized release app" "$tmp_dir/release-guard.err"
 
 if [ "${LOGSONIC_APP_UI_SMOKE:-0}" = "1" ]; then
   command -v ruby >/dev/null || { echo "test-macos-app.sh: ruby is required for UI smoke port selection" >&2; exit 1; }
@@ -117,8 +117,8 @@ if [ "${LOGSONIC_APP_UI_SMOKE:-0}" = "1" ]; then
   child_pid="$(pgrep -P "$wrapper_pid" -f '/Contents/MacOS/logsonic' | head -1)"
   [ -n "$child_pid" ] || { echo "test-macos-app.sh: backend child process not found" >&2; exit 1; }
   listener="$(lsof -Pan -p "$child_pid" -iTCP -sTCP:LISTEN 2>/dev/null || true)"
-  printf '%s\n' "$listener" | rg -q "127\.0\.0\.1:$port \(LISTEN\)"
-  if printf '%s\n' "$listener" | rg -q "(\*|0\.0\.0\.0):$port \(LISTEN\)"; then
+  printf '%s\n' "$listener" | grep -qE "127\.0\.0\.1:$port \(LISTEN\)"
+  if printf '%s\n' "$listener" | grep -qE "(\*|0\.0\.0\.0):$port \(LISTEN\)"; then
     echo "test-macos-app.sh: standalone API is listening on all interfaces" >&2
     exit 1
   fi
