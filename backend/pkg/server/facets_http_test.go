@@ -27,7 +27,10 @@ func getLogsRaw(t *testing.T, ts *httptest.Server, params url.Values) (int, []by
 }
 
 // H1: facets present, every count bounded by the total; H3: facets honor the
-// query and source filters.
+// query and source filters. _src is the spec'd exception to both (now-02
+// design decisions: "the _src facet lists every source with exact corpus
+// counts from the catalog instead of window-scoped counts", live since
+// now-10 phase 2a), so it is exempt from the bound and asserted separately.
 func TestLogsIncludeFacets(t *testing.T) {
 	_, ts := newTestServer(t, Config{Host: "localhost", Port: ":0"})
 	ingestLines(t, ts, []string{
@@ -58,7 +61,7 @@ func TestLogsIncludeFacets(t *testing.T) {
 			src = &out.Facets.Fields[i]
 		}
 		for _, v := range out.Facets.Fields[i].Values {
-			if v.Count > out.TotalCount {
+			if out.Facets.Fields[i].Name != "_src" && v.Count > out.TotalCount {
 				t.Errorf("field %s value %q count %d exceeds total %d", out.Facets.Fields[i].Name, v.Value, v.Count, out.TotalCount)
 			}
 		}
@@ -77,6 +80,13 @@ func TestLogsIncludeFacets(t *testing.T) {
 	}
 	if out.Facets == nil || out.Facets.ComputedOver != 2 {
 		t.Fatalf("query-scoped facets computed_over = %v, want 2", out.Facets)
+	}
+	// …except _src, which stays corpus-wide: still 4 under a query that
+	// matches 2.
+	for _, f := range out.Facets.Fields {
+		if f.Name == "_src" && (len(f.Values) != 1 || f.Values[0].Count != 4) {
+			t.Errorf("_src facet under a narrowing query = %+v, want the corpus-wide 4", f.Values)
+		}
 	}
 }
 
