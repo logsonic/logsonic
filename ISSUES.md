@@ -33,6 +33,40 @@ Alternatively it belongs in `macos-b3` if b2's scope is already full. Not fixed 
 
 ---
 
+## 2026-09-16 — `_src` was tokenized: source filters were never exact, and phase 2's delete-by-source would have been data loss on old shards (now-10 phase 1)
+
+**Severity:** P2 for existing stores (behavior is unchanged there, but the inexactness is now documented and blocks a spec'd feature); fixed for new shards.
+
+**What:** `_src` had no explicit field mapping, so Bleve's dynamic mapping put it through the `standard` analyzer: `app.log.1` was indexed as `app.log` + `1`, `My App` as `app` (stop word dropped, lowercased). Consequences, all confirmed with a probe test before building on them: a `_src` facet returned tokens, not names; the source filter (`sourceFilterQuery`, a match query with AND) for `app.log` also matched `app.log.1`; and spec now-10's "term query on `_src` … `DeleteByIds`" bullet, taken literally, would delete `app.log.1` rows when deleting `app.log`.
+
+**What phase 1 did:** an explicit keyword mapping with doc values for `_src` on **new** shards (`buildIndexMapping`), so facets, filters and future deletes are exact there. Shards created earlier keep the tokenized field — a mapping is fixed at index creation, and rewriting `_src` is a reindex (charter-level, per the spec's own out-of-scope list). `storage.LegacySourceShard(date)` tells them apart. The spec's Rebuild and Delete bullets carry dated corrections.
+
+**What remains, for whoever does phase 2:** on shards `storage.LegacySourceShard(date)` reports, `DELETE /sources/{name}` must fetch each candidate's stored `_src` and delete only exact matches — the same sentence now sits in the spec's Delete bullet. The current day's shard stays legacy until the date rolls over after upgrade, so every upgraded store is mixed for up to a day. The filter inexactness on legacy shards (`app.log` matching `app.log.1`) predates this work and is unchanged; a store-wide fix is the reindex.
+
+**Numbers:** rebuild on a legacy shard is a paged stored-field read — 472 ms for 120k rows in one single-day shard on this machine (arm64, SSD), i.e. ≈4 s per million legacy rows, **sequential across day-indices** (a year-old store is 365 reads, one per shard), synchronous at the first start after upgrade, before the listener opens. Whether that first-launch pause is acceptable at the maintainer's largest real stores is their call; the alternative is a background rebuild with `/info` reporting an empty source list until it finishes.
+
+---
+
+## 2026-09-16 — Rebuilt `first_ts`/`last_ts` are second-precision; write-path values are exact (now-10 phase 1)
+
+**Severity:** Informational.
+
+**What:** Bleve returns a stored datetime field as RFC 3339 without the fractional part (probe: stored `10:00:00.123456789` → read back `10:00:00`). The existing search path has the same limit (`dateparse` over the same string). So a catalog entry's bounds are exact when they came from `Record` (the write path sees the `time.Time`) and up to 999 ms early after a `Rebuild`. Documented on `storage.SourceDayStats`; C2's test uses whole seconds for that reason.
+
+**Suggested next step:** none needed for the catalog's purpose (a span for the Sources panel). If sub-second bounds ever matter, store the timestamp's UnixNano as a numeric field alongside — a mapping change like the one above.
+
+---
+
+## 2026-09-16 — Catalog `Record`/scoped `Rebuild` can double-count a batch in flight (now-10 phase 1)
+
+**Severity:** Low, self-healing.
+
+**What:** `Store` commits to the index before `recordStored` takes the catalog mutex. If a scoped `Rebuild` (after `DeleteByIds` or a prune) runs in that gap, its facet already counts the new rows *and* the blocked `Record` then adds them again. Window is microseconds per batch; the next `Rebuild` (startup, `POST /sources/rebuild`, the next prune) is exact again.
+
+**Not fixed because:** closing it means either holding the catalog mutex across `Store` (serializing every ingest path behind one lock) or a generation counter on the storage side; neither belongs in a read-side phase. Recorded so phase 2's delete — which will rebuild the affected days — knows the counts it reads can be off by one batch during a concurrent import.
+
+---
+
 ## 2026-09-16 — `specs/WORKFLOW.md` consumer-sweep table named the deleted `logsonicfile:` fetch — **fixed**
 
 **Severity:** Low. A stale pointer in the process doc, not code.
