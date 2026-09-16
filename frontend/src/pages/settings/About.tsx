@@ -1,51 +1,17 @@
-import { Check, Copy, ExternalLink, Github } from 'lucide-react';
-import { FC, useState } from 'react';
+import { ExternalLink, Github } from 'lucide-react';
+import { FC } from 'react';
 
 import pkg from '../../../package.json';
 
 import { SettingsLayout } from './SettingsLayout';
 
+import { CopyableValue } from '@/components/settings/CopyableValue';
 import { Button } from '@/components/ui/button';
 import { formatBytes } from '@/lib/utils';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 
 const SOURCE_URL = 'https://github.com/logsonic/logsonic';
 
-const CopyableValue: FC<{ value: string }> = ({ value }) => {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(value).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  };
-
-  return (
-    <div className="flex items-center" style={{ gap: 6, minWidth: 0 }}>
-      <span className="ls-mono-inline" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }} title={value}>
-        {value}
-      </span>
-      <button
-        type="button"
-        onClick={handleCopy}
-        title="Copy to clipboard"
-        style={{
-          flexShrink: 0,
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          padding: 2,
-          color: 'var(--ls-text-3)',
-          display: 'flex',
-          alignItems: 'center',
-        }}
-      >
-        {copied ? <Check size={12} style={{ color: 'var(--ls-ok)' }} /> : <Copy size={12} />}
-      </button>
-    </div>
-  );
-};
 
 const About: FC = () => {
   const { systemInfo } = useSystemInfoStore();

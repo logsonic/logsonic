@@ -1,8 +1,12 @@
 /**
- * Sources panel E2E (spec now-10 C9): seed two sources, open the Sources
- * panel from the rail, check both rows, delete one through its confirm, and
- * check that the row, the status bar's source count and the Fields panel's
- * _src facet all update without a reload.
+ * Sources panel + Storage settings E2E (spec now-10 C9 and the storage
+ * page): seed two sources, open the Sources panel from the rail, check both
+ * rows, delete one through its confirm, and check that the row, the status
+ * bar's source count and the Fields panel's _src facet all update without a
+ * reload. Then, on Settings → Storage: retention shows its source, saving
+ * and clearing it round-trips, and deleting a day (an old one seeded here
+ * with explicit timestamps, so today's shard and the other scripts' data
+ * are untouched) drops it from the table and the status bar.
  *
  *   node e2e-sources.mjs                                    # embedded build on :8080
  *   E2E_BASE_URL=http://localhost:8081 node e2e-sources.mjs  # dev split
@@ -90,6 +94,60 @@ if ((await srcRow.getAttribute('aria-expanded')) !== 'true') await srcRow.click(
 await page.waitForFunction(() => !document.body.innerText.includes('file.e2e-src-b.log'), null, { timeout: 10000 }).catch(() => {});
 const facetText = await page.locator('body').innerText();
 assert(facetText.includes(A) && !facetText.includes(B), '_src facet lists A and no longer lists B', '');
+
+// --- Storage settings page -------------------------------------------------
+// Seed one old day under its own source so deleting it touches nothing else.
+const OLD_DAY = '2019-06-15';
+const OLD_SRC = 'file.e2e-old-day.log';
+{
+  const start = await post('/ingest/start', {
+    name: 'E2E_OLD', pattern: '%{TIMESTAMP_ISO8601:timestamp} %{WORD:level} %{GREEDYDATA:message}', source: 'e2e-old-day.log', meta: { _src: OLD_SRC },
+  });
+  await post('/ingest/logs', { logs: Array.from({ length: 9 }, (_, i) => `${OLD_DAY}T10:00:0${i}Z INFO old row ${i}`), session_id: start.session_id });
+  await post('/ingest/end', { session_id: start.session_id });
+}
+const storageBefore = await api('GET', '/storage');
+assert(storageBefore.days.some((d) => d.date === OLD_DAY), 'seeded a day-index for 2019-06-15', storageBefore.days.map((d) => d.date).join(','));
+
+await page.goto(`${BASE_URL}/#/settings/storage`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+await page.locator('[data-testid="storage-day"]').first().waitFor({ timeout: 15000 });
+ok('Storage settings page loaded with the day table');
+const retentionInput = page.getByLabel('Retention days');
+assert((await retentionInput.inputValue()) === String(storageBefore.retention_days), `retention input shows the value in effect (${storageBefore.retention_days})`);
+assert(await page.locator('[data-testid="storage-retention"]').textContent().then((t) => /Nothing set|From the -retention-days|Set here/.test(t)), 'retention row names its source');
+
+// Save 3650, see it come back as "Set here", then clear. The save prunes
+// synchronously, and the smoke suite's Apache sample is from 2005, so the
+// store can legitimately lose days here -- the delete-day check below
+// takes its baseline after this, not before.
+await retentionInput.fill('3650');
+await page.getByRole('button', { name: 'Save' }).click();
+await page.locator('[data-testid="storage-retention"]', { hasText: 'Set here' }).waitFor({ timeout: 10000 });
+ok('saving retention shows it as set here (config.json)');
+const afterSave = await api('GET', '/storage');
+assert(afterSave.retention_days === 3650 && afterSave.retention_source === 'config', 'server has the override', `${afterSave.retention_days}/${afterSave.retention_source}`);
+await page.getByRole('button', { name: /Clear/ }).click();
+await page.waitForFunction(() => !document.body.innerText.includes('Set here'), null, { timeout: 10000 }).catch(() => {});
+const afterClear = await api('GET', '/storage');
+assert(afterClear.retention_source !== 'config', 'clearing removes the override', afterClear.retention_source);
+
+// Delete the seeded old day through its confirm.
+const sourcesBeforeDay = (await api('GET', '/sources')).sources.length;
+await page.getByRole('button', { name: `Delete ${OLD_DAY}` }).click();
+const dayDialog = page.getByRole('alertdialog');
+await dayDialog.waitFor({ timeout: 5000 });
+const dayText = await dayDialog.textContent();
+assert(new RegExp(`Delete ${OLD_DAY}\\?`).test(dayText) && /9 rows/.test(dayText) && /can't be undone/.test(dayText), 'delete-day confirm names the day, its 9 rows, and that it cannot be undone', dayText);
+await dayDialog.getByRole('button', { name: 'Delete day' }).click();
+await page.locator('[data-testid="storage-day"]', { hasText: OLD_DAY }).waitFor({ state: 'detached', timeout: 10000 });
+ok('the day leaves the table after confirming');
+const storageAfter = await api('GET', '/storage');
+assert(!storageAfter.days.some((d) => d.date === OLD_DAY), 'server no longer has the day-index');
+const sourcesAfterDay = (await api('GET', '/sources')).sources.length;
+assert(sourcesAfterDay === sourcesBeforeDay - 1, 'the source whose only day it was is gone from the catalog', `${sourcesBeforeDay} -> ${sourcesAfterDay}`);
+await page.goto(`${BASE_URL}/#/?isRelative=true&relativeValue=last-10-years`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+await page.waitForFunction((n) => new RegExp(`${n} sources? indexed`).test(document.body.innerText), sourcesAfterDay, { timeout: 10000 }).catch(() => {});
+assert((await statusCount()) === sourcesAfterDay, 'status bar reflects the deleted day\'s source', String(await statusCount()));
 
 await browser.close();
 console.log(failed ? `\n${failed} check(s) failed` : '\nall sources checks passed');

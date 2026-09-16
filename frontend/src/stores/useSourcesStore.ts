@@ -5,13 +5,13 @@ import type { SourceEntry } from '@/lib/api-types';
 import { waitForIngestJob } from '@/components/Import/hooks/ingestJobEvents';
 import { refreshSearchMetadata } from '@/hooks/useSearchLogs';
 import {
-  ApiError,
   deleteSource as deleteSourceRequest,
   getSystemInfo,
   listSources,
   reimportSource as reimportSourceRequest,
   renameSource as renameSourceRequest,
 } from '@/lib/api-client';
+import { apiErrorMessage } from '@/lib/api-errors';
 import { useFacetStore } from '@/stores/useFacetStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
@@ -51,29 +51,8 @@ interface SourcesState {
   clearReimport: (name: string) => void;
 }
 
-/** User copy for the failures a source action can hit; anything else falls back to the server's message. */
-export const sourceErrorMessage = (err: unknown, fallback: string): string => {
-  if (err instanceof ApiError) {
-    switch (err.code) {
-      case 'SOURCE_IN_USE':
-        return err.details?.includes('live tail')
-          ? 'A live tail is still writing to this source. Stop it first.'
-          : 'An import is still running for this source. Wait for it to finish.';
-      case 'SOURCE_NOT_REIMPORTABLE':
-        return 'This source was uploaded from the browser, so there is no file to re-import from.';
-      case 'SOURCE_NAME_TAKEN':
-        return 'Another source already uses that name.';
-      case 'SOURCE_NAME_INVALID':
-        return 'Use 1–120 characters with no leading or trailing spaces.';
-      case 'INVALID_PATH':
-        return 'The original file is no longer readable at its recorded path. Nothing was deleted.';
-      case 'SOURCE_NOT_FOUND':
-        return 'That source no longer exists.';
-    }
-    return err.message || fallback;
-  }
-  return err instanceof Error && err.message ? err.message : fallback;
-};
+/** Kept for callers that import it from here; the mapper lives in lib/api-errors. */
+export const sourceErrorMessage = apiErrorMessage;
 
 /**
  * Every other surface that lists sources — the Filter tab, SourceTabs, the
@@ -83,7 +62,7 @@ export const sourceErrorMessage = (err: unknown, fallback: string): string => {
  * data), so this pushes both, and re-runs the search so the table drops
  * rows that just went away even when that source wasn't selected.
  */
-const refreshAfterMutation = async () => {
+export const refreshAfterMutation = async () => {
   try {
     const info = await getSystemInfo(true);
     useSystemInfoStore.getState().setSystemInfo(info);

@@ -378,6 +378,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         controller.add(self, name: "logsonicDownload")
         controller.add(self, name: "logsonicDrag")
         controller.add(self, name: "logsonicTheme")
+        // Settings → Storage "Reveal in Finder" (spec now-10). Only the
+        // app's own page can post here: the navigation policy cancels every
+        // other origin before it could run script.
+        controller.add(self, name: "logsonicReveal")
         controller.addUserScript(WKUserScript(source: blobDownloadHookJS, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         controller.addUserScript(WKUserScript(source: dragStripHookJS, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
@@ -806,6 +810,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             handleDragMessage(message)
         case "logsonicTheme":
             handleThemeMessage(message)
+        case "logsonicReveal":
+            revealInFinder()
         default:
             break
         }

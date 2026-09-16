@@ -97,6 +97,11 @@ export const FieldsPanel = () => {
     const showAll = showAllFields.has(field.name);
     const values = showAll ? field.values : field.values.slice(0, VISIBLE_VALUES);
     const max = field.values[0]?.count ?? 0;
+    // _src is the one corpus-wide facet (its counts come from the sources
+    // catalog, spec now-10), so the panel's "top values in N results"
+    // caption does not apply to it; say so on the row, where the count is
+    // visible even while collapsed.
+    const corpusWide = field.name === '_src';
     return (
       <div key={field.name} className="rounded" style={{ borderBottom: '1px solid var(--ls-border-subtle)' }}>
         <button
@@ -114,11 +119,20 @@ export const FieldsPanel = () => {
             {field.name}
           </span>
           <span className="text-[10.5px]" style={{ ...mono, color: 'var(--ls-text-3)' }}>
-            {field.high_cardinality ? `${field.distinct.toLocaleString()} distinct` : field.distinct}
+            {corpusWide
+              ? `${field.distinct} in the whole index`
+              : field.high_cardinality
+                ? `${field.distinct.toLocaleString()} distinct`
+                : field.distinct}
           </span>
         </button>
         {expanded && (
           <div className="pb-1.5 pl-4">
+            {corpusWide && (
+              <p className="px-1.5 py-1 text-[11px]" style={{ color: 'var(--ls-text-3)' }}>
+                Every source with its total rows, not just this search.
+              </p>
+            )}
             {field.high_cardinality ? (
               <p className="px-1.5 py-1 text-[11px]" style={{ color: 'var(--ls-text-3)' }}>
                 {field.distinct.toLocaleString()} distinct values — too many to list. Filter with{' '}

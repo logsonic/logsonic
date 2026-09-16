@@ -20,6 +20,9 @@ import {
   SourceReimportResponse,
   SourceRenameRequest,
   SourcesResponse,
+  StorageDayDeleteResponse,
+  StorageResponse,
+  StorageUpdateRequest,
   SuggestResponse,
   SystemInfoResponse,
   TimestampPreviewRequest,
@@ -308,4 +311,21 @@ export async function reimportSource(name: string): Promise<SourceReimportRespon
 
 export async function rebuildSources(): Promise<SourcesResponse> {
   return apiRequest<SourcesResponse>('/sources/rebuild', 'POST', {});
+}
+
+// Storage settings (spec now-10)
+
+export async function getStorage(signal?: AbortSignal): Promise<StorageResponse> {
+  return apiRequest<StorageResponse>('/storage', 'GET', undefined, undefined, signal);
+}
+
+export async function updateStorage(request: StorageUpdateRequest): Promise<StorageResponse> {
+  return apiRequest<StorageResponse>('/storage', 'PUT', request);
+}
+
+export async function deleteStorageDay(date: string): Promise<StorageDayDeleteResponse> {
+  return apiRequest<StorageDayDeleteResponse>(
+    `/storage/days/${encodeURIComponent(date)}`,
+    'DELETE'
+  );
 }

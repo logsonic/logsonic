@@ -38,3 +38,21 @@ export function isNativeShell(): boolean {
 export function applyNativeBootstrapClass(root: HTMLElement = document.documentElement): void {
   root.classList.toggle('is-native-macos', isNativeShell());
 }
+
+/**
+ * Asks the macOS shell to reveal the index folder in Finder. Returns false
+ * when there is no shell to ask (browser mode, other platforms), in which
+ * case the caller shows the path with a copy button instead. The handler
+ * ("logsonicReveal", LogsonicApp.swift) is registered only by the shell,
+ * and only the app's own page can post to it.
+ */
+export function revealStoragePath(): boolean {
+  const handler = (
+    window as unknown as {
+      webkit?: { messageHandlers?: { logsonicReveal?: { postMessage: (m: unknown) => void } } };
+    }
+  ).webkit?.messageHandlers?.logsonicReveal;
+  if (!handler) return false;
+  handler.postMessage({});
+  return true;
+}
