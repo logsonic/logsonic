@@ -488,6 +488,29 @@ func (c *Catalog) Delete(name string) error {
 	return nil
 }
 
+// Reinstate puts an entry back with its rows zeroed but everything the index
+// cannot know — display name, aliases, origin, pattern, replayable options,
+// import history, created_at — intact. Re-import uses it after the rows are
+// deleted (which drops the entry) so the job's first Record refills the same
+// entry instead of creating a fresh one that has forgotten its rename.
+func (c *Catalog) Reinstate(e types.SourceEntry) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed || e.Name == "" {
+		return
+	}
+	kept := cloneEntry(&e)
+	kept.Rows = 0
+	kept.BytesRaw = 0
+	kept.DayRows = map[string]int64{}
+	kept.FirstTS, kept.LastTS = nil, nil
+	kept.UpdatedAt = c.now()
+	normalize(&kept)
+	c.entries[e.Name] = &kept
+	delete(c.lastImport, e.Name)
+	c.dirty = true
+}
+
 // Rename sets the entry's display name and remembers it as an alias so
 // searches by any previous display name keep resolving. An empty display
 // name clears it (aliases are kept). The name must not collide with any

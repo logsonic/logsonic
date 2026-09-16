@@ -272,7 +272,7 @@ func (h *Services) HandleRenameSource(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Re-import a source from its origin path
-// @Description Requires an origin path that is still readable and the options recorded at its last path import. Validates the path and compiles the pattern first, then deletes the source's rows and starts a path-ingest job (same as POST /ingest/file) that stores them again under the same _src. 409 while a tail or job is writing to the source; 400 when the path is gone or the source was never path-imported.
+// @Description Requires an origin path that is still readable and the options recorded at its last path import. Validates the path and compiles the pattern first, then deletes the source's rows and starts a path-ingest job (same as POST /ingest/file) that stores them again under the same _src. The catalog entry is kept with zero rows — display name, aliases, origin, pattern and import history survive — and fills as the job runs. 409 while a tail or job is writing to the source; 400 when the path is gone or the source was never path-imported.
 // @Tags sources
 // @Produce json
 // @Param name path string true "Source name (stored _src)"
@@ -327,6 +327,11 @@ func (h *Services) HandleReimportSource(w http.ResponseWriter, r *http.Request) 
 	}
 
 	deleted, err := h.deleteSourceRows(r.Context(), entry)
+	// Keep the entry (rename, aliases, origin, pattern, history) with zero
+	// rows; the job refills it. Done even on a partial delete so what the
+	// user named is never silently forgotten.
+	h.Catalog.Reinstate(entry)
+	h.InvalidateInfoCache()
 	if err != nil {
 		h.endIngestSession(sessionID)
 		w.WriteHeader(http.StatusInternalServerError)

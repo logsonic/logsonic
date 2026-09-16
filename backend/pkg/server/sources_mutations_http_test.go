@@ -248,6 +248,8 @@ func TestReimportSource(t *testing.T) {
 	if before.ImportOptions == nil || before.Origin.Path == "" || len(before.Imports) != 1 {
 		t.Fatalf("entry before reimport: %+v", before)
 	}
+	// A rename must survive the re-import.
+	do(t, ts, http.MethodPatch, "/api/v1/sources/file.re.log", types.SourceRenameRequest{DisplayName: "Re-log"}, nil)
 
 	// Failure branch first: move the file away → 400, rows untouched.
 	moved := path + ".moved"
@@ -286,8 +288,17 @@ func TestReimportSource(t *testing.T) {
 	if after.Rows != 81 || after.Origin.Path != re.Path || after.PatternName != "TIMED" || len(after.Days) != 3 {
 		t.Fatalf("entry after reimport: %+v", after)
 	}
-	if len(after.Imports) != 1 || after.Imports[0].JobID != re.JobID {
-		t.Fatalf("a re-import recreates the entry: one import row, the new job: %+v", after.Imports)
+	if after.DisplayName != "Re-log" || len(after.Aliases) != 1 || !after.CreatedAt.Equal(before.CreatedAt) {
+		t.Fatalf("re-import must keep the rename, aliases and created_at: %+v", after)
+	}
+	if len(after.Imports) != 2 || after.Imports[1].JobID != re.JobID {
+		t.Fatalf("re-import appends to the import history: %+v", after.Imports)
+	}
+	// Between the 202 and the first batch the entry is present with zero
+	// rows rather than absent (checked here after the fact through the
+	// history: the original import row is still there).
+	if after.Imports[0].JobID != accepted.JobID {
+		t.Fatalf("original import row lost: %+v", after.Imports)
 	}
 	// The server-started session was ended by the job (no client calls
 	// /ingest/end): a chunk against it is rejected as an invalid session.
