@@ -33,11 +33,21 @@ Alternatively it belongs in `macos-b3` if b2's scope is already full. Not fixed 
 
 ---
 
+## 2026-09-16 — Settings → Storage "Reveal in Finder" is manual-pending in the native app (now-10 phase 3b)
+
+**Severity:** Low. Compile-verified; the one unverified link is a `switch` case.
+
+**What:** the page posts to a new `logsonicReveal` WKScriptMessage handler (`LogsonicApp.swift`, registered beside `logsonicTheme`), which calls the shell's existing `revealInFinder()` — the same selector the View menu's "Reveal Index in Finder" item uses and macos-b1's manual walk exercised. `test-macos-app.sh` compiles both arches and validates the ad-hoc app; this session has no desktop control to click the button.
+
+**Manual step:** `LOGSONIC_DEV_NO_OPEN=1 bash backend/scripts/dev-macos-app.sh <scratch binary>`, then `open --env STORAGE_PATH=<scratch> -a backend/dist-dev/Logsonic.app`, Settings → Storage → **Reveal in Finder**. Expected: a Finder window opens at the storage directory. In browser mode (`--browser` or a plain browser) the button is not rendered and the path + copy button stand in.
+
+---
+
 ## 2026-09-16 — `apiRequest` read `detail`; the backend has always written `details` (found during now-10 phase 3a) — **fixed**
 
 **Severity:** Low. No caller ever received the server's `details` string — every toast showed only the one-line `error`.
 
-**Fix (`0317098`, additive):** `apiRequest` now throws an `ApiError` carrying `status`, `code` and `details`; `message` is unchanged (still `detail || error || "API request failed…"`) so existing string matching (`useUpload.ts`'s "Import cancel" prefix, tests) keeps working. The Sources panel maps codes to user copy and treats `details` as operator text (it contains API paths). Other surfaces still show `message` only; switching them to code-based copy is a per-surface improvement, not a bug.
+**Fix (`0317098`, additive):** `apiRequest` now throws an `ApiError` carrying `status`, `code` and `details`; `message` is unchanged (still `detail || error || "API request failed…"`) so existing string matching (`useUpload.ts`'s "Import cancel" prefix, tests) keeps working. The Sources panel maps codes to user copy and treats `details` as operator text (it contains API paths). `lib/api-errors.ts` (3b) is the shared code → copy mapper; the Sources panel and the Storage page use it; the Header, the import wizard and the workspace menu still show `message` only — switching them is a per-surface improvement, not a bug.
 
 ---
 
@@ -87,7 +97,7 @@ Alternatively it belongs in `macos-b3` if b2's scope is already full. Not fixed 
 
 **What remains, for whoever does phase 2:** on shards `storage.LegacySourceShard(date)` reports, `DELETE /sources/{name}` must fetch each candidate's stored `_src` and delete only exact matches — the same sentence now sits in the spec's Delete bullet. The current day's shard stays legacy until the date rolls over after upgrade, so every upgraded store is mixed for up to a day. The filter inexactness on legacy shards (`app.log` matching `app.log.1`) predates this work and is unchanged; a store-wide fix is the reindex.
 
-**Numbers:** rebuild on a legacy shard is a paged stored-field read — 472 ms for 120k rows in one single-day shard on this machine (arm64, SSD), i.e. ≈4 s per million legacy rows, **sequential across day-indices** (a year-old store is 365 reads, one per shard), synchronous at the first start after upgrade, before the listener opens. Whether that first-launch pause is acceptable at the maintainer's largest real stores is their call; the alternative is a background rebuild with `/info` reporting an empty source list until it finishes.
+**Numbers:** rebuild on a legacy shard is a paged stored-field read — 472 ms for 120k rows in one single-day shard on this machine (arm64, SSD), i.e. ≈4 s per million legacy rows, **sequential across day-indices** (a year-old store is 365 reads, one per shard), synchronous at the first start after upgrade, before the listener opens. For comparison, the same rebuild on keyword-mapped shards (the facet path) measured **1.04 s per million rows** over 30 day-indices (now-10 phase 3b's C6 run) — so a fully migrated store rebuilds ≈4× faster than a legacy one. Whether that first-launch pause is acceptable at the maintainer's largest real stores is their call; the alternative is a background rebuild with `/info` reporting an empty source list until it finishes.
 
 ---
 
