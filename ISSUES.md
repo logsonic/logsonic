@@ -33,6 +33,30 @@ Alternatively it belongs in `macos-b3` if b2's scope is already full. Not fixed 
 
 ---
 
+## 2026-09-16 — Per-source delete: three windows it can't see (now-10 phase 2a)
+
+**Severity:** Low each; recorded so phase 3's UI and any operator know the edges.
+
+1. **In-flight browser chunk upload.** `DELETE /sources/{name}` refuses (409) while a live tail or a running path-ingest job writes the source, but a browser upload in progress is only a session with a recent `LastActivity` — no server-side handle to check. Its next chunk stores rows that survive the delete. The wizard is the only such client; phase 3 should disable the delete row while its own import runs.
+2. **Stale catalog days.** The delete iterates the entry's `days`. Rows on a day the catalog doesn't list — which an unclean exit can cause, see the next entry — stay, and the response can't say so. `POST /sources/rebuild` first is the remedy; phase 3's dialog could offer it.
+3. **Re-import gap.** Between the 202 and the job's first stored batch the source is absent from `GET /sources`, `/info` and the `_src` facet (the entry was deleted and is recreated by `Record`). Phase 3's panel should render "re-importing" from `GET /ingest/jobs` rather than let the row vanish. Also: the auto-ended session's trailing multiline record is flushed after `job.finish`, so it isn't in that job's `rows_stored` (same as a client calling `/ingest/end`).
+
+`storage.RemoveDay` closes an index under the storage lock exactly as `PruneOlderThan`/`Clear` do; a `StoreWithIDs` already holding that handle sees the same closed-index error those two can cause today (method comment says so).
+
+---
+
+## 2026-09-16 — An unclean exit silently lags the catalog; nothing repairs it until a manual rebuild (now-10 phase 1 design)
+
+**Severity:** Low. Affects only what `/info`, the Sources panel and per-source delete *report*; the index itself is unaffected.
+
+**What:** `Record` is debounced — `sources.json` is written every 2 s and on a clean `Close`. A crash or `kill -9` inside that window loses the batches recorded since the last flush. On the next start `Open` finds a *valid* file and loads it **without rebuilding** (a rebuild only runs when the file is missing, corrupt or from another schema version). So after an unclean exit the catalog under-counts rows and can miss a whole day for a source, and the only thing that fixes it is `POST /sources/rebuild` (or deleting the file). The phase-1 code comment says the debounce bounds "how much a crash can lose to a rebuild" — but no rebuild is triggered.
+
+**Why it matters for phase 2a:** `DELETE /sources/{name}` iterates the entry's days, so a missing day's rows survive the delete (item 2 above).
+
+**Fix candidates (cheap, either is a phase-2b/3 one-liner):** (a) a dirty-marker file (`sources.json.dirty`) created on the first `Record` after a flush and removed by a clean `Close`; if present at `Open`, run a full `Rebuild`; or (b) always run a scoped `Rebuild` over the current day (and yesterday) at startup, which covers the common case — a crash mid-import — at the cost of one facet query per start. (a) is exact; (b) is simpler. Recommendation: (a).
+
+---
+
 ## 2026-09-16 — `_src` was tokenized: source filters were never exact, and phase 2's delete-by-source would have been data loss on old shards (now-10 phase 1)
 
 **Severity:** P2 for existing stores (behavior is unchanged there, but the inexactness is now documented and blocks a spec'd feature); fixed for new shards.
