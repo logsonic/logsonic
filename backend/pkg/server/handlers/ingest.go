@@ -562,6 +562,7 @@ func expireStaleSessions(now time.Time, h *Services) {
 	sessionMapMutex.Unlock()
 	for _, e := range expired {
 		h.flushSessionMultiline(e.session, e.id)
+		h.reconcileSource(effectiveSource(e.session.Options))
 	}
 }
 

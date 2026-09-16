@@ -123,3 +123,60 @@ func TestC6_InfoNeverScansForSourceNames(t *testing.T) {
 		t.Fatalf("warm loop made %d SourceStats calls", n)
 	}
 }
+
+// A session that is swept for inactivity (client gone before /ingest/end)
+// reconciles its source the same way an ended one does: the same lines
+// uploaded twice in that session count once.
+func TestExpiredSessionReconcilesCatalog(t *testing.T) {
+	dir := activateL2GConfig(t)
+	store, err := storagepkg.NewStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	h := NewHandler(store, dir)
+	t.Cleanup(func() { _ = h.Catalog.Close() })
+
+	body, _ := json.Marshal(types.IngestSessionOptions{
+		Name: "EXP", Pattern: "%{TIMESTAMP_ISO8601:timestamp} %{GREEDYDATA:message}", Source: "exp.log",
+		Meta: map[string]interface{}{"_src": "exp.log"},
+	})
+	w := httptest.NewRecorder()
+	h.HandleIngestStart(w, httptest.NewRequest(http.MethodPost, "/api/v1/ingest/start", bytes.NewReader(body)))
+	var started types.IngestResponse
+	_ = json.NewDecoder(w.Body).Decode(&started)
+	lines := make([]string, 500)
+	for i := range lines {
+		lines[i] = "2026-03-01T10:00:" + strconv.Itoa(i%60) + "Z line " + strconv.Itoa(i)
+	}
+	for pass := 0; pass < 2; pass++ {
+		// Reset the seq so the second pass reproduces the first pass's IDs,
+		// as a retried upload of the same chunk would.
+		sessionMapMutex.Lock()
+		s := sessionMap[started.SessionID]
+		s.Seq.Store(0)
+		sessionMap[started.SessionID] = s
+		sessionMapMutex.Unlock()
+		body, _ = json.Marshal(map[string]any{"logs": lines, "session_id": started.SessionID})
+		w = httptest.NewRecorder()
+		h.HandleIngest(w, httptest.NewRequest(http.MethodPost, "/api/v1/ingest/logs", bytes.NewReader(body)))
+		if w.Code != http.StatusOK {
+			t.Fatalf("ingest pass %d: %d %s", pass, w.Code, w.Body.String())
+		}
+	}
+	if e, _ := h.Catalog.Get("exp.log"); e.Rows != 1000 {
+		t.Fatalf("before expiry the counter is expected to over-count: %d", e.Rows)
+	}
+
+	sessionMapMutex.Lock()
+	s := sessionMap[started.SessionID]
+	s.LastActivity = time.Now().Add(-SessionTimeout - time.Minute)
+	sessionMap[started.SessionID] = s
+	sessionMapMutex.Unlock()
+	expireStaleSessions(time.Now(), h)
+
+	e, err := h.Catalog.Get("exp.log")
+	if err != nil || e.Rows != 500 {
+		t.Fatalf("after expiry: %+v %v", e, err)
+	}
+}

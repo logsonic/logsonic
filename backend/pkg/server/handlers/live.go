@@ -412,6 +412,31 @@ func (m *TailManager) removeSource(sourceID string) {
 	m.mu.Unlock()
 }
 
+// storeRecorded is StoreWithIDs + onStored under the manager's storeGuard
+// (read side), released before the rows are fanned out to subscribers.
+func (s *TailSource) storeRecorded(parsed []map[string]interface{}, lines []string) ([]string, error) {
+	if g := s.manager.storeGuard; g != nil {
+		g.RLock()
+		defer g.RUnlock()
+	}
+	ids, err := s.manager.storage.StoreWithIDs(parsed, s.opts.Source)
+	if err != nil {
+		return nil, err
+	}
+	if s.manager.onStored != nil {
+		origin := types.SourceOrigin{Kind: "stdin"}
+		if s.path != "" {
+			kind := s.kind
+			if kind == "" {
+				kind = "tail"
+			}
+			origin = types.SourceOrigin{Kind: kind, Path: s.path}
+		}
+		s.manager.onStored(storedBatch{Opts: s.opts, Origin: origin, ImportID: s.id, Lines: lines, Rows: parsed})
+	}
+	return ids, nil
+}
+
 func (m *TailManager) publishRows(sourceID string, rows []map[string]interface{}) {
 	if len(rows) == 0 {
 		return
@@ -751,24 +776,9 @@ func (s *TailSource) processFoldedLines(lines []string) error {
 		return nil
 	}
 
-	if g := s.manager.storeGuard; g != nil {
-		g.RLock()
-		defer g.RUnlock()
-	}
-	ids, err := s.manager.storage.StoreWithIDs(parsed, s.opts.Source)
+	ids, err := s.storeRecorded(parsed, lines)
 	if err != nil {
 		return err
-	}
-	if s.manager.onStored != nil {
-		origin := types.SourceOrigin{Kind: "stdin"}
-		if s.path != "" {
-			kind := s.kind
-			if kind == "" {
-				kind = "tail"
-			}
-			origin = types.SourceOrigin{Kind: kind, Path: s.path}
-		}
-		s.manager.onStored(storedBatch{Opts: s.opts, Origin: origin, ImportID: s.id, Lines: lines, Rows: parsed})
 	}
 
 	for i := range parsed {

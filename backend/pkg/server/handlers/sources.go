@@ -98,7 +98,12 @@ func (h *Services) HandleRebuildSources(w http.ResponseWriter, r *http.Request) 
 		writeCatalogUnavailable(w)
 		return
 	}
-	if err := h.Catalog.Rebuild(); err != nil {
+	// Same fence as rebuildCatalog: never between a batch's Store and
+	// its Record.
+	h.catalogSync.Lock()
+	err := h.Catalog.Rebuild()
+	h.catalogSync.Unlock()
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(types.ErrorResponse{
 			Status:  "error",
