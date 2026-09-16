@@ -33,13 +33,21 @@ Alternatively it belongs in `macos-b3` if b2's scope is already full. Not fixed 
 
 ---
 
+## 2026-09-16 — `apiRequest` read `detail`; the backend has always written `details` (found during now-10 phase 3a) — **fixed**
+
+**Severity:** Low. No caller ever received the server's `details` string — every toast showed only the one-line `error`.
+
+**Fix (`0317098`, additive):** `apiRequest` now throws an `ApiError` carrying `status`, `code` and `details`; `message` is unchanged (still `detail || error || "API request failed…"`) so existing string matching (`useUpload.ts`'s "Import cancel" prefix, tests) keeps working. The Sources panel maps codes to user copy and treats `details` as operator text (it contains API paths). Other surfaces still show `message` only; switching them to code-based copy is a per-surface improvement, not a bug.
+
+---
+
 ## 2026-09-16 — Per-source delete: three windows it can't see (now-10 phase 2a)
 
 **Severity:** Low each; recorded so phase 3's UI and any operator know the edges.
 
-1. **In-flight browser chunk upload.** `DELETE /sources/{name}` refuses (409) while a live tail or a running path-ingest job writes the source, but a browser upload in progress is only a session with a recent `LastActivity` — no server-side handle to check. Its next chunk stores rows that survive the delete. The wizard is the only such client; phase 3 should disable the delete row while its own import runs.
+1. **In-flight browser chunk upload.** `DELETE /sources/{name}` refuses (409) while a live tail or a running path-ingest job writes the source, but a browser upload in progress is only a session with a recent `LastActivity` — no server-side handle to check. Its next chunk stores rows that survive the delete. The wizard is the only such client; **phase 3a (`0317098`) disables Delete and Re-import in the Sources panel while `useImportStore.isUploading`** — client-side only, so the server race stands for a hand-written client. The guard is real because `useImportStore.reset()` is called only from tests, so `isUploading` survives navigating away from `/import` mid-upload; a later refactor that resets the store on unmount would silently void it.
 2. **Stale catalog days.** The delete iterates the entry's `days`. Rows on a day the catalog doesn't list stay, and the response can't say so. An unclean exit used to cause this (see *An unclean exit silently lags the catalog* below, Closed 2026-09-16); after 2b's marker there is no known cause, and this item stays only as the rationale for `POST /sources/rebuild` being the remedy a phase-3 dialog could offer.
-3. **Re-import gap.** Between the 202 and the job's first stored batch the source is absent from `GET /sources`, `/info` and the `_src` facet (the entry was deleted and is recreated by `Record`). Phase 3's panel should render "re-importing" from `GET /ingest/jobs` rather than let the row vanish. Also: the auto-ended session's trailing multiline record is flushed after `job.finish`, so it isn't in that job's `rows_stored` (same as a client calling `/ingest/end`).
+3. **Re-import gap — Closed 2026-09-16 (`f641ce4`).** The entry is now kept at zero rows (`catalog.Reinstate`) and refilled by the job, so it never leaves `GET /sources` / `/info`; the panel shows "re-importing, N rows" on the row itself. Two residual edges, recorded not fixed: a `Rebuild` that touches the source between the 202 and the job's first `Record` (daily prune, `POST /sources/rebuild`, delete-day on one of its former days) drops the zero-row entry and the rename with it — seconds for a local file; and on the partial-delete error path the reinstated entry reports 0 rows while rows remain, until the retry or a rebuild. Still true: the auto-ended session's trailing multiline record is flushed after `job.finish`, so it isn't in that job's `rows_stored`.
 
 `storage.RemoveDay` closes an index under the storage lock exactly as `PruneOlderThan`/`Clear` do; a `StoreWithIDs` already holding that handle sees the same closed-index error those two can cause today (method comment says so).
 
