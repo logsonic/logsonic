@@ -53,6 +53,10 @@ type ingestJob struct {
 	startedAt   time.Time
 
 	cancel context.CancelFunc
+	// autoEnd marks a job the server started itself (re-import): no client
+	// will call /ingest/end, so the runner ends the session at its terminal
+	// state instead of leaving it to the expiry sweep.
+	autoEnd bool
 
 	mu         sync.Mutex
 	bytesRead  int64
@@ -196,7 +200,7 @@ func statMembersTotal(members []string) int64 {
 // job.cancel) is created here, before the goroutine starts, so a DELETE
 // that lands the instant after this call returns is never racing an unset
 // job.cancel.
-func (h *Services) startIngestFileJob(sessionID, canonicalPath string, members []string, compression string) *ingestJob {
+func (h *Services) startIngestFileJob(sessionID, canonicalPath string, members []string, compression string, autoEnd bool) *ingestJob {
 	ctx, cancel := context.WithTimeout(h.ingestJobsCtx, ingestJobWallClock)
 	job := &ingestJob{
 		id:          uuid.New().String(),
@@ -208,6 +212,7 @@ func (h *Services) startIngestFileJob(sessionID, canonicalPath string, members [
 		startedAt:   time.Now(),
 		state:       ingestJobStateRunning,
 		cancel:      cancel,
+		autoEnd:     autoEnd,
 	}
 
 	ingestJobsMu.Lock()
@@ -321,7 +326,47 @@ memberLoop:
 	default:
 		job.finish(ingestJobStateDone, "")
 	}
+	if job.autoEnd {
+		h.endIngestSession(job.sessionID)
+	}
 	publish(true)
+}
+
+// runningIngestSources returns the effective source name (meta._src if
+// stamped, else Options.Source) of every path-ingest job still running —
+// what a per-source delete must refuse to race against.
+func runningIngestSources() []string {
+	ingestJobsMu.Lock()
+	sessionIDs := make([]string, 0, len(ingestJobs))
+	for _, job := range ingestJobs {
+		job.mu.Lock()
+		running := job.state == ingestJobStateRunning
+		job.mu.Unlock()
+		if running {
+			sessionIDs = append(sessionIDs, job.sessionID)
+		}
+	}
+	ingestJobsMu.Unlock()
+
+	sessionMapMutex.RLock()
+	defer sessionMapMutex.RUnlock()
+	out := make([]string, 0, len(sessionIDs))
+	for _, id := range sessionIDs {
+		if session, ok := sessionMap[id]; ok {
+			out = append(out, effectiveSource(session.Options))
+		}
+	}
+	return out
+}
+
+// effectiveSource is the _src rows are stored under for these options:
+// meta._src when the client stamped one (the import wizard does), else
+// Source. It is the catalog key.
+func effectiveSource(opts types.IngestSessionOptions) string {
+	if v, ok := opts.Meta["_src"].(string); ok && v != "" {
+		return v
+	}
+	return opts.Source
 }
 
 // @Summary List path-ingest jobs

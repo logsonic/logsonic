@@ -57,7 +57,7 @@ If the user says "last hour" / "yesterday" / "last 7 days", compute the absolute
 
 ## Facets (field summary of a window)
 
-`GET /api/v1/logs?include_facets=true` (not yet exposed as an MCP tool — that is spec `next-05`) adds a `facets` object: for every parsed field, the distinct-value count and up to 8 top values with counts, computed over the newest rows of the current window (`computed_over`; `sampled: true` when the window exceeded the 20,000-row scan cap). High-cardinality fields (IDs) report only their distinct count. Use it to learn which fields and values exist before writing a `field:value` query instead of paging raw rows.
+`GET /api/v1/logs?include_facets=true` (not yet exposed as an MCP tool — that is spec `next-05`) adds a `facets` object: for every parsed field, the distinct-value count and up to 8 top values with counts, computed over the newest rows of the current window (`computed_over`; `sampled: true` when the window exceeded the 20,000-row scan cap). High-cardinality fields (IDs) report only their distinct count. The one exception is `_src`: its values come from the sources catalog and list every source with its total row count, regardless of the window or query. Use it to learn which fields and values exist before writing a `field:value` query instead of paging raw rows.
 
 ## Pagination
 

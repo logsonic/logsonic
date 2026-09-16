@@ -132,6 +132,12 @@ func (m *mockStorage) GetDocCount(date string) (uint64, error) { return m.docCou
 
 func (m *mockStorage) DeleteByIds(ids []string) (int, error) { return len(ids), nil }
 
+func (m *mockStorage) DeleteBySource(ctx context.Context, source string, dates []string) (int, []string, error) {
+	return 0, nil, nil
+}
+
+func (m *mockStorage) RemoveDay(date string) error { return nil }
+
 func (m *mockStorage) PruneOlderThan(maxAge time.Duration) (int, error) { return 0, nil }
 
 // ---------------------------------------------------------------------------

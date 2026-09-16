@@ -138,6 +138,18 @@ func (m *TailManager) ActiveSourceIDs() []string {
 	return ids
 }
 
+// ActiveSourceNames returns the effective source name of every running tail
+// (file or stdin), for the per-source delete's in-use check.
+func (m *TailManager) ActiveSourceNames() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]string, 0, len(m.sources))
+	for _, s := range m.sources {
+		out = append(out, effectiveSource(s.opts))
+	}
+	return out
+}
+
 func (m *TailManager) StartFile(path string, opts types.IngestSessionOptions) (string, error) {
 	if path == "" {
 		return "", errors.New("path is required")

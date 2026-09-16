@@ -284,6 +284,11 @@ func NewServer(cfg Config) (*Server, error) {
 	// security headers, and CORS from the root router.
 	r.Get("/api/v1/live/events", h.HandleLiveEvents)
 	r.Post("/api/v1/live/stdin", h.HandleLiveStdin)
+	// Per-source delete (spec now-10) is synchronous by contract — it
+	// returns the rows removed — and a multi-million-row source takes longer
+	// than the API timeout; a timeout mid-way would leave a half-deleted
+	// source. No body, so the JSON-body rule the group enforces is moot.
+	r.Delete("/api/v1/sources/{name}", h.HandleDeleteSource)
 
 	// Set up API routes
 	r.Group(func(r chi.Router) {
@@ -342,6 +347,8 @@ func NewServer(cfg Config) (*Server, error) {
 				r.Get("/", h.HandleListSources)
 				r.Post("/rebuild", h.HandleRebuildSources)
 				r.Get("/{name}", h.HandleGetSource)
+				r.Patch("/{name}", h.HandleRenameSource)
+				r.Post("/{name}/reimport", h.HandleReimportSource)
 			})
 
 			// Live-tail controls are short-lived JSON calls and can use the

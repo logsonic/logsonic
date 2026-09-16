@@ -367,3 +367,89 @@ func TestScopedRebuildRecomputesBoundsOnlyWhenAffected(t *testing.T) {
 		t.Fatalf("after first-day delete: %+v", e)
 	}
 }
+
+func TestRenameAliasesAndResolve(t *testing.T) {
+	st, dir := newStorage(t)
+	c, _ := Open(dir, st)
+	day := time.Date(2026, 8, 30, 10, 0, 0, 0, time.UTC)
+	store(t, st, c, "file.app.log", rows("file.app.log", day, 2, time.Second), "s1")
+	store(t, st, c, "file.db.log", rows("file.db.log", day, 2, time.Second), "s2")
+
+	e, err := c.Rename("file.app.log", "prod-app")
+	if err != nil || e.DisplayName != "prod-app" || len(e.Aliases) != 1 || e.Aliases[0] != "prod-app" {
+		t.Fatalf("rename: %v %+v", err, e)
+	}
+	e, _ = c.Rename("file.app.log", "prod-app-2")
+	if e.DisplayName != "prod-app-2" || len(e.Aliases) != 2 {
+		t.Fatalf("second rename keeps the first alias: %+v", e)
+	}
+	// Collisions: another entry's name, its display name, its alias.
+	if _, err := c.Rename("file.db.log", "file.app.log"); err != ErrNameTaken {
+		t.Errorf("stored name of another entry: %v", err)
+	}
+	if _, err := c.Rename("file.db.log", "prod-app"); err != ErrNameTaken {
+		t.Errorf("alias of another entry: %v", err)
+	}
+	if _, err := c.Rename("file.db.log", " x"); err != ErrBadName {
+		t.Errorf("untrimmed: %v", err)
+	}
+	if _, err := c.Rename("nope", "x"); err != ErrNotFound {
+		t.Errorf("missing: %v", err)
+	}
+	// Resolution: stored names pass, display name and old alias map back,
+	// unknown names pass through, duplicates collapse.
+	got := c.ResolveSources([]string{"prod-app-2", "prod-app", "file.app.log", "file.db.log", "unknown.log"})
+	want := []string{"file.app.log", "file.db.log", "unknown.log"}
+	if len(got) != len(want) {
+		t.Fatalf("resolve: %v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("resolve: %v want %v", got, want)
+		}
+	}
+	// Clearing keeps aliases so old links still resolve.
+	e, _ = c.Rename("file.app.log", "")
+	if e.DisplayName != "" || len(e.Aliases) != 2 {
+		t.Fatalf("clear: %+v", e)
+	}
+
+	// Persist round-trip keeps display name + aliases.
+	_ = c.Close()
+	c2, _ := Open(dir, st)
+	e2 := mustGet(t, c2, "file.app.log")
+	if len(e2.Aliases) != 2 {
+		t.Fatalf("aliases lost on reload: %+v", e2)
+	}
+
+	top, distinct := c2.TopSources(1)
+	if distinct != 2 || len(top) != 1 || top[0].Rows != 2 {
+		t.Fatalf("top: %v %d", top, distinct)
+	}
+	if err := c2.Delete("file.app.log"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c2.Get("file.app.log"); err != ErrNotFound {
+		t.Fatal("deleted entry still present")
+	}
+	if err := c2.Delete("file.app.log"); err != ErrNotFound {
+		t.Fatal("double delete must be ErrNotFound")
+	}
+}
+
+func TestImportOptionsRecordedOnlyWhenGiven(t *testing.T) {
+	st, dir := newStorage(t)
+	c, _ := Open(dir, st)
+	day := time.Date(2026, 8, 30, 10, 0, 0, 0, time.UTC)
+	dr := map[string]int64{"2026-08-30": 1}
+	c.Record(Batch{Source: "a", Rows: 1, DayRows: dr, FirstTS: day, LastTS: day, ImportOptions: &types.IngestSessionOptions{Name: "P1", Source: "a"}})
+	c.Record(Batch{Source: "a", Rows: 1, DayRows: dr, FirstTS: day, LastTS: day})
+	e := mustGet(t, c, "a")
+	if e.ImportOptions == nil || e.ImportOptions.Name != "P1" {
+		t.Fatalf("a batch without options must not clear them: %+v", e.ImportOptions)
+	}
+	c.Record(Batch{Source: "a", Rows: 1, DayRows: dr, FirstTS: day, LastTS: day, ImportOptions: &types.IngestSessionOptions{Name: "P2", Source: "a"}})
+	if e := mustGet(t, c, "a"); e.ImportOptions.Name != "P2" {
+		t.Fatalf("last path-backed import wins: %+v", e.ImportOptions)
+	}
+}

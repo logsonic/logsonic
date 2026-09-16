@@ -285,14 +285,39 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" && req.Pattern == "" {
+	sessionID, startErr := newIngestSession(req)
+	if startErr != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(types.ErrorResponse{
-			Status: "error",
-			Error:  "Pattern name or pattern is required",
-			Code:   "INVALID_PATTERN",
+			Status:  "error",
+			Error:   startErr.message,
+			Code:    startErr.code,
+			Details: startErr.details,
 		})
 		return
+	}
+
+	json.NewEncoder(w).Encode(types.IngestResponse{
+		Status:    "success",
+		SessionID: sessionID,
+	})
+}
+
+// sessionStartError is what newIngestSession reports; every case is the
+// caller's input, so HandleIngestStart maps all of them to 400.
+type sessionStartError struct {
+	code, message, details string
+}
+
+func (e *sessionStartError) Error() string { return e.message + ": " + e.details }
+
+// newIngestSession compiles the pattern and registers a session, the shared
+// half of POST /ingest/start and the server-initiated re-import
+// (POST /sources/{name}/reimport), which replays a catalog entry's
+// recorded options through the same code so the rows land identically.
+func newIngestSession(req types.IngestSessionOptions) (string, *sessionStartError) {
+	if req.Name == "" && req.Pattern == "" {
+		return "", &sessionStartError{code: "INVALID_PATTERN", message: "Pattern name or pattern is required"}
 	}
 
 	dec, err := l2g.NewDecoder(l2g.PatternSpec{
@@ -304,26 +329,12 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		SmartDecode: req.SmartDecoder,
 	})
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(types.ErrorResponse{
-			Status:  "error",
-			Error:   "Failed to add pattern",
-			Code:    "PATTERN_ERROR",
-			Details: err.Error(),
-		})
-		return
+		return "", &sessionStartError{code: "PATTERN_ERROR", message: "Failed to add pattern", details: err.Error()}
 	}
 
 	multilineCfg, err := buildMultilineConfig(req.Multiline)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(types.ErrorResponse{
-			Status:  "error",
-			Error:   "Invalid multiline configuration",
-			Code:    "MULTILINE_CONFIG_ERROR",
-			Details: err.Error(),
-		})
-		return
+		return "", &sessionStartError{code: "MULTILINE_CONFIG_ERROR", message: "Invalid multiline configuration", details: err.Error()}
 	}
 	var multiline *multilineFolder
 	if multilineCfg != nil {
@@ -363,11 +374,21 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		Origin: types.SourceOrigin{Kind: "file"},
 	}
 	sessionMapMutex.Unlock()
+	return sessionID, nil
+}
 
-	json.NewEncoder(w).Encode(types.IngestResponse{
-		Status:    "success",
-		SessionID: sessionID,
-	})
+// endIngestSession is /ingest/end's teardown: drop the session and flush
+// its trailing multiline record. Also run by a path-ingest job that was
+// started by the server (re-import) rather than a client, which would
+// otherwise leave the session to the expiry sweep.
+func (h *Services) endIngestSession(sessionID string) {
+	sessionMapMutex.Lock()
+	session, exists := sessionMap[sessionID]
+	delete(sessionMap, sessionID)
+	sessionMapMutex.Unlock()
+	if exists {
+		h.flushSessionMultiline(session, sessionID)
+	}
 }
 
 // @Summary End log ingest session
@@ -408,14 +429,7 @@ func (h *Services) HandleIngestEnd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.SessionID != "" {
-		sessionMapMutex.Lock()
-		session, exists := sessionMap[req.SessionID]
-		delete(sessionMap, req.SessionID)
-		sessionMapMutex.Unlock()
-
-		if exists {
-			h.flushSessionMultiline(session, req.SessionID)
-		}
+		h.endIngestSession(req.SessionID)
 	}
 
 	json.NewEncoder(w).Encode(types.IngestResponse{

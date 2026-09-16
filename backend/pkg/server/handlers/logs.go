@@ -29,7 +29,7 @@ import (
 // @Param start_date query string false "Start date for log retrieval (RFC3339 format)"
 // @Param end_date query string false "End date for log retrieval (RFC3339 format)"
 // @Param query query string false "Optional search query to filter logs"
-// @Param _src query string false "Optional comma-separated source filter"
+// @Param _src query string false "Optional comma-separated source filter. Stored _src names, or a source's display name / former display name (PATCH /sources/{name}), which resolve to the stored name"
 // @Param fields query string false "Optional comma-separated fields to return"
 // @Param include_distribution query boolean false "Include chart distribution metadata (default: true)"
 // @Param include_facets query boolean false "Include a field/value facet summary of the window (default: false; bounded scan of the newest rows, see facets.computed_over/sampled)"
@@ -213,6 +213,13 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 				sources = append(sources, source)
 			}
 		}
+		// Display names and aliases (PATCH /sources/{name}) resolve to the
+		// stored _src here, so a renamed source is searchable by any name it
+		// has had. Only this parameter resolves; _src:… inside the query
+		// string is a raw field match.
+		if h.Catalog != nil && len(sources) > 0 {
+			sources = h.Catalog.ResolveSources(sources)
+		}
 		if len(sources) == 0 {
 			totalTime := time.Since(startTime)
 			json.NewEncoder(w).Encode(types.LogResponse{
@@ -333,6 +340,10 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 			Details: err.Error(),
 		})
 		return
+	}
+
+	if facets != nil {
+		h.overlaySourceFacet(facets)
 	}
 
 	if offset >= totalCount {

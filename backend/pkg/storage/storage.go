@@ -38,6 +38,8 @@ type StorageInterface interface {
 	BaseDir() string
 	GetDocCount(date string) (uint64, error)
 	DeleteByIds(ids []string) (int, error)
+	DeleteBySource(ctx context.Context, source string, dates []string) (rows int, daysTouched []string, err error)
+	RemoveDay(date string) error
 	PruneOlderThan(maxAge time.Duration) (int, error)
 }
 

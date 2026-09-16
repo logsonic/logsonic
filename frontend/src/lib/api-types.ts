@@ -489,9 +489,14 @@ export interface SourceImport {
 /** One row of the sources catalog (`<storage>/sources.json`), keyed by `name` (the stored `_src`). */
 export interface SourceEntry {
   name: string;
+  /** UI-level rename; the index keeps `name` as `_src`. Every past display name is kept in `aliases`. */
+  display_name?: string;
+  aliases: string[];
   origin: SourceOrigin;
   pattern_name?: string;
   pattern?: string;
+  /** Last path-backed import's options — what a re-import replays. Absent for browser uploads / streams. */
+  import_options?: IngestSessionOptions;
   rows: number;
   bytes_raw: number;
   first_ts?: string;
@@ -507,6 +512,30 @@ export interface SourceEntry {
 /** GET /sources and POST /sources/rebuild. */
 export interface SourcesResponse {
   sources: SourceEntry[];
+}
+
+/** DELETE /sources/{name}. Not undoable. */
+export interface SourceDeleteResponse {
+  status: string;
+  name: string;
+  rows_deleted: number;
+  days_touched: string[];
+  /** Day-indices deleted from disk because the source was the last thing in them. */
+  days_removed: string[];
+}
+
+/** PATCH /sources/{name} body; empty clears the display name. */
+export interface SourceRenameRequest {
+  display_name: string;
+}
+
+/** POST /sources/{name}/reimport (202): old rows gone, a path-ingest job is running. */
+export interface SourceReimportResponse {
+  status: string;
+  job_id: string;
+  session_id: string;
+  path: string;
+  rows_deleted: number;
 }
 
 // Query Parameters

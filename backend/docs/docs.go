@@ -546,7 +546,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Optional comma-separated source filter",
+                        "description": "Optional comma-separated source filter. Stored _src names, or a source's display name / former display name (PATCH /sources/{name}), which resolve to the stored name",
                         "name": "_src",
                         "in": "query"
                     },
@@ -864,6 +864,179 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete every row stored under this source (its exact stored _src) from every day-index holding it, remove day-indices that end up empty, and drop the catalog entry. Not undoable. Refused with 409 while a live tail or a path-ingest job is still writing to the source.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sources"
+                ],
+                "summary": "Delete a source",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Source name (stored _src)",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.SourceDeleteResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Set or clear a display name. The index keeps the stored _src; every display name ever set is kept as an alias, and the _src query parameter on GET /logs resolves aliases to the stored name. The display name must not collide with another source's name, display name or alias.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sources"
+                ],
+                "summary": "Rename a source (display name)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Source name (stored _src)",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New display name; empty clears it",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.SourceRenameRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.SourceEntry"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/sources/{name}/reimport": {
+            "post": {
+                "description": "Requires an origin path that is still readable and the options recorded at its last path import. Validates the path and compiles the pattern first, then deletes the source's rows and starts a path-ingest job (same as POST /ingest/file) that stores them again under the same _src. 409 while a tail or job is writing to the source; 400 when the path is gone or the source was never path-imported.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sources"
+                ],
+                "summary": "Re-import a source from its origin path",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Source name (stored _src)",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/types.SourceReimportResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/types.ErrorResponse"
                         }
@@ -2008,9 +2181,42 @@ const docTemplate = `{
                 }
             }
         },
+        "types.SourceDeleteResponse": {
+            "type": "object",
+            "properties": {
+                "days_removed": {
+                    "description": "DaysRemoved lists day-indices deleted from disk because the source\nwas the last thing in them.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "days_touched": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rows_deleted": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "types.SourceEntry": {
             "type": "object",
             "properties": {
+                "aliases": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "bytes_raw": {
                     "type": "integer"
                 },
@@ -2031,8 +2237,20 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "display_name": {
+                    "description": "DisplayName is a UI-level rename (spec now-10 \"Rename\"); the index\nkeeps Name as _src. Every past DisplayName is kept in Aliases so a\nsearch by any of them resolves to Name (see catalog.ResolveSources).",
+                    "type": "string"
+                },
                 "first_ts": {
                     "type": "string"
+                },
+                "import_options": {
+                    "description": "ImportOptions is the last path-backed ingest session's full options\n(pattern, custom patterns, timestamp config, meta._src …) — what a\nre-import replays so the rows land under the same _src. Only set by\nimports that have an origin path; browser uploads can't be replayed.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.IngestSessionOptions"
+                        }
+                    ]
                 },
                 "imports": {
                     "type": "array",
@@ -2090,6 +2308,34 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "path": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.SourceReimportResponse": {
+            "type": "object",
+            "properties": {
+                "job_id": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "rows_deleted": {
+                    "type": "integer"
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.SourceRenameRequest": {
+            "type": "object",
+            "properties": {
+                "display_name": {
                     "type": "string"
                 }
             }

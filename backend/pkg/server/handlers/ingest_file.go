@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -52,36 +53,50 @@ func (h *Services) HandleIngestFile(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve the member list before responding, so a bad path still fails
 	// with a synchronous 400 rather than surfacing only as a job error.
-	// Open validates absolute / exists / not-a-directory.
-	probe, err := ingestfile.Open(r.Context(), path)
-	if err != nil {
+	canonical, members, compression, openErr := openFileForImport(r.Context(), path, req.IncludeRotated)
+	if openErr != nil {
 		// Every Open failure (not absolute, not found, unreadable, a
 		// directory) is the caller's path problem, so this is 400 either way.
-		writeIngestFileError(w, http.StatusBadRequest, "INVALID_PATH", "Cannot open file", err.Error())
+		writeIngestFileError(w, http.StatusBadRequest, "INVALID_PATH", openErr.message, openErr.details)
 		return
 	}
-	info := probe.Info()
-	probe.Close()
-
-	members := []string{info.CanonicalPath}
-	if req.IncludeRotated {
-		expanded, expandErr := ingestfile.ExpandRotation(info.CanonicalPath)
-		if expandErr != nil {
-			writeIngestFileError(w, http.StatusBadRequest, "INVALID_PATH", "Cannot list rotated files", expandErr.Error())
-			return
-		}
-		members = expanded
-	}
-
-	job := h.startIngestFileJob(req.SessionID, info.CanonicalPath, members, string(info.Compression))
+	job := h.startIngestFileJob(req.SessionID, canonical, members, compression, false)
 
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(types.IngestFileResponse{
 		Status:  "accepted",
 		JobID:   job.id,
-		Path:    info.CanonicalPath,
+		Path:    canonical,
 		Members: members,
 	})
+}
+
+// openError is openFileForImport's report; both cases are path problems.
+type openError struct{ message, details string }
+
+func (e *openError) Error() string { return e.message + ": " + e.details }
+
+// openFileForImport validates a path (absolute, exists, readable, not a
+// directory), canonicalizes it, and lists the members to ingest — the
+// shared half of POST /ingest/file and the re-import route. Open sniffs
+// compression by magic bytes.
+func openFileForImport(ctx context.Context, path string, includeRotated bool) (canonical string, members []string, compression string, err *openError) {
+	probe, openErr := ingestfile.Open(ctx, path)
+	if openErr != nil {
+		return "", nil, "", &openError{message: "Cannot open file", details: openErr.Error()}
+	}
+	info := probe.Info()
+	probe.Close()
+
+	members = []string{info.CanonicalPath}
+	if includeRotated {
+		expanded, expandErr := ingestfile.ExpandRotation(info.CanonicalPath)
+		if expandErr != nil {
+			return "", nil, "", &openError{message: "Cannot list rotated files", details: expandErr.Error()}
+		}
+		members = expanded
+	}
+	return info.CanonicalPath, members, string(info.Compression), nil
 }
 
 func writeIngestFileError(w http.ResponseWriter, status int, code, message, details string) {

@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,7 +38,16 @@ const (
 	dayLayout           = "2006-01-02"
 )
 
-var ErrNotFound = errors.New("source not found")
+var (
+	ErrNotFound = errors.New("source not found")
+	// ErrNameTaken is returned by Rename when the display name collides
+	// with another entry's name, display name or alias — ResolveSources
+	// would otherwise be ambiguous.
+	ErrNameTaken = errors.New("display name already refers to another source")
+	ErrBadName   = errors.New("invalid display name")
+)
+
+const maxDisplayNameLen = 120
 
 // Indexer is what Rebuild needs from storage: the day list and per-day
 // per-source stats. *storage.Storage satisfies it.
@@ -70,6 +80,9 @@ type Batch struct {
 	ImportID    string
 	ImportPath  string
 	ImportJobID string
+	// ImportOptions, when set, becomes the entry's replayable options.
+	// Callers pass it only for path-backed imports.
+	ImportOptions *types.IngestSessionOptions
 }
 
 // Catalog is the in-memory catalog plus its on-disk file.
@@ -226,6 +239,10 @@ func (c *Catalog) Record(b Batch) {
 	if !b.LastTS.IsZero() && (e.LastTS == nil || b.LastTS.After(*e.LastTS)) {
 		t := b.LastTS
 		e.LastTS = &t
+	}
+	if b.ImportOptions != nil {
+		opts := *b.ImportOptions
+		e.ImportOptions = &opts
 	}
 	if b.ImportID != "" {
 		if c.lastImport[b.Source] == b.ImportID && len(e.Imports) > 0 {
@@ -431,6 +448,119 @@ func DaysForDocIDs(ids []string) []string {
 	return out
 }
 
+// Delete removes an entry. The caller has already deleted the rows.
+func (c *Catalog) Delete(name string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.entries[name]; !ok {
+		return ErrNotFound
+	}
+	delete(c.entries, name)
+	delete(c.lastImport, name)
+	c.dirty = true
+	return nil
+}
+
+// Rename sets the entry's display name and remembers it as an alias so
+// searches by any previous display name keep resolving. An empty display
+// name clears it (aliases are kept). The name must not collide with any
+// other entry's name, display name or alias.
+func (c *Catalog) Rename(name, displayName string) (types.SourceEntry, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.entries[name]
+	if !ok {
+		return types.SourceEntry{}, ErrNotFound
+	}
+	if len(displayName) > maxDisplayNameLen || displayName != strings.TrimSpace(displayName) {
+		return types.SourceEntry{}, ErrBadName
+	}
+	if displayName != "" && displayName != name {
+		for other, oe := range c.entries {
+			if other == name {
+				continue
+			}
+			if other == displayName || oe.DisplayName == displayName || contains(oe.Aliases, displayName) {
+				return types.SourceEntry{}, ErrNameTaken
+			}
+		}
+	}
+	e.DisplayName = displayName
+	if displayName != "" && displayName != name && !contains(e.Aliases, displayName) {
+		e.Aliases = append(e.Aliases, displayName)
+	}
+	if displayName == name {
+		e.DisplayName = ""
+	}
+	e.UpdatedAt = c.now()
+	normalize(e)
+	c.dirty = true
+	return cloneEntry(e), nil
+}
+
+// ResolveSources maps requested source names to stored _src names: a name
+// that is some entry's display name or alias becomes that entry's Name;
+// anything else passes through unchanged (it may be a stored name the
+// catalog has not seen, or nothing at all — the search decides). Order is
+// kept, duplicates dropped.
+func (c *Catalog) ResolveSources(names []string) []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, 0, len(names))
+	seen := map[string]bool{}
+	add := func(n string) {
+		if !seen[n] {
+			seen[n] = true
+			out = append(out, n)
+		}
+	}
+	for _, n := range names {
+		if _, ok := c.entries[n]; ok {
+			add(n)
+			continue
+		}
+		resolved := n
+		for stored, e := range c.entries {
+			if e.DisplayName == n || contains(e.Aliases, n) {
+				resolved = stored
+				break
+			}
+		}
+		add(resolved)
+	}
+	return out
+}
+
+// TopSources returns up to n entries by rows descending (ties by name) —
+// the _src facet's values, which are corpus-wide by spec (now-02).
+func (c *Catalog) TopSources(n int) (values []types.SourceRowsEntry, distinct int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	all := make([]types.SourceRowsEntry, 0, len(c.entries))
+	for _, e := range c.entries {
+		all = append(all, types.SourceRowsEntry{Name: e.Name, Rows: e.Rows})
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if all[i].Rows != all[j].Rows {
+			return all[i].Rows > all[j].Rows
+		}
+		return all[i].Name < all[j].Name
+	})
+	if n < len(all) {
+		all = all[:n]
+	}
+	return all, len(c.entries)
+}
+
+func contains(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
 // DaysBefore returns every day the catalog references that is older than
 // cutoff — the scope for a rebuild after a retention prune, which reports
 // only how many indices it removed.
@@ -576,6 +706,9 @@ func normalize(e *types.SourceEntry) {
 	if e.Imports == nil {
 		e.Imports = []types.SourceImport{}
 	}
+	if e.Aliases == nil {
+		e.Aliases = []string{}
+	}
 	if e.Origin.Kind == "" {
 		e.Origin.Kind = "unknown"
 	}
@@ -594,6 +727,12 @@ func cloneEntry(e *types.SourceEntry) types.SourceEntry {
 	}
 	out.Imports = make([]types.SourceImport, len(e.Imports))
 	copy(out.Imports, e.Imports)
+	out.Aliases = make([]string, len(e.Aliases))
+	copy(out.Aliases, e.Aliases)
+	if e.ImportOptions != nil {
+		opts := *e.ImportOptions
+		out.ImportOptions = &opts
+	}
 	if e.FirstTS != nil {
 		t := *e.FirstTS
 		out.FirstTS = &t

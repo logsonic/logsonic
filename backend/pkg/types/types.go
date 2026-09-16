@@ -539,14 +539,24 @@ type SourceImport struct {
 // SourceEntry is one row of the sources catalog (<storage>/sources.json),
 // keyed by Name, which is the stored _src value.
 type SourceEntry struct {
-	Name        string       `json:"name"`
+	Name string `json:"name"`
+	// DisplayName is a UI-level rename (spec now-10 "Rename"); the index
+	// keeps Name as _src. Every past DisplayName is kept in Aliases so a
+	// search by any of them resolves to Name (see catalog.ResolveSources).
+	DisplayName string       `json:"display_name,omitempty"`
+	Aliases     []string     `json:"aliases"`
 	Origin      SourceOrigin `json:"origin"`
 	PatternName string       `json:"pattern_name,omitempty"`
 	Pattern     string       `json:"pattern,omitempty"`
-	Rows        int64        `json:"rows"`
-	BytesRaw    int64        `json:"bytes_raw"`
-	FirstTS     *time.Time   `json:"first_ts,omitempty"`
-	LastTS      *time.Time   `json:"last_ts,omitempty"`
+	// ImportOptions is the last path-backed ingest session's full options
+	// (pattern, custom patterns, timestamp config, meta._src …) — what a
+	// re-import replays so the rows land under the same _src. Only set by
+	// imports that have an origin path; browser uploads can't be replayed.
+	ImportOptions *IngestSessionOptions `json:"import_options,omitempty"`
+	Rows          int64                 `json:"rows"`
+	BytesRaw      int64                 `json:"bytes_raw"`
+	FirstTS       *time.Time            `json:"first_ts,omitempty"`
+	LastTS        *time.Time            `json:"last_ts,omitempty"`
 	// Days lists every day-index holding rows for this source (sorted);
 	// DayRows is the per-day count behind it, which is what lets a rebuild
 	// after a prune or a row delete touch only the affected days.
@@ -560,4 +570,31 @@ type SourceEntry struct {
 // SourcesResponse is GET /sources and POST /sources/rebuild.
 type SourcesResponse struct {
 	Sources []SourceEntry `json:"sources"`
+}
+
+// SourceDeleteResponse is DELETE /sources/{name}.
+type SourceDeleteResponse struct {
+	Status      string   `json:"status"`
+	Name        string   `json:"name"`
+	RowsDeleted int      `json:"rows_deleted"`
+	DaysTouched []string `json:"days_touched"`
+	// DaysRemoved lists day-indices deleted from disk because the source
+	// was the last thing in them.
+	DaysRemoved []string `json:"days_removed"`
+}
+
+// SourceRenameRequest is the PATCH /sources/{name} body.
+type SourceRenameRequest struct {
+	DisplayName string `json:"display_name"`
+}
+
+// SourceReimportResponse is POST /sources/{name}/reimport: the old rows are
+// gone and a path-ingest job (see IngestJob) is running for the same path
+// with the recorded options.
+type SourceReimportResponse struct {
+	Status      string `json:"status"`
+	JobID       string `json:"job_id"`
+	SessionID   string `json:"session_id"`
+	Path        string `json:"path"`
+	RowsDeleted int    `json:"rows_deleted"`
 }
