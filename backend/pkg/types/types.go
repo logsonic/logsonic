@@ -681,3 +681,30 @@ type Watch struct {
 type WatchesResponse struct {
 	Watches []Watch `json:"watches"`
 }
+
+// SampleInfo describes one bundled sample log (GET /samples).
+type SampleInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Lines       int    `json:"lines"`
+	Bytes       int    `json:"bytes"`
+	License     string `json:"license"`
+	Source      string `json:"source"`
+	PatternName string `json:"pattern_name"`
+}
+
+// SamplesResponse is GET /samples.
+type SamplesResponse struct {
+	Samples []SampleInfo `json:"samples"`
+}
+
+// UIFocusRequest is POST /ui/focus: ask the app window to come to the
+// front, optionally at a route (a "#/..." hash).
+type UIFocusRequest struct {
+	Route string `json:"route,omitempty"`
+}
+
+// UIFocusEvent is the "ui_focus" SSE broadcast on /live/events.
+type UIFocusEvent struct {
+	Route string `json:"route,omitempty"`
+}

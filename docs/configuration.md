@@ -56,6 +56,7 @@ None of this requires a token today — the local API stays open to any client t
 ## CLI Subcommands
 
 - `logsonic mcp [--url http://localhost:8080]`: start the MCP stdio server for AI clients
+- `logsonic open [--tail] [--pattern NAME] [--source NAME] [--url URL] [--open] <file>...`: import one or more files into the running LogSonic — starting it if nothing answers at the URL (the macOS app when it is installed, otherwise a headless server on the URL's port) — with the pattern detected from the first lines unless `--pattern` names a saved one; progress goes to stderr, the URL that shows the rows to stdout. `--source` puts every file under one source, in order; `--tail` follows one file instead (as `tail -f` does). Exit codes: 0 ok, 1 failure, 2 usage.
 - `logsonic tail -f /path/to/file [options]`: ask the running LogSonic server to follow a file it can read
 - `cmd | logsonic tail - [options]`: stream lines from stdin into LogSonic
 

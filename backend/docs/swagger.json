@@ -772,6 +772,67 @@
                 }
             }
         },
+        "/samples": {
+            "get": {
+                "description": "The sample files embedded in the binary for a first run, with the source name and pattern each imports under.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "samples"
+                ],
+                "summary": "List bundled sample logs",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.SamplesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/samples/{name}/import": {
+            "post": {
+                "description": "Ingest a bundled sample straight from the binary into the index (nothing is written to disk) under its fixed source name with its pinned pattern. Runs as a path-ingest job: 202 with the job id, progress as \"ingest_progress\" on /live/events, the session ends itself. Importing the same sample twice upserts the same rows.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "samples"
+                ],
+                "summary": "Import a bundled sample",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sample name (GET /samples)",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/types.IngestFileResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/sources": {
             "get": {
                 "description": "Every source in the catalog (\u003cstorage\u003e/sources.json): origin, pattern, rows, bytes, timestamp span, the day-indices holding it, and its import history. Maintained on the ingest write path; see POST /sources/rebuild to reconcile with the indices.",
@@ -1215,6 +1276,36 @@
                         "schema": {
                             "$ref": "#/definitions/types.ErrorResponse"
                         }
+                    }
+                }
+            }
+        },
+        "/ui/focus": {
+            "post": {
+                "description": "Broadcasts a \"ui_focus\" event on /live/events; the macOS shell raises its window and, when a route is given, navigates to it. In browser mode nothing listens — the CLI prints the URL instead.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ui"
+                ],
+                "summary": "Bring the app window to the front",
+                "parameters": [
+                    {
+                        "description": "Optional route (a #/... hash)",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/types.UIFocusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
                     }
                 }
             }
@@ -2468,6 +2559,43 @@
                 }
             }
         },
+        "types.SampleInfo": {
+            "type": "object",
+            "properties": {
+                "bytes": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "license": {
+                    "type": "string"
+                },
+                "lines": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "pattern_name": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.SamplesResponse": {
+            "type": "object",
+            "properties": {
+                "samples": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.SampleInfo"
+                    }
+                }
+            }
+        },
         "types.SavedQuery": {
             "type": "object",
             "properties": {
@@ -2865,6 +2993,14 @@
                             "type": "string"
                         }
                     }
+                }
+            }
+        },
+        "types.UIFocusRequest": {
+            "type": "object",
+            "properties": {
+                "route": {
+                    "type": "string"
                 }
             }
         },

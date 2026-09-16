@@ -57,6 +57,9 @@ type ingestJob struct {
 	// will call /ingest/end, so the runner ends the session at its terminal
 	// state instead of leaving it to the expiry sweep.
 	autoEnd bool
+	// openMember, when set, opens a member instead of ingestfile.Open — a
+	// bundled sample is bytes in the binary, not a path (spec now-12).
+	openMember func(ctx context.Context, member string) (*ingestfile.Reader, error)
 
 	mu         sync.Mutex
 	bytesRead  int64
@@ -201,6 +204,15 @@ func statMembersTotal(members []string) int64 {
 // that lands the instant after this call returns is never racing an unset
 // job.cancel.
 func (h *Services) startIngestFileJob(sessionID, canonicalPath string, members []string, compression string, autoEnd bool) *ingestJob {
+	job, ctx := h.newIngestFileJob(sessionID, canonicalPath, members, compression, autoEnd, "file")
+	go h.runIngestFileJob(ctx, job)
+	return job
+}
+
+// newIngestFileJob registers a job without running it, so a caller can set
+// openMember / bytesTotal before launching (the sample import). originKind
+// is what the catalog records for the session's rows.
+func (h *Services) newIngestFileJob(sessionID, canonicalPath string, members []string, compression string, autoEnd bool, originKind string) (*ingestJob, context.Context) {
 	ctx, cancel := context.WithTimeout(h.ingestJobsCtx, ingestJobWallClock)
 	job := &ingestJob{
 		id:          uuid.New().String(),
@@ -224,14 +236,15 @@ func (h *Services) startIngestFileJob(sessionID, canonicalPath string, members [
 	// the map, so the stamped copy has to be written back under the lock.
 	sessionMapMutex.Lock()
 	if session, ok := sessionMap[sessionID]; ok {
-		session.Origin = types.SourceOrigin{Kind: "file", Path: canonicalPath}
+		session.Origin = types.SourceOrigin{Kind: originKind, Path: canonicalPath}
+		if originKind != "file" {
+			session.Origin.Path = ""
+		}
 		session.JobID = job.id
 		sessionMap[sessionID] = session
 	}
 	sessionMapMutex.Unlock()
-
-	go h.runIngestFileJob(ctx, job)
-	return job
+	return job, ctx
 }
 
 // runIngestFileJob reads every member in order, storing lines through the
@@ -258,7 +271,11 @@ func (h *Services) runIngestFileJob(ctx context.Context, job *ingestJob) {
 
 memberLoop:
 	for _, member := range job.members {
-		reader, openErr := ingestfile.Open(ctx, member)
+		open := ingestfile.Open
+		if job.openMember != nil {
+			open = job.openMember
+		}
+		reader, openErr := open(ctx, member)
 		if openErr != nil {
 			finalErr = fmt.Errorf("cannot open %s: %w", member, openErr)
 			break

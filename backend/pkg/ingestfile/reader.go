@@ -80,14 +80,15 @@ func (c *countingReader) Read(p []byte) (int, error) {
 
 // Reader iterates the non-empty physical lines of a file.
 type Reader struct {
-	ctx     context.Context
-	info    Info
-	file    *os.File
-	counter *countingReader
-	closer  io.Closer // decompressor, when any
-	buf     *bufio.Reader
-	line    int // physical lines consumed, 1-based for error messages
-	first   bool
+	ctx       context.Context
+	info      Info
+	file      *os.File  // nil for OpenReader
+	srcCloser io.Closer // OpenReader's source, when it can be closed
+	counter   *countingReader
+	closer    io.Closer // decompressor, when any
+	buf       *bufio.Reader
+	line      int // physical lines consumed, 1-based for error messages
+	first     bool
 }
 
 // Open validates path (absolute, exists, not a directory), resolves symlinks,
@@ -139,6 +140,43 @@ func Open(ctx context.Context, path string) (*Reader, error) {
 		r.buf = bufio.NewReaderSize(zr, 256*1024)
 	default:
 		r.buf = head
+	}
+	return r, nil
+}
+
+// OpenReader wraps an in-memory or streamed source the same way Open wraps
+// a file — compression sniffed, the same line iterator and bounds — for
+// bytes that never live on the user's disk (the bundled samples, spec
+// now-12). name is what Info reports as the path; size is the byte length
+// when known (progress), else 0.
+func OpenReader(ctx context.Context, src io.Reader, name string, size int64) (*Reader, error) {
+	counter := &countingReader{r: src}
+	head := bufio.NewReaderSize(counter, 64*1024)
+	magic, _ := head.Peek(4)
+	r := &Reader{ctx: ctx, counter: counter, first: true}
+	r.info = Info{Path: name, CanonicalPath: name, SizeBytes: size}
+	switch {
+	case bytes.HasPrefix(magic, gzipMagic):
+		gz, gzErr := gzip.NewReader(head)
+		if gzErr != nil {
+			return nil, fmt.Errorf("gzip: %w", gzErr)
+		}
+		r.info.Compression = Gzip
+		r.closer = gz
+		r.buf = bufio.NewReaderSize(gz, 256*1024)
+	case bytes.HasPrefix(magic, zstdMagic):
+		zr, zErr := zstd.NewReader(head)
+		if zErr != nil {
+			return nil, fmt.Errorf("zstd: %w", zErr)
+		}
+		r.info.Compression = Zstd
+		r.closer = zr.IOReadCloser()
+		r.buf = bufio.NewReaderSize(zr, 256*1024)
+	default:
+		r.buf = head
+	}
+	if c, ok := src.(io.Closer); ok {
+		r.srcCloser = c
 	}
 	return r, nil
 }
@@ -211,6 +249,12 @@ func (r *Reader) readLine() ([]byte, error) {
 func (r *Reader) Close() error {
 	if r.closer != nil {
 		_ = r.closer.Close()
+	}
+	if r.file == nil {
+		if r.srcCloser != nil {
+			return r.srcCloser.Close()
+		}
+		return nil
 	}
 	return r.file.Close()
 }

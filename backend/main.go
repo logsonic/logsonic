@@ -58,6 +58,9 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "open" {
+		os.Exit(runOpenCommand(os.Args[2:]))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "tail" {
 		os.Exit(runTailCommand(os.Args[2:]))
 	}
@@ -243,6 +246,7 @@ func printUsage() {
 	fmt.Println("\nUsage:")
 	fmt.Println("  logsonic [options]")
 	fmt.Println("  logsonic mcp [--url http://localhost:8080]   Start the MCP stdio server for AI clients")
+	fmt.Println("  logsonic open [--tail] <file>...             Import files into the running LogSonic (starts it if needed) and print the URL")
 	fmt.Println("  logsonic tail -f /path/to/file [options]     Stream appended file lines into LogSonic")
 	fmt.Println("  cmd | logsonic tail - [options]              Stream stdin into LogSonic")
 	fmt.Println("\nOptions:")

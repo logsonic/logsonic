@@ -91,6 +91,7 @@ For Linux, Windows, Docker, source builds, storage locations, and the macOS app 
 - Saved local workspaces for recurring investigations.
 - Color rules, event histogram, source filters, and dark/light themes.
 - Local file-based storage with retention controls.
+- `logsonic open app.log` from any terminal imports a file into the running app (starting it if needed) and prints the link to it.
 
 ## Documentation
 

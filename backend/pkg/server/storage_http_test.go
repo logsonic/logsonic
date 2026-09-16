@@ -180,12 +180,21 @@ func TestDeleteStorageDay(t *testing.T) {
 	f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
 	fmt.Fprintf(f, "%sT10:00:00Z INFO api one\n", today)
 	f.Close()
+	// Wait for the row to be catalogued, not just searchable: Store commits
+	// before Record runs, and the in-use check reads the catalog's day map.
 	deadline := time.Now().Add(5 * time.Second)
-	for totalFor(t, ts, "tail.log") == 0 && time.Now().Before(deadline) {
+	for time.Now().Before(deadline) {
+		var e types.SourceEntry
+		if do(t, ts, http.MethodGet, "/api/v1/sources/tail.log", nil, &e) == 200 && e.DayRows[today] > 0 {
+			break
+		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	errResp = types.ErrorResponse{}
 	if code := do(t, ts, http.MethodDelete, "/api/v1/storage/days/"+today, nil, &errResp); code != 409 || errResp.Code != "DAY_IN_USE" {
-		t.Fatalf("delete today's day during a tail: %d %+v", code, errResp)
+		var srcs types.SourcesResponse
+		do(t, ts, http.MethodGet, "/api/v1/sources", nil, &srcs)
+		t.Fatalf("delete today's day during a tail: %d %+v\n  live kinds: %v\n  catalog: %+v", code, errResp, srv.services.Live.ActiveSourceKinds(), srcs.Sources)
 	}
 	do(t, ts, http.MethodDelete, "/api/v1/live/sources/"+live.SourceID, nil, nil)
 	if code := do(t, ts, http.MethodDelete, "/api/v1/storage/days/"+today, nil, &resp); code != 200 || resp.RowsDeleted != 1 {

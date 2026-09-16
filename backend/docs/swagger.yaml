@@ -603,6 +603,30 @@ definitions:
       size_bytes:
         type: integer
     type: object
+  types.SampleInfo:
+    properties:
+      bytes:
+        type: integer
+      description:
+        type: string
+      license:
+        type: string
+      lines:
+        type: integer
+      name:
+        type: string
+      pattern_name:
+        type: string
+      source:
+        type: string
+    type: object
+  types.SamplesResponse:
+    properties:
+      samples:
+        items:
+          $ref: '#/definitions/types.SampleInfo'
+        type: array
+    type: object
   types.SavedQuery:
     properties:
       created_at:
@@ -892,6 +916,11 @@ definitions:
           os_type:
             type: string
         type: object
+    type: object
+  types.UIFocusRequest:
+    properties:
+      route:
+        type: string
     type: object
   types.Watch:
     properties:
@@ -1593,6 +1622,51 @@ paths:
       summary: Ping the API
       tags:
       - System
+  /samples:
+    get:
+      description: The sample files embedded in the binary for a first run, with the
+        source name and pattern each imports under.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.SamplesResponse'
+      summary: List bundled sample logs
+      tags:
+      - samples
+  /samples/{name}/import:
+    post:
+      description: 'Ingest a bundled sample straight from the binary into the index
+        (nothing is written to disk) under its fixed source name with its pinned pattern.
+        Runs as a path-ingest job: 202 with the job id, progress as "ingest_progress"
+        on /live/events, the session ends itself. Importing the same sample twice
+        upserts the same rows.'
+      parameters:
+      - description: Sample name (GET /samples)
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/types.IngestFileResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Import a bundled sample
+      tags:
+      - samples
   /sources:
     get:
       description: 'Every source in the catalog (<storage>/sources.json): origin,
@@ -1923,6 +1997,27 @@ paths:
       summary: Preview timestamp resolution
       tags:
       - parsing
+  /ui/focus:
+    post:
+      consumes:
+      - application/json
+      description: Broadcasts a "ui_focus" event on /live/events; the macOS shell
+        raises its window and, when a route is given, navigates to it. In browser
+        mode nothing listens — the CLI prints the URL instead.
+      parameters:
+      - description: 'Optional route (a #/... hash)'
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/types.UIFocusRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+      summary: Bring the app window to the front
+      tags:
+      - ui
   /watches:
     get:
       description: Every folder watch with its live per-file snapshot (state pending

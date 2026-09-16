@@ -374,6 +374,9 @@ func NewServer(cfg Config) (*Server, error) {
 				r.Put("/", h.HandlePutStorage)
 				r.Delete("/days/{date}", h.HandleDeleteStorageDay)
 			})
+			r.Get("/samples", h.HandleListSamples)
+			r.Post("/samples/{name}/import", h.HandleImportSample)
+			r.Post("/ui/focus", h.HandleUIFocus)
 			r.Route("/watches", func(r chi.Router) {
 				r.Get("/", h.HandleListWatches)
 				r.Post("/", h.HandleCreateWatch)
@@ -497,6 +500,29 @@ func (s *Server) Start() error {
 // tried (scanning up to portScanRange ports); otherwise a busy port is fatal.
 // The returned port may differ from the configured one, so callers use it (not
 // config.Port) for the URL.
+// Handler exposes the router so an in-process test (the CLI's) can serve it
+// on an httptest listener without Start's signal handling. Background
+// services (StartLive, StartWatches, …) are Start's job and are not run.
+func (s *Server) Handler() http.Handler { return s.router }
+
+// StartBackground runs the background services Start would run — live tail,
+// folder watches, path-ingest jobs, retention — on ctx, for a caller that
+// serves the router itself (tests). Cancel ctx to stop them.
+func (s *Server) StartBackground(ctx context.Context) {
+	handlers.StartSessionCleanup(ctx, s.services)
+	s.services.StartLive(ctx)
+	s.services.StartWatches(ctx)
+	s.services.StartIngestJobs(ctx)
+	handlers.StartIngestJobCleanup(ctx)
+	if s.services.Catalog != nil {
+		s.services.Catalog.Start(ctx)
+	}
+}
+
+// Close flushes and closes storage and the side files (what Start does
+// after shutdown).
+func (s *Server) Close() error { return s.services.CloseStorage() }
+
 func (s *Server) listen() (net.Listener, int, error) {
 	const portScanRange = 100
 

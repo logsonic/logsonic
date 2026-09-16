@@ -616,6 +616,35 @@ export interface WatchesResponse {
   watches: Watch[];
 }
 
+// --- Bundled samples and UI focus (mirrors backend pkg/types; spec now-12) ---
+
+/** One sample log embedded in the binary. */
+export interface SampleInfo {
+  name: string;
+  description: string;
+  lines: number;
+  bytes: number;
+  license: string;
+  /** The `_src` it imports under. */
+  source: string;
+  pattern_name: string;
+}
+
+/** GET /samples. */
+export interface SamplesResponse {
+  samples: SampleInfo[];
+}
+
+/** POST /ui/focus body: bring the app window to the front, optionally at a `#/...` route. */
+export interface UIFocusRequest {
+  route?: string;
+}
+
+/** The `ui_focus` SSE event on /live/events. */
+export interface UIFocusEvent {
+  route?: string;
+}
+
 // Query Parameters
 export interface LogQueryParams {
   limit?: number;

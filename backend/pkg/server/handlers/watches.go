@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	l2g "github.com/logsonic/log2grok/pkg/log2grok"
 
@@ -163,8 +164,11 @@ func resolveSavedPattern(opts *types.IngestSessionOptions) error {
 	if opts.Pattern != "" || opts.Name == "" {
 		return nil
 	}
+	// Discovery labels library hits "library:<name>" (the wizard shows and
+	// records that label); accept it as the library name.
+	name := strings.TrimPrefix(opts.Name, "library:")
 	for _, kp := range l2g.ListLibrary() {
-		if kp.Name == opts.Name {
+		if kp.Name == name {
 			opts.Pattern = kp.Pattern
 			if opts.CustomPatterns == nil {
 				opts.CustomPatterns = kp.CustomPatterns

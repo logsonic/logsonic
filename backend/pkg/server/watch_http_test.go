@@ -270,15 +270,17 @@ func TestW8_DeleteStopsGoroutinesKeepsData(t *testing.T) {
 	if code := do(t, ts, http.MethodDelete, "/api/v1/watches/"+w.ID, nil, nil); code != http.StatusNoContent {
 		t.Fatalf("delete: %d", code)
 	}
-	// Leak check by stack frame: no watchLoop goroutine and no follower
-	// (followFile) goroutine may survive the delete. HTTP keep-alive and
-	// storage goroutines make an absolute count meaningless.
-	until(t, "watch and follower goroutines exit", func() bool {
+	// Leak check: no watchLoop goroutine may survive the delete (by stack
+	// frame — HTTP keep-alive and storage goroutines make an absolute count
+	// meaningless), and this server's tail manager must own no follower
+	// (other tests' tails may still be winding down in the same process).
+	until(t, "watch goroutines exit", func() bool {
 		buf := make([]byte, 1<<20)
 		n := runtime.Stack(buf, true)
 		stacks := string(buf[:n])
-		return !strings.Contains(stacks, "watch.(*watchLoop).run") && !strings.Contains(stacks, "watch.(*watchLoop).startFile") && !strings.Contains(stacks, "(*TailSource).followFile")
+		return !strings.Contains(stacks, "watch.(*watchLoop).run") && !strings.Contains(stacks, "watch.(*watchLoop).startFile")
 	})
+	until(t, "followers released", func() bool { return len(srv.services.Live.ActiveSourceIDs()) == 0 })
 	var list types.WatchesResponse
 	do(t, ts, http.MethodGet, "/api/v1/watches", nil, &list)
 	if len(list.Watches) != 0 {
@@ -291,9 +293,6 @@ func TestW8_DeleteStopsGoroutinesKeepsData(t *testing.T) {
 	}
 	if n := totalFor(t, ts, "watch.x.f0.log"); n != 4 {
 		t.Fatalf("indexed data must stay: %d", n)
-	}
-	if len(srv.services.Live.ActiveSourceIDs()) != 0 {
-		t.Fatal("followers still registered as live sources")
 	}
 }
 
