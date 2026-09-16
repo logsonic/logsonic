@@ -9,6 +9,8 @@ lerna-debug.log*
 node_modules/**
 dist
 dist-ssr
+# tsc -b (project-references build mode) writes these next to each tsconfig
+*.tsbuildinfo
 *.local
 
 # Editor directories and files
