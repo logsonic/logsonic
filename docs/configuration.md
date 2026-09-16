@@ -10,7 +10,7 @@ LogSonic can be configured with command-line flags or environment variables.
 - `-open`: open the web UI in your browser once the server starts
 - `-browser`: same as `-open` for the CLI; does not launch Logsonic.app
 - `-auto-port`: if the port is busy, bind the next free port instead of failing; enabled by default, pass `-auto-port=false` to fail instead
-- `-retention-days N`: delete indexed logs older than N days; `0` keeps everything
+- `-retention-days N`: delete indexed logs older than N days; `0` keeps everything. This is the *default*: a value saved from the UI (or `PUT /api/v1/storage`) into `<storage>/config.json` takes precedence — see [Retention precedence](#retention-precedence)
 - `-allowed-hosts`: comma-separated extra Host header values to accept, on top of `localhost`/`127.0.0.1`/`::1`; only consulted when `-host` is not loopback (see [Security model](#security-model) below)
 - `-help`: show usage information
 
@@ -86,3 +86,15 @@ logsonic -host 0.0.0.0 -allowed-hosts myserver.local
 # Environment variables
 HOST=0.0.0.0 PORT=9000 STORAGE_PATH=/var/logs/storage logsonic
 ```
+
+## Retention precedence
+
+Retention can be set in three places. The first one that is set wins:
+
+1. **`<storage>/config.json`** — `retention_days`, written by the Storage settings page or `PUT /api/v1/storage {"retention_days": N}`. `0` here means *keep everything* even if the flag says otherwise; `null` (or deleting the key) clears the override.
+2. **`-retention-days N`** on the command line.
+3. **`RETENTION_DAYS=N`** in the environment.
+
+`GET /api/v1/storage` reports the value in effect and its source (`config`, `flag`, or `none`), plus the flag/env default the override falls back to. The server logs which source won at startup, e.g. `retention: 7 day(s) from config.json, overriding -retention-days 30`. The sweep runs at startup, once a day, and immediately after a `PUT`. `DELETE /api/v1/storage/days/{date}` removes one day regardless of retention.
+
+`config.json` is shared with other server-side settings; keys this version doesn't know are preserved when retention is saved.

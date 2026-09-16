@@ -138,6 +138,8 @@ func (m *mockStorage) DeleteBySource(ctx context.Context, source string, dates [
 
 func (m *mockStorage) RemoveDay(date string) error { return nil }
 
+func (m *mockStorage) IndexDirSize(date string) (int64, error) { return 0, nil }
+
 func (m *mockStorage) PruneOlderThan(maxAge time.Duration) (int, error) { return 0, nil }
 
 // ---------------------------------------------------------------------------

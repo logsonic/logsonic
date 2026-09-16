@@ -538,6 +538,43 @@ export interface SourceReimportResponse {
   rows_deleted: number;
 }
 
+// --- Storage settings (mirrors backend pkg/types Storage*; spec now-10) ---
+
+/** One row of the per-day table on GET /storage. */
+export interface StorageDay {
+  date: string;
+  rows: number;
+  bytes: number;
+}
+
+/** GET /storage and PUT /storage. */
+export interface StorageResponse {
+  status: string;
+  /** Retention in effect; 0 = keep everything. */
+  retention_days: number;
+  /** Where it came from: `config.json` (set from the UI), the CLI flag/env, or nothing. */
+  retention_source: 'config' | 'flag' | 'none';
+  /** The flag/env value clearing the override falls back to. */
+  retention_default: number;
+  days: StorageDay[];
+  /** Sum of the day-index directories only (not the whole storage dir). */
+  total_bytes: number;
+  path: string;
+  config_path: string;
+}
+
+/** PUT /storage body. `null` clears the override; 0 keeps everything. */
+export interface StorageUpdateRequest {
+  retention_days: number | null;
+}
+
+/** DELETE /storage/days/{date}. Not undoable. */
+export interface StorageDayDeleteResponse {
+  status: string;
+  date: string;
+  rows_deleted: number;
+}
+
 // Query Parameters
 export interface LogQueryParams {
   limit?: number;

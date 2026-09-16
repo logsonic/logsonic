@@ -453,3 +453,47 @@ func TestImportOptionsRecordedOnlyWhenGiven(t *testing.T) {
 		t.Fatalf("last path-backed import wins: %+v", e.ImportOptions)
 	}
 }
+
+// An unclean exit (the marker is still there at Open) forces a rebuild
+// even though sources.json is valid; a clean Close removes the marker.
+func TestUncleanExitMarkerForcesRebuild(t *testing.T) {
+	st, dir := newStorage(t)
+	c, _ := Open(dir, st)
+	marker := filepath.Join(dir, fileName+markerSuffix)
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("marker must exist while open: %v", err)
+	}
+	day := time.Date(2026, 8, 30, 10, 0, 0, 0, time.UTC)
+	store(t, st, c, "a.log", rows("a.log", day, 5, time.Second), "s1")
+	if err := c.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a crash: more rows land in the index after the last flush,
+	// and the process dies without Close (marker stays).
+	if err := st.Store(rows("a.log", day.Add(time.Hour), 5, time.Second), "a.log"); err != nil {
+		t.Fatal(err)
+	}
+	c2, _ := Open(dir, st)
+	if !c2.RebuiltAtOpen() {
+		t.Fatal("marker present → rebuild expected")
+	}
+	if e := mustGet(t, c2, "a.log"); e.Rows != 10 {
+		t.Fatalf("rebuild must see the unrecorded rows: %d", e.Rows)
+	}
+	// The rebuild result is persisted immediately, not left to the ticker.
+	b, _ := os.ReadFile(filepath.Join(dir, fileName))
+	if !strings.Contains(string(b), `"rows": 10`) {
+		t.Fatalf("rebuilt catalog not saved at Open: %s", b)
+	}
+	if err := c2.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("clean Close must remove the marker")
+	}
+	c3, _ := Open(dir, st)
+	if c3.RebuiltAtOpen() {
+		t.Fatal("after a clean Close no rebuild should run")
+	}
+	_ = c3.Close()
+}

@@ -598,3 +598,44 @@ type SourceReimportResponse struct {
 	Path        string `json:"path"`
 	RowsDeleted int    `json:"rows_deleted"`
 }
+
+// StorageDay is one row of the per-day table on GET /storage.
+type StorageDay struct {
+	Date  string `json:"date"`
+	Rows  int64  `json:"rows"`
+	Bytes int64  `json:"bytes"`
+}
+
+// StorageResponse is GET /storage and PUT /storage. RetentionDays is the
+// value in effect; RetentionSource says where it came from — "config"
+// (<storage>/config.json, set from the UI), "flag" (-retention-days or
+// RETENTION_DAYS), or "none" (nothing set; 0 = keep everything).
+// RetentionDefault is what the flag/env provides, i.e. what clearing the
+// override falls back to.
+type StorageResponse struct {
+	Status           string       `json:"status"`
+	RetentionDays    int          `json:"retention_days"`
+	RetentionSource  string       `json:"retention_source"`
+	RetentionDefault int          `json:"retention_default"`
+	Days             []StorageDay `json:"days"`
+	// TotalBytes is the sum of the day-index directories only — not the
+	// whole storage dir (which /info reports and which also holds
+	// sources.json, workspaces.json and the pattern library).
+	TotalBytes int64  `json:"total_bytes"`
+	Path       string `json:"path"`
+	ConfigPath string `json:"config_path"`
+}
+
+// StorageUpdateRequest is the PUT /storage body. A null retention_days
+// clears the override so the flag/env default applies again; 0 keeps
+// everything.
+type StorageUpdateRequest struct {
+	RetentionDays *int `json:"retention_days"`
+}
+
+// StorageDayDeleteResponse is DELETE /storage/days/{date}.
+type StorageDayDeleteResponse struct {
+	Status      string `json:"status"`
+	Date        string `json:"date"`
+	RowsDeleted int64  `json:"rows_deleted"`
+}

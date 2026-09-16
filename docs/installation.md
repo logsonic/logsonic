@@ -78,7 +78,7 @@ LogSonic indexes ingested logs into a per-user data directory. Override it with 
 | Linux | `$XDG_DATA_HOME/logsonic` or `~/.local/share/logsonic` |
 | Windows | `%APPDATA%\Logsonic` |
 
-To keep storage bounded, run with `-retention-days N` or `RETENTION_DAYS=N`:
+To keep storage bounded, set retention days in the app's Storage settings (saved to `<storage>/config.json`, which overrides the flag), or run with `-retention-days N` or `RETENTION_DAYS=N` — see [Retention precedence](configuration.md#retention-precedence):
 
 ```bash
 logsonic -retention-days 30

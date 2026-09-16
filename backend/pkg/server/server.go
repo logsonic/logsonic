@@ -24,6 +24,7 @@ import (
 	"logsonic/pkg/server/handlers"
 	"logsonic/pkg/types"
 
+	"logsonic/pkg/appconfig"
 	"logsonic/pkg/static"
 	"logsonic/pkg/storage"
 
@@ -181,6 +182,13 @@ func NewServer(cfg Config) (*Server, error) {
 	// Initialize handler
 	h := handlers.NewHandler(store, cfg.StoragePath)
 	h.Build = handlers.BuildInfo{Version: cfg.Version, Commit: cfg.Commit, BuildDate: cfg.BuildDate}
+	// Retention: <storage>/config.json (set from the UI) overrides the CLI
+	// flag / env value main.go resolved into cfg.RetentionDays.
+	appCfg, err := appconfig.Open(cfg.StoragePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "appconfig: %v; retention settings cannot be saved this run\n", err)
+	}
+	handlers.NewRetentionManager(h, appCfg, cfg.RetentionDays)
 	srv := &Server{
 		services: h,
 		store:    store,
@@ -350,6 +358,11 @@ func NewServer(cfg Config) (*Server, error) {
 				r.Patch("/{name}", h.HandleRenameSource)
 				r.Post("/{name}/reimport", h.HandleReimportSource)
 			})
+			r.Route("/storage", func(r chi.Router) {
+				r.Get("/", h.HandleGetStorage)
+				r.Put("/", h.HandlePutStorage)
+				r.Delete("/days/{date}", h.HandleDeleteStorageDay)
+			})
 
 			// Live-tail controls are short-lived JSON calls and can use the
 			// normal API timeout/throttle budget.
@@ -416,7 +429,9 @@ func (s *Server) Start() error {
 	}
 
 	// Apply retention now and once a day; cancelled on shutdown.
-	s.startRetention(cleanupCtx)
+	if s.services.Retention != nil {
+		s.services.Retention.Start(cleanupCtx)
+	}
 
 	// Open the web UI once the listener is up.
 	if s.config.OpenBrowser {
@@ -483,49 +498,6 @@ func (s *Server) listen() (net.Listener, int, error) {
 		// Port busy and AutoPort is on — try the next one.
 	}
 	return nil, 0, fmt.Errorf("no free port found in range %d-%d", basePort, basePort+portScanRange-1)
-}
-
-// startRetention deletes indices older than RetentionDays now, then once a day
-// until ctx is cancelled. A non-positive RetentionDays disables it entirely.
-func (s *Server) startRetention(ctx context.Context) {
-	if s.config.RetentionDays <= 0 {
-		return
-	}
-	maxAge := time.Duration(s.config.RetentionDays) * 24 * time.Hour
-
-	prune := func() {
-		cutoff := time.Now().Add(-maxAge)
-		removed, err := s.store.PruneOlderThan(maxAge)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "retention: prune failed: %v\n", err)
-			return
-		}
-		if removed > 0 {
-			fmt.Printf("retention: removed %d index(es) older than %d day(s)\n", removed, s.config.RetentionDays)
-			// Prune bypasses the catalog's write path; reconcile just the
-			// days that could have gone.
-			if c := s.services.Catalog; c != nil {
-				if err := c.Rebuild(c.DaysBefore(cutoff)...); err != nil {
-					fmt.Fprintf(os.Stderr, "retention: catalog rebuild failed: %v\n", err)
-				}
-			}
-		}
-	}
-
-	prune() // sweep once at startup
-
-	go func() {
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				prune()
-			}
-		}
-	}()
 }
 
 // parsePort turns a ":8080" or "8080" config value into an integer.

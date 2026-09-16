@@ -40,6 +40,7 @@ type StorageInterface interface {
 	DeleteByIds(ids []string) (int, error)
 	DeleteBySource(ctx context.Context, source string, dates []string) (rows int, daysTouched []string, err error)
 	RemoveDay(date string) error
+	IndexDirSize(date string) (int64, error)
 	PruneOlderThan(maxAge time.Duration) (int, error)
 }
 
@@ -404,6 +405,26 @@ func (s *Storage) List() ([]string, error) {
 	}
 
 	return dates, nil
+}
+
+// IndexDirSize is the on-disk size of one day-index directory (the sum of
+// its files), for the per-day table on GET /storage. A missing day is 0.
+func (s *Storage) IndexDirSize(date string) (int64, error) {
+	var total int64
+	root := filepath.Join(s.baseDir, "logs-"+date+".bleve")
+	err := filepath.Walk(root, func(_ string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			if os.IsNotExist(walkErr) {
+				return nil
+			}
+			return walkErr
+		}
+		if !info.IsDir() {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total, err
 }
 
 // BaseDir returns the base directory for storage

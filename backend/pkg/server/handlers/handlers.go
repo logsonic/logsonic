@@ -34,6 +34,9 @@ type Services struct {
 	// Every write path reports its batch here via recordStored; /info and
 	// the /sources routes read it instead of scanning the indices.
 	Catalog *catalog.Catalog
+	// Retention is set by the server (it needs the CLI default); nil in
+	// handler unit tests, which the storage routes treat as unavailable.
+	Retention *RetentionManager
 
 	storageInfoCache any
 	infoCacheMutex   sync.RWMutex

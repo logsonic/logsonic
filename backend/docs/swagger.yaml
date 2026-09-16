@@ -750,6 +750,54 @@ definitions:
           $ref: '#/definitions/types.SourceEntry'
         type: array
     type: object
+  types.StorageDay:
+    properties:
+      bytes:
+        type: integer
+      date:
+        type: string
+      rows:
+        type: integer
+    type: object
+  types.StorageDayDeleteResponse:
+    properties:
+      date:
+        type: string
+      rows_deleted:
+        type: integer
+      status:
+        type: string
+    type: object
+  types.StorageResponse:
+    properties:
+      config_path:
+        type: string
+      days:
+        items:
+          $ref: '#/definitions/types.StorageDay'
+        type: array
+      path:
+        type: string
+      retention_days:
+        type: integer
+      retention_default:
+        type: integer
+      retention_source:
+        type: string
+      status:
+        type: string
+      total_bytes:
+        description: |-
+          TotalBytes is the sum of the day-index directories only — not the
+          whole storage dir (which /info reports and which also holds
+          sources.json, workspaces.json and the pattern library).
+        type: integer
+    type: object
+  types.StorageUpdateRequest:
+    properties:
+      retention_days:
+        type: integer
+    type: object
   types.SuggestResponse:
     properties:
       combined_coverage:
@@ -1682,6 +1730,105 @@ paths:
       summary: Rebuild the sources catalog from the indices
       tags:
       - sources
+  /storage:
+    get:
+      description: 'Retention in effect (with its source: config.json, the CLI flag/env,
+        or none) and a per-day table of row counts and on-disk bytes. total_bytes
+        sums the day-index directories only; /info''s storage_size_bytes walks the
+        whole storage dir.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.StorageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Storage overview and retention setting
+      tags:
+      - storage
+    put:
+      consumes:
+      - application/json
+      description: Writes retention_days to <storage>/config.json, which takes precedence
+        over -retention-days / RETENTION_DAYS; null clears the override (the flag/env
+        default applies again); 0 keeps everything. The prune runs synchronously before
+        the response, so the first PUT on a long-lived store may take a moment while
+        old day-indices are removed.
+      parameters:
+      - description: 'retention_days: 0–3650, or null to clear'
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.StorageUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.StorageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Set the retention override
+      tags:
+      - storage
+  /storage/days/{date}:
+    delete:
+      description: Remove the day-index for a date (every source's rows for that day)
+        from disk and reconcile the catalog. Not undoable. 409 while a live tail or
+        a running path-ingest job is storing rows for a source that has rows on that
+        day.
+      parameters:
+      - description: Day, YYYY-MM-DD
+        in: path
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.StorageDayDeleteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Delete one day of logs
+      tags:
+      - storage
   /timestamp/preview:
     post:
       consumes:

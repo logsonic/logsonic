@@ -1044,6 +1044,141 @@
                 }
             }
         },
+        "/storage": {
+            "get": {
+                "description": "Retention in effect (with its source: config.json, the CLI flag/env, or none) and a per-day table of row counts and on-disk bytes. total_bytes sums the day-index directories only; /info's storage_size_bytes walks the whole storage dir.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "storage"
+                ],
+                "summary": "Storage overview and retention setting",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.StorageResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Writes retention_days to \u003cstorage\u003e/config.json, which takes precedence over -retention-days / RETENTION_DAYS; null clears the override (the flag/env default applies again); 0 keeps everything. The prune runs synchronously before the response, so the first PUT on a long-lived store may take a moment while old day-indices are removed.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "storage"
+                ],
+                "summary": "Set the retention override",
+                "parameters": [
+                    {
+                        "description": "retention_days: 0–3650, or null to clear",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.StorageUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.StorageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/storage/days/{date}": {
+            "delete": {
+                "description": "Remove the day-index for a date (every source's rows for that day) from disk and reconcile the catalog. Not undoable. 409 while a live tail or a running path-ingest job is storing rows for a source that has rows on that day.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "storage"
+                ],
+                "summary": "Delete one day of logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Day, YYYY-MM-DD",
+                        "name": "date",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.StorageDayDeleteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/timestamp/preview": {
             "post": {
                 "description": "Re-renders the timestamp inference and preview rows for\na sample of log lines using the supplied Resolution.\nUsed by the import wizard's timestamp panel to show a\nlive preview as the user changes knobs (anchor, year\nstrategy, timezone, force mode, rollover) without\nre-running the full /parse path.",
@@ -2353,6 +2488,75 @@
                     "items": {
                         "$ref": "#/definitions/types.SourceEntry"
                     }
+                }
+            }
+        },
+        "types.StorageDay": {
+            "type": "object",
+            "properties": {
+                "bytes": {
+                    "type": "integer"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "rows": {
+                    "type": "integer"
+                }
+            }
+        },
+        "types.StorageDayDeleteResponse": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "rows_deleted": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.StorageResponse": {
+            "type": "object",
+            "properties": {
+                "config_path": {
+                    "type": "string"
+                },
+                "days": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.StorageDay"
+                    }
+                },
+                "path": {
+                    "type": "string"
+                },
+                "retention_days": {
+                    "type": "integer"
+                },
+                "retention_default": {
+                    "type": "integer"
+                },
+                "retention_source": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "total_bytes": {
+                    "description": "TotalBytes is the sum of the day-index directories only — not the\nwhole storage dir (which /info reports and which also holds\nsources.json, workspaces.json and the pattern library).",
+                    "type": "integer"
+                }
+            }
+        },
+        "types.StorageUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "retention_days": {
+                    "type": "integer"
                 }
             }
         },

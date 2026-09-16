@@ -26,7 +26,13 @@ import (
 )
 
 const (
-	fileName      = "sources.json"
+	fileName = "sources.json"
+	// markerSuffix names the unclean-exit marker: <sources.json>.dirty is
+	// created by Open and removed only by a clean Close. If it is already
+	// there at Open, the previous process died with up to flushInterval of
+	// Records unflushed — and possibly a batch stored but never recorded —
+	// so the file cannot be trusted and a full Rebuild runs.
+	markerSuffix  = ".dirty"
 	schemaVersion = 1
 	// flushInterval is the debounce for persisting Record updates. Ingest
 	// calls Record once per batch (thousands of times per import); a
@@ -126,6 +132,11 @@ func Open(dir string, indexer Indexer) (*Catalog, error) {
 		lastImport: map[string]string{},
 	}
 	reason := c.load()
+	if reason == "" {
+		if _, err := os.Stat(c.markerPath()); err == nil {
+			reason = "previous run did not exit cleanly (" + filepath.Base(c.markerPath()) + " present)"
+		}
+	}
 	if reason != "" {
 		start := c.now()
 		if err := c.Rebuild(); err != nil {
@@ -134,13 +145,29 @@ func Open(dir string, indexer Indexer) (*Catalog, error) {
 		} else {
 			c.mu.Lock()
 			n := len(c.entries)
+			saveErr := c.saveLocked()
+			if saveErr == nil {
+				c.dirty = false
+			}
 			c.mu.Unlock()
+			if saveErr != nil {
+				log.Printf("catalog: save after rebuild: %v", saveErr)
+			}
 			log.Printf("catalog: %s; rebuilt %d source(s) from indices in %s", reason, n, c.now().Sub(start).Round(time.Millisecond))
 		}
 		c.rebuiltAtOpen = true
 	}
+	// From here on this process owns the file; the marker says so until
+	// Close removes it.
+	if f, err := os.OpenFile(c.markerPath(), os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
+		_ = f.Close()
+	} else {
+		log.Printf("catalog: cannot create %s: %v (an unclean exit will not trigger a rebuild)", c.markerPath(), err)
+	}
 	return c, nil
 }
+
+func (c *Catalog) markerPath() string { return c.path + markerSuffix }
 
 // load reads the file into entries. It returns a non-empty reason when a
 // rebuild is needed instead.
@@ -644,6 +671,13 @@ func (c *Catalog) Close() error {
 	c.mu.Lock()
 	c.closed = true
 	c.mu.Unlock()
+	if err == nil {
+		// Only a clean flush earns a clean marker; if the final write
+		// failed, the next Open should rebuild.
+		if rmErr := os.Remove(c.markerPath()); rmErr != nil && !errors.Is(rmErr, fs.ErrNotExist) {
+			log.Printf("catalog: remove %s: %v", c.markerPath(), rmErr)
+		}
+	}
 	return err
 }
 
