@@ -41,7 +41,7 @@ Alternatively it belongs in `macos-b3` if b2's scope is already full. Not fixed 
 
 **Fix shipped:** `BuildDocID` zero-pads the seq to twelve digits, so string order equals numeric order for every row written from `c8bde0b` on. No mapping change, no index growth. **Caveat:** rows written before keep their unpadded IDs; within one second, a tie between an old row and a new one compares differently-shaped strings and interleaves arbitrarily — only across the upgrade boundary, only within a second.
 
-**Principled fix (maintainer's call):** index `_seq` with doc values so the numeric sort applies. Costs one term per document and, like the `_src` keyword mapping, would apply to new shards only.
+**Principled fix (maintainer's call):** index `_seq` with doc values so the numeric sort applies. Costs one term per document and, like the `_src` keyword mapping, would apply to new shards only — `go test ./pkg/storage -bench IndexSize` before and after flipping `seqField.Index` puts a number on it.
 
 ---
 

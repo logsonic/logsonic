@@ -90,6 +90,49 @@ func TestO1_OpenImportsAFile(t *testing.T) {
 	if !strings.Contains(stderr.String(), "imported 2,000 rows as apache.log") || !strings.Contains(stderr.String(), "lines") {
 		t.Fatalf("stderr must show progress and the summary: %q", stderr.String())
 	}
+
+	// O5 through the CLI flag: --pattern with the name auto-detect chose
+	// imports the same file with the same field set.
+	resp, err := http.Get(ts.URL + "/api/v1/sources/apache.log")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entry types.SourceEntry
+	_ = json.NewDecoder(resp.Body).Decode(&entry)
+	resp.Body.Close()
+	if entry.PatternName == "" {
+		t.Fatalf("detected pattern not recorded: %+v", entry)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := runOpen([]string{"--url", ts.URL, "--pattern", entry.PatternName, "--source", "explicit.log", sample}, &stdout, &stderr, noLauncher{}); code != 0 {
+		t.Fatalf("--pattern %q: exit %d: %s", entry.PatternName, code, stderr.String())
+	}
+	if n := total(t, ts.URL, "explicit.log"); n != 2000 {
+		t.Fatalf("--pattern import rows: %d", n)
+	}
+	fieldsOf := func(source string) string {
+		q := url.Values{"limit": {"1"}, "_src": {source}, "start_date": {"2000-01-01T00:00:00Z"}, "end_date": {"2100-01-01T00:00:00Z"}}
+		r, _ := http.Get(ts.URL + "/api/v1/logs?" + q.Encode())
+		var out types.LogResponse
+		_ = json.NewDecoder(r.Body).Decode(&out)
+		r.Body.Close()
+		var keys []string
+		for k := range out.Logs[0] {
+			if !strings.HasPrefix(k, "_") && k != "timestamp" {
+				keys = append(keys, k)
+			}
+		}
+		for i := 1; i < len(keys); i++ {
+			for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
+				keys[j], keys[j-1] = keys[j-1], keys[j]
+			}
+		}
+		return strings.Join(keys, ",")
+	}
+	if a, b := fieldsOf("apache.log"), fieldsOf("explicit.log"); a != b {
+		t.Fatalf("O5: auto %q vs --pattern %q", a, b)
+	}
 }
 
 // O2: two paths with --source: one source, both files, file order kept
