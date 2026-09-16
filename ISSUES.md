@@ -33,6 +33,21 @@ Alternatively it belongs in `macos-b3` if b2's scope is already full. Not fixed 
 
 ---
 
+## 2026-09-16 — Boundary pass on the built binary: two fixes shipped, three product notes (not a work package)
+
+**What ran:** 88 checks against `logsonic` built from `47b2955`, driven through the HTTP API, the `open` CLI and a Playwright pass over the UI, on a scratch store. Ingest by path (empty/blank/no-newline/3 MB line/gzip/BOM+CRLF/unicode and space-bearing paths/relative/dir/unreadable/symlink/file growing mid-import/`/ingest/end` and cancel mid-job/unknown and invalid patterns/17 MB body/form-encoded body), sources (rename at 0/3/120/121 chars, unicode, self, alias collision, bad JSON, unknown; delete unknown/in-use/300k rows; reimport of a sample and of a vanished file; rebuild idempotence), storage (`retention_days` 0/3650/3651/−1/null/string/float/absent; day delete on impossible, malformed, future and short-form dates), watches (nonexistent/file/relative dir, invalid glob, unknown pattern, trailing slash and `..` aliasing → 409, symlink loop under recursive, 10× pause/resume, delete mid-import, directory replaced by a file), samples (list, three concurrent imports, delete), CLI (unknown `--pattern`, `--tail` with two files, `--source` with one missing file, empty file, binary file, garbage and dead `--url`), two concurrent `open`s of one source, delete during an open, `kill -9` mid-import → restart, and the UI with 67 sources including a 120-character name, a `/`-named source renamed to unicode, and a conflicting rename. Everything not listed below passed as the spec describes.
+
+**Fixed (own commits):**
+- `d583e80` — `/sources/{name}` GET/PATCH/DELETE/reimport 404'd for any name that needs percent-encoding (`a/b.log`, `x?y=1&z=2`): chi returns the raw segment when the request path was escaped. The UI and CLI encode correctly, so this was reachable from both. Unescaped only when `URL.RawPath` is set, so a literal `%` in a name keeps working; test covers all three shapes on every route.
+- `49ee993` — importing the same lines twice into one source (`logsonic open x.log` twice, two concurrent opens, a re-upload) stored them once but the catalog counted them twice until a manual rebuild; the Sources panel and `/info` showed 2×. Session end now reconciles the source from the index, and a `catalogSync` RWMutex keeps any rebuild from landing between a batch's Store and its Record — a window the prune/clear rebuilds also had. Cost: one `_src` facet per day the source spans, at session end only. `58a693f` extends it to sessions swept for inactivity and puts the manual `POST /sources/rebuild` behind the same fence.
+
+**Notes for the maintainer (no code change):**
+1. **`pattern: "auto"` never fails.** A 20 KB file of `/dev/urandom` imports as 83 rows under log2grok's `fallback:Message` catch-all with wall-clock timestamps, and `logsonic open bin.log` exits 0 with a URL. The rows render as gibberish in the table. If that is not wanted, the cheap guard is in `ensureSessionDecoder`: reject the session (`PATTERN_NOT_FOUND`-style 4xx, job → error) when detection lands on the fallback *and* the sample has, say, more than 10 % non-printable bytes — a deliberate plain-text file with no timestamps still imports. Spec now-12 does not say either way.
+2. **Any string is a valid source name**, including `..`, `a\nb` and names of arbitrary length. Names are catalog keys and the `_src` field, never paths, so nothing is unsafe; but a display name of `a\nb` renders as a two-line row and there is no length cap on the stored name (the *display* name is capped at 120). Worth a rule if `_src` ever becomes a filename.
+3. **Catalog reconcile on legacy shards.** The session-end reconcile in `49ee993` is a facet on keyword-mapped shards but a stored-field read (≈4 s per million rows) on shards created before now-10 phase 1. A store that still has large legacy days will feel that at every `/ingest/end` touching those days until the day rolls over or the shard is rebuilt. New stores never hit it.
+
+---
+
 ## 2026-09-16 — Rows sharing a timestamp sorted by seq as a string (found during now-12; fixed for new rows in `c8bde0b`)
 
 **Severity:** P2, pre-existing. Any source with more than nine lines in one second displayed them out of order (1, 10, 11, …, 2, 3).
