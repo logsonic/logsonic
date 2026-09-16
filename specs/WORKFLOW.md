@@ -35,7 +35,7 @@ Invoke it as `/pickup` in Claude Code (a local pointer to this file), once per p
   | Consumer | Where |
   |----------|-------|
   | Web app HTTP client | `frontend/src/lib/api-client.ts` (`apiRequest`) |
-  | Native-file fetch (dock drop / Open With) | `frontend/src/components/Import/LocalFileImport/FileSelection.tsx` (`fetch(logsonicfile://…)`) |
+  | Native-path handoff (dock drop / Open With) | `frontend/src/components/Import/LocalFileImport/FileSelection.tsx` (reads `window.__logsonicPendingNativeFiles` / the `logsonic-native-files` event; paths, not bytes — the `logsonicfile:` fetch was deleted 2026-09-16) |
   | SSE consumer | `frontend/src/hooks/useLogStream.ts` (`EventSource`) |
   | CLI | `backend/tail_cli.go` (and any later `open_cli.go`, `doctor_cli.go`) |
   | MCP tool handlers | `backend/pkg/mcp/server.go` (REST calls to the local API) |
@@ -63,7 +63,7 @@ Unit tests prove logic. They do not prove a served header works in a browser or 
 | Any Go code | `go build ./... && go vet ./... && go test ./...` from `backend/`; `gofmt -l` on touched files only (three pre-existing files are unformatted — leave them) |
 | Any frontend code | `npx vitest run`; `npx eslint <touched files>` (the repo-wide gate is red with ~6,300 pre-existing errors — see ISSUES.md — so compare **per-file error count before vs after**, and require zero errors on lines you added) |
 | Served HTML/headers/CSP, or the embedded bundle | `npm run build && npm run build:copy` (both `dist/` dirs are gitignored), `go build -o <scratch>/logsonic .`, run it on a scratch storage dir, open it in Chrome via the browser tools. **CSP reports do not reach the console-messages tool** — install `document.addEventListener('securitypolicyviolation', …)` in-page *before* interacting and read it back. Drive load → search → theme toggle → export. Seed rows through the API first (`/ingest/start` → `/ingest/logs` → `/ingest/end`). |
-| The native bridge (`LogsonicApp.swift`, `logsonicfile:`, downloads, `__LOGSONIC_NATIVE__`) | `LOGSONIC_DEV_NO_OPEN=1 bash backend/scripts/dev-macos-app.sh <scratch binary>` then `open --env STORAGE_PATH=<scratch> -a backend/dist-dev/Logsonic.app <file>`. Seeing the result needs desktop-control permission; if it is not granted, record the exact command and expected outcome in ISSUES.md as **manual-pending** — do not mark the box verified. |
+| The native bridge (`LogsonicApp.swift`, `deliverNativePaths`, downloads, `__LOGSONIC_NATIVE__`) | `LOGSONIC_DEV_NO_OPEN=1 bash backend/scripts/dev-macos-app.sh <scratch binary>` then `open --env STORAGE_PATH=<scratch> -a backend/dist-dev/Logsonic.app <file>`. Seeing the result needs desktop-control permission; if it is not granted, record the exact command and expected outcome in ISSUES.md as **manual-pending** — do not mark the box verified. |
 | A CLI flag or subcommand | Run the binary with the flag; paste the output in the commit message |
 | Docs | Every relative link resolves (`grep -o '\[[^]]*\]([^)]*)'` and check targets) |
 

@@ -33,6 +33,16 @@ Alternatively it belongs in `macos-b3` if b2's scope is already full. Not fixed 
 
 ---
 
+## 2026-09-16 — `specs/WORKFLOW.md` consumer-sweep table named the deleted `logsonicfile:` fetch — **fixed**
+
+**Severity:** Low. A stale pointer in the process doc, not code.
+
+**What:** after `d4ce39a` deleted the scheme handler, WORKFLOW.md §2's consumer table still listed "Native-file fetch … `fetch(logsonicfile://…)`" and §4's native-bridge row still named `logsonicfile:`. A future consumer sweep would grep for a consumer that no longer exists and miss the real one.
+
+**Fix (same day, factual correction per the standing rules):** the row now names the actual consumer — `FileSelection.tsx` reading `window.__logsonicPendingNativeFiles` / the `logsonic-native-files` event — and the bridge row names `deliverNativePaths`. Also noted: WORKFLOW.md's standing rules still say "Never push"; the maintainer authorized pushing `dev` and opening draft PR #35 on 2026-09-16, so that rule is now out of date and needs the maintainer's rewording (not changed here — it's a policy line, not a fact).
+
+---
+
 ## 2026-09-03 — M1–M10 visual/interactive checks are manual-pending (macos-b1) — **Closed**
 
 **Severity:** P2 — opened as a verification gap; walking M1/M2 live surfaced two real defects (see *Partially remediated* below). The change itself compiles warning-clean on both architectures and the full non-interactive build/validate/smoke pipeline passes.
