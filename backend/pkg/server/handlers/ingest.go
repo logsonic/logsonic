@@ -59,6 +59,8 @@ func (h *Services) ingestBatch(sessionID string, lines []string) (processed, fai
 	sessionDecoder := session.Decoder
 	sessionSeq := session.Seq
 	sessionMultiline := session.Multiline
+	sessionOrigin := session.Origin
+	sessionJobID := session.JobID
 	sessionMapMutex.Unlock()
 
 	if !exists || sessionID == "" {
@@ -90,7 +92,11 @@ func (h *Services) ingestBatch(sessionID string, lines []string) (processed, fai
 	if err := h.storage.Store(jsonOutput, sessionOptions.Source); err != nil {
 		return 0, 0, fmt.Errorf("failed to store logs: %w", err)
 	}
-	h.InvalidateInfoCache()
+	h.recordStored(storedBatch{
+		Opts: sessionOptions, Origin: sessionOrigin,
+		ImportID: sessionID, ImportJobID: sessionJobID,
+		Lines: logs, Rows: jsonOutput,
+	})
 	return successCount, failedCount, nil
 }
 
@@ -113,6 +119,12 @@ type IngestSession struct {
 	// /ingest/logs chunk boundaries before decoding. Nil when the
 	// session didn't opt into multiline folding.
 	Multiline *multilineFolder
+	// Origin is what the catalog records for rows stored under this
+	// session: a browser chunk upload is {file} with no path; a path
+	// import (ingest_jobs.go) stamps {file, <canonical path>} and JobID
+	// when it starts.
+	Origin types.SourceOrigin
+	JobID  string
 }
 
 var sessionMap = make(map[string]IngestSession)
@@ -346,6 +358,9 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		Decoder:      dec,
 		Seq:          new(atomic.Int64),
 		Multiline:    multiline,
+		// Browser chunk uploads have no path the server can name; a
+		// path import overwrites this when its job starts.
+		Origin: types.SourceOrigin{Kind: "file"},
 	}
 	sessionMapMutex.Unlock()
 
@@ -428,7 +443,11 @@ func (h *Services) flushSessionMultiline(session IngestSession, sessionID string
 		log.Printf("ingest: failed to store trailing multiline record for session %s: %v", sessionID, err)
 		return
 	}
-	h.InvalidateInfoCache()
+	h.recordStored(storedBatch{
+		Opts: session.Options, Origin: session.Origin,
+		ImportID: sessionID, ImportJobID: session.JobID,
+		Lines: final, Rows: jsonOutput,
+	})
 }
 
 // expireStaleSessions removes sessions older than SessionTimeout and

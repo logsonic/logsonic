@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"log"
+	"logsonic/pkg/catalog"
 	"logsonic/pkg/storage"
 	"logsonic/pkg/timeresolve"
 	"logsonic/pkg/workspaces"
@@ -29,6 +30,10 @@ type Services struct {
 	// anchor / year strategy / timezone on next import.
 	PatternTimestamps *timeresolve.LibraryStore
 	Workspaces        *workspaces.Store
+	// Catalog is the sources catalog (<storage>/sources.json, spec now-10).
+	// Every write path reports its batch here via recordStored; /info and
+	// the /sources routes read it instead of scanning the indices.
+	Catalog *catalog.Catalog
 
 	storageInfoCache any
 	infoCacheMutex   sync.RWMutex
@@ -57,16 +62,25 @@ func NewHandler(storage storage.StorageInterface, storagePath string) *Services 
 	if err != nil {
 		log.Printf("workspaces: failed to open workspaces.json: %v", err)
 	}
+	sources, err := catalog.Open(storagePath, storage)
+	if err != nil {
+		// Unlike the two side files above this one has readers (/info)
+		// that need a non-nil catalog; Open only fails if the storage dir
+		// itself can't be created, which storage has already done, so
+		// this is defensive rather than expected.
+		log.Printf("catalog: failed to open sources.json: %v", err)
+	}
 	svc := &Services{
 		storage:           storage,
 		StoragePath:       storagePath,
 		PatternTimestamps: store,
 		Workspaces:        workspaceStore,
+		Catalog:           sources,
 		storageInfoCache:  nil,
 		cacheValid:        false,
 		ingestJobsCtx:     context.Background(),
 	}
-	svc.Live = NewTailManager(storage, svc.InvalidateInfoCache)
+	svc.Live = NewTailManager(storage, svc.recordStored)
 	return svc
 }
 
@@ -80,10 +94,18 @@ func (s *Services) StartIngestJobs(ctx context.Context) {
 	s.ingestJobsCtx = ctx
 }
 
-// CloseStorage cleanly shuts down all open Bleve indices.
+// CloseStorage flushes the sources catalog, then cleanly shuts down all open
+// Bleve indices. The catalog goes first so its final write happens while a
+// late Record from a not-yet-stopped tail/job is still meaningful; after
+// Close those become no-ops.
 func (s *Services) CloseStorage() error {
 	type closer interface {
 		Close() error
+	}
+	if s.Catalog != nil {
+		if err := s.Catalog.Close(); err != nil {
+			log.Printf("catalog: flush on shutdown: %v", err)
+		}
 	}
 	if c, ok := s.storage.(closer); ok {
 		return c.Close()

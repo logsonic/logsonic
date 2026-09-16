@@ -277,7 +277,10 @@ type SystemInfoResponse struct {
 		TotalLogEntries  int      `json:"total_log_entries"`
 		StorageDirectory string   `json:"storage_directory"`
 		StorageSize      int64    `json:"storage_size_bytes"`
-		SourceNames      []string `json:"source_names"`
+		// SourceNames is kept for existing clients; Sources carries the
+		// same names with their row counts from the sources catalog.
+		SourceNames []string          `json:"source_names"`
+		Sources     []SourceRowsEntry `json:"sources"`
 	} `json:"storage_info"`
 	SystemInfo struct {
 		Hostname     string `json:"hostname"`
@@ -507,4 +510,54 @@ type LogDistributionResponse struct {
 	StartDate       string                 `json:"start_date"`
 	EndDate         string                 `json:"end_date"`
 	LogDistribution []LogDistributionEntry `json:"log_distribution"`
+}
+
+// SourceRowsEntry is the compact per-source line on /info.
+type SourceRowsEntry struct {
+	Name string `json:"name"`
+	Rows int64  `json:"rows"`
+}
+
+// SourceOrigin records where a source's rows came from. Kind is one of
+// file | stdin | tail | watch | otlp | case | unknown ("unknown" is what a
+// catalog rebuild assigns to a source it discovered in the index without
+// ever having seen an ingest for it).
+type SourceOrigin struct {
+	Kind string `json:"kind"`
+	Path string `json:"path,omitempty"`
+	Host string `json:"host,omitempty"`
+}
+
+// SourceImport is one ingest session/job that contributed rows to a source.
+type SourceImport struct {
+	At    time.Time `json:"at"`
+	Rows  int64     `json:"rows"`
+	Path  string    `json:"path,omitempty"`
+	JobID string    `json:"job_id,omitempty"`
+}
+
+// SourceEntry is one row of the sources catalog (<storage>/sources.json),
+// keyed by Name, which is the stored _src value.
+type SourceEntry struct {
+	Name        string       `json:"name"`
+	Origin      SourceOrigin `json:"origin"`
+	PatternName string       `json:"pattern_name,omitempty"`
+	Pattern     string       `json:"pattern,omitempty"`
+	Rows        int64        `json:"rows"`
+	BytesRaw    int64        `json:"bytes_raw"`
+	FirstTS     *time.Time   `json:"first_ts,omitempty"`
+	LastTS      *time.Time   `json:"last_ts,omitempty"`
+	// Days lists every day-index holding rows for this source (sorted);
+	// DayRows is the per-day count behind it, which is what lets a rebuild
+	// after a prune or a row delete touch only the affected days.
+	Days      []string         `json:"days"`
+	DayRows   map[string]int64 `json:"day_rows"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
+	Imports   []SourceImport   `json:"imports"`
+}
+
+// SourcesResponse is GET /sources and POST /sources/rebuild.
+type SourcesResponse struct {
+	Sources []SourceEntry `json:"sources"`
 }

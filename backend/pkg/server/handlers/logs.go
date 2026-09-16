@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"logsonic/pkg/catalog"
 	storagepkg "logsonic/pkg/storage"
 	"logsonic/pkg/types"
 	"net/http"
@@ -578,8 +579,10 @@ func (h *Services) HandleClear(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Invalidate the system info cache since log data has changed
+	// Invalidate the system info cache since log data has changed, and
+	// reconcile the catalog (Clear bypasses the write path).
 	h.InvalidateInfoCache()
+	h.rebuildCatalog()
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":  "success",
@@ -653,8 +656,12 @@ func (h *Services) HandleDeleteByIds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Invalidate the system info cache since log data has changed
+	// Invalidate the system info cache since log data has changed, and
+	// reconcile the catalog for the days those IDs could live in.
 	h.InvalidateInfoCache()
+	if deletedCount > 0 {
+		h.rebuildCatalog(catalog.DaysForDocIDs(request.Ids)...)
+	}
 
 	// Return success response
 	json.NewEncoder(w).Encode(map[string]interface{}{

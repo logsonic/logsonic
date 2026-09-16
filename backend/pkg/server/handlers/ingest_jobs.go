@@ -214,6 +214,17 @@ func (h *Services) startIngestFileJob(sessionID, canonicalPath string, members [
 	ingestJobs[job.id] = job
 	ingestJobsMu.Unlock()
 
+	// Stamp the session so every batch this job stores is catalogued with
+	// its origin path and job id. IngestSession is copied by value out of
+	// the map, so the stamped copy has to be written back under the lock.
+	sessionMapMutex.Lock()
+	if session, ok := sessionMap[sessionID]; ok {
+		session.Origin = types.SourceOrigin{Kind: "file", Path: canonicalPath}
+		session.JobID = job.id
+		sessionMap[sessionID] = session
+	}
+	sessionMapMutex.Unlock()
+
 	go h.runIngestFileJob(ctx, job)
 	return job
 }

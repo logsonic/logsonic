@@ -620,6 +620,80 @@ definitions:
       time:
         $ref: '#/definitions/types.WorkspaceTime'
     type: object
+  types.SourceEntry:
+    properties:
+      bytes_raw:
+        type: integer
+      created_at:
+        type: string
+      day_rows:
+        additionalProperties:
+          format: int64
+          type: integer
+        type: object
+      days:
+        description: |-
+          Days lists every day-index holding rows for this source (sorted);
+          DayRows is the per-day count behind it, which is what lets a rebuild
+          after a prune or a row delete touch only the affected days.
+        items:
+          type: string
+        type: array
+      first_ts:
+        type: string
+      imports:
+        items:
+          $ref: '#/definitions/types.SourceImport'
+        type: array
+      last_ts:
+        type: string
+      name:
+        type: string
+      origin:
+        $ref: '#/definitions/types.SourceOrigin'
+      pattern:
+        type: string
+      pattern_name:
+        type: string
+      rows:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  types.SourceImport:
+    properties:
+      at:
+        type: string
+      job_id:
+        type: string
+      path:
+        type: string
+      rows:
+        type: integer
+    type: object
+  types.SourceOrigin:
+    properties:
+      host:
+        type: string
+      kind:
+        type: string
+      path:
+        type: string
+    type: object
+  types.SourceRowsEntry:
+    properties:
+      name:
+        type: string
+      rows:
+        type: integer
+    type: object
+  types.SourcesResponse:
+    properties:
+      sources:
+        items:
+          $ref: '#/definitions/types.SourceEntry'
+        type: array
+    type: object
   types.SuggestResponse:
     properties:
       combined_coverage:
@@ -672,8 +746,15 @@ definitions:
               type: string
             type: array
           source_names:
+            description: |-
+              SourceNames is kept for existing clients; Sources carries the
+              same names with their row counts from the sources catalog.
             items:
               type: string
+            type: array
+          sources:
+            items:
+              $ref: '#/definitions/types.SourceRowsEntry'
             type: array
           storage_directory:
             type: string
@@ -1346,6 +1427,77 @@ paths:
       summary: Ping the API
       tags:
       - System
+  /sources:
+    get:
+      description: 'Every source in the catalog (<storage>/sources.json): origin,
+        pattern, rows, bytes, timestamp span, the day-indices holding it, and its
+        import history. Maintained on the ingest write path; see POST /sources/rebuild
+        to reconcile with the indices.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.SourcesResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: List sources
+      tags:
+      - sources
+  /sources/{name}:
+    get:
+      description: One catalog entry by source name (the stored _src value).
+      parameters:
+      - description: Source name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.SourceEntry'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Get one source
+      tags:
+      - sources
+  /sources/rebuild:
+    post:
+      description: Recomputes rows, days and timestamp bounds for every source from
+        the day-indices (one size-0 facet per day on current indices; a stored-field
+        read on indices created before v1.8's keyword _src mapping). Origin, pattern
+        and import history are kept; sources with no rows left are dropped. Idempotent.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.SourcesResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Rebuild the sources catalog from the indices
+      tags:
+      - sources
   /timestamp/preview:
     post:
       consumes:

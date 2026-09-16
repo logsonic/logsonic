@@ -436,7 +436,9 @@ export interface SystemInfo {
 
 export interface StorageInfo {
   available_dates?: string[];
+  /** Kept for existing readers; `sources` carries the same names with row counts. */
   source_names?: string[];
+  sources?: SourceRowsEntry[];
   storage_directory?: string;
   storage_size_bytes?: number;
   total_indices?: number;
@@ -459,6 +461,52 @@ export interface SystemInfoResponse {
   app?: AppBuildInfo;
   storage_info?: StorageInfo;
   system_info?: SystemInfo;
+}
+
+// --- Sources catalog (mirrors backend pkg/types Source*; spec now-10) ---
+
+/** Compact per-source line on /info. */
+export interface SourceRowsEntry {
+  name: string;
+  rows: number;
+}
+
+/** Where a source's rows came from. */
+export interface SourceOrigin {
+  kind: 'file' | 'stdin' | 'tail' | 'watch' | 'otlp' | 'case' | 'unknown';
+  path?: string;
+  host?: string;
+}
+
+/** One ingest session/job that contributed rows to a source. */
+export interface SourceImport {
+  at: string;
+  rows: number;
+  path?: string;
+  job_id?: string;
+}
+
+/** One row of the sources catalog (`<storage>/sources.json`), keyed by `name` (the stored `_src`). */
+export interface SourceEntry {
+  name: string;
+  origin: SourceOrigin;
+  pattern_name?: string;
+  pattern?: string;
+  rows: number;
+  bytes_raw: number;
+  first_ts?: string;
+  last_ts?: string;
+  /** Every day-index holding rows for this source (sorted); `day_rows` is the per-day count behind it. */
+  days: string[];
+  day_rows: Record<string, number>;
+  created_at: string;
+  updated_at: string;
+  imports: SourceImport[];
+}
+
+/** GET /sources and POST /sources/rebuild. */
+export interface SourcesResponse {
+  sources: SourceEntry[];
 }
 
 // Query Parameters

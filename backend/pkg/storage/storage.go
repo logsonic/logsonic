@@ -32,7 +32,8 @@ type StorageInterface interface {
 	SearchPage(ctx context.Context, options SearchOptions) (SearchPageResult, error)
 	Facets(ctx context.Context, options SearchOptions) (*types.FacetsResponse, error)
 	List() ([]string, error)
-	GetSourceNames() ([]string, error)
+	SourceStats(date string) ([]SourceDayStats, error)
+	LegacySourceShard(date string) bool
 	Clear() error
 	BaseDir() string
 	GetDocCount(date string) (uint64, error)
@@ -125,6 +126,23 @@ func buildIndexMapping() mapping.IndexMapping {
 	// facets, so the _raw doc-values payload is dead weight — disable it.
 	textField.DocValues = false
 	logMapping.AddFieldMappingsAt("_raw", textField)
+
+	// _src is the source name the catalog (pkg/catalog) and the per-source
+	// filter key on. It is an identifier, not prose: the standard analyzer
+	// would split "app.log.1" into ["app.log", "1"] and lowercase "My App",
+	// so a _src facet returned tokens and a _src:app.log filter also matched
+	// app.log.1. Keyword analysis stores the whole value as one term, and
+	// DocValues lets scorch facet on it (SourceStats). Shards created before
+	// this mapping keep the tokenized field; SourceStats detects them through
+	// the shard's own mapping and reads stored fields instead.
+	srcField := bleve.NewTextFieldMapping()
+	srcField.Analyzer = "keyword"
+	srcField.Store = true
+	srcField.Index = true
+	srcField.IncludeInAll = false
+	srcField.IncludeTermVectors = false
+	srcField.DocValues = true
+	logMapping.AddFieldMappingsAt("_src", srcField)
 
 	// _seq is internal ordering metadata (the sort tie-breaker). Persist it
 	// so it round-trips for sorting, but keep it out of the field index.

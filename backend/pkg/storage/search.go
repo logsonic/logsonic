@@ -221,33 +221,3 @@ func (s *Storage) Search(queryStr string, startDate, endDate *time.Time, sources
 
 	return results, totalTime, nil
 }
-
-// GetSourceNames returns all unique source names _src from all indices
-func (s *Storage) GetSourceNames() ([]string, error) {
-	sourceNames := make(map[string]bool)
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	for _, index := range s.indices {
-		query := bleve.NewQueryStringQuery("_src:*")
-		searchRequest := bleve.NewSearchRequest(query)
-		searchRequest.Fields = []string{"_src"}
-		searchRequest.Size = 1000000 // Adjust this value as needed
-		searchResults, err := index.Search(searchRequest)
-		if err != nil {
-			return nil, fmt.Errorf("failed to run search: %w", err)
-		}
-
-		for _, hit := range searchResults.Hits {
-			sourceNames[hit.Fields["_src"].(string)] = true
-		}
-	}
-
-	uniqueSourceNames := make([]string, 0, len(sourceNames))
-	for sourceName := range sourceNames {
-		uniqueSourceNames = append(uniqueSourceNames, sourceName)
-	}
-
-	return uniqueSourceNames, nil
-}

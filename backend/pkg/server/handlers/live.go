@@ -36,8 +36,10 @@ const (
 )
 
 type TailManager struct {
-	storage    storagepkg.StorageInterface
-	invalidate func()
+	storage storagepkg.StorageInterface
+	// onStored is called after every successful StoreWithIDs with what was
+	// stored; the Services wires it to recordStored (catalog + info cache).
+	onStored func(storedBatch)
 
 	mu          sync.RWMutex
 	sources     map[string]*TailSource
@@ -87,11 +89,11 @@ type liveEvent struct {
 	data interface{}
 }
 
-func NewTailManager(storage storagepkg.StorageInterface, invalidate func()) *TailManager {
+func NewTailManager(storage storagepkg.StorageInterface, onStored func(storedBatch)) *TailManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &TailManager{
 		storage:     storage,
-		invalidate:  invalidate,
+		onStored:    onStored,
 		sources:     make(map[string]*TailSource),
 		subscribers: make(map[string]*liveSubscriber),
 		rootCtx:     ctx,
@@ -655,8 +657,12 @@ func (s *TailSource) processFoldedLines(lines []string) error {
 	if err != nil {
 		return err
 	}
-	if s.manager.invalidate != nil {
-		s.manager.invalidate()
+	if s.manager.onStored != nil {
+		origin := types.SourceOrigin{Kind: "stdin"}
+		if s.path != "" {
+			origin = types.SourceOrigin{Kind: "tail", Path: s.path}
+		}
+		s.manager.onStored(storedBatch{Opts: s.opts, Origin: origin, ImportID: s.id, Lines: lines, Rows: parsed})
 	}
 
 	for i := range parsed {

@@ -338,6 +338,11 @@ func NewServer(cfg Config) (*Server, error) {
 				r.Delete("/{id}", h.HandleDeleteWorkspace)
 			})
 			r.Get("/info", h.HandleInfo)
+			r.Route("/sources", func(r chi.Router) {
+				r.Get("/", h.HandleListSources)
+				r.Post("/rebuild", h.HandleRebuildSources)
+				r.Get("/{name}", h.HandleGetSource)
+			})
 
 			// Live-tail controls are short-lived JSON calls and can use the
 			// normal API timeout/throttle budget.
@@ -399,6 +404,9 @@ func (s *Server) Start() error {
 	s.services.StartLive(cleanupCtx)
 	s.services.StartIngestJobs(cleanupCtx)
 	handlers.StartIngestJobCleanup(cleanupCtx)
+	if s.services.Catalog != nil {
+		s.services.Catalog.Start(cleanupCtx)
+	}
 
 	// Apply retention now and once a day; cancelled on shutdown.
 	s.startRetention(cleanupCtx)
@@ -479,6 +487,7 @@ func (s *Server) startRetention(ctx context.Context) {
 	maxAge := time.Duration(s.config.RetentionDays) * 24 * time.Hour
 
 	prune := func() {
+		cutoff := time.Now().Add(-maxAge)
 		removed, err := s.store.PruneOlderThan(maxAge)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "retention: prune failed: %v\n", err)
@@ -486,6 +495,13 @@ func (s *Server) startRetention(ctx context.Context) {
 		}
 		if removed > 0 {
 			fmt.Printf("retention: removed %d index(es) older than %d day(s)\n", removed, s.config.RetentionDays)
+			// Prune bypasses the catalog's write path; reconcile just the
+			// days that could have gone.
+			if c := s.services.Catalog; c != nil {
+				if err := c.Rebuild(c.DaysBefore(cutoff)...); err != nil {
+					fmt.Fprintf(os.Stderr, "retention: catalog rebuild failed: %v\n", err)
+				}
+			}
 		}
 	}
 
