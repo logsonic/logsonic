@@ -5,6 +5,7 @@ import {
   DEFAULT_SESSION_OPTIONS,
   sessionMultilineOption,
   isMultilineHeaderInvalid,
+  basenameOfPath,
 } from "../useImportStore";
 import { parseLogs } from "@/lib/api-client";
 
@@ -690,5 +691,27 @@ describe("handlePatternOperation multiline", () => {
         }),
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// basenameOfPath (spec now-08 H7: a native path can be POSIX or Windows)
+// ---------------------------------------------------------------------------
+
+describe("basenameOfPath", () => {
+  it("extracts the basename from a POSIX path", () => {
+    expect(basenameOfPath("/var/log/app.log")).toBe("app.log");
+  });
+
+  it("extracts the basename from a Windows path", () => {
+    expect(basenameOfPath("C:\\Users\\alice\\logs\\app.log")).toBe("app.log");
+  });
+
+  it("extracts the basename from a Windows UNC path", () => {
+    expect(basenameOfPath("\\\\server\\share\\app.log")).toBe("app.log");
+  });
+
+  it("returns the input unchanged when there is no separator", () => {
+    expect(basenameOfPath("app.log")).toBe("app.log");
   });
 });

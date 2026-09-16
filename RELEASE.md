@@ -7,10 +7,10 @@ Current release contract plus the longer-term plan for signed Windows installers
 ## 1. Current state
 
 - Build: GoReleaser produces stripped Linux `tar.gz` and Windows `zip` archives for amd64/arm64. It also builds a `lipo`-merged universal darwin binary used only inside the app bundle; no bare macOS archive is published. See [`backend/.goreleaser.yaml`](backend/.goreleaser.yaml).
-- Frontend: Vite build copied into [backend/pkg/static/dist/](backend/pkg/static/dist/) and embedded via `go:embed`.
+- Frontend: Vite build copied into `backend/pkg/static/dist/` (gitignored build output) and embedded via `go:embed`.
 - Runtime: [backend/main.go](backend/main.go) remains the headless CLI. `Logsonic.app` uses a native AppKit launcher with an embedded `WKWebView`, starts the Go server as a loopback-only child, supports browser fallback, and shuts the child down with the app.
 - Signing: macOS ships as a universal, Developer ID-signed, notarized, and stapled `Logsonic.app` zip. Windows installer/Authenticode is not implemented yet.
-- CI: no `.github/workflows` — releases are run manually from a dev machine via [`backend/scripts/release.sh`](backend/scripts/release.sh).
+- CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) gates pull requests (Go vet/staticcheck/race tests/Swagger drift/govulncheck, frontend build + unit tests with coverage, an `api-types.ts` mirror check against `backend/pkg/types/types.go` (warn-only), the macOS shell's own validation script on a macOS runner, a goreleaser snapshot build of the Linux/Windows binaries, and a Playwright network audit + smoke run against the embedded build); [`docs.yml`](.github/workflows/docs.yml) checks relative Markdown links, external links (`lychee`), and that the dev-bootstrap commands `docs/development.md` documents still run; [`nightly.yml`](.github/workflows/nightly.yml) (schedule + manual dispatch) runs the §8 bench harness ([`backend/bench/`](backend/bench/)) plus the full E2E set and uploads `bench.json` as an artifact — regression comparison against a committed baseline is wired in but inert until a human commits `backend/bench/baseline.json` from a real run. Releases are still run manually from a dev machine via [`backend/scripts/release.sh`](backend/scripts/release.sh) — signing/notarization secrets are not in CI (see §9).
 - Distribution: GitHub Releases + a live Homebrew cask at [`logsonic/homebrew-logsonic`](https://github.com/logsonic/homebrew-logsonic) (`brew tap logsonic/logsonic && brew install logsonic`).
 
 ### How macOS signing works today
@@ -475,7 +475,7 @@ The pragmatic split: macOS job builds + signs Mac + Linux + Homebrew tap; Window
 You asked specifically about this. The realistic options:
 
 1. **Self-fund + use the project as a write-off.** $99/yr Apple + ~$120/yr Azure Trusted Signing = ~$220/yr. Smallest path, full control.
-2. **SignPath Foundation** — free Authenticode code signing for OSS projects ([signpath.org/foundation](https://signpath.org/foundation)). They hold the certificate, you submit builds via their GitHub Action. Eligibility: OSS license (MIT works), public repo, no monetization tied to the signed binaries. Strongest free option for Windows.
+2. **SignPath Foundation** — free Authenticode code signing for OSS projects ([signpath.org](https://signpath.org/)). They hold the certificate, you submit builds via their GitHub Action. Eligibility: OSS license (MIT works), public repo, no monetization tied to the signed binaries. Strongest free option for Windows.
 3. **MacOS notarization has no free equivalent.** Apple does not offer a foundation program. Some OSS projects sidestep this by distributing through Homebrew Cask (which uses a Developer-signed binary if provided, or falls back to `xattr -d com.apple.quarantine`) and leaving the `.dmg` unsigned with install instructions. Acceptable for a beta; not great for non-technical users.
 4. **GitHub Sponsors / Open Collective to cover certs.** Several OSS projects (e.g., Inkscape, Krita) fund their signing certs this way.
 5. **sigstore/cosign for checksums** — free, keyless signing of release artifacts via OIDC. Does not replace OS signing (Gatekeeper/SmartScreen ignore it) but proves provenance for security-conscious users and integrates well with SLSA.

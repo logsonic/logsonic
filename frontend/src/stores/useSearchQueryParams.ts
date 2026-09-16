@@ -1,5 +1,6 @@
 import { calculatePresetRelativeDate, calculateRelativeDate, calculateRelativeDateRange, RELATIVE_DATE_PRESETS } from '@/lib/date-utils';
-import { normalizeWorkspaceColumnWidths } from '@/lib/workspace-utils';
+import { normalizeWorkspaceColumnWidths, searchStateToWorkspaceTime } from '@/lib/workspace-utils';
+import { useQueryHistoryStore } from '@/stores/useQueryHistoryStore';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
@@ -334,7 +335,26 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
             hasSearched: true,
             searchNonce: currentState.searchNonce + 1,
           });
-          
+
+          // History records *executed* queries, not keystrokes (spec
+          // now-03) -- this is the one place every real search execution
+          // passes through: the search bar's Enter/Search button, a facet
+          // click, a workspace load (applyWorkspaceToCurrentState calls
+          // this too, which is correct -- loading a workspace's query is
+          // itself an executed search), and the initial URL-query cold
+          // load. Skip an empty query so a default/no-query load doesn't
+          // push a blank entry. syncWithUrlParams's own browser-navigation
+          // path bumps searchNonce directly rather than calling this
+          // action, so back/forward doesn't push a duplicate -- intentional,
+          // not an oversight.
+          if (currentState.searchQuery) {
+            useQueryHistoryStore.getState().push({
+              query: currentState.searchQuery,
+              time: searchStateToWorkspaceTime(currentState),
+              sources: currentState.sources.length > 0 ? [...currentState.sources] : undefined,
+            });
+          }
+
           // Update URL parameters when search is triggered
           currentState.updateUrlParams();
         },

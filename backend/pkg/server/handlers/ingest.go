@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
+	"logsonic/pkg/ingestfile"
 	"logsonic/pkg/types"
 	"net/http"
 	"sync"
@@ -21,17 +23,90 @@ const (
 	SessionTimeout        = 60 * time.Minute
 	MaxIngestRequestBytes = 16 * 1024 * 1024
 	MaxIngestLines        = 10_000
-	MaxIngestLineBytes    = 2 * 1024 * 1024
+	// MaxIngestLineBytes is shared with the path-based reader so both ingest
+	// routes reject the same input.
+	MaxIngestLineBytes = ingestfile.MaxLineBytes
 )
 
-var defaultIngestSessionOptions = types.IngestSessionOptions{
-	Source:          "",
-	SmartDecoder:    false,
-	ForceTimezone:   "",
-	ForceStartYear:  "",
-	ForceStartMonth: "",
-	ForceStartDay:   "",
-	Meta:            nil,
+// Errors returned by ingestBatch, mapped to HTTP statuses by its callers.
+var (
+	errInvalidSession = errors.New("invalid or missing session ID")
+)
+
+// multilineError wraps a folding failure so callers can return 400 with the
+// folder's message rather than a generic 500.
+type multilineError struct{ err error }
+
+func (e *multilineError) Error() string { return e.err.Error() }
+func (e *multilineError) Unwrap() error { return e.err }
+
+// ingestBatch is the one decode-and-store path for a session: it marks the
+// session active, folds multiline records, decodes with the session's
+// compiled pattern, stamps `_seq`, and stores. Both the chunk endpoint
+// (/ingest/logs) and the path endpoint (/ingest/file) call it, which is what
+// keeps their stored documents identical.
+func (h *Services) ingestBatch(sessionID string, lines []string) (processed, failed int, err error) {
+	// Mark the request as activity while atomically taking the session
+	// snapshot. This prevents the cleanup sweep from expiring an active
+	// upload between session lookup and decoding/storage.
+	sessionMapMutex.Lock()
+	session, exists := sessionMap[sessionID]
+	if exists {
+		session.LastActivity = time.Now()
+		sessionMap[sessionID] = session
+	}
+	sessionOptions := session.Options
+	sessionDecoder := session.Decoder
+	sessionSeq := session.Seq
+	sessionMultiline := session.Multiline
+	sessionOrigin := session.Origin
+	sessionJobID := session.JobID
+	sessionMapMutex.Unlock()
+
+	if !exists || sessionID == "" {
+		return 0, 0, errInvalidSession
+	}
+
+	logs := lines
+	if sessionMultiline != nil {
+		folded, foldErr := sessionMultiline.Feed(lines)
+		if foldErr != nil {
+			return 0, 0, &multilineError{err: foldErr}
+		}
+		logs = folded
+	}
+	if len(logs) == 0 {
+		// Batch was entirely absorbed into a still-open multiline record;
+		// nothing to decode/store yet.
+		return 0, 0, nil
+	}
+
+	if sessionDecoder == nil {
+		// pattern "auto": the first batch picks the pattern.
+		dec, opts, err := h.ensureSessionDecoder(sessionID, logs)
+		if err != nil {
+			return 0, 0, err
+		}
+		sessionDecoder, sessionOptions = dec, opts
+	}
+
+	// DecodeConcurrent fans the regex work across NumCPU goroutines for
+	// large batches and transparently falls back to serial Decode below
+	// its internal threshold (~512 lines). The Decoder is goroutine-safe
+	// and output order is preserved, so this is a drop-in replacement
+	// for Decode that scales ingest throughput on multi-core boxes.
+	results := sessionDecoder.DecodeConcurrent(logs, 0)
+	jsonOutput, successCount, failedCount, _ := postProcess(results, sessionOptions, sessionSeq)
+
+	if err := h.storage.Store(jsonOutput, sessionOptions.Source); err != nil {
+		return 0, 0, fmt.Errorf("failed to store logs: %w", err)
+	}
+	h.recordStored(storedBatch{
+		Opts: sessionOptions, Origin: sessionOrigin,
+		ImportID: sessionID, ImportJobID: sessionJobID,
+		Lines: logs, Rows: jsonOutput,
+	})
+	return successCount, failedCount, nil
 }
 
 // IngestSession ties one /ingest/start invocation to its compiled
@@ -53,6 +128,18 @@ type IngestSession struct {
 	// /ingest/logs chunk boundaries before decoding. Nil when the
 	// session didn't opt into multiline folding.
 	Multiline *multilineFolder
+	// Origin is what the catalog records for rows stored under this
+	// session: a browser chunk upload is {file} with no path; a path
+	// import (ingest_jobs.go) stamps {file, <canonical path>} and JobID
+	// when it starts.
+	Origin types.SourceOrigin
+	JobID  string
+	// AutoDetect: the session was started with pattern "auto" (spec
+	// now-12); Decoder stays nil until the first batch, which picks the
+	// pattern from its lines. DetectErr makes a failed detection sticky so
+	// every later batch fails fast with the same message.
+	AutoDetect bool
+	DetectErr  string
 }
 
 var sessionMap = make(map[string]IngestSession)
@@ -145,84 +232,41 @@ func (h *Services) HandleIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Mark the request as activity while atomically taking the session
-	// snapshot. This prevents the cleanup sweep from expiring an active
-	// upload between session lookup and decoding/storage.
-	sessionMapMutex.Lock()
-	session, exists := sessionMap[req.SessionID]
-	if exists {
-		session.LastActivity = time.Now()
-		sessionMap[req.SessionID] = session
-	}
-	sessionOptions := session.Options
-	sessionDecoder := session.Decoder
-	sessionSeq := session.Seq
-	sessionMultiline := session.Multiline
-	sessionMapMutex.Unlock()
-
-	if !exists || req.SessionID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(types.ErrorResponse{
-			Status: "error",
-			Error:  "Invalid or missing session ID",
-			Code:   "INVALID_SESSION",
-		})
-		return
-	}
-
-	logs := req.Logs
-	if sessionMultiline != nil {
-		folded, err := sessionMultiline.Feed(req.Logs)
-		if err != nil {
+	processed, failed, err := h.ingestBatch(req.SessionID, req.Logs)
+	if err != nil {
+		var mlErr *multilineError
+		switch {
+		case errors.Is(err, errInvalidSession):
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(types.ErrorResponse{
+				Status: "error",
+				Error:  "Invalid or missing session ID",
+				Code:   "INVALID_SESSION",
+			})
+		case errors.As(err, &mlErr):
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(types.ErrorResponse{
 				Status:  "error",
 				Error:   "Failed to fold multiline records",
 				Code:    "MULTILINE_ERROR",
+				Details: mlErr.err.Error(),
+			})
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(types.ErrorResponse{
+				Status:  "error",
+				Error:   "Failed to store logs",
+				Code:    "STORAGE_ERROR",
 				Details: err.Error(),
 			})
-			return
 		}
-		logs = folded
-	}
-
-	if len(logs) == 0 {
-		// Batch was entirely absorbed into a still-open multiline record;
-		// nothing to decode/store yet.
-		json.NewEncoder(w).Encode(types.IngestResponse{
-			Status:    "success",
-			Processed: 0,
-			Failed:    0,
-			SessionID: req.SessionID,
-		})
 		return
 	}
-
-	// DecodeConcurrent fans the regex work across NumCPU goroutines for
-	// large batches and transparently falls back to serial Decode below
-	// its internal threshold (~512 lines). The Decoder is goroutine-safe
-	// and output order is preserved, so this is a drop-in replacement
-	// for Decode that scales ingest throughput on multi-core boxes.
-	results := sessionDecoder.DecodeConcurrent(logs, 0)
-	jsonOutput, successCount, failedCount, _ := postProcess(results, sessionOptions, sessionSeq)
-
-	if err := h.storage.Store(jsonOutput, sessionOptions.Source); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(types.ErrorResponse{
-			Status:  "error",
-			Error:   "Failed to store logs",
-			Code:    "STORAGE_ERROR",
-			Details: err.Error(),
-		})
-		return
-	}
-
-	h.InvalidateInfoCache()
 
 	json.NewEncoder(w).Encode(types.IngestResponse{
 		Status:    "success",
-		Processed: successCount,
-		Failed:    failedCount,
+		Processed: processed,
+		Failed:    failed,
 		SessionID: req.SessionID,
 	})
 }
@@ -256,45 +300,65 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" && req.Pattern == "" {
+	sessionID, startErr := newIngestSession(req)
+	if startErr != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(types.ErrorResponse{
-			Status: "error",
-			Error:  "Pattern name or pattern is required",
-			Code:   "INVALID_PATTERN",
+			Status:  "error",
+			Error:   startErr.message,
+			Code:    startErr.code,
+			Details: startErr.details,
 		})
 		return
 	}
 
-	dec, err := l2g.NewDecoder(l2g.PatternSpec{
-		Name:           req.Name,
-		Grok:           req.Pattern,
-		CustomPatterns: req.CustomPatterns,
-		Priority:       req.Priority,
-	}, l2g.DecoderOptions{
-		SmartDecode: req.SmartDecoder,
+	json.NewEncoder(w).Encode(types.IngestResponse{
+		Status:    "success",
+		SessionID: sessionID,
 	})
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(types.ErrorResponse{
-			Status:  "error",
-			Error:   "Failed to add pattern",
-			Code:    "PATTERN_ERROR",
-			Details: err.Error(),
+}
+
+// sessionStartError is what newIngestSession reports; every case is the
+// caller's input, so HandleIngestStart maps all of them to 400.
+type sessionStartError struct {
+	code, message, details string
+}
+
+func (e *sessionStartError) Error() string { return e.message + ": " + e.details }
+
+// newIngestSession compiles the pattern and registers a session, the shared
+// half of POST /ingest/start and the server-initiated re-import
+// (POST /sources/{name}/reimport), which replays a catalog entry's
+// recorded options through the same code so the rows land identically.
+func newIngestSession(req types.IngestSessionOptions) (string, *sessionStartError) {
+	if req.Name == "" && req.Pattern == "" {
+		return "", &sessionStartError{code: "INVALID_PATTERN", message: "Pattern name or pattern is required"}
+	}
+	if err := resolveSavedPattern(&req); err != nil {
+		return "", &sessionStartError{code: "PATTERN_NOT_FOUND", message: "Unknown pattern name", details: err.Error()}
+	}
+
+	// "auto": detect on the first batch (see ingestBatch); no decoder yet.
+	autoDetect := req.Pattern == "auto"
+	var dec *l2g.Decoder
+	if !autoDetect {
+		var err error
+		dec, err = l2g.NewDecoder(l2g.PatternSpec{
+			Name:           req.Name,
+			Grok:           req.Pattern,
+			CustomPatterns: req.CustomPatterns,
+			Priority:       req.Priority,
+		}, l2g.DecoderOptions{
+			SmartDecode: req.SmartDecoder,
 		})
-		return
+		if err != nil {
+			return "", &sessionStartError{code: "PATTERN_ERROR", message: "Failed to add pattern", details: err.Error()}
+		}
 	}
 
 	multilineCfg, err := buildMultilineConfig(req.Multiline)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(types.ErrorResponse{
-			Status:  "error",
-			Error:   "Invalid multiline configuration",
-			Code:    "MULTILINE_CONFIG_ERROR",
-			Details: err.Error(),
-		})
-		return
+		return "", &sessionStartError{code: "MULTILINE_CONFIG_ERROR", message: "Invalid multiline configuration", details: err.Error()}
 	}
 	var multiline *multilineFolder
 	if multilineCfg != nil {
@@ -329,13 +393,78 @@ func (h *Services) HandleIngestStart(w http.ResponseWriter, r *http.Request) {
 		Decoder:      dec,
 		Seq:          new(atomic.Int64),
 		Multiline:    multiline,
+		// Browser chunk uploads have no path the server can name; a
+		// path import overwrites this when its job starts.
+		Origin:     types.SourceOrigin{Kind: "file"},
+		AutoDetect: autoDetect,
 	}
 	sessionMapMutex.Unlock()
+	return sessionID, nil
+}
 
-	json.NewEncoder(w).Encode(types.IngestResponse{
-		Status:    "success",
-		SessionID: sessionID,
-	})
+// autoDetectLines is how many lines of the first batch feed detection.
+const autoDetectLines = 200
+
+// ensureSessionDecoder compiles an "auto" session's decoder from the first
+// batch's lines, once. Double-checked under the session lock so two
+// concurrent batches for the same session don't both detect; a failed
+// detection is recorded on the session and returned again for every later
+// batch rather than retried.
+func (h *Services) ensureSessionDecoder(sessionID string, lines []string) (*l2g.Decoder, types.IngestSessionOptions, error) {
+	sessionMapMutex.Lock()
+	defer sessionMapMutex.Unlock()
+	session, ok := sessionMap[sessionID]
+	if !ok {
+		return nil, types.IngestSessionOptions{}, errInvalidSession
+	}
+	if session.Decoder != nil {
+		return session.Decoder, session.Options, nil
+	}
+	if session.DetectErr != "" {
+		return nil, session.Options, errors.New(session.DetectErr)
+	}
+	sample := lines
+	if len(sample) > autoDetectLines {
+		sample = sample[:autoDetectLines]
+	}
+	results, err := h.autosuggestPatterns(sample)
+	if err == nil && len(results) == 0 {
+		err = errors.New("auto-detect found no pattern in the first lines; start the session with a pattern")
+	}
+	if err != nil {
+		session.DetectErr = "auto-detect: " + err.Error()
+		sessionMap[sessionID] = session
+		return nil, session.Options, errors.New(session.DetectErr)
+	}
+	r := results[0]
+	dec, err := l2g.NewDecoder(l2g.PatternSpec{
+		Name: r.PatternName, Grok: r.Pattern, CustomPatterns: r.CustomPatterns,
+	}, l2g.DecoderOptions{SmartDecode: session.Options.SmartDecoder})
+	if err != nil {
+		session.DetectErr = "auto-detect: compile " + r.PatternName + ": " + err.Error()
+		sessionMap[sessionID] = session
+		return nil, session.Options, errors.New(session.DetectErr)
+	}
+	session.Decoder = dec
+	session.Options.Name = r.PatternName
+	session.Options.Pattern = r.Pattern
+	session.Options.CustomPatterns = r.CustomPatterns
+	sessionMap[sessionID] = session
+	return dec, session.Options, nil
+}
+
+// endIngestSession is /ingest/end's teardown: drop the session and flush
+// its trailing multiline record. Also run by a path-ingest job that was
+// started by the server (re-import) rather than a client, which would
+// otherwise leave the session to the expiry sweep.
+func (h *Services) endIngestSession(sessionID string) {
+	sessionMapMutex.Lock()
+	session, exists := sessionMap[sessionID]
+	delete(sessionMap, sessionID)
+	sessionMapMutex.Unlock()
+	if exists {
+		h.flushSessionMultiline(session, sessionID)
+	}
 }
 
 // @Summary End log ingest session
@@ -376,14 +505,7 @@ func (h *Services) HandleIngestEnd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.SessionID != "" {
-		sessionMapMutex.Lock()
-		session, exists := sessionMap[req.SessionID]
-		delete(sessionMap, req.SessionID)
-		sessionMapMutex.Unlock()
-
-		if exists {
-			h.flushSessionMultiline(session, req.SessionID)
-		}
+		h.endIngestSession(req.SessionID)
 	}
 
 	json.NewEncoder(w).Encode(types.IngestResponse{
@@ -399,7 +521,7 @@ func (h *Services) flushSessionMultiline(session IngestSession, sessionID string
 		return
 	}
 	final := session.Multiline.Flush()
-	if len(final) == 0 {
+	if len(final) == 0 || session.Decoder == nil {
 		return
 	}
 	results := session.Decoder.DecodeConcurrent(final, 0)
@@ -411,7 +533,11 @@ func (h *Services) flushSessionMultiline(session IngestSession, sessionID string
 		log.Printf("ingest: failed to store trailing multiline record for session %s: %v", sessionID, err)
 		return
 	}
-	h.InvalidateInfoCache()
+	h.recordStored(storedBatch{
+		Opts: session.Options, Origin: session.Origin,
+		ImportID: sessionID, ImportJobID: session.JobID,
+		Lines: final, Rows: jsonOutput,
+	})
 }
 
 // expireStaleSessions removes sessions older than SessionTimeout and

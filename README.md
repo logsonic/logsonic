@@ -2,6 +2,7 @@
 
 > **Drop a log file or livestream one. Search it in seconds. Keep it fully offline. Let your AI agent query it.**
 
+[![CI](https://github.com/logsonic/logsonic/actions/workflows/ci.yml/badge.svg)](https://github.com/logsonic/logsonic/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/logsonic/logsonic?label=release)](https://github.com/logsonic/logsonic/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/logsonic/logsonic?style=social)](https://github.com/logsonic/logsonic/stargazers)
@@ -90,6 +91,7 @@ For Linux, Windows, Docker, source builds, storage locations, and the macOS app 
 - Saved local workspaces for recurring investigations.
 - Color rules, event histogram, source filters, and dark/light themes.
 - Local file-based storage with retention controls.
+- `logsonic open app.log` from any terminal imports a file into the running app (starting it if needed) and prints the link to it.
 
 ## Documentation
 
@@ -99,8 +101,8 @@ For Linux, Windows, Docker, source builds, storage locations, and the macOS app 
 - [Live Streaming](docs/live-streaming.md): `logsonic tail`, stdin streaming, server-side file following, and demos.
 - [Timestamp Resolution](docs/timestamp-resolution.md): how LogSonic derives real timestamps and when to override.
 - [Development](docs/development.md): local backend/frontend setup, tests, E2E, and Swagger generation.
-- [Architecture](docs/Architecture.md): backend, frontend, storage, and MCP architecture.
-- [Production Readiness Plan](docs/production-readiness-plan.md): bounded import and search, automated releases, secure self-update, rollout gates, and deferred hardening.
+- [Architecture](docs/System_Architecture.md): backend, frontend, storage, ingest, search, and MCP architecture.
+- [Roadmap](ROADMAP.md): the desktop-first principles, what is planned for the next releases, and what is deliberately out of scope.
 - [MCP Setup](mcp/README.md): configure Claude Desktop, Cursor, Windsurf, or another MCP client.
 - [Agent Playbook](mcp/SKILLS.md): query patterns and workflow guidance for AI clients.
 

@@ -1,10 +1,102 @@
 import { LogQueryParams, LogResponse } from '@/lib/api-types';
 import { getLogs } from '@/lib/api-client';
 import { calculateRelativeDateRange } from '@/lib/date-utils';
+import { useFacetStore } from '@/stores/useFacetStore';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useCallback, useEffect, useRef } from 'react';
 import { useGetLogs } from './useApi';
+
+type SearchWindowState = Pick<
+  ReturnType<typeof useSearchQueryParamsStore.getState>,
+  'searchQuery' | 'sources' | 'sourcesInitialized' | 'isRelative' | 'relativeValue' | 'customRelativeUnit' | 'customRelativeCount' | 'UTCTimeSince' | 'UTCTimeTo'
+>;
+
+/** Resolve the store's window (relative or absolute) to concrete UTC bounds. */
+export const resolveSearchWindow = (store: SearchWindowState): { startDate: Date; endDate: Date } => {
+  if (store.isRelative) {
+    return calculateRelativeDateRange(store.relativeValue, store.customRelativeUnit, store.customRelativeCount);
+  }
+  return { startDate: store.UTCTimeSince, endDate: store.UTCTimeTo };
+};
+
+/**
+ * Identity of "the current search window" -- query, sources and resolved
+ * range -- used by the Fields panel to tell whether its facets are current.
+ * Relative ranges are resolved to the minute so a panel doesn't refetch every
+ * render while the clock ticks. Consequence: two searches inside the same
+ * wall-clock minute share a fingerprint even if a live tail added rows in
+ * between, so the panel's "stale" hint can lag by up to a minute; the facets
+ * themselves are refetched with the next search regardless.
+ */
+export const searchFingerprint = (store: SearchWindowState): string => {
+  const { startDate, endDate } = resolveSearchWindow(store);
+  const minute = (d: Date) => Math.floor(d.getTime() / 60000);
+  const sources = store.sourcesInitialized ? [...store.sources].sort().join(',') : '*';
+  return `${store.searchQuery}|${sources}|${minute(startDate)}|${minute(endDate)}`;
+};
+
+let activeMetadataController: AbortController | null = null;
+
+/**
+ * The deferred second request: chart distribution (and, when the Fields
+ * panel is open, facets) for the current window. Kept out of the first page
+ * request because a facet scan roughly doubles it. `fields` here only
+ * projects the returned row; the server's facet scan builds its own field
+ * list, so the projection does not starve the facets.
+ */
+export const refreshSearchMetadata = async (opts: { includeFacets: boolean; params?: LogQueryParams }): Promise<void> => {
+  const query = useSearchQueryParamsStore.getState();
+  const facetStore = useFacetStore.getState();
+  const fingerprint = searchFingerprint(query);
+  const { startDate, endDate } = resolveSearchWindow(query);
+  const params: LogQueryParams = opts.params ?? {
+    query: query.searchQuery,
+    _src: query.sourcesInitialized ? query.sources.join(',') : undefined,
+    start_date: startDate.toISOString(),
+    end_date: endDate.toISOString(),
+  };
+  activeMetadataController?.abort();
+  const controller = new AbortController();
+  activeMetadataController = controller;
+  if (opts.includeFacets) facetStore.setLoading(true);
+  try {
+    const metadata = await getLogs({
+      ...params,
+      limit: 1,
+      offset: 0,
+      sort_by: 'timestamp',
+      sort_order: 'desc',
+      fields: 'timestamp,_src',
+      include_distribution: true,
+      include_facets: opts.includeFacets,
+    }, controller.signal);
+    if (activeMetadataController !== controller) return;
+    const current = useLogResultStore.getState().logData;
+    if (current) {
+      useLogResultStore.getState().setLogData({
+        ...current,
+        total_count: metadata.total_count,
+        log_distribution: metadata.log_distribution,
+      });
+    }
+    if (opts.includeFacets && metadata.facets) {
+      useFacetStore.getState().setFacets(metadata.facets, fingerprint);
+    }
+  } catch (metadataError) {
+    if (!controller.signal.aborted) {
+      console.warn('Failed to load log distribution:', metadataError);
+      if (opts.includeFacets) {
+        useFacetStore.getState().setError(metadataError instanceof Error ? metadataError.message : 'request failed');
+      }
+    }
+  } finally {
+    if (activeMetadataController === controller) {
+      activeMetadataController = null;
+      if (opts.includeFacets) useFacetStore.getState().setLoading(false);
+    }
+  }
+};
 
 /**
  * Hook for searching logs that uses the LogResultStore for state management
@@ -17,17 +109,15 @@ export const useSearchLogs = (
   const logResultStore = useLogResultStore();
   const { execute: fetchLogs, isLoading: apiLoading, performanceMetrics } = useGetLogs();
   const activeSearchRef = useRef<AbortController | null>(null);
-  const activeMetadataRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => {
     activeSearchRef.current?.abort();
-    activeMetadataRef.current?.abort();
+    activeMetadataController?.abort();
   }, []);
 
   // Create a stable search function that doesn't change on every render
   const searchLogs = useCallback(async () => {
     activeSearchRef.current?.abort();
-    activeMetadataRef.current?.abort();
     const controller = new AbortController();
     activeSearchRef.current = controller;
     try {
@@ -116,36 +206,9 @@ export const useSearchLogs = (
 
         // Chart facets roughly double a large-index request and are not needed
         // to render the first result page. Fetch them after the rows are
-        // visible, then merge only the metadata into the still-current result.
-        const metadataController = new AbortController();
-        activeMetadataRef.current = metadataController;
-        void getLogs({
-          ...params,
-          limit: 1,
-          offset: 0,
-          sort_by: 'timestamp',
-          sort_order: 'desc',
-          fields: 'timestamp,_src',
-          include_distribution: true,
-        }, metadataController.signal).then((metadata) => {
-          if (activeMetadataRef.current !== metadataController) return;
-          const current = useLogResultStore.getState().logData;
-          if (!current) return;
-          useLogResultStore.getState().setLogData({
-            ...current,
-            total_count: metadata.total_count,
-            log_distribution: metadata.log_distribution,
-          });
-        }).catch((metadataError) => {
-          if (!metadataController.signal.aborted) {
-            console.warn('Failed to load log distribution:', metadataError);
-          }
-        }).finally(() => {
-          if (activeMetadataRef.current === metadataController) {
-            activeMetadataRef.current = null;
-          }
-        });
-        
+        // visible (with field facets too when the Fields panel is open).
+        void refreshSearchMetadata({ includeFacets: useFacetStore.getState().panelOpen, params });
+
         return result;
       }
     } catch (error) {

@@ -62,6 +62,13 @@ export function generateFileId(): string {
   return `file-${Date.now()}-${++fileIdCounter}`;
 }
 
+// The browser has no path.basename; a native path can be POSIX or Windows
+// (spec now-08 requires both to work), so split on either separator.
+export function basenameOfPath(path: string): string {
+  const parts = path.split(/[\\/]/);
+  return parts[parts.length - 1] || path;
+}
+
 interface ImportState {
   // Upload step tracking
   currentStep: UploadStep;
@@ -138,6 +145,7 @@ interface ImportState {
 
   // --- Multi-file actions ---
   addFiles: (newFiles: File[]) => void;
+  addNativePathFiles: (paths: string[], mtimes?: (string | null)[]) => void;
   removeFile: (fileId: string) => void;
   setActiveFileId: (fileId: string | null) => void;
   updateFile: (fileId: string, updates: Partial<ImportFile>) => void;
@@ -287,6 +295,43 @@ export const useImportStore = create<ImportState>((set, get) => ({
       // it here so the resolver can anchor against the file's mtime
       // instead of falling back to wall-clock now.
       sourceMTime: file.lastModified ? new Date(file.lastModified).toISOString() : null,
+    }));
+    set(state => ({ files: [...state.files, ...importFiles] }));
+  },
+
+  // Native-path files (spec now-08 phase 5's FileSelection.tsx wiring is
+  // the only intended caller): fileSize/previewLines/approxLines are left
+  // at zero/empty here since getting them means an extra request
+  // (POST /parse/preview-file) the caller makes once, not per store call.
+  // `mtimes[i]` (already ISO 8601, from the macOS shell's own stat() of
+  // the path -- the browser has none) anchors year-less/2-digit-year
+  // timestamps the same way a browser File's lastModified does; missing
+  // or shorter than `paths` falls back to null per entry, same as before.
+  addNativePathFiles: (paths: string[], mtimes?: (string | null)[]) => {
+    const importFiles: ImportFile[] = paths.map((path, i) => ({
+      id: generateFileId(),
+      nativePath: path,
+      fileName: basenameOfPath(path),
+      fileSize: 0,
+      previewLines: [],
+      approxLines: 0,
+      detectedPattern: null,
+      selectedPattern: null,
+      isCustomPattern: false,
+      customPattern: null,
+      customPatternTokens: {},
+      detectionStatus: 'pending',
+      detectionError: null,
+      parsedLogs: [],
+      uploadStatus: 'pending',
+      uploadProgress: 0,
+      uploadError: null,
+      totalLinesProcessed: 0,
+      sessionOptions: { ...DEFAULT_SESSION_OPTIONS },
+      timestampInference: null,
+      timestampOverrides: {},
+      timestampConfirmed: false,
+      sourceMTime: mtimes?.[i] ?? null,
     }));
     set(state => ({ files: [...state.files, ...importFiles] }));
   },

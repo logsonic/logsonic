@@ -14,6 +14,7 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 backend_dir="$(cd "$script_dir/.." && pwd)"
 swift_src="$backend_dir/macos/LogsonicApp.swift"
 listening_src="$backend_dir/macos/ListeningURL.swift"
+dragstrip_src="$backend_dir/macos/DragStrip.swift"
 icon_png="$script_dir/app-icon.png"
 outdir="$backend_dir/dist-dev"
 app="$outdir/Logsonic.app"
@@ -27,6 +28,7 @@ fi
 [ -f "$bin" ] || { echo "dev-macos-app.sh: no binary at $bin" >&2; exit 1; }
 [ -f "$swift_src" ] || { echo "dev-macos-app.sh: missing $swift_src" >&2; exit 1; }
 [ -f "$listening_src" ] || { echo "dev-macos-app.sh: missing $listening_src" >&2; exit 1; }
+[ -f "$dragstrip_src" ] || { echo "dev-macos-app.sh: missing $dragstrip_src" >&2; exit 1; }
 [ -f "$icon_png" ] || { echo "dev-macos-app.sh: missing $icon_png" >&2; exit 1; }
 command -v sips >/dev/null || { echo "dev-macos-app.sh: sips is required to build the app icon" >&2; exit 1; }
 command -v iconutil >/dev/null || { echo "dev-macos-app.sh: iconutil is required to build the app icon" >&2; exit 1; }
@@ -38,7 +40,7 @@ chmod 755 "$app/Contents/MacOS/logsonic"
 
 swiftc -O -D DEBUG -framework AppKit -framework WebKit \
   -target "$(uname -m)-apple-macos11" \
-  "$listening_src" "$swift_src" -o "$app/Contents/MacOS/LogsonicApp"
+  "$listening_src" "$dragstrip_src" "$swift_src" -o "$app/Contents/MacOS/LogsonicApp"
 chmod 755 "$app/Contents/MacOS/LogsonicApp"
 
 iconset="$outdir/AppIcon.iconset"

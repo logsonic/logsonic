@@ -11,6 +11,16 @@ export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    // Node-side scripts (Playwright E2E drivers, build helpers) use console,
+    // process, fetch and — inside page.evaluate callbacks — document. Without
+    // this block they were linted with browser-only globals and produced 80
+    // spurious no-undef errors.
+    files: ["*.mjs", "scripts/**/*.{js,mjs}"],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
+  {
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
       ecmaVersion: 2020,
@@ -70,15 +80,11 @@ export default [
           },
         },
       ],
-      "prettier/prettier": ["error", {
-        "semi": true,
-        "tabWidth": 2,
-        "printWidth": 100,
-        "singleQuote": true,
-        "trailingComma": "es5",
-        "arrowParens": "always",
-        "endOfLine": "lf"
-      }],
+      // No inline options: prettier/prettier reads .prettierrc, so eslint and
+      // `npm run format` can never disagree about the house style again. (They
+      // did: this block used to say singleQuote: true while .prettierrc says
+      // false, which made every double-quoted line in the repo a lint error.)
+      "prettier/prettier": "error",
       "no-unused-vars": "off", // Turn off the base rule as it can report incorrect errors
     },
   }

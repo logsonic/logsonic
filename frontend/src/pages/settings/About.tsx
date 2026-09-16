@@ -1,51 +1,17 @@
-import { Check, Copy, ExternalLink, Github } from 'lucide-react';
-import { FC, useState } from 'react';
+import { ExternalLink, Github } from 'lucide-react';
+import { FC } from 'react';
 
 import pkg from '../../../package.json';
 
 import { SettingsLayout } from './SettingsLayout';
 
+import { CopyableValue } from '@/components/settings/CopyableValue';
 import { Button } from '@/components/ui/button';
 import { formatBytes } from '@/lib/utils';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 
 const SOURCE_URL = 'https://github.com/logsonic/logsonic';
 
-const CopyableValue: FC<{ value: string }> = ({ value }) => {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(value).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  };
-
-  return (
-    <div className="flex items-center" style={{ gap: 6, minWidth: 0 }}>
-      <span className="ls-mono-inline" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }} title={value}>
-        {value}
-      </span>
-      <button
-        type="button"
-        onClick={handleCopy}
-        title="Copy to clipboard"
-        style={{
-          flexShrink: 0,
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          padding: 2,
-          color: 'var(--ls-text-3)',
-          display: 'flex',
-          alignItems: 'center',
-        }}
-      >
-        {copied ? <Check size={12} style={{ color: 'var(--ls-ok)' }} /> : <Copy size={12} />}
-      </button>
-    </div>
-  );
-};
 
 const About: FC = () => {
   const { systemInfo } = useSystemInfoStore();
@@ -54,8 +20,14 @@ const About: FC = () => {
   const storageDir = systemInfo?.storage_info?.storage_directory;
   const storageSize = systemInfo?.storage_info?.storage_size_bytes;
 
+  // Server build identity wins; the bundle's package.json version is only
+  // the fallback while /info has not loaded (or in dev, where both say dev).
+  const serverVersion = systemInfo?.app?.version;
+  const versionLabel = serverVersion && serverVersion !== 'dev' ? serverVersion : `v${pkg.version}`;
+  const commit = systemInfo?.app?.commit;
+
   const staticRows: [string, string][] = [
-    ['Version', `v${pkg.version}`],
+    ['Version', commit ? `${versionLabel} (${commit.slice(0, 12)})` : versionLabel],
     ['License', 'MIT'],
     ['API endpoint', apiBase],
     ['Source', 'github.com/logsonic/logsonic'],

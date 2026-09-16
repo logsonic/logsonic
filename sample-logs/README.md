@@ -2,6 +2,11 @@
 
 Ready-to-import log files for testing logsonic. Files from [logpai/loghub](https://github.com/logpai/loghub) are real production logs; synthetic files are realistic generated samples.
 
+## Licensing
+
+- **loghub files** (`apache.log`, `openssh.log`, `linux-syslog.log`, `mac-system.log`, `hadoop.log`, `hdfs.log`, `spark.log`, `zookeeper.log`, `openstack.log`, `bgl-supercomputer.log`, `hpc.log`, `healthapp.log`): loghub's README states the datasets are "freely available for research or academic work" and asks for a citation of the repository and paper; **no open-source licence is named** (checked 2026-09-16 against the loghub README). They stay in this folder for local testing and are **not** bundled into the binary.
+- **Synthetic files** (`nginx-access.log`, `app-json.log`, `postgresql.log`, `docker.log`, `java-stacktrace.log`, `syslog-multiline.log`): generated for this repository; MIT like the rest of it. `nginx-access.log` is the sample the binary bundles for the first-run "Try with sample logs" (`GET /api/v1/samples`).
+
 ## Files
 
 | File | Lines | Source | Format Example |

@@ -36,8 +36,10 @@ const (
 )
 
 type TailManager struct {
-	storage    storagepkg.StorageInterface
-	invalidate func()
+	storage storagepkg.StorageInterface
+	// onStored is called after every successful StoreWithIDs with what was
+	// stored; the Services wires it to recordStored (catalog + info cache).
+	onStored func(storedBatch)
 
 	mu          sync.RWMutex
 	sources     map[string]*TailSource
@@ -47,12 +49,30 @@ type TailManager struct {
 	rootCancel context.CancelFunc
 }
 
+// FollowObserver lets a caller that owns a followed file (the folder watch,
+// spec now-04) track where the follower is. Progress reports the offset of
+// the last complete line stored and the seq reached there — the pair a
+// resume needs to reproduce identical document IDs. Rotated fires when the
+// file was replaced (the follower restarts at 0). Finished fires exactly
+// once, with the same status/message the SSE "source_status" event carries.
+type FollowObserver interface {
+	Progress(offset, seq int64, info os.FileInfo)
+	Rotated(info os.FileInfo)
+	Finished(status, message string)
+}
+
 type TailSource struct {
 	id      string
 	path    string
 	opts    types.IngestSessionOptions
 	decoder *l2g.Decoder
 	manager *TailManager
+	// kind is the catalog origin: "tail" (POST /live/files, tail -f),
+	// "stdin", or "watch" (pkg/watch). startOffset < 0 means end-of-file
+	// (tail semantics); ≥ 0 seeks there, or to 0 if the file is shorter.
+	kind        string
+	startOffset int64
+	observer    FollowObserver
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -87,11 +107,11 @@ type liveEvent struct {
 	data interface{}
 }
 
-func NewTailManager(storage storagepkg.StorageInterface, invalidate func()) *TailManager {
+func NewTailManager(storage storagepkg.StorageInterface, onStored func(storedBatch)) *TailManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &TailManager{
 		storage:     storage,
-		invalidate:  invalidate,
+		onStored:    onStored,
 		sources:     make(map[string]*TailSource),
 		subscribers: make(map[string]*liveSubscriber),
 		rootCtx:     ctx,
@@ -136,7 +156,47 @@ func (m *TailManager) ActiveSourceIDs() []string {
 	return ids
 }
 
+// ActiveSourceNames returns the effective source name of every running tail
+// (file or stdin), for the per-source delete's in-use check.
+func (m *TailManager) ActiveSourceNames() []string {
+	kinds := m.ActiveSourceKinds()
+	out := make([]string, 0, len(kinds))
+	for name := range kinds {
+		out = append(out, name)
+	}
+	return out
+}
+
+// ActiveSourceKinds maps every running source's effective name to its kind
+// ("tail", "stdin", "watch"), so a refusal can say what to stop.
+func (m *TailManager) ActiveSourceKinds() map[string]string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make(map[string]string, len(m.sources))
+	for _, s := range m.sources {
+		kind := s.kind
+		if kind == "" {
+			kind = "tail"
+		}
+		if s.path == "" {
+			kind = "stdin"
+		}
+		out[effectiveSource(s.opts)] = kind
+	}
+	return out
+}
+
 func (m *TailManager) StartFile(path string, opts types.IngestSessionOptions) (string, error) {
+	return m.StartFileAt(path, opts, -1, 0, nil, "tail")
+}
+
+// StartFileAt is StartFile with a starting point: offset (−1 = end of file,
+// the tail default), the seq to continue numbering from (so a resume from a
+// stored (offset, seq) pair re-creates the same document IDs and Bleve
+// upserts instead of duplicating), an optional observer, and the catalog
+// origin kind. The folder watch (spec now-04) is the caller that needs all
+// four; the follow loop itself is shared, not forked.
+func (m *TailManager) StartFileAt(path string, opts types.IngestSessionOptions, offset, seq int64, observer FollowObserver, kind string) (string, error) {
 	if path == "" {
 		return "", errors.New("path is required")
 	}
@@ -162,6 +222,12 @@ func (m *TailManager) StartFile(path string, opts types.IngestSessionOptions) (s
 		return "", err
 	}
 	source.path = absPath
+	source.kind = kind
+	source.startOffset = offset
+	source.observer = observer
+	if seq > 0 {
+		source.seq.Store(seq)
+	}
 	if err := m.addSource(source); err != nil {
 		return "", err
 	}
@@ -287,6 +353,9 @@ func (m *TailManager) Done() <-chan struct{} {
 }
 
 func (m *TailManager) newSource(opts types.IngestSessionOptions) (*TailSource, error) {
+	if err := resolveSavedPattern(&opts); err != nil {
+		return nil, err
+	}
 	opts = defaultLiveOptions(opts)
 	decoder, err := l2g.NewDecoder(l2g.PatternSpec{
 		Name:           opts.Name,
@@ -384,6 +453,33 @@ func (m *TailManager) publishStatus(sourceID, status, message string) {
 	}
 }
 
+// publishBroadcast sends event to every subscriber regardless of
+// sourceFilter, for events that aren't tied to a tail source (ingest-job
+// progress). Unlike publishRows/publishStatus it also bypasses a
+// subscriber's pause flag: pause is a row-feed concept for live tail, and a
+// paused SSE connection must still see a job reach done/cancelled/error, or
+// GET /ingest/jobs is the only way it would ever learn the job finished.
+func (m *TailManager) publishBroadcast(name string, data interface{}) {
+	event := liveEvent{name: name, data: data}
+
+	m.mu.RLock()
+	subscribers := make([]*liveSubscriber, 0, len(m.subscribers))
+	for _, sub := range m.subscribers {
+		subscribers = append(subscribers, sub)
+	}
+	m.mu.RUnlock()
+
+	for _, sub := range subscribers {
+		select {
+		case sub.ch <- event:
+		default:
+			// Best-effort like every other live event: a full buffer means a
+			// slow consumer, and there is no "skipped" counter for job
+			// events. GET /ingest/jobs is the reconciliation path.
+		}
+	}
+}
+
 func (s *liveSubscriber) enqueue(event liveEvent, sourceID string, rowCount int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -415,6 +511,9 @@ func (s *TailSource) Stop() {
 func (s *TailSource) finish(status, message string) {
 	s.manager.removeSource(s.id)
 	s.manager.publishStatus(s.id, status, message)
+	if s.observer != nil {
+		s.observer.Finished(status, message)
+	}
 	close(s.done)
 }
 
@@ -432,7 +531,18 @@ func (s *TailSource) followFile() {
 	}
 	defer file.Close()
 
-	offset, err := file.Seek(0, io.SeekEnd)
+	var offset int64
+	if s.startOffset < 0 {
+		offset, err = file.Seek(0, io.SeekEnd)
+	} else {
+		offset = s.startOffset
+		if offset > info.Size() {
+			// The file is shorter than where we left it: it was rotated
+			// while nobody was watching. Start over, like a live rotation.
+			offset = 0
+		}
+		_, err = file.Seek(offset, io.SeekStart)
+	}
 	if err != nil {
 		s.finish("error", err.Error())
 		return
@@ -466,9 +576,17 @@ func (s *TailSource) followFile() {
 					info = nextInfo
 				}
 				pending = pending[:0]
+				if s.observer != nil {
+					s.observer.Rotated(info)
+				}
 			}
 
 			for {
+				// A stop during a long catch-up read must not wait for EOF:
+				// a watched file can be gigabytes, and Stop() only waits 5 s.
+				if s.ctx.Err() != nil {
+					break
+				}
 				n, readErr := file.Read(buf)
 				if n > 0 {
 					offset += int64(n)
@@ -478,6 +596,11 @@ func (s *TailSource) followFile() {
 					if err := s.processLines(lines); err != nil {
 						s.finish("error", err.Error())
 						return
+					}
+					if s.observer != nil && len(lines) > 0 {
+						// The offset of the last complete line, not the read
+						// position: a resume from here starts on a line boundary.
+						s.observer.Progress(offset-int64(len(pending)), s.seq.Load(), info)
 					}
 				}
 				if readErr == nil {
@@ -628,8 +751,16 @@ func (s *TailSource) processFoldedLines(lines []string) error {
 	if err != nil {
 		return err
 	}
-	if s.manager.invalidate != nil {
-		s.manager.invalidate()
+	if s.manager.onStored != nil {
+		origin := types.SourceOrigin{Kind: "stdin"}
+		if s.path != "" {
+			kind := s.kind
+			if kind == "" {
+				kind = "tail"
+			}
+			origin = types.SourceOrigin{Kind: kind, Path: s.path}
+		}
+		s.manager.onStored(storedBatch{Opts: s.opts, Origin: origin, ImportID: s.id, Lines: lines, Rows: parsed})
 	}
 
 	for i := range parsed {
@@ -707,6 +838,14 @@ func defaultLiveOptions(opts types.IngestSessionOptions) types.IngestSessionOpti
 		opts.Source = "live"
 	}
 	return opts
+}
+
+// StartWatches starts the folder-watch manager on the server's shutdown
+// context; it stops itself when ctx is cancelled.
+func (h *Services) StartWatches(ctx context.Context) {
+	if h.Watches != nil {
+		h.Watches.Start(ctx)
+	}
 }
 
 func (h *Services) StartLive(ctx context.Context) {

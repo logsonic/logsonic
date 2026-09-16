@@ -78,7 +78,7 @@ LogSonic indexes ingested logs into a per-user data directory. Override it with 
 | Linux | `$XDG_DATA_HOME/logsonic` or `~/.local/share/logsonic` |
 | Windows | `%APPDATA%\Logsonic` |
 
-To keep storage bounded, run with `-retention-days N` or `RETENTION_DAYS=N`:
+To keep storage bounded, set retention days in the app's Storage settings (saved to `<storage>/config.json`, which overrides the flag), or run with `-retention-days N` or `RETENTION_DAYS=N` — see [Retention precedence](configuration.md#retention-precedence):
 
 ```bash
 logsonic -retention-days 30
@@ -131,3 +131,5 @@ Run:
 docker buildx build -t logsonic .
 docker run -p 8080:8080 -v /path/to/logs:/data logsonic
 ```
+
+The image sets `HOST=0.0.0.0` so the server accepts connections from outside the container. LogSonic's [Host-header allow-list](configuration.md#security-model) is skipped by default on any non-loopback bind, including this one, so the container works unchanged: a request with `Host: localhost:8080` from the host machine (or whatever hostname you access the mapped port through) is accepted. Pass `-allowed-hosts` in the container's command if you want that check enforced.

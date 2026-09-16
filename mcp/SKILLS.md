@@ -11,7 +11,7 @@ You cannot:
 - Tail logs in real time — every query is a snapshot.
 - Query data outside the range LogSonic has indexed.
 
-You can create and reopen saved investigation workspaces. Workspaces store local query state, time range, sources, columns, coloring, and visualization mode under the user's LogSonic storage directory.
+You can create and reopen saved investigation workspaces. Workspaces store local query state, time range, sources, columns, coloring, visualization mode, and any saved queries under the user's LogSonic storage directory.
 
 ## The standard workflow
 
@@ -54,6 +54,10 @@ Key gotchas:
 `query_logs` accepts `start_date` and `end_date` in **RFC3339** (`2025-01-15T10:00:00Z`). The `logsonic_url` tool is the exception — its `start_date`/`end_date` are **Unix milliseconds** because that's what the UI's URL hash expects. Don't mix them up.
 
 If the user says "last hour" / "yesterday" / "last 7 days", compute the absolute window yourself from the current time and pass RFC3339. Don't pass through fuzzy strings — LogSonic won't parse them.
+
+## Facets (field summary of a window)
+
+`GET /api/v1/logs?include_facets=true` (not yet exposed as an MCP tool — that is spec `next-05`) adds a `facets` object: for every parsed field, the distinct-value count and up to 8 top values with counts, computed over the newest rows of the current window (`computed_over`; `sampled: true` when the window exceeded the 20,000-row scan cap). High-cardinality fields (IDs) report only their distinct count. The one exception is `_src`: its values come from the sources catalog and list every source with its total row count, regardless of the window or query. Use it to learn which fields and values exist before writing a `field:value` query instead of paging raw rows.
 
 ## Pagination
 

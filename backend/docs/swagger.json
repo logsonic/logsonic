@@ -283,6 +283,101 @@
                 }
             }
         },
+        "/ingest/file": {
+            "post": {
+                "description": "Start ingesting a log file the server can access (absolute path; gzip and zstd are detected by magic bytes) into an existing ingest session, optionally with its rotated siblings. Accepted immediately (202); the read runs in the background. Poll GET /ingest/jobs or listen for \"ingest_progress\" on GET /live/events for progress and the final state. Call POST /ingest/end only after the job reaches a terminal state (done|cancelled|error) -- ending the session while the job is still running fails its next batch with an invalid-session error.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ingest"
+                ],
+                "summary": "Ingest a file by path",
+                "parameters": [
+                    {
+                        "description": "Session and absolute path",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.IngestFileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/types.IngestFileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ingest/jobs": {
+            "get": {
+                "description": "List every path-based ingest job started this server run (running or finished), for a UI reconnecting to a job it lost SSE contact with.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ingest"
+                ],
+                "summary": "List path-ingest jobs",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.IngestJobsListResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ingest/jobs/{id}": {
+            "delete": {
+                "description": "Cancel a running path-based ingest job. A no-op (200, the job's own terminal state) if it already finished.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ingest"
+                ],
+                "summary": "Cancel a path-ingest job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Job ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.IngestJobActionResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/ingest/logs": {
             "post": {
                 "description": "Ingest log data using existing Grok patterns and store them into the index",
@@ -445,8 +540,26 @@
                     },
                     {
                         "type": "string",
-                        "description": "Optional comma-separated source filter",
+                        "description": "Optional comma-separated source filter. Stored _src names, or a source's display name / former display name (PATCH /sources/{name}), which resolve to the stored name",
                         "name": "_src",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional comma-separated fields to return",
+                        "name": "fields",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include chart distribution metadata (default: true)",
+                        "name": "include_distribution",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include a field/value facet summary of the window (default: false; bounded scan of the newest rows, see facets.computed_over/sampled)",
+                        "name": "include_facets",
                         "in": "query"
                     }
                 ],
@@ -593,6 +706,52 @@
                 }
             }
         },
+        "/parse/preview-file": {
+            "post": {
+                "description": "Read the first few lines of a file the server can access (absolute path; gzip and zstd detected by magic bytes), without creating an ingest session. Used by the native-drop wizard flow, which only ever has a path, not a browser File to read.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ingest"
+                ],
+                "summary": "Preview a file by path",
+                "parameters": [
+                    {
+                        "description": "Absolute path and optional line count",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.PreviewFileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.PreviewFileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/ping": {
             "get": {
                 "description": "Check if the API is running",
@@ -608,6 +767,474 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/handlers.PingResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/samples": {
+            "get": {
+                "description": "The sample files embedded in the binary for a first run, with the source name and pattern each imports under.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "samples"
+                ],
+                "summary": "List bundled sample logs",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.SamplesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/samples/{name}/import": {
+            "post": {
+                "description": "Ingest a bundled sample straight from the binary into the index (nothing is written to disk) under its fixed source name with its pinned pattern. Runs as a path-ingest job: 202 with the job id, progress as \"ingest_progress\" on /live/events, the session ends itself. Importing the same sample twice upserts the same rows.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "samples"
+                ],
+                "summary": "Import a bundled sample",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sample name (GET /samples)",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/types.IngestFileResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/sources": {
+            "get": {
+                "description": "Every source in the catalog (\u003cstorage\u003e/sources.json): origin, pattern, rows, bytes, timestamp span, the day-indices holding it, and its import history. Maintained on the ingest write path; see POST /sources/rebuild to reconcile with the indices.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sources"
+                ],
+                "summary": "List sources",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.SourcesResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/sources/rebuild": {
+            "post": {
+                "description": "Recomputes rows, days and timestamp bounds for every source from the day-indices (one size-0 facet per day on current indices; a stored-field read on indices created before v1.8's keyword _src mapping). Origin, pattern and import history are kept; sources with no rows left are dropped. Idempotent.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sources"
+                ],
+                "summary": "Rebuild the sources catalog from the indices",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.SourcesResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/sources/{name}": {
+            "get": {
+                "description": "One catalog entry by source name (the stored _src value).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sources"
+                ],
+                "summary": "Get one source",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Source name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.SourceEntry"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete every row stored under this source (its exact stored _src) from every day-index holding it, remove day-indices that end up empty, and drop the catalog entry. Not undoable. Refused with 409 while a live tail or a path-ingest job is still writing to the source.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sources"
+                ],
+                "summary": "Delete a source",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Source name (stored _src)",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.SourceDeleteResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Set or clear a display name. The index keeps the stored _src; every display name ever set is kept as an alias, and the _src query parameter on GET /logs resolves aliases to the stored name. The display name must not collide with another source's name, display name or alias.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sources"
+                ],
+                "summary": "Rename a source (display name)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Source name (stored _src)",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New display name; empty clears it",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.SourceRenameRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.SourceEntry"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/sources/{name}/reimport": {
+            "post": {
+                "description": "Requires an origin path that is still readable and the options recorded at its last path import. Validates the path and compiles the pattern first, then deletes the source's rows and starts a path-ingest job (same as POST /ingest/file) that stores them again under the same _src. The catalog entry is kept with zero rows — display name, aliases, origin, pattern and import history survive — and fills as the job runs. 409 while a tail or job is writing to the source; 400 when the path is gone or the source was never path-imported.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sources"
+                ],
+                "summary": "Re-import a source from its origin path",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Source name (stored _src)",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/types.SourceReimportResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/storage": {
+            "get": {
+                "description": "Retention in effect (with its source: config.json, the CLI flag/env, or none) and a per-day table of row counts and on-disk bytes. total_bytes sums the day-index directories only; /info's storage_size_bytes walks the whole storage dir.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "storage"
+                ],
+                "summary": "Storage overview and retention setting",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.StorageResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Writes retention_days to \u003cstorage\u003e/config.json, which takes precedence over -retention-days / RETENTION_DAYS; null clears the override (the flag/env default applies again); 0 keeps everything. The prune runs synchronously before the response, so the first PUT on a long-lived store may take a moment while old day-indices are removed.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "storage"
+                ],
+                "summary": "Set the retention override",
+                "parameters": [
+                    {
+                        "description": "retention_days: 0–3650, or null to clear",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.StorageUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.StorageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/storage/days/{date}": {
+            "delete": {
+                "description": "Remove the day-index for a date (every source's rows for that day) from disk and reconcile the catalog. Not undoable. 409 while a live tail or a running path-ingest job is storing rows for a source that has rows on that day.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "storage"
+                ],
+                "summary": "Delete one day of logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Day, YYYY-MM-DD",
+                        "name": "date",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.StorageDayDeleteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
                         }
                     }
                 }
@@ -646,6 +1273,220 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ui/focus": {
+            "post": {
+                "description": "Broadcasts a \"ui_focus\" event on /live/events; the macOS shell raises its window and, when a route is given, navigates to it. In browser mode nothing listens — the CLI prints the URL instead.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ui"
+                ],
+                "summary": "Bring the app window to the front",
+                "parameters": [
+                    {
+                        "description": "Optional route (a #/... hash)",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/types.UIFocusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/watches": {
+            "get": {
+                "description": "Every folder watch with its live per-file snapshot (state pending | ingesting | following | done | skipped | error, offset, size, source name).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "watches"
+                ],
+                "summary": "List folder watches",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.WatchesResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Watch an absolute, existing directory: every file whose base name matches glob (default *.log) is ingested when it appears and followed as it grows, under the source name watch.\u003cdirname\u003e.\u003cfilename\u003e. pattern is \"\" or \"auto\" for per-file detection, else a saved Grok pattern name. Persisted in \u003cstorage\u003e/watches.json and resumed after a restart.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "watches"
+                ],
+                "summary": "Create a folder watch",
+                "parameters": [
+                    {
+                        "description": "Watch to create",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.WatchRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/types.Watch"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/watches/{id}": {
+            "delete": {
+                "description": "Stop following and forget the watch. Rows already indexed stay.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "watches"
+                ],
+                "summary": "Delete a folder watch",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Watch ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/watches/{id}/pause": {
+            "post": {
+                "description": "Stop detection and following; offsets are kept, so resume continues where each file was left.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "watches"
+                ],
+                "summary": "Pause a folder watch",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Watch ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.Watch"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/watches/{id}/resume": {
+            "post": {
+                "description": "Sweep the directory now and continue following from the stored offsets.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "watches"
+                ],
+                "summary": "Resume a folder watch",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Watch ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.Watch"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/types.ErrorResponse"
                         }
@@ -1181,6 +2022,57 @@
                 }
             }
         },
+        "types.FacetField": {
+            "type": "object",
+            "properties": {
+                "distinct": {
+                    "type": "integer"
+                },
+                "high_cardinality": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "values": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.FacetValue"
+                    }
+                }
+            }
+        },
+        "types.FacetValue": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "truncated": {
+                    "type": "boolean"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.FacetsResponse": {
+            "type": "object",
+            "properties": {
+                "computed_over": {
+                    "type": "integer"
+                },
+                "fields": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.FacetField"
+                    }
+                },
+                "sampled": {
+                    "type": "boolean"
+                }
+            }
+        },
         "types.GrokPatternRequest": {
             "description": "Request structure for creating or updating Grok patterns",
             "type": "object",
@@ -1236,6 +2128,115 @@
                 "status": {
                     "description": "Status of the operation",
                     "type": "string"
+                }
+            }
+        },
+        "types.IngestFileRequest": {
+            "type": "object",
+            "properties": {
+                "include_rotated": {
+                    "description": "IncludeRotated also ingests app.log.N / app-YYYY-MM-DD.log siblings,\noldest first, under the same session and source.",
+                    "type": "boolean"
+                },
+                "log_file_name": {
+                    "description": "Deprecated: use Path.",
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "session_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.IngestFileResponse": {
+            "type": "object",
+            "properties": {
+                "job_id": {
+                    "type": "string"
+                },
+                "members": {
+                    "description": "every file that will be read, in order",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "path": {
+                    "description": "canonical path of the base file",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "\"accepted\"",
+                    "type": "string"
+                }
+            }
+        },
+        "types.IngestJob": {
+            "type": "object",
+            "properties": {
+                "bytes_read": {
+                    "type": "integer"
+                },
+                "bytes_total": {
+                    "type": "integer"
+                },
+                "compression": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "job_id": {
+                    "type": "string"
+                },
+                "lines": {
+                    "type": "integer"
+                },
+                "members": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "path": {
+                    "type": "string"
+                },
+                "rate_lines_per_s": {
+                    "type": "number"
+                },
+                "rows_failed": {
+                    "type": "integer"
+                },
+                "rows_stored": {
+                    "type": "integer"
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.IngestJobActionResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "description": "\"cancelling\", or the job's terminal state if it had already finished",
+                    "type": "string"
+                }
+            }
+        },
+        "types.IngestJobsListResponse": {
+            "type": "object",
+            "properties": {
+                "jobs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.IngestJob"
+                    }
                 }
             }
         },
@@ -1373,6 +2374,14 @@
                 },
                 "end_date": {
                     "type": "string"
+                },
+                "facets": {
+                    "description": "Facets is present only when the request asked for include_facets=true.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.FacetsResponse"
+                        }
+                    ]
                 },
                 "index_query_time": {
                     "type": "integer"
@@ -1518,6 +2527,350 @@
                 }
             }
         },
+        "types.PreviewFileRequest": {
+            "type": "object",
+            "properties": {
+                "lines": {
+                    "description": "Lines caps how many lines to read; default 100, capped server-side.",
+                    "type": "integer"
+                },
+                "path": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.PreviewFileResponse": {
+            "type": "object",
+            "properties": {
+                "approx_lines": {
+                    "type": "integer"
+                },
+                "compressed": {
+                    "type": "string"
+                },
+                "lines": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "size_bytes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "types.SampleInfo": {
+            "type": "object",
+            "properties": {
+                "bytes": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "license": {
+                    "type": "string"
+                },
+                "lines": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "pattern_name": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.SamplesResponse": {
+            "type": "object",
+            "properties": {
+                "samples": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.SampleInfo"
+                    }
+                }
+            }
+        },
+        "types.SavedQuery": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "query": {
+                    "type": "string"
+                },
+                "sources": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "time": {
+                    "$ref": "#/definitions/types.WorkspaceTime"
+                }
+            }
+        },
+        "types.SourceDeleteResponse": {
+            "type": "object",
+            "properties": {
+                "days_removed": {
+                    "description": "DaysRemoved lists day-indices deleted from disk because the source\nwas the last thing in them.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "days_touched": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rows_deleted": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.SourceEntry": {
+            "type": "object",
+            "properties": {
+                "aliases": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "bytes_raw": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "day_rows": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "days": {
+                    "description": "Days lists every day-index holding rows for this source (sorted);\nDayRows is the per-day count behind it, which is what lets a rebuild\nafter a prune or a row delete touch only the affected days.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "display_name": {
+                    "description": "DisplayName is a UI-level rename (spec now-10 \"Rename\"); the index\nkeeps Name as _src. Every past DisplayName is kept in Aliases so a\nsearch by any of them resolves to Name (see catalog.ResolveSources).",
+                    "type": "string"
+                },
+                "first_ts": {
+                    "type": "string"
+                },
+                "import_options": {
+                    "description": "ImportOptions is the last path-backed ingest session's full options\n(pattern, custom patterns, timestamp config, meta._src …) — what a\nre-import replays so the rows land under the same _src. Only set by\nimports that have an origin path; browser uploads can't be replayed.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.IngestSessionOptions"
+                        }
+                    ]
+                },
+                "imports": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.SourceImport"
+                    }
+                },
+                "last_ts": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "origin": {
+                    "$ref": "#/definitions/types.SourceOrigin"
+                },
+                "pattern": {
+                    "type": "string"
+                },
+                "pattern_name": {
+                    "type": "string"
+                },
+                "rows": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.SourceImport": {
+            "type": "object",
+            "properties": {
+                "at": {
+                    "type": "string"
+                },
+                "job_id": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "rows": {
+                    "type": "integer"
+                }
+            }
+        },
+        "types.SourceOrigin": {
+            "type": "object",
+            "properties": {
+                "host": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.SourceReimportResponse": {
+            "type": "object",
+            "properties": {
+                "job_id": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "rows_deleted": {
+                    "type": "integer"
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.SourceRenameRequest": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.SourceRowsEntry": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "rows": {
+                    "type": "integer"
+                }
+            }
+        },
+        "types.SourcesResponse": {
+            "type": "object",
+            "properties": {
+                "sources": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.SourceEntry"
+                    }
+                }
+            }
+        },
+        "types.StorageDay": {
+            "type": "object",
+            "properties": {
+                "bytes": {
+                    "type": "integer"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "rows": {
+                    "type": "integer"
+                }
+            }
+        },
+        "types.StorageDayDeleteResponse": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "rows_deleted": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.StorageResponse": {
+            "type": "object",
+            "properties": {
+                "config_path": {
+                    "type": "string"
+                },
+                "days": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.StorageDay"
+                    }
+                },
+                "path": {
+                    "type": "string"
+                },
+                "retention_days": {
+                    "type": "integer"
+                },
+                "retention_default": {
+                    "type": "integer"
+                },
+                "retention_source": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "total_bytes": {
+                    "description": "TotalBytes is the sum of the day-index directories only — not the\nwhole storage dir (which /info reports and which also holds\nsources.json, workspaces.json and the pattern library).",
+                    "type": "integer"
+                }
+            }
+        },
+        "types.StorageUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "retention_days": {
+                    "type": "integer"
+                }
+            }
+        },
         "types.SuggestResponse": {
             "type": "object",
             "properties": {
@@ -1550,6 +2903,21 @@
         "types.SystemInfoResponse": {
             "type": "object",
             "properties": {
+                "app": {
+                    "description": "App identifies the server binary (from goreleaser ldflags). The UI\nprefers this over its own bundle version so a stale app shell or a\nmismatched CLI is visible in the status bar and About page.",
+                    "type": "object",
+                    "properties": {
+                        "build_date": {
+                            "type": "string"
+                        },
+                        "commit": {
+                            "type": "string"
+                        },
+                        "version": {
+                            "type": "string"
+                        }
+                    }
+                },
                 "status": {
                     "type": "string"
                 },
@@ -1563,9 +2931,16 @@
                             }
                         },
                         "source_names": {
+                            "description": "SourceNames is kept for existing clients; Sources carries the\nsame names with their row counts from the sources catalog.",
                             "type": "array",
                             "items": {
                                 "type": "string"
+                            }
+                        },
+                        "sources": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/types.SourceRowsEntry"
                             }
                         },
                         "storage_directory": {
@@ -1621,6 +2996,104 @@
                 }
             }
         },
+        "types.UIFocusRequest": {
+            "type": "object",
+            "properties": {
+                "route": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.Watch": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "dir": {
+                    "type": "string"
+                },
+                "error": {
+                    "description": "Error is set when the directory itself can't be read (deleted,\npermissions); the watch keeps sweeping and clears it when it can.",
+                    "type": "string"
+                },
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.WatchFile"
+                    }
+                },
+                "glob": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "pattern": {
+                    "type": "string"
+                },
+                "paused": {
+                    "type": "boolean"
+                },
+                "recursive": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "types.WatchFile": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "pattern": {
+                    "type": "string"
+                },
+                "size": {
+                    "type": "integer"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.WatchRequest": {
+            "type": "object",
+            "properties": {
+                "dir": {
+                    "type": "string"
+                },
+                "glob": {
+                    "type": "string"
+                },
+                "pattern": {
+                    "type": "string"
+                },
+                "recursive": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "types.WatchesResponse": {
+            "type": "object",
+            "properties": {
+                "watches": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.Watch"
+                    }
+                }
+            }
+        },
         "types.Workspace": {
             "type": "object",
             "properties": {
@@ -1665,6 +3138,13 @@
                 },
                 "query": {
                     "type": "string"
+                },
+                "saved_queries": {
+                    "description": "SavedQueries are named query+time+source snapshots a user starred\nwhile investigating in this workspace (spec now-03). Omitted (not an\nempty array) on a workspace with none, so a pre-now-03 workspace file\nunmarshals with a nil slice, not a JSON parse error.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.SavedQuery"
+                    }
                 },
                 "sort_by": {
                     "type": "string"

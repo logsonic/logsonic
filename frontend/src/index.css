@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -51,8 +49,8 @@
   --ls-shadow-md: 0 4px 12px -2px rgba(24,24,27,0.08), 0 2px 4px rgba(24,24,27,0.04);
   --ls-shadow-lg: 0 12px 32px -6px rgba(24,24,27,0.16), 0 4px 8px rgba(24,24,27,0.06);
 
-  --ls-font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --ls-font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --ls-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --ls-font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 
   --ls-topbar-h: 44px;
   --ls-rail-w: 56px;
@@ -132,6 +130,13 @@ html, body {
   font-feature-settings: "cv11", "ss01", "ss03";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* macos-b1: the brand cell / topbar / nav rail double as the window's drag
+   region (see dragStripHookJS in LogsonicApp.swift) -- text selection there
+   fights with dragging. Scoped to chrome only, never log content. */
+.is-native-macos .ls-native-chrome {
+  user-select: none;
 }
 
 /* Search-metadata chips (sources / query / range). Token-based so they
@@ -263,7 +268,10 @@ html, body {
    a filter search box. Design tokens remapped to the project's --ls-* set. */
 .ls-set-grid {
   display: grid;
-  grid-template-columns: 200px 1fr;
+  /* minmax(0, 1fr), not 1fr: a bare 1fr is minmax(auto, 1fr), so a long
+     unbreakable value (a watched folder's path) would widen the column past
+     the viewport instead of truncating inside its card. */
+  grid-template-columns: 200px minmax(0, 1fr);
   gap: 36px;
   align-items: start;
 }

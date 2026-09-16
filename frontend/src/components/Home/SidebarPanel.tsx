@@ -4,10 +4,15 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
 import { useSystemInfoStore } from "@/stores/useSystemInfoStore";
-import { CheckSquare2, Eye, FilterX, Loader2, Square } from "lucide-react";
+import { CheckSquare2, Database, Eye, FilterX, ListFilter, Loader2, Square } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { VerticalTab } from "./Sidebar/CollapsiblePanel";
 import { ColorRulesPanel } from "./Sidebar/ColorRulesPanel";
+import { FieldsPanel } from "./Sidebar/FieldsPanel";
+import { SourcesPanel } from './Sidebar/SourcesPanel';
+
+/** The sidebar's tabs, shared by Home (state), Header (label) and LeftRail (buttons). */
+export type SidebarTabId = 'filter' | 'fields' | 'sources' | 'styling';
 
 const sameSources = (a: string[], b: string[]) =>
   a.length === b.length && a.every((source, index) => source === b[index]);
@@ -211,6 +216,18 @@ export const SidebarPanel = () => {
       icon: <FilterX className="h-4 w-4" />,
       label: 'Filter',
       content: filterContent
+    },
+    {
+      id: 'fields',
+      icon: <ListFilter className="h-4 w-4" />,
+      label: 'Fields',
+      content: <FieldsPanel />
+    },
+    {
+      id: 'sources',
+      icon: <Database className="h-4 w-4" />,
+      label: 'Sources',
+      content: <SourcesPanel />,
     },
     {
       id: 'styling',

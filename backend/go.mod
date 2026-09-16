@@ -6,9 +6,11 @@ require (
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de
 	github.com/blevesearch/bleve/v2 v2.5.7
 	github.com/blevesearch/bleve_index_api v1.2.11
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/go-chi/cors v1.2.1
 	github.com/google/uuid v1.6.0
+	github.com/klauspost/compress v1.19.2
 	github.com/logsonic/log2grok v1.1.0
 	github.com/mark3labs/mcp-go v0.54.1
 	github.com/shirou/gopsutil/v3 v3.24.5
