@@ -575,6 +575,46 @@ export interface StorageDayDeleteResponse {
   rows_deleted: number;
 }
 
+// --- Folder watches (mirrors backend pkg/types Watch*; spec now-04) ---
+
+/** Create a folder watch: matching files in `dir` are ingested when they appear and followed as they grow. */
+export interface WatchRequest {
+  /** Absolute path of an existing directory. */
+  dir: string;
+  /** Base-name glob, default `*.log`. */
+  glob?: string;
+  /** `""` or `"auto"` for per-file detection, else a saved Grok pattern name. */
+  pattern?: string;
+  recursive?: boolean;
+}
+
+/** One tracked file. `done` = a compressed file's one-shot ingest finished; `skipped` = beyond the 100-file cap. */
+export interface WatchFile {
+  path: string;
+  offset: number;
+  size: number;
+  state: 'pending' | 'ingesting' | 'following' | 'done' | 'skipped' | 'error';
+  error?: string;
+  /** The `_src` rows are stored under: `watch.<dirname>.<filename>`. */
+  source: string;
+  pattern?: string;
+}
+
+/** A folder watch with its live file snapshot. */
+export interface Watch extends WatchRequest {
+  id: string;
+  paused: boolean;
+  created_at: string;
+  /** Set while the directory itself can't be read; cleared when it can. */
+  error?: string;
+  files: WatchFile[];
+}
+
+/** GET /watches. */
+export interface WatchesResponse {
+  watches: Watch[];
+}
+
 // Query Parameters
 export interface LogQueryParams {
   limit?: number;

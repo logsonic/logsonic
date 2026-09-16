@@ -15,9 +15,9 @@ The user points LogSonic at a directory (e.g. `~/logs`); LogSonic ingests matchi
 - **fsnotify for detection, with a polling fallback.** Use `github.com/fsnotify/fsnotify` on the watched directory (non-recursive in v1; recursive is a config flag defaulting to false). Because fsnotify misses events on some network mounts, run a reconciliation sweep every 60 s that compares directory listing + sizes against known state. The sweep is the source of truth; fsnotify is the low-latency hint.
 - **Watch configs persist server-side** in a JSON file `<storage>/watches.json` (same pattern as `pkg/workspaces/store.go`) so watches survive restarts and exist independently of any browser session.
 - **Dedup / resume:** track per-file `(path, inode/fileID, offset)` in the watch state. On restart, resume from stored offset if the file is unchanged (same inode, size ≥ offset); re-ingest from 0 if rotated (new inode) — standard tail rotation semantics, which `live.go` may already implement for `-f`; reuse if so.
-- **Pattern selection:** each watch stores either `"auto"` (log2grok detection per new file, same as import) or a fixed saved Grok pattern name. Mixed folders default to `"auto"`.
-- **Safety caps:** default include glob `*.log`, configurable; per-file size cap reuses the bounded-import limits from the existing import path (commit `c284235` added bounding/cancel — find and reuse those constants); max 100 tracked files per watch, oldest-mtime files skipped beyond that with a logged warning.
-- Source naming: `watch.<dirname>.<filename>` to keep `_src` facet-friendly and collision-free.
+- **Pattern selection:** each watch stores either `"auto"` (log2grok detection per new file, same as import) or a fixed saved Grok pattern name. Mixed folders default to `"auto"`. (*Corrected 2026-09-16, phase 1:* `l2g.NewDecoder` never looks a name up — it needs the Grok body — so a saved name is resolved through `l2g.ListLibrary()` at watch creation and at each file start (`handlers.patternOptions`); an unknown name is a 400.)
+- **Safety caps:** default include glob `*.log`, configurable; per-file size cap reuses the bounded-import limits from the existing import path (commit `c284235` added bounding/cancel — find and reuse those constants); max 100 tracked files per watch, oldest-mtime files skipped beyond that with a logged warning. (*Corrected 2026-09-16, phase 1:* there is no per-file size cap to reuse any more — now-08 removed the 512 MB cap on path imports; what remains and is reused is the per-line bound `ingestfile.MaxLineBytes` and the 10k-line batch.)
+- Source naming: `watch.<dirname>.<filename>` to keep `_src` facet-friendly and collision-free. (*Corrected 2026-09-16, phase 1:* not collision-free — two watches on directories with the same base name, or one recursive watch with `x/app.log` and `y/app.log`, would give different files the same `_src` and, with independent seq counters, colliding document IDs. Phase 1 refuses a second watch on the same directory (409) and names nested files `watch.<dirname>.<rel.path.with.dots>`; the same-basename cross-watch case is open in ISSUES.md.)
 
 ## Current-state anchors
 
@@ -58,7 +58,7 @@ type WatchFile struct {
     Path      string `json:"path"`
     Offset    int64  `json:"offset"`
     Size      int64  `json:"size"`
-    State     string `json:"state"` // pending|ingesting|following|skipped|error
+    State     string `json:"state"` // pending|ingesting|following|done|skipped|error  (done added 2026-09-16: a compressed file's one-shot ingest — it cannot be followed)
     Error     string `json:"error,omitempty"`
 }
 ```

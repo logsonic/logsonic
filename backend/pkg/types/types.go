@@ -639,3 +639,45 @@ type StorageDayDeleteResponse struct {
 	Date        string `json:"date"`
 	RowsDeleted int64  `json:"rows_deleted"`
 }
+
+// WatchRequest creates a folder watch (spec now-04): every file in Dir whose
+// base name matches Glob is ingested when it appears and followed as it
+// grows. Pattern is "" or "auto" for per-file detection, else a saved Grok
+// pattern name.
+type WatchRequest struct {
+	Dir       string `json:"dir"`
+	Glob      string `json:"glob,omitempty"`
+	Pattern   string `json:"pattern,omitempty"`
+	Recursive bool   `json:"recursive,omitempty"`
+}
+
+// WatchFile is one tracked file's status. State is pending | ingesting |
+// following | done | skipped | error — "done" is a compressed file whose
+// one-shot ingest finished (it cannot be followed); "skipped" is a file
+// beyond the 100-per-watch cap.
+type WatchFile struct {
+	Path    string `json:"path"`
+	Offset  int64  `json:"offset"`
+	Size    int64  `json:"size"`
+	State   string `json:"state"`
+	Error   string `json:"error,omitempty"`
+	Source  string `json:"source"`
+	Pattern string `json:"pattern,omitempty"`
+}
+
+// Watch is a folder watch with its live file snapshot.
+type Watch struct {
+	ID string `json:"id"`
+	WatchRequest
+	Paused    bool      `json:"paused"`
+	CreatedAt time.Time `json:"created_at"`
+	// Error is set when the directory itself can't be read (deleted,
+	// permissions); the watch keeps sweeping and clears it when it can.
+	Error string      `json:"error,omitempty"`
+	Files []WatchFile `json:"files"`
+}
+
+// WatchesResponse is GET /watches.
+type WatchesResponse struct {
+	Watches []Watch `json:"watches"`
+}

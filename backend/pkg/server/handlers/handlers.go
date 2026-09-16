@@ -6,6 +6,7 @@ import (
 	"logsonic/pkg/catalog"
 	"logsonic/pkg/storage"
 	"logsonic/pkg/timeresolve"
+	"logsonic/pkg/watch"
 	"logsonic/pkg/workspaces"
 	"sync"
 )
@@ -37,6 +38,9 @@ type Services struct {
 	// Retention is set by the server (it needs the CLI default); nil in
 	// handler unit tests, which the storage routes treat as unavailable.
 	Retention *RetentionManager
+	// Watches is the folder-watch manager (spec now-04), started by the
+	// server beside the live tail and closed before storage.
+	Watches *watch.Manager
 
 	storageInfoCache any
 	infoCacheMutex   sync.RWMutex
@@ -84,6 +88,16 @@ func NewHandler(storage storage.StorageInterface, storagePath string) *Services 
 		ingestJobsCtx:     context.Background(),
 	}
 	svc.Live = NewTailManager(storage, svc.recordStored)
+	watches, err := watch.Open(storagePath, watch.Deps{
+		Follower:       watchDeps{svc},
+		Importer:       watchDeps{svc},
+		Detector:       watchDeps{svc},
+		PatternOptions: svc.patternOptions,
+	})
+	if err != nil {
+		log.Printf("watch: failed to open watches.json: %v", err)
+	}
+	svc.Watches = watches
 	return svc
 }
 
@@ -104,6 +118,13 @@ func (s *Services) StartIngestJobs(ctx context.Context) {
 func (s *Services) CloseStorage() error {
 	type closer interface {
 		Close() error
+	}
+	// Watches first: they own followers and a state file, and their
+	// Finished callbacks must land before the catalog's final flush.
+	if s.Watches != nil {
+		if err := s.Watches.Close(); err != nil {
+			log.Printf("watch: flush on shutdown: %v", err)
+		}
 	}
 	if s.Catalog != nil {
 		if err := s.Catalog.Close(); err != nil {

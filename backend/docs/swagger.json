@@ -1219,6 +1219,190 @@
                 }
             }
         },
+        "/watches": {
+            "get": {
+                "description": "Every folder watch with its live per-file snapshot (state pending | ingesting | following | done | skipped | error, offset, size, source name).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "watches"
+                ],
+                "summary": "List folder watches",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.WatchesResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Watch an absolute, existing directory: every file whose base name matches glob (default *.log) is ingested when it appears and followed as it grows, under the source name watch.\u003cdirname\u003e.\u003cfilename\u003e. pattern is \"\" or \"auto\" for per-file detection, else a saved Grok pattern name. Persisted in \u003cstorage\u003e/watches.json and resumed after a restart.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "watches"
+                ],
+                "summary": "Create a folder watch",
+                "parameters": [
+                    {
+                        "description": "Watch to create",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.WatchRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/types.Watch"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/watches/{id}": {
+            "delete": {
+                "description": "Stop following and forget the watch. Rows already indexed stay.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "watches"
+                ],
+                "summary": "Delete a folder watch",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Watch ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/watches/{id}/pause": {
+            "post": {
+                "description": "Stop detection and following; offsets are kept, so resume continues where each file was left.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "watches"
+                ],
+                "summary": "Pause a folder watch",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Watch ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.Watch"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/watches/{id}/resume": {
+            "post": {
+                "description": "Sweep the directory now and continue following from the stored offsets.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "watches"
+                ],
+                "summary": "Resume a folder watch",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Watch ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.Watch"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces": {
             "get": {
                 "produces": [
@@ -2680,6 +2864,96 @@
                         "os_type": {
                             "type": "string"
                         }
+                    }
+                }
+            }
+        },
+        "types.Watch": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "dir": {
+                    "type": "string"
+                },
+                "error": {
+                    "description": "Error is set when the directory itself can't be read (deleted,\npermissions); the watch keeps sweeping and clears it when it can.",
+                    "type": "string"
+                },
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.WatchFile"
+                    }
+                },
+                "glob": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "pattern": {
+                    "type": "string"
+                },
+                "paused": {
+                    "type": "boolean"
+                },
+                "recursive": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "types.WatchFile": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "pattern": {
+                    "type": "string"
+                },
+                "size": {
+                    "type": "integer"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.WatchRequest": {
+            "type": "object",
+            "properties": {
+                "dir": {
+                    "type": "string"
+                },
+                "glob": {
+                    "type": "string"
+                },
+                "pattern": {
+                    "type": "string"
+                },
+                "recursive": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "types.WatchesResponse": {
+            "type": "object",
+            "properties": {
+                "watches": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.Watch"
                     }
                 }
             }

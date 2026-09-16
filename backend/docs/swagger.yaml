@@ -893,6 +893,67 @@ definitions:
             type: string
         type: object
     type: object
+  types.Watch:
+    properties:
+      created_at:
+        type: string
+      dir:
+        type: string
+      error:
+        description: |-
+          Error is set when the directory itself can't be read (deleted,
+          permissions); the watch keeps sweeping and clears it when it can.
+        type: string
+      files:
+        items:
+          $ref: '#/definitions/types.WatchFile'
+        type: array
+      glob:
+        type: string
+      id:
+        type: string
+      pattern:
+        type: string
+      paused:
+        type: boolean
+      recursive:
+        type: boolean
+    type: object
+  types.WatchFile:
+    properties:
+      error:
+        type: string
+      offset:
+        type: integer
+      path:
+        type: string
+      pattern:
+        type: string
+      size:
+        type: integer
+      source:
+        type: string
+      state:
+        type: string
+    type: object
+  types.WatchRequest:
+    properties:
+      dir:
+        type: string
+      glob:
+        type: string
+      pattern:
+        type: string
+      recursive:
+        type: boolean
+    type: object
+  types.WatchesResponse:
+    properties:
+      watches:
+        items:
+          $ref: '#/definitions/types.Watch'
+        type: array
+    type: object
   types.Workspace:
     properties:
       color_rules:
@@ -1862,6 +1923,134 @@ paths:
       summary: Preview timestamp resolution
       tags:
       - parsing
+  /watches:
+    get:
+      description: Every folder watch with its live per-file snapshot (state pending
+        | ingesting | following | done | skipped | error, offset, size, source name).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.WatchesResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: List folder watches
+      tags:
+      - watches
+    post:
+      consumes:
+      - application/json
+      description: 'Watch an absolute, existing directory: every file whose base name
+        matches glob (default *.log) is ingested when it appears and followed as it
+        grows, under the source name watch.<dirname>.<filename>. pattern is "" or
+        "auto" for per-file detection, else a saved Grok pattern name. Persisted in
+        <storage>/watches.json and resumed after a restart.'
+      parameters:
+      - description: Watch to create
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.WatchRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/types.Watch'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Create a folder watch
+      tags:
+      - watches
+  /watches/{id}:
+    delete:
+      description: Stop following and forget the watch. Rows already indexed stay.
+      parameters:
+      - description: Watch ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Delete a folder watch
+      tags:
+      - watches
+  /watches/{id}/pause:
+    post:
+      description: Stop detection and following; offsets are kept, so resume continues
+        where each file was left.
+      parameters:
+      - description: Watch ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.Watch'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Pause a folder watch
+      tags:
+      - watches
+  /watches/{id}/resume:
+    post:
+      description: Sweep the directory now and continue following from the stored
+        offsets.
+      parameters:
+      - description: Watch ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.Watch'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Resume a folder watch
+      tags:
+      - watches
   /workspaces:
     get:
       produces:

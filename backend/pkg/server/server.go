@@ -363,6 +363,13 @@ func NewServer(cfg Config) (*Server, error) {
 				r.Put("/", h.HandlePutStorage)
 				r.Delete("/days/{date}", h.HandleDeleteStorageDay)
 			})
+			r.Route("/watches", func(r chi.Router) {
+				r.Get("/", h.HandleListWatches)
+				r.Post("/", h.HandleCreateWatch)
+				r.Delete("/{id}", h.HandleDeleteWatch)
+				r.Post("/{id}/pause", h.HandlePauseWatch)
+				r.Post("/{id}/resume", h.HandleResumeWatch)
+			})
 
 			// Live-tail controls are short-lived JSON calls and can use the
 			// normal API timeout/throttle budget.
@@ -422,6 +429,7 @@ func (s *Server) Start() error {
 	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
 	handlers.StartSessionCleanup(cleanupCtx, s.services)
 	s.services.StartLive(cleanupCtx)
+	s.services.StartWatches(cleanupCtx)
 	s.services.StartIngestJobs(cleanupCtx)
 	handlers.StartIngestJobCleanup(cleanupCtx)
 	if s.services.Catalog != nil {
