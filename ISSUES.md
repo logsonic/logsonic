@@ -33,6 +33,16 @@ Alternatively it belongs in `macos-b3` if b2's scope is already full. Not fixed 
 
 ---
 
+## 2026-09-16 — Two watches on directories with the same base name give different files the same source (now-04 phase 1)
+
+**Severity:** P3 until a second watch exists; then a data-integrity trap.
+
+**What:** a watched file's `_src` is `watch.<dirname>.<filename>` (spec now-04), so `/srv/a/logs/app.log` and `/srv/b/logs/app.log` under two watches both become `watch.logs.app.log`. Document IDs are `ts-source-seq` with an independent seq counter per follower, so rows from the two files can carry identical IDs and silently overwrite each other, and the catalog counts them as one source. Phase 1 closes the two cases it can without a naming decision: a second watch on the *same* directory is refused (409 `WATCH_EXISTS`), and a recursive watch names nested files by their relative path (`watch.logs.x.app.log`). The spec's "collision-free" wording carries a dated correction.
+
+**Suggested next step (needs a human — it's the user-visible source name):** include a short watch id or the parent directory in the source (`watch.<dirname>-<id6>.<filename>`, or `watch.<parent>.<dirname>.<filename>`), or refuse to create a watch whose base name matches an existing watch's. Whichever, phase 2's add-watch form should show the resulting source name before the user confirms.
+
+---
+
 ## 2026-09-16 — Settings → Storage "Reveal in Finder" is manual-pending in the native app (now-10 phase 3b)
 
 **Severity:** Low. Compile-verified; the one unverified link is a `switch` case.
