@@ -268,7 +268,10 @@ html, body {
    a filter search box. Design tokens remapped to the project's --ls-* set. */
 .ls-set-grid {
   display: grid;
-  grid-template-columns: 200px 1fr;
+  /* minmax(0, 1fr), not 1fr: a bare 1fr is minmax(auto, 1fr), so a long
+     unbreakable value (a watched folder's path) would widen the column past
+     the viewport instead of truncating inside its card. */
+  grid-template-columns: 200px minmax(0, 1fr);
   gap: 36px;
   align-items: start;
 }
