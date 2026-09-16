@@ -28,7 +28,7 @@ import SystemInfoModal from './SystemInfoModal';
 
 // Mirrors SidebarTabId in SidebarPanel.tsx (kept local: this file's import
 // block predates the import/order rule and any new import here fails lint).
-type ActiveSection = 'filter' | 'fields' | 'styling' | null;
+type ActiveSection = 'filter' | 'fields' | 'sources' | 'styling' | null;
 
 interface HeaderProps {
   activeSection?: ActiveSection;
@@ -37,6 +37,7 @@ interface HeaderProps {
 const SECTION_LABEL: Record<Exclude<ActiveSection, null>, string> = {
   filter: 'Filter',
   fields: 'Fields',
+  sources: 'Sources',
   styling: 'Coloring',
 };
 

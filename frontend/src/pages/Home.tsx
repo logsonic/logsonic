@@ -161,6 +161,15 @@ const Home = () => {
     }
   }, [activeTabId, isCollapsed, togglePanelCollapse]);
 
+  const toggleSources = useCallback(() => {
+    if (activeTabId === 'sources' && !isCollapsed) {
+      togglePanelCollapse();
+    } else {
+      setActiveTabId('sources');
+      if (isCollapsed) togglePanelCollapse();
+    }
+  }, [activeTabId, isCollapsed, togglePanelCollapse]);
+
   return (
     <div
       className="h-screen overflow-hidden"
@@ -229,9 +238,11 @@ const Home = () => {
         <LeftRail
           filterOpen={!isCollapsed && activeTabId === 'filter'}
           fieldsOpen={!isCollapsed && activeTabId === 'fields'}
+          sourcesOpen={!isCollapsed && activeTabId === 'sources'}
           coloringOpen={!isCollapsed && activeTabId === 'styling'}
           onToggleFilter={toggleFilter}
           onToggleFields={toggleFields}
+          onToggleSources={toggleSources}
           onToggleColoring={toggleColoring}
         />
       </div>

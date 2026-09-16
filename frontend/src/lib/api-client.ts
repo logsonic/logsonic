@@ -15,6 +15,11 @@ import {
   ParseResponse,
   PreviewFileRequest,
   PreviewFileResponse,
+  SourceDeleteResponse,
+  SourceEntry,
+  SourceReimportResponse,
+  SourceRenameRequest,
+  SourcesResponse,
   SuggestResponse,
   SystemInfoResponse,
   TimestampPreviewRequest,
@@ -34,6 +39,26 @@ export const API_BASE_URL = (import.meta.env.DEV
 export const liveEventsURL = () => `${API_BASE_URL}/live/events`;
 
 // Helper function for API requests
+/**
+ * An API error with the server's structured fields attached. `message` is
+ * what callers have always received (the server's `error` line), so existing
+ * string matching keeps working; `code` and `details` let a caller map a
+ * known failure to user copy instead of showing operator text verbatim.
+ */
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  details?: string;
+
+  constructor(message: string, status: number, code?: string, details?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
+
 async function apiRequest<T = unknown>(
   endpoint: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' = 'GET',
@@ -79,7 +104,9 @@ async function apiRequest<T = unknown>(
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
     const errorMessage = errorData?.detail || errorData?.error || `API request failed with status ${response.status}`;
-    throw new Error(errorMessage);
+    // The backend's ErrorResponse field is `details` (plural); `detail` is
+    // kept above only because it was always read first.
+    throw new ApiError(errorMessage, response.status, errorData?.code, errorData?.details);
   }
   
   if (response.status === 204) {
@@ -248,4 +275,37 @@ export async function pingServer(): Promise<PingResponse> {
 // Delete logs by document IDs
 export async function deleteLogsById(ids: string[]): Promise<any> {
   return apiRequest<any>('/logs/ids', 'DELETE', { ids });
+}
+
+// Sources catalog (spec now-10)
+
+export async function listSources(signal?: AbortSignal): Promise<SourcesResponse> {
+  return apiRequest<SourcesResponse>('/sources', 'GET', undefined, undefined, signal);
+}
+
+export async function getSource(name: string): Promise<SourceEntry> {
+  return apiRequest<SourceEntry>(`/sources/${encodeURIComponent(name)}`, 'GET');
+}
+
+export async function deleteSource(name: string): Promise<SourceDeleteResponse> {
+  return apiRequest<SourceDeleteResponse>(`/sources/${encodeURIComponent(name)}`, 'DELETE');
+}
+
+export async function renameSource(
+  name: string,
+  request: SourceRenameRequest
+): Promise<SourceEntry> {
+  return apiRequest<SourceEntry>(`/sources/${encodeURIComponent(name)}`, 'PATCH', request);
+}
+
+export async function reimportSource(name: string): Promise<SourceReimportResponse> {
+  return apiRequest<SourceReimportResponse>(
+    `/sources/${encodeURIComponent(name)}/reimport`,
+    'POST',
+    {}
+  );
+}
+
+export async function rebuildSources(): Promise<SourcesResponse> {
+  return apiRequest<SourcesResponse>('/sources/rebuild', 'POST', {});
 }
