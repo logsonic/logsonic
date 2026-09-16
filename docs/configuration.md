@@ -98,3 +98,7 @@ Retention can be set in three places. The first one that is set wins:
 `GET /api/v1/storage` reports the value in effect and its source (`config`, `flag`, or `none`), plus the flag/env default the override falls back to. The server logs which source won at startup, e.g. `retention: 7 day(s) from config.json, overriding -retention-days 30`. The sweep runs at startup, once a day, and immediately after a `PUT`. `DELETE /api/v1/storage/days/{date}` removes one day regardless of retention.
 
 `config.json` is shared with other server-side settings; keys this version doesn't know are preserved when retention is saved.
+
+## Folder watches
+
+Watches (Settings → Watched folders, or `POST /api/v1/watches`) live in `<storage>/watches.json` and resume after a restart from each file's stored offset. Detection uses fsnotify as a hint and a reconciliation sweep every 60 s as the truth. `LOGSONIC_WATCH_SWEEP=2s` shortens the sweep — a test knob (the E2E suite uses it), also useful for checking a mount where fsnotify does not deliver events; anything under 100ms is ignored.

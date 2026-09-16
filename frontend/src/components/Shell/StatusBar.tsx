@@ -1,8 +1,13 @@
+import { FolderSearch } from 'lucide-react';
+import { useEffect } from 'react';
+import { Link } from 'react-router-dom';
+
 import { useBackendStatus } from '@/hooks/useBackendStatus';
 import { formatBytes } from '@/lib/utils';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
+import { activeWatchCount, useWatchesStore } from '@/stores/useWatchesStore';
 
 const dot = (color: string, pulse = false) => (
   <span
@@ -34,6 +39,20 @@ export const StatusBar = () => {
   const { systemInfo } = useSystemInfoStore();
   const { apiExecutionTime } = useSearchQueryParamsStore();
   const { logData } = useLogResultStore();
+
+  // Folder watches: fetched once here (the bar lives for the session);
+  // the settings page keeps the store current while it is open.
+  const watchCount = useWatchesStore(activeWatchCount);
+  const watchDirs = useWatchesStore((s) =>
+    s.watches
+      .filter((w) => !w.paused)
+      .map((w) => w.dir)
+      .join('\n')
+  );
+  const fetchWatches = useWatchesStore((s) => s.fetchWatches);
+  useEffect(() => {
+    void fetchWatches();
+  }, [fetchWatches]);
 
   const sourceCount = systemInfo?.storage_info?.source_names?.length ?? 0;
   const totalEvents = systemInfo?.storage_info?.total_log_entries ?? 0;
@@ -82,6 +101,21 @@ export const StatusBar = () => {
           </span>
         );
       })()}
+      {watchCount > 0 && (
+        <>
+          <Divider />
+          <Link
+            to="/settings/watches"
+            className="inline-flex items-center"
+            style={{ gap: 5, color: 'var(--ls-text-2)', textDecoration: 'none' }}
+            title={watchDirs}
+            data-testid="watch-indicator"
+          >
+            <FolderSearch size={11} />
+            Watching {watchCount} folder{watchCount === 1 ? '' : 's'}
+          </Link>
+        </>
+      )}
       <Divider />
       <span>
         Events{' '}

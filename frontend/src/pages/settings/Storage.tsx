@@ -8,6 +8,12 @@ import type { StorageDay, StorageResponse } from '@/lib/api-types';
 
 import { CopyableValue } from '@/components/settings/CopyableValue';
 import {
+  settingsCard,
+  settingsLabel,
+  settingsNote,
+  settingsRow,
+} from '@/components/settings/styles';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -28,26 +34,10 @@ import { refreshAfterMutation } from '@/stores/useSourcesStore';
 
 const MAX_RETENTION_DAYS = 3650;
 
-const card: React.CSSProperties = {
-  background: 'var(--ls-panel)',
-  border: '1px solid var(--ls-border)',
-  borderRadius: 'var(--ls-radius-lg)',
-  boxShadow: 'var(--ls-shadow-sm)',
-  padding: '6px 16px',
-  marginBottom: 14,
-};
-const rowStyle = (first: boolean): React.CSSProperties => ({
-  gap: 16,
-  padding: '10px 0',
-  borderTop: first ? 'none' : '1px solid var(--ls-border-subtle)',
-});
-const label: React.CSSProperties = {
-  fontSize: 12.5,
-  fontWeight: 500,
-  color: 'var(--ls-text)',
-  flexShrink: 0,
-};
-const note: React.CSSProperties = { fontSize: 12, color: 'var(--ls-text-2)' };
+const card = settingsCard;
+const rowStyle = settingsRow;
+const label = settingsLabel;
+const note = settingsNote;
 const n = (v: number) => v.toLocaleString();
 
 const retentionSourceLine = (s: StorageResponse): string => {

@@ -17,6 +17,12 @@ For timestamp controls, see [Timestamp Resolution](timestamp-resolution.md).
 3. Use advanced syntax for field shorthand, regex, exclusions, and boolean operators.
 4. Save recurring searches from the workspace menu to restore query, time range, sources, columns, widths, and row coloring later.
 
+## Watch A Folder
+
+**Settings → Watched folders** points LogSonic at a directory: every file whose name matches the pattern (default `*.log`) is read when it appears and followed as it grows, with no further import step. Choose **Auto-detect per file** or a saved Grok pattern, and optionally include subfolders. Files land under sources named `watch.<folder>.<file>`, so they show up in the Sources panel and the `_src` facet like any import; the status bar shows **Watching N folders** while a watch is running.
+
+Watches survive restarts and continue from where each file was left, so an appended line is indexed once. Rotated files (renamed away and recreated) are read from the start again. Compressed files (`.gz`, `.zst`) in the folder are imported once but not followed. Pause a watch to stop following without forgetting its files; delete it to stop for good — rows already indexed stay. Up to 100 files per folder are tracked.
+
 ## Managing Sources
 
 Every import, live tail or stream becomes a **source** (the `_src` field on each row). Click **Sources** in the left rail to see them all with their row counts; expand one for where it came from, which pattern parsed it, the days it covers and its import history.

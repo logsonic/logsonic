@@ -13,7 +13,9 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 storage="$(mktemp -d)"
 log="$storage/server.log"
 
-"$bin" -host 127.0.0.1 -port "$port" -auto-port=false -storage "$storage/store" >"$log" 2>&1 &
+# LOGSONIC_WATCH_SWEEP: the folder-watch e2e must not depend on fsnotify
+# delivering an event on the runner's tmpdir (60 s default sweep otherwise).
+LOGSONIC_WATCH_SWEEP=2s "$bin" -host 127.0.0.1 -port "$port" -auto-port=false -storage "$storage/store" >"$log" 2>&1 &
 pid=$!
 cleanup() {
   kill -INT "$pid" 2>/dev/null || true
@@ -45,6 +47,9 @@ node "$root/frontend/e2e-facets.mjs" || status=1
 
 echo "== sources =="
 node "$root/frontend/e2e-sources.mjs" || status=1
+
+echo "== watch =="
+(cd "$root/frontend" && node e2e-watch.mjs) || status=1
 
 if [ "$status" -ne 0 ]; then
   echo "== server log =="; tail -50 "$log"

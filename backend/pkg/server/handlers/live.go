@@ -159,11 +159,29 @@ func (m *TailManager) ActiveSourceIDs() []string {
 // ActiveSourceNames returns the effective source name of every running tail
 // (file or stdin), for the per-source delete's in-use check.
 func (m *TailManager) ActiveSourceNames() []string {
+	kinds := m.ActiveSourceKinds()
+	out := make([]string, 0, len(kinds))
+	for name := range kinds {
+		out = append(out, name)
+	}
+	return out
+}
+
+// ActiveSourceKinds maps every running source's effective name to its kind
+// ("tail", "stdin", "watch"), so a refusal can say what to stop.
+func (m *TailManager) ActiveSourceKinds() map[string]string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	out := make([]string, 0, len(m.sources))
+	out := make(map[string]string, len(m.sources))
 	for _, s := range m.sources {
-		out = append(out, effectiveSource(s.opts))
+		kind := s.kind
+		if kind == "" {
+			kind = "tail"
+		}
+		if s.path == "" {
+			kind = "stdin"
+		}
+		out[effectiveSource(s.opts)] = kind
 	}
 	return out
 }

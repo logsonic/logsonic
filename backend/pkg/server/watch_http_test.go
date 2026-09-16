@@ -134,6 +134,10 @@ func TestW1W4_CreateWatchIngestsMatchingFiles(t *testing.T) {
 	if entry.Origin.Kind != "watch" || entry.Origin.Path != a {
 		t.Fatalf("catalog origin: %+v", entry.Origin)
 	}
+	// Deleting a watched source is refused with wording that names the watch.
+	if code := do(t, ts, http.MethodDelete, "/api/v1/sources/watch.logs.a.log", nil, &errResp); code != 409 || errResp.Code != "SOURCE_IN_USE" || !strings.Contains(errResp.Details, "folder watch") {
+		t.Fatalf("delete watched source: %d %+v", code, errResp)
+	}
 	if code := do(t, ts, http.MethodPost, "/api/v1/watches/nope/pause", nil, &errResp); code != 404 || errResp.Code != "WATCH_NOT_FOUND" {
 		t.Fatalf("pause unknown: %d", code)
 	}

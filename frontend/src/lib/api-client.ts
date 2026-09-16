@@ -27,6 +27,9 @@ import {
   SystemInfoResponse,
   TimestampPreviewRequest,
   TimestampPreviewResponse,
+  Watch,
+  WatchesResponse,
+  WatchRequest,
   Workspace,
   WorkspaceListResponse,
   WorkspaceResponse,
@@ -328,4 +331,26 @@ export async function deleteStorageDay(date: string): Promise<StorageDayDeleteRe
     `/storage/days/${encodeURIComponent(date)}`,
     'DELETE'
   );
+}
+
+// Folder watches (spec now-04)
+
+export async function listWatches(signal?: AbortSignal): Promise<WatchesResponse> {
+  return apiRequest<WatchesResponse>('/watches', 'GET', undefined, undefined, signal);
+}
+
+export async function createWatch(request: WatchRequest): Promise<Watch> {
+  return apiRequest<Watch>('/watches', 'POST', request);
+}
+
+export async function deleteWatch(id: string): Promise<void> {
+  return apiRequest<void>(`/watches/${encodeURIComponent(id)}`, 'DELETE');
+}
+
+export async function pauseWatch(id: string): Promise<Watch> {
+  return apiRequest<Watch>(`/watches/${encodeURIComponent(id)}/pause`, 'POST', {});
+}
+
+export async function resumeWatch(id: string): Promise<Watch> {
+  return apiRequest<Watch>(`/watches/${encodeURIComponent(id)}/resume`, 'POST', {});
 }

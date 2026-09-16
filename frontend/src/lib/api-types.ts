@@ -600,9 +600,10 @@ export interface WatchFile {
   pattern?: string;
 }
 
-/** A folder watch with its live file snapshot. */
-export interface Watch extends WatchRequest {
+/** A folder watch with its live file snapshot. The server always fills `glob` (default `*.log`). */
+export interface Watch extends Omit<WatchRequest, 'glob'> {
   id: string;
+  glob: string;
   paused: boolean;
   created_at: string;
   /** Set while the directory itself can't be read; cleared when it can. */

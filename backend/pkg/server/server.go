@@ -27,6 +27,7 @@ import (
 	"logsonic/pkg/appconfig"
 	"logsonic/pkg/static"
 	"logsonic/pkg/storage"
+	"logsonic/pkg/watch"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -189,6 +190,16 @@ func NewServer(cfg Config) (*Server, error) {
 		fmt.Fprintf(os.Stderr, "appconfig: %v; retention settings cannot be saved this run\n", err)
 	}
 	handlers.NewRetentionManager(h, appCfg, cfg.RetentionDays)
+	// LOGSONIC_WATCH_SWEEP shortens the folder-watch reconciliation sweep
+	// (default 60s) — for the E2E suite and for checking a mount where
+	// fsnotify is unreliable. Not a user-facing setting.
+	if v := os.Getenv("LOGSONIC_WATCH_SWEEP"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d >= 100*time.Millisecond {
+			watch.SweepInterval = d
+		} else {
+			fmt.Fprintf(os.Stderr, "LOGSONIC_WATCH_SWEEP=%q ignored: want a duration of at least 100ms\n", v)
+		}
+	}
 	srv := &Server{
 		services: h,
 		store:    store,

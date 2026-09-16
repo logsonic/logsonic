@@ -122,10 +122,11 @@ func writeCatalogUnavailable(w http.ResponseWriter) {
 // delete. Recorded in ISSUES.md.
 func (h *Services) sourceInUse(name string) (bool, string) {
 	if h.Live != nil {
-		for _, s := range h.Live.ActiveSourceNames() {
-			if s == name {
-				return true, "a live tail is writing to this source; stop it first (DELETE /api/v1/live/sources/{id})"
+		if kind, ok := h.Live.ActiveSourceKinds()[name]; ok {
+			if kind == "watch" {
+				return true, "a folder watch is following this file; pause or delete the watch first (Settings → Watched folders, or DELETE /api/v1/watches/{id})"
 			}
+			return true, "a live tail is writing to this source; stop it first (DELETE /api/v1/live/sources/{id})"
 		}
 	}
 	for _, s := range runningIngestSources() {

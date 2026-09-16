@@ -12,6 +12,9 @@ export const apiErrorMessage = (err: unknown, fallback: string): string => {
     switch (err.code) {
       case 'SOURCE_IN_USE':
       case 'DAY_IN_USE':
+        if (err.details?.includes('folder watch')) {
+          return 'A folder watch is following this file. Pause or delete the watch first (Settings → Watched folders).';
+        }
         return err.details?.includes('live tail')
           ? 'A live tail is still writing here. Stop it first.'
           : 'An import is still running here. Wait for it to finish.';
@@ -31,6 +34,12 @@ export const apiErrorMessage = (err: unknown, fallback: string): string => {
         return 'Retention must be between 0 (keep everything) and 3650 days.';
       case 'STORAGE_SETTINGS_UNAVAILABLE':
         return 'Settings could not be saved: config.json could not be opened at startup. Check the server log.';
+      case 'WATCH_EXISTS':
+        return 'That folder is already watched.';
+      case 'WATCH_NOT_FOUND':
+        return 'That watch no longer exists.';
+      case 'WATCHES_UNAVAILABLE':
+        return 'Folder watches are unavailable: watches.json could not be opened at startup. Check the server log.';
     }
     return err.message || fallback;
   }
