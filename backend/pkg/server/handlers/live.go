@@ -353,6 +353,9 @@ func (m *TailManager) Done() <-chan struct{} {
 }
 
 func (m *TailManager) newSource(opts types.IngestSessionOptions) (*TailSource, error) {
+	if err := resolveSavedPattern(&opts); err != nil {
+		return nil, err
+	}
 	opts = defaultLiveOptions(opts)
 	decoder, err := l2g.NewDecoder(l2g.PatternSpec{
 		Name:           opts.Name,

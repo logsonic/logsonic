@@ -140,20 +140,39 @@ func (d watchDeps) Detect(path string, lines int) (types.IngestSessionOptions, e
 // patternOptions resolves a saved pattern name to its Grok body (the
 // decoder never looks names up) plus its remembered timestamp settings.
 func (h *Services) patternOptions(name string) (types.IngestSessionOptions, error) {
-	for _, kp := range l2g.ListLibrary() {
-		if kp.Name != name {
-			continue
-		}
-		opts := types.IngestSessionOptions{Name: kp.Name, Pattern: kp.Pattern, CustomPatterns: kp.CustomPatterns}
-		if h.PatternTimestamps != nil {
-			if r, ok := h.PatternTimestamps.Snapshot()[kp.Name]; ok {
-				rCopy := r
-				opts.TimestampConfig = &rCopy
-			}
-		}
-		return opts, nil
+	opts := types.IngestSessionOptions{Name: name}
+	if err := resolveSavedPattern(&opts); err != nil {
+		return types.IngestSessionOptions{}, err
 	}
-	return types.IngestSessionOptions{}, fmt.Errorf("no saved pattern named %q (GET /api/v1/grok lists them)", name)
+	if h.PatternTimestamps != nil {
+		if r, ok := h.PatternTimestamps.Snapshot()[name]; ok {
+			rCopy := r
+			opts.TimestampConfig = &rCopy
+		}
+	}
+	return opts, nil
+}
+
+// resolveSavedPattern fills Pattern (and CustomPatterns) from the library
+// when a caller sent only a saved pattern's Name. l2g.NewDecoder compiles
+// the Grok body and never looks a name up, so without this a name-only
+// request — the CLI's --pattern, the API's documented "name or pattern" —
+// failed with "pattern is empty". "auto" and an explicit Pattern pass
+// through untouched.
+func resolveSavedPattern(opts *types.IngestSessionOptions) error {
+	if opts.Pattern != "" || opts.Name == "" {
+		return nil
+	}
+	for _, kp := range l2g.ListLibrary() {
+		if kp.Name == opts.Name {
+			opts.Pattern = kp.Pattern
+			if opts.CustomPatterns == nil {
+				opts.CustomPatterns = kp.CustomPatterns
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("no saved pattern named %q (GET /api/v1/grok lists them)", opts.Name)
 }
 
 func writeWatchesUnavailable(w http.ResponseWriter) {

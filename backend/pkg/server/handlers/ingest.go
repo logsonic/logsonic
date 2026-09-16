@@ -319,6 +319,9 @@ func newIngestSession(req types.IngestSessionOptions) (string, *sessionStartErro
 	if req.Name == "" && req.Pattern == "" {
 		return "", &sessionStartError{code: "INVALID_PATTERN", message: "Pattern name or pattern is required"}
 	}
+	if err := resolveSavedPattern(&req); err != nil {
+		return "", &sessionStartError{code: "PATTERN_NOT_FOUND", message: "Unknown pattern name", details: err.Error()}
+	}
 
 	dec, err := l2g.NewDecoder(l2g.PatternSpec{
 		Name:           req.Name,
