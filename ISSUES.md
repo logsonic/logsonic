@@ -33,6 +33,24 @@ Alternatively it belongs in `macos-b3` if b2's scope is already full. Not fixed 
 
 ---
 
+## 2026-09-16 — Rows sharing a timestamp sorted by seq as a string (found during now-12; fixed for new rows in `c8bde0b`)
+
+**Severity:** P2, pre-existing. Any source with more than nine lines in one second displayed them out of order (1, 10, 11, …, 2, 3).
+
+**What:** `SearchPage` sorts by timestamp, then `_seq`, then doc ID — but `_seq` is stored without being indexed (the mapping keeps it out of the index to save space), so Bleve has nothing to sort on and the tie falls through to the doc ID *string* `<nanos>-<source>-<seq>`. Found by now-12's O2 (two files, one source, identical timestamps).
+
+**Fix shipped:** `BuildDocID` zero-pads the seq to twelve digits, so string order equals numeric order for every row written from `c8bde0b` on. No mapping change, no index growth. **Caveat:** rows written before keep their unpadded IDs; within one second, a tie between an old row and a new one compares differently-shaped strings and interleaves arbitrarily — only across the upgrade boundary, only within a second.
+
+**Principled fix (maintainer's call):** index `_seq` with doc values so the numeric sort applies. Costs one term per document and, like the `_src` keyword mapping, would apply to new shards only.
+
+---
+
+## 2026-09-16 — A saved pattern's name alone was rejected everywhere (found during now-12) — **fixed**
+
+**Closed 2026-09-16** (`37ae9e0`): `l2g.NewDecoder` never looks a name up, so `POST /ingest/start {name}` and `logsonic tail --pattern NAME` failed with "pattern is empty" since they shipped. `resolveSavedPattern` fills the Grok body from the library (accepting discovery's `library:` label) in one place used by the ingest session and the live tail; an unknown name is 400 `PATTERN_NOT_FOUND` naming it. Test covers both paths.
+
+---
+
 ## 2026-09-16 — Two watches on directories with the same base name give different files the same source (now-04 phase 1)
 
 **Severity:** P3 until a second watch exists; then a data-integrity trap.
