@@ -6,7 +6,9 @@ Process: every candidate entry goes through the remediation pass in [`specs/WORK
 
 ---
 
-## 2026-09-07 — Dropping a file on the app *window* does nothing; only the Dock icon and Finder "Open With" import (found during macos-b1's M1–M10 walk)
+## 2026-09-07 — Dropping a file on the app *window* does nothing; only the Dock icon and Finder "Open With" import (found during macos-b1's M1–M10 walk) — **Scheduled**
+
+**Scheduled 2026-09-16** — the maintainer chose macos-b3. `specs/macos-b3-ambient-presence.md` now carries the AppKit-layer design decision below, step 7, manual row M10, and an acceptance box. Nothing implemented yet; this entry closes when macos-b3 ships M10.
 
 **Severity:** P2 — user-visible and discoverability-costing (dragging onto the window someone is looking at is the more obvious gesture than aiming at the Dock icon), but not a defect against any spec: nothing was broken, this was never built. No data risk, and two working paths exist (Dock icon, Finder "Open With", plus the Import page's own drop zone).
 
@@ -143,7 +145,9 @@ Expected: the app activates, the wizard opens on step 2 (Analyzing) with the dro
 
 ---
 
-## 2026-09-03 — `NativeFileSchemeHandler` has no live caller in either mode (now-08 phase 5)
+## 2026-09-03 — `NativeFileSchemeHandler` has no live caller in either mode (now-08 phase 5) — **Closed**
+
+**Closed 2026-09-16** — maintainer chose option (a). Commit `d4ce39a` deletes the class, `setURLSchemeHandler` registration, the `logsonicfile` navigation-policy allowance, and `logsonicfile:` from the server CSP's `connect-src`; `specs/now-08` wording corrected. Verified: `go test ./...`, `test-macos-app.sh`.
 
 **Severity:** Informational — a spec-vs-code discrepancy, not a regression this session introduced.
 
@@ -193,7 +197,9 @@ Expected: the app activates, the wizard opens on step 2 (Analyzing) with the dro
 
 ---
 
-## 2026-09-03 — `docs/live-streaming.md` documents no SSE event schema, existing or new (now-08 phase 2)
+## 2026-09-03 — `docs/live-streaming.md` documents no SSE event schema, existing or new (now-08 phase 2) — **Closed**
+
+**Closed 2026-09-16** (stale heading) — now-08 phase 6 (`a312492`) already wrote the doc's first event schema (`ingest_progress`); the TBD row recorded it but this heading was never updated. `grep -c ingest_progress docs/live-streaming.md` → 2.
 
 **Severity:** Informational.
 
@@ -273,7 +279,9 @@ Expected: the app activates, the wizard opens on step 2 (Analyzing) with the dro
 
 ---
 
-## 2026-09-02 — CI workflows are committed but have never executed (now-11 phase 1)
+## 2026-09-02 — CI workflows are committed but have never executed (now-11 phase 1) — **Closed**
+
+**Closed 2026-09-16** — maintainer pushed `dev` and opened draft PR #35. First run: 5/6 CI jobs green; the two failures (Docs: `RELEASE.md` → gitignored `backend/pkg/static/dist/`; macOS: `rg` not on the runner) were exactly the "worked locally" class predicted below, fixed in `2edbe15` / `80f6f2a`. Second run fully green (CI 35066190789, Docs 35066190782). Branch protection / required checks remain a repo setting for the maintainer to flip after merge. The `backend/README.md` tracked-but-ignored note below is still open.
 
 **Severity:** Medium for confidence, zero for risk. Nothing runs until something is pushed, and the standing rule for this branch is never push.
 
@@ -306,7 +314,9 @@ gh issue comment 10 --repo logsonic/logsonic --body "Superseded by the tracking 
 
 ---
 
-## 2026-09-01 — `logsonicfile:` in CSP fixed but unverified in the native app (now-09 review)
+## 2026-09-01 — `logsonicfile:` in CSP fixed but unverified in the native app (now-09 review) — **Closed**
+
+**Closed 2026-09-16** — moot: the scheme was deleted entirely in `d4ce39a` (see the 2026-09-03 `NativeFileSchemeHandler` entry). There is no longer a `logsonicfile:` fetch to verify.
 
 **Severity:** Low-medium. The fix is almost certainly right, but "almost certainly" is not the standard for a path that gates dock-drop import in the shipped Mac app.
 

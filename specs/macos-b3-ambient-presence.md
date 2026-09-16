@@ -15,6 +15,7 @@ LogSonic stays useful when its window is closed: an `NSStatusItem` menu-bar extr
 - **Status item:** template-style glyph (monochrome waveform); menu shows per-source rows "app.log — 42 rows/s" with per-source Pause/Resume (calls `POST /api/v1/live/subscribers/{id}/pause|resume` — note these act on *subscribers*; the shell maintains its own subscriber where needed, matching the browser semantics from `handlers/live.go`), "N errors since last glance" row (clears when clicked → opens window with `level:error` query), "Open LogSonic", "Quit".
 - **Notifications:** `UNUserNotificationCenter` (request permission on first watcher creation, not app launch). One notification per watcher-event *burst* (coalesce ≤1 per watcher per 30 s; the coalescing lives in the shell). Clicking deep-links: open window and apply the watcher's query via `__logsonicPerformAction`/URL param.
 - **Dock badge:** count of unseen error-level rows across active tails (from `LiveRowsEvent` level counts if present; else from watcher hits only — check what the event payload carries in `types.go:130` and decide at implementation time with a comment). Clears when the window becomes key.
+- **Drop a file on the window, not just the Dock (added 2026-09-16 from ISSUES.md 2026-09-07).** Today only the Dock icon and Finder "Open With" reach `openNativeFiles`; a drop onto the window's content area is silently swallowed (the shell registers no `NSDraggingDestination`, and the SPA has no window-level drop target outside the Import wizard). Implement at the **AppKit layer, not the web layer**: `registerForDraggedTypes([.fileURL])` on the window's content view (or a thin `NSView` overlay), `draggingEntered`/`draggingUpdated` return `.copy` and show a visible drop highlight, `performDragOperation` reads the file URLs off the pasteboard and calls the existing `openNativeFiles(paths)` — the same entry point the Dock uses, so the now-08 path handoff, the removed 512 MB cap, and directory handling come along unchanged. A web-layer implementation would inherit the in-browser byte-reading path now-08 retired for Dock drops, so it is the wrong layer.
 
 ## Current-state anchors
 
@@ -22,6 +23,7 @@ LogSonic stays useful when its window is closed: an `NSStatusItem` menu-bar extr
 - Pause/resume/stop routes: `server.go:277–280`.
 - Shell lifecycle to modify: `LogsonicApp.swift` (window-close → SIGINT path; grep `windowShouldClose` / `applicationShouldTerminateAfterLastWindowClosed`).
 - Watcher event contract: `specs/next-04-watchers-notifications.md` (build against its SSE event type `watch_alert`).
+- Native file delivery entry point for window drops: `openNativeFiles` → `deliverNativePaths` in `LogsonicApp.swift` (the Dock / "Open With" path from now-08 phase 5); `grep -nE "registerForDraggedTypes|NSDraggingDestination|performDragOperation" backend/macos/*.swift` currently returns nothing.
 
 ## Step-by-step
 
@@ -31,6 +33,7 @@ LogSonic stays useful when its window is closed: an `NSStatusItem` menu-bar extr
 4. Notifications: permission flow, coalescing, deep-link action.
 5. Dock badge via `NSApp.dockTile.badgeLabel`; clear on window key.
 6. Add new files to `scripts/app-macos.sh` swiftc lists; rebuild.
+7. Window drop target (see design decision): drag-destination registration on the content view, highlight, `performDragOperation` → `openNativeFiles(paths)`. Independent of steps 1–5; can ship first.
 
 ## Test cases
 
@@ -49,11 +52,13 @@ LogSonic stays useful when its window is closed: an `NSStatusItem` menu-bar extr
 | M7 | 100 rapid watcher hits → ≤ a handful of notifications (coalescing) |
 | M8 | Dock badge increments on errors, clears on focusing the window |
 | M9 | Kill the backend process manually → status item shows disconnected state, no crash; existing maxServerRestarts logic unaffected |
+| M10 | Drop a log file on the app *window* (search view, not the Import page) → drop highlight while hovering; on release the Import wizard opens on step 2 with the file's basename; a Dock-icon drop of the same file behaves identically (regression) |
 
 ## Acceptance criteria
 
 - [ ] Full manual matrix on arm64; Swift unit tests green.
 - [ ] No REST polling loops (SSE only, verified by server access logs).
+- [ ] Window drop (M10) works from the search view; no `File`/`DataTransfer` byte path is introduced for it (it goes through `openNativeFiles`).
 - [ ] Window-close semantics documented in README/installation docs and release notes. `docs/installation.md` currently says "Closing the app window stops the server" (still true; now-07 left it deliberately) — this bundle must rewrite that sentence when the stay-alive behavior lands.
 
 ## Out of scope
