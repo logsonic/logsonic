@@ -24,8 +24,10 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("initial state", () => {
-  it("starts at step 1", () => {
-    expect(useImportStore.getState().currentStep).toBe(1);
+  it('has no detail panel open', () => {
+    expect(useImportStore.getState().detailPanelFileId).toBeNull();
+    expect(useImportStore.getState().detailTab).toBe('pattern');
+    expect(useImportStore.getState().isExpandedPerFileDetails).toBe(false);
   });
 
   it("has no import source", () => {
@@ -61,18 +63,65 @@ describe("initial state", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Step Management
+// Detail panel (single-surface import)
 // ---------------------------------------------------------------------------
 
-describe("step management", () => {
-  it("setCurrentStep changes the step", () => {
-    useImportStore.getState().setCurrentStep(2);
-    expect(useImportStore.getState().currentStep).toBe(2);
+describe('detail panel', () => {
+  const twoFiles = () => {
+    useImportStore
+      .getState()
+      .addFiles([
+        new File(['a'], 'a.log', { type: 'text/plain' }),
+        new File(['b'], 'b.log', { type: 'text/plain' }),
+      ]);
+    return useImportStore.getState().files.map((f) => f.id);
+  };
+
+  it('openFileDetail selects the file, opens the panel and resets the tab', () => {
+    const [a, b] = twoFiles();
+    useImportStore.getState().setDetailTab('options');
+    useImportStore.getState().openFileDetail(b);
+    expect(useImportStore.getState().detailPanelFileId).toBe(b);
+    expect(useImportStore.getState().activeFileId).toBe(b);
+    expect(useImportStore.getState().detailTab).toBe('pattern');
+    expect(a).not.toBe(b);
   });
 
-  it("setCurrentStep to step 3", () => {
-    useImportStore.getState().setCurrentStep(3);
-    expect(useImportStore.getState().currentStep).toBe(3);
+  it('closeFileDetail keeps the selection', () => {
+    const [, b] = twoFiles();
+    useImportStore.getState().openFileDetail(b);
+    useImportStore.getState().closeFileDetail();
+    expect(useImportStore.getState().detailPanelFileId).toBeNull();
+    expect(useImportStore.getState().activeFileId).toBe(b);
+  });
+
+  it('removeFile closes the panel when its file goes away', () => {
+    const [a, b] = twoFiles();
+    useImportStore.getState().openFileDetail(a);
+    useImportStore.getState().removeFile(a);
+    expect(useImportStore.getState().detailPanelFileId).toBeNull();
+    useImportStore.getState().openFileDetail(b);
+    useImportStore.getState().removeFile(a);
+    expect(useImportStore.getState().detailPanelFileId).toBe(b);
+  });
+
+  it('togglePerFileDetails flips the progress rows', () => {
+    useImportStore.getState().togglePerFileDetails();
+    expect(useImportStore.getState().isExpandedPerFileDetails).toBe(true);
+    useImportStore.getState().togglePerFileDetails();
+    expect(useImportStore.getState().isExpandedPerFileDetails).toBe(false);
+  });
+
+  it("setAllFilesOptions copies one file's options to every file", () => {
+    const [a, b] = twoFiles();
+    useImportStore
+      .getState()
+      .updateFileSessionOptions(a, { smartDecoder: false, timezone: 'Asia/Tokyo' });
+    const src = useImportStore.getState().files.find((f) => f.id === a)!.sessionOptions;
+    useImportStore.getState().setAllFilesOptions(src);
+    const other = useImportStore.getState().files.find((f) => f.id === b)!.sessionOptions;
+    expect(other).toEqual(src);
+    expect(other).not.toBe(src);
   });
 });
 
@@ -491,15 +540,6 @@ describe("file preview (legacy)", () => {
     expect(useImportStore.getState().filePreviewBuffer).toEqual(preview);
   });
 
-  it("setReadyToSelectPattern updates readiness", () => {
-    useImportStore.getState().setReadyToSelectPattern(true);
-    expect(useImportStore.getState().readyToSelectPattern).toBe(true);
-  });
-
-  it("setReadyToImportLogs updates readiness", () => {
-    useImportStore.getState().setReadyToImportLogs(true);
-    expect(useImportStore.getState().readyToImportLogs).toBe(true);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -591,7 +631,8 @@ describe("provider upload handler", () => {
 describe("reset", () => {
   it("resets all state to defaults", () => {
     // Modify many fields
-    useImportStore.getState().setCurrentStep(3);
+    useImportStore.getState().setDetailTab('options');
+    useImportStore.getState().togglePerFileDetails();
     useImportStore.getState().setImportSource("file");
     useImportStore.getState().setIsUploading(true);
     useImportStore.getState().setUploadProgress(50);
@@ -605,7 +646,9 @@ describe("reset", () => {
     useImportStore.getState().reset();
 
     const state = useImportStore.getState();
-    expect(state.currentStep).toBe(1);
+    expect(state.detailPanelFileId).toBeNull();
+    expect(state.detailTab).toBe('pattern');
+    expect(state.isExpandedPerFileDetails).toBe(false);
     expect(state.importSource).toBeNull();
     expect(state.isUploading).toBe(false);
     expect(state.uploadProgress).toBe(0);

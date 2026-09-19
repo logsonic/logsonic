@@ -1,0 +1,21 @@
+// Common Grok tokens offered as chips -- the same 18 the wizard's editor had.
+export const COMMON_GROK_PATTERNS = [
+  { name: 'TIMESTAMP', description: 'Common timestamp formats', key: 'timestamp' },
+  { name: 'TIMESTAMP_ISO8601', description: 'ISO8601 timestamp', key: 'timestamp' },
+  { name: 'DATE', description: 'Date formats like yyyy-MM-dd', key: 'date' },
+  { name: 'TIME', description: 'Time formats like HH:mm:ss', key: 'time' },
+  { name: 'LOGLEVEL', description: 'Log levels (INFO, WARN, ERROR, etc)', key: 'level' },
+  { name: 'NUMBER', description: 'Any number', key: 'number' },
+  { name: 'INT', description: 'Integer number', key: 'int' },
+  { name: 'POSINT', description: 'Positive integer', key: 'pid' },
+  { name: 'WORD', description: 'Word characters [a-zA-Z0-9_]', key: 'word' },
+  { name: 'NOTSPACE', description: 'Any non-whitespace character', key: 'data' },
+  { name: 'DATA', description: 'Any data until the next field', key: 'data' },
+  { name: 'GREEDYDATA', description: 'Match everything to the end', key: 'message' },
+  { name: 'QUOTEDSTRING', description: 'Quoted string', key: 'string' },
+  { name: 'UUID', description: 'UUID format', key: 'uuid' },
+  { name: 'IP', description: 'IP address (v4 or v6)', key: 'clientip' },
+  { name: 'HOSTNAME', description: 'Hostname', key: 'hostname' },
+  { name: 'HTTPDATE', description: 'HTTP date format', key: 'timestamp' },
+  { name: 'IPORHOST', description: 'IP or hostname', key: 'clientip' },
+];

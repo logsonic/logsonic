@@ -2,8 +2,6 @@
 
 import type { TimestampInference, TimestampResolution } from '@/lib/api-types';
 
-export type UploadStep = 1 | 2 | 3;
-
 export interface Pattern {
   name: string;
   pattern: string;
@@ -76,6 +74,11 @@ export interface ImportFile {
   // Per-file session options
   sessionOptions: FileSessionOptions;
 
+  // Match rate (0-100) of each saved pattern against this file's preview,
+  // computed lazily when the detail panel's Pattern tab opens. Keyed by
+  // pattern name; absent until the alternatives have been tested.
+  patternMatches?: Record<string, number>;
+
   // Timestamp resolution per file. Each file in a batch can have its
   // own anchor (mtime), inferred layout, and user overrides. The
   // upload path reads these instead of the global timestamp* state.
@@ -93,15 +96,7 @@ export interface FileSessionOptions {
   day: string;
 }
 
-// --- Existing types (kept for backward compatibility) ---
-
-export interface UploadProgressHookProps {
-  selectedFile: File | null;
-  selectedPattern: Pattern | null;
-  customPattern: string;
-  customPatterns: Record<string, string>;
-  detectionResult?: DetectionResult;
-}
+// --- Upload hook types ---
 
 export interface MultiFileUploadResult {
   files: ImportFile[];
@@ -114,54 +109,6 @@ export interface UploadProgressHookResult {
   approxLines: number;
   handleMultiFileUpload: (files: ImportFile[], fileService: LogSourceProviderService) => Promise<MultiFileUploadResult>;
   cancelUpload: () => void;
-}
-
-export interface FileParserHookResult {
-  selectedFile: File | null;
-  filePreview: FilePreview;
-  handleFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
-  selectedPattern: Pattern;
-  setSelectedPattern: React.Dispatch<React.SetStateAction<Pattern>>;
-}
-
-export interface PatternTestResultsProps {
-  pattern: string;
-  customPatterns: Record<string, string>;
-  logs: string[];
-  parsedLogs?: Record<string, any>[];
-  isLoading?: boolean;
-  error?: string;
-}
-
-export interface LogPatternSelectionProps {
-  initialPattern?: Pattern;
-  onPatternChange: (pattern: Pattern) => void;
-  previewLines: string[];
-}
-
-export interface AnalyzePatternProps {
-  logs: string[];
-  onDetectionComplete: (result: DetectionResult) => void;
-  initialPattern?: Pattern;
-}
-
-export interface CustomPatternEditorProps {
-  pattern: string;
-  customPatterns: Record<string, string>;
-  onPatternChange: (pattern: string) => void;
-  onCustomPatternsChange: (patterns: Record<string, string>) => void;
-}
-
-// Props passed to a log-source provider component (currently only
-// FileSelection, since CloudWatch was removed). Kept as a named type so
-// callers don't have to inline-spell the callback signatures.
-export interface LogSourceProvider {
-  // Notify that a file has been selected by the user
-  onFileSelect: (filename: string) => void;
-  // Notify that a file preview component has been loaded
-  onFilePreview: (lines: string[], filename: string) => void;
-  // Notify that the user wants to step back from preview to source selection
-  onBackToSourceSelection: () => void;
 }
 
 // Interface for log provider components that implement ref functionality

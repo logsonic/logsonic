@@ -154,7 +154,7 @@ async function main() {
   } else {
     await page.goto(`${FRONTEND}/#/import`, { waitUntil: 'domcontentloaded' });
   }
-  await page.getByText('Import logs', { exact: true }).waitFor({ timeout: 10000 });
+  await page.getByText('Drop log files here', { exact: false }).waitFor({ timeout: 10000 });
   await step(page);
 
   // ── 3. Select files (step 1) ────────────────────────────────────────────
@@ -172,15 +172,15 @@ async function main() {
 
   // ── 4. Step 2: wait for auto-detection to settle ────────────────────────
   log('Waiting for pattern auto-detection…');
-  const importBtn = page.getByRole('button', { name: /^Import(\s+\d+\s+File)?/ });
+  const importBtn = page.getByRole('button', { name: /^Import(\s+\d+\s+file)?/i });
   await importBtn.waitFor({ timeout: 15000 });
   // Detection is done once either the Import button is enabled (all clean) or a
   // Settings button has appeared (a file auto-expanded for a timestamp issue).
   await page.waitForFunction(() => {
     const btns = [...document.querySelectorAll('button')];
-    const imp = btns.find((x) => /^Import(\s+\d+\s+File)?/.test(x.textContent?.trim() ?? ''));
+    const imp = btns.find((x) => /^Import(\s+\d+\s+file)?/i.test(x.textContent?.trim() ?? ''));
     const ready = imp && !imp.disabled;
-    const hasSettings = btns.some((x) => /Settings/.test(x.textContent ?? ''));
+    const hasSettings = btns.some((x) => /^Configure /.test(x.getAttribute('aria-label') ?? ''));
     return ready || hasSettings;
   }, { timeout: 25000 }).catch(() => {});
   await step(page);
@@ -194,11 +194,11 @@ async function main() {
   await fileRow.scrollIntoViewIfNeeded().catch(() => {});
   await fileRow.click();
   await pause(page, 600);
-  let settingsBtn = page.getByRole('button', { name: /Settings/ }).first();
+  let settingsBtn = page.getByRole('button', { name: /^Configure /, exact: false }).first();
   if (!(await settingsBtn.isVisible().catch(() => false))) {
     await fileRow.click();
     await pause(page, 600);
-    settingsBtn = page.getByRole('button', { name: /Settings/ }).first();
+    settingsBtn = page.getByRole('button', { name: /^Configure /, exact: false }).first();
   }
   await step(page);
 
@@ -225,7 +225,7 @@ async function main() {
   // ── 4c. Import (now that any gate is cleared) ───────────────────────────
   await page.waitForFunction(() => {
     const b = [...document.querySelectorAll('button')].find((x) =>
-      /^Import(\s+\d+\s+File)?/.test(x.textContent?.trim() ?? ''));
+      /^Import(\s+\d+\s+file)?/i.test(x.textContent?.trim() ?? ''));
     return b && !b.disabled;
   }, { timeout: 15000 }).catch(() => log('  (Import still gated — check timestamp step)'));
 
@@ -235,7 +235,7 @@ async function main() {
   await step(page);
 
   // ── 5. Step 3: success summary → Home ───────────────────────────────────
-  const homeBtn = page.getByRole('button', { name: 'Home', exact: true });
+  const homeBtn = page.getByRole('button', { name: 'View in LogSonic →', exact: true });
   await homeBtn.waitFor({ timeout: 30000 });
   log('Import complete — viewing summary.');
   await step(page);

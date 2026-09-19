@@ -141,11 +141,10 @@ async function browserTests(browser) {
       const content = await page.locator('main, [role="main"], #root > *').count();
       await assert(content > 0, 'Import page content renders');
 
-      // The source-selection grid was dropped now that local files are the
-      // only ingest path — the wizard lands directly on the dropzone.
-      const hasAddLogs = await page.getByText('Add log files').count() > 0;
+      // Single-surface import: the page opens on the empty-state drop zone.
       const hasDropZone = await page.getByText('Drop log files here').count() > 0;
-      await assert(hasAddLogs && hasDropZone, 'Import page shows file dropzone');
+      const hasFootnote = await page.getByText('detection runs automatically').count() > 0;
+      await assert(hasDropZone && hasFootnote, 'Import page shows file dropzone');
     });
 
     // ── Back to home ───────────────────────────────────────────────────────
@@ -249,10 +248,9 @@ async function multiFileImportTests(browser) {
     // ── Navigate to import page ────────────────────────────────────────────
     await section('Multi-File Import – Navigate to Import Page', async () => {
       await page.goto(`${BASE_URL}/#/import`, { waitUntil: 'domcontentloaded', timeout: 15000 });
-      // After the CloudWatch removal, local files are the only ingest source
-      // and the wizard renders the dropzone directly — no source picker.
+      // Local files are the only ingest source: the page is the dropzone.
       await page.waitForSelector('text=Drop log files here', { timeout: 10000 });
-      await assert(await page.getByText('Add log files').count() > 0, 'Import page loaded');
+      await assert(await page.getByText('Drop log files here').count() > 0, 'Import page loaded');
       await assert(await page.locator('input[type="file"]').count() > 0, 'File input present');
     });
 
@@ -264,32 +262,30 @@ async function multiFileImportTests(browser) {
         `${SAMPLE_LOGS_DIR}/linux-syslog.log`,
       ]);
 
-      // App auto-advances to Step 2 (pattern configuration) once preview is loaded.
-      await page.waitForSelector('text=Pattern configuration', { timeout: 20000 });
-      await assert(await page.getByText('Pattern configuration').count() > 0, 'Auto-advanced to pattern detection step');
+      // Files land straight in the split pane (file list + preview); the
+      // compact "Drop more files" strip replaces the empty-state zone.
+      await page.waitForSelector('text=Drop more files', { timeout: 20000 });
+      await assert(await page.locator('.ls-imp-filerow').count() === 3, 'All 3 files listed');
     });
 
     // ── Pattern detection ──────────────────────────────────────────────────
     await section('Multi-File Import – Auto-detect Patterns for Each File', async () => {
-      // Wait for all files to finish detection (no "Detecting..." or "Queued" badges remain)
-      await page.waitForFunction(() => {
-        const body = document.body.innerText;
-        return !body.includes('Detecting...') && !body.includes('Queued');
-      }, { timeout: 30000 });
+      // Detection runs on drop, in parallel; rows say "Detecting…" until done.
+      await page.waitForFunction(() => !document.body.innerText.includes('Detecting'), { timeout: 30000 });
       await page.waitForTimeout(500);
 
-      const matched = await page.getByText('Pattern found').count();
-      const attention = await page.getByText('Manual selection needed').count();
-      await assert(matched + attention === 3, `All 3 files have detection results (${matched} matched, ${attention} need attention)`);
+      // Every row ends with a verdict: "<pattern> · N%" or "Detection failed".
+      const rows = await page.locator('.ls-imp-filerow').allInnerTexts();
+      const verdicts = rows.filter(t => /·\s*\d+%/.test(t) || /Detection failed/.test(t)).length;
+      await assert(verdicts === 3, `All 3 files have detection results (${verdicts} verdicts)`);
 
-      // The primary button on step 2 doubles as the import trigger now that
-      // the separate Confirm step is gone. Its label includes the file count.
+      // The sticky footer's "Import N files" button is the only commit action.
       await page.waitForFunction(() => {
         const btns = Array.from(document.querySelectorAll('button'));
-        const importBtn = btns.find(b => /Import \d+ Files?/.test(b.textContent?.trim() || ''));
+        const importBtn = btns.find(b => /Import \d+ files?/.test(b.textContent?.trim() || ''));
         return importBtn && !importBtn.disabled;
       }, { timeout: 10000 });
-      await assert(true, '"Import N Files" button enabled after detection');
+      await assert(true, '"Import N files" button enabled after detection');
     });
 
     // ── Trigger import from step 2 and verify success ──────────────────────
@@ -297,11 +293,11 @@ async function multiFileImportTests(browser) {
     // we need from the summary screen *before* the timer fires.
     let successPageText = '';
     await section('Multi-File Import – Import All Files', async () => {
-      await page.getByRole('button', { name: 'Import 3 Files' }).last().click();
+      await page.getByRole('button', { name: 'Import 3 files' }).last().click();
 
-      // handleNext(step 2) runs handleMultiFileUpload then setCurrentStep(3).
-      // The summary screen uses sentence-case "Import successful" / "Import complete".
-      await page.waitForSelector('text=/Import successful|Import complete/i', { timeout: 60000 });
+      // handleImport runs handleMultiFileUpload then shows the completion
+      // card: "Import complete" (all ok) or "Import finished with errors".
+      await page.waitForSelector('text=/Import complete|Import finished with errors/i', { timeout: 60000 });
       successPageText = await page.locator('body').innerText();
       await assert(true, 'Import completed — success/complete screen shown');
     });
@@ -311,30 +307,20 @@ async function multiFileImportTests(browser) {
       // Snapshot of the success page taken above — assertions below run
       // against that text rather than the live DOM, which avoids racing the
       // 5-second auto-redirect back to home.
-      const allSuccessMsg = /All \d+ files have been imported/i.test(successPageText);
-      const partialMsg = /\d+ of \d+ files imported successfully/i.test(successPageText);
+      const allSuccessMsg = /3 files · [\d,]+ lines/i.test(successPageText);
+      const partialMsg = /\d+ succeeded · \d+ failed/i.test(successPageText);
       await assert(allSuccessMsg || partialMsg, 'Success count message shown');
 
-      // v2 stat label is sentence-case "Lines processed" in the DOM but is
-      // rendered uppercase via CSS text-transform — innerText returns the
-      // visually transformed text, so match case-insensitively.
-      await assert(/Lines processed/i.test(successPageText), '"Lines processed" stat shown');
-
-      // Per-file result rows are one <div> per file in the multi-file summary
-      // container; just check each filename appears in the success view.
-      const expectedFiles = ['nginx-access.log', 'apache.log', 'linux-syslog.log'];
-      const rowsFound = expectedFiles.filter(name => successPageText.includes(name)).length;
-      await assert(rowsFound === 3, `3 per-file result rows shown (found ${rowsFound})`);
+      // The card shows the line total; a partial failure additionally lists
+      // the failed files with their errors (none expected here).
+      await assert(/[\d,]+ lines/.test(successPageText), 'Line count shown');
+      await assert(!/failed/i.test(successPageText), 'No file reported as failed');
 
       // No critical JS errors during the full flow.
-      // Filter the known dev-mode-only React warning about setState during
-      // render of SuccessSummary (unrelated to ingest correctness; harmless
-      // in prod) so the assertion catches *real* breakage only.
       const critErrors = consoleErrors.filter(e =>
         !e.includes('favicon') &&
         !e.includes('ollama') &&
-        !e.includes('ERR_CONNECTION_REFUSED') &&
-        !e.includes('Cannot update a component')
+        !e.includes('ERR_CONNECTION_REFUSED')
       );
       await assert(critErrors.length === 0, `No critical JS errors during import (found ${critErrors.length})`);
     });

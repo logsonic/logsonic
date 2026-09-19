@@ -71,14 +71,13 @@ async function main() {
     await check('local import analyzes and ingests one file', async () => {
       await page.waitForSelector('input[type="file"]', { state: 'attached', timeout: 10000 });
       await page.locator('input[type="file"]').setInputFiles(sampleLog);
-      await page.getByText('Pattern configuration', { exact: true }).waitFor({ state: 'visible', timeout: 20000 });
-      await page.waitForFunction(() => {
-        const body = document.body.innerText;
-        return !body.includes('Detecting...') && !body.includes('Queued');
-      }, { timeout: 30000 });
-      await page.getByRole('button', { name: /^Import 1 File$/ }).click();
-      await page.getByRole('heading', { name: 'Import successful', exact: true }).waitFor({ state: 'visible', timeout: 30000 });
-      if (!await page.getByText('Lines processed', { exact: true }).count()) throw new Error('import summary missing');
+      // Single-surface import: the file lands in the split pane and detection
+      // starts at once; the sticky footer's "Import 1 file" commits it.
+      await page.getByText('Drop more files', { exact: true }).waitFor({ state: 'visible', timeout: 20000 });
+      await page.waitForFunction(() => !document.body.innerText.includes('Detecting'), { timeout: 30000 });
+      await page.getByRole('button', { name: /^Import 1 file$/ }).click();
+      await page.getByText('Import complete', { exact: true }).waitFor({ state: 'visible', timeout: 30000 });
+      if (!await page.getByText(/1 file · [\d,]+ lines/).count()) throw new Error('import summary missing');
     });
 
     await check('import redirects back to the home view', async () => {

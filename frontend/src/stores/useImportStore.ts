@@ -54,7 +54,6 @@ export function isMultilineHeaderInvalid(state: {
 // Add a type for the provider upload handler
 export type ProviderUploadHandler = (handleImport: (chunkSize: number, callback: (lines: string[], totalLines: number, next: () => void) => Promise<void>) => Promise<void>) => Promise<void>;
 
-export type UploadStep = 1 | 2 | 3;
 export type ImportSource = string | null;
 
 let fileIdCounter = 0;
@@ -69,19 +68,22 @@ export function basenameOfPath(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-interface ImportState {
-  // Upload step tracking
-  currentStep: UploadStep;
+export type DetailTab = 'pattern' | 'timestamp' | 'options';
 
+interface ImportState {
   // Import source name
   importSource: ImportSource;
 
-  readyToSelectPattern: boolean;
-  readyToImportLogs: boolean;
-
   // --- Multi-file state ---
   files: ImportFile[];
-  activeFileId: string | null; // Which file is currently being configured in detail
+  // The file whose preview is shown (the selected row). Also the file
+  // the SavePatternDialog captures a timestamp resolution from.
+  activeFileId: string | null;
+  // Non-null while the per-file detail panel replaces the file list.
+  detailPanelFileId: string | null;
+  detailTab: DetailTab;
+  // Upload-progress UI: whether the per-file rows are expanded.
+  isExpandedPerFileDetails: boolean;
 
   // --- Legacy single-file state ---
   selectedFileName: string | null;
@@ -152,7 +154,12 @@ interface ImportState {
   updateFilePattern: (fileId: string, pattern: Pattern) => void;
   updateFileSessionOptions: (fileId: string, options: Partial<FileSessionOptions>) => void;
   setAllFilesPattern: (pattern: Pattern) => void;
+  setAllFilesOptions: (options: FileSessionOptions) => void;
   getActiveFile: () => ImportFile | null;
+  openFileDetail: (fileId: string) => void;
+  closeFileDetail: () => void;
+  setDetailTab: (tab: DetailTab) => void;
+  togglePerFileDetails: () => void;
 
   // Per-file timestamp resolution actions. The TimestampPanel writes
   // through these in multi-file mode so each file keeps its own
@@ -167,14 +174,12 @@ interface ImportState {
   applyTimestampToAllFiles: (sourceFileId: string) => void;
 
   // --- Legacy actions ---
-  setCurrentStep: (step: UploadStep) => void;
   setImportSource: (source: ImportSource) => void;
   setSelectedFileName: (filename: string | null) => void;
   setSelectedFileHandle: (fileHandle: any | null) => void;
   setFilePreviewBuffer: (preview: FilePreview | null) => void;
   setAvailablePatterns: (patterns: GrokPatternRequest[]) => void;
   setSelectedPattern: (pattern: Pattern | null) => void;
-  setReadyToImportLogs: (ready: boolean) => void;
   setCreateNewPattern: (pattern: Pattern) => void;
   setCreateNewPatternTokens: (tokens: Record<string, string>) => void;
   setCreateNewPatternName: (name: string) => void;
@@ -205,7 +210,6 @@ interface ImportState {
   setParsedLogs: (logs: Record<string, string>[]) => void;
   setIsTestingPattern: (isTestingPattern: boolean) => void;
   setMetadata: (metadata: Record<string, string | number | boolean>) => void;
-  setReadyToSelectPattern: (ready: boolean) => void;
   handlePatternOperation: (pattern: Pattern, updateStore?: boolean, onSuccess?: (parsedLogs: Record<string, string>[]) => void, onError?: (error: string) => void) => Promise<void>;
   testPattern: () => Promise<void>;
   reset: () => void;
@@ -219,13 +223,10 @@ interface ImportState {
  */
 export const useImportStore = create<ImportState>((set, get) => ({
 
-  currentStep: 1,
   importSource: null,
   selectedFileName: null,
   selectedFileHandle: null,
   filePreviewBuffer: null,
-  readyToSelectPattern: false,
-  readyToImportLogs: false,
   availablePatterns: [DEFAULT_PATTERN as unknown as GrokPatternRequest],
   selectedPattern: DEFAULT_PATTERN,
   createNewPattern: DEFAULT_PATTERN,
@@ -264,6 +265,9 @@ export const useImportStore = create<ImportState>((set, get) => ({
   // Multi-file state
   files: [],
   activeFileId: null,
+  detailPanelFileId: null,
+  detailTab: 'pattern',
+  isExpandedPerFileDetails: false,
 
   // --- Multi-file actions ---
 
@@ -337,9 +341,10 @@ export const useImportStore = create<ImportState>((set, get) => ({
   },
 
   removeFile: (fileId: string) => {
-    set(state => ({
-      files: state.files.filter(f => f.id !== fileId),
+    set((state) => ({
+      files: state.files.filter((f) => f.id !== fileId),
       activeFileId: state.activeFileId === fileId ? null : state.activeFileId,
+      detailPanelFileId: state.detailPanelFileId === fileId ? null : state.detailPanelFileId,
     }));
   },
 
@@ -381,10 +386,26 @@ export const useImportStore = create<ImportState>((set, get) => ({
     }));
   },
 
+  setAllFilesOptions: (options: FileSessionOptions) => {
+    set((state) => ({
+      files: state.files.map((f) => ({ ...f, sessionOptions: { ...options } })),
+    }));
+  },
+
   getActiveFile: () => {
     const { files, activeFileId } = get();
     return files.find(f => f.id === activeFileId) || null;
   },
+
+  // Opening a file's detail also selects it, so the preview pane and the
+  // panel always describe the same file. The tab resets to Pattern on
+  // every open (per the handoff), not per file.
+  openFileDetail: (fileId: string) =>
+    set({ detailPanelFileId: fileId, activeFileId: fileId, detailTab: 'pattern' }),
+  closeFileDetail: () => set({ detailPanelFileId: null }),
+  setDetailTab: (detailTab: DetailTab) => set({ detailTab }),
+  togglePerFileDetails: () =>
+    set((state) => ({ isExpandedPerFileDetails: !state.isExpandedPerFileDetails })),
 
   setFileTimestampInference: (fileId, inference) => {
     // status="exact" means no user intervention is needed; auto-confirm
@@ -452,13 +473,10 @@ export const useImportStore = create<ImportState>((set, get) => ({
   },
 
   // --- Legacy actions (unchanged) ---
-  setCurrentStep: (currentStep) => set({ currentStep }),
   setImportSource: (importSource) => set({ importSource }),
   setSelectedFileName: (selectedFileName) => set({ selectedFileName }),
   setSelectedFileHandle: (selectedFileHandle) => set({ selectedFileHandle }),
   setFilePreviewBuffer: (filePreviewBuffer) => set({ filePreviewBuffer }),
-  setReadyToSelectPattern: (readyToSelectPattern) => set({ readyToSelectPattern }),
-  setReadyToImportLogs: (readyToImportLogs) => set({ readyToImportLogs }),
 
   setAvailablePatterns: (availablePatterns) => {
     const patternsWithCustom = [
@@ -613,7 +631,6 @@ export const useImportStore = create<ImportState>((set, get) => ({
   reset: () => {
     console.log("Resetting import store");
     set({
-      currentStep: 1,
       importSource: null,
       selectedFileName: null,
       selectedFileHandle: null,
@@ -651,6 +668,9 @@ export const useImportStore = create<ImportState>((set, get) => ({
       providerUploadHandler: null,
       files: [],
       activeFileId: null,
+      detailPanelFileId: null,
+      detailTab: 'pattern',
+      isExpandedPerFileDetails: false,
     });
   },
 
