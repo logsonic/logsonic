@@ -110,73 +110,69 @@ graph LR
 
 ## 4. Multi-File Import Flow
 
-The import wizard supports selecting multiple local files simultaneously, each with independent pattern detection and upload tracking.
+The import page (`#/import`) is a single surface: files land in a drop zone, detection runs for each of them the moment they arrive, and the file list + preview split pane shows what was found. Per-file configuration (pattern, timestamp, options) is one click away in a detail panel; "Import N files" in the sticky footer commits the batch.
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor User
-    participant UI as Import Wizard (React)
+    participant UI as Import page (React)
     participant Store as useImportStore (Zustand)
     participant API as Go API Server
     participant Tok as Grok Tokenizer
     participant Bleve as Bleve Storage
 
-    Note over User,UI: Step 1 — Source Selection
-    User->>UI: "Local File" is the only supported source
+    Note over User,UI: Drop — files enter the list
+    User->>UI: Drag & drop / browse (browser Files) or Dock / Open With (native paths)
+    UI->>Store: addFiles(File[]) / addNativePathFiles(paths) → ImportFile[] with status "pending"
 
-    Note over User,UI: Step 2 — File Selection (Multi-File)
-    User->>UI: Drag & drop or browse multiple files
-    UI->>Store: addFiles(File[]) → creates ImportFile[] with unique IDs
-    Store-->>UI: Render file list with per-file status = "pending"
+    Note over UI,API: Detect — parallel, capped, per pending file (useFileDetection)
+    UI->>API: POST /api/v1/parse {logs: preview_lines} (no grok_pattern → autosuggest)
+    API->>Tok: Try registered patterns against the sample
+    API-->>UI: SuggestResponse {results[0] = best fit, multiline?}
+    UI->>API: POST /api/v1/parse {logs, grok_pattern: best, source_mtime}
+    API-->>UI: ParseResponse {logs, timestamp_inference}
+    UI->>Store: updateFile(fileId, {selectedPattern, parsedLogs, status: "detected"}) + setFileTimestampInference
 
-    Note over User,UI: Step 3 — Pattern Detection & Configuration
-    UI->>API: POST /api/v1/parse {logs: preview_lines[0..100]}
-    Note right of API: No grok_pattern → triggers autosuggest
-    API->>Tok: Try every registered pattern against sample
-    Tok-->>API: Score each pattern (fields_extracted / lines)
-    API-->>UI: SuggestResponse {results: sorted by score}
-    UI->>Store: setAvailablePatterns(results)
-    
-    alt User selects a suggested pattern
-        User->>UI: Click suggested pattern card
-        UI->>Store: updateFilePattern(fileId, pattern)
-    else User creates a custom pattern
-        User->>UI: Edit Grok expression in CustomPatternSelector
+    Note over User,UI: Inspect — file list + preview; detail panel on demand
+    alt User picks an alternative or saved pattern (Pattern tab)
+        UI->>API: POST /api/v1/parse per saved pattern (20-line sample) → match %
+        User->>UI: Click an alternative / "More patterns"
+        UI->>API: POST /api/v1/parse {logs, grok_pattern}
+        UI->>Store: updateFile(fileId, {selectedPattern, parsedLogs}) + inference
+    else User writes a custom pattern (inline editor)
+        User->>UI: Edit Grok, click "Test pattern"
         UI->>API: POST /api/v1/parse {logs, grok_pattern, custom_patterns}
-        API->>Tok: Compile & test custom pattern
-        Tok-->>API: ParseResponse {logs, processed, failed}
-        API-->>UI: Display preview results
-        User->>UI: Click "Save Pattern"
-        UI->>API: POST /api/v1/grok (persist to grok.json)
+        API-->>UI: ParseResponse → preview re-renders
+    end
+    opt Timestamp tab override (year / month / day / timezone / source field)
+        UI->>Store: patchFileTimestampOverride(fileId, patch)
+        UI->>API: POST /api/v1/timestamp/preview (debounced)
+        API-->>UI: fresh TimestampInference
     end
 
-    User->>UI: Click "Test Pattern"
-    UI->>Store: testPattern()
-    Store->>API: POST /api/v1/parse {logs: preview[0..20], grok_pattern}
-    API-->>UI: ParseResponse with parsed field tokens
-
-    Note over User,UI: Step 4 — Batch Ingestion
-    User->>UI: Confirm import
-    loop Per file in ImportFile[]
-        UI->>API: POST /api/v1/ingest/start {pattern, source, session_options}
+    Note over User,UI: Commit — "Import N files"
+    opt A file uses a custom pattern
+        UI->>User: SavePatternDialog (Save Pattern → POST /api/v1/grok, or Skip)
+    end
+    loop Per file in ImportFile[] (useUpload)
+        UI->>API: POST /api/v1/ingest/start {pattern, source, session_options, timestamp_config}
         API->>Tok: Create dedicated session Tokenizer
         API-->>UI: {session_id: uuid}
-        loop Per chunk (configurable batch size)
-            UI->>API: POST /api/v1/ingest/logs {session_id, logs: chunk[]}
-            API->>Tok: ParseLogs(chunk, sessionOptions)
-            Tok-->>API: Structured maps with _raw, timestamp, fields
-            API->>Bleve: Batch index by date shard
-            Bleve-->>API: Success
-            API-->>UI: {processed: N, failed: M}
-            UI->>Store: updateFile(fileId, {uploadProgress: %})
+        alt Browser File
+            loop Per chunk
+                UI->>API: POST /api/v1/ingest/logs {session_id, logs: chunk[]}
+                API->>Bleve: Batch index by date shard
+                UI->>Store: updateFile(fileId, {uploadProgress: %})
+            end
+        else Native path
+            UI->>API: POST /api/v1/ingest/file {session_id, path} → job_id
+            API-->>UI: SSE ingest_progress events
         end
         UI->>API: POST /api/v1/ingest/end {session_id}
-        API-->>UI: Session cleaned up
-        UI->>Store: updateFile(fileId, {uploadStatus: "complete"})
+        UI->>Store: updateFile(fileId, {uploadStatus: "success"})
     end
-    
-    UI->>Store: setCurrentStep(4) → SuccessSummaryStep
+    UI->>User: Completion card → refresh /info → home after 5 s (no auto-redirect on partial failure)
 ```
 
 ### Multi-File State Model

@@ -35,7 +35,7 @@ Invoke it as `/pickup` in Claude Code (a local pointer to this file), once per p
   | Consumer | Where |
   |----------|-------|
   | Web app HTTP client | `frontend/src/lib/api-client.ts` (`apiRequest`) |
-  | Native-path handoff (dock drop / Open With) | `frontend/src/components/Import/LocalFileImport/FileSelection.tsx` (reads `window.__logsonicPendingNativeFiles` / the `logsonic-native-files` event; paths, not bytes — the `logsonicfile:` fetch was deleted 2026-09-16) |
+  | Native-path handoff (dock drop / Open With) | `frontend/src/components/Import/hooks/useFileIntake.ts` (reads `window.__logsonicPendingNativeFiles` / the `logsonic-native-files` event; paths, not bytes — the `logsonicfile:` fetch was deleted 2026-09-16; moved out of the deleted `FileSelection.tsx` on 2026-09-19 with the import-UI redesign) |
   | SSE consumer | `frontend/src/hooks/useLogStream.ts` (`EventSource`) |
   | CLI | `backend/tail_cli.go` (and any later `open_cli.go`, `doctor_cli.go`) |
   | MCP tool handlers | `backend/pkg/mcp/server.go` (REST calls to the local API) |

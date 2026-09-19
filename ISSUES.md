@@ -6,6 +6,35 @@ Process: every candidate entry goes through the remediation pass in [`specs/WORK
 
 ---
 
+## 2026-09-19 — Import UI redesign: where the shipped surface deviates from the design handoff, and what it leaves open — **Open (decisions to confirm)**
+
+**Source:** the "LogSonic Import UI Redesign" handoff (README + spec + HTML prototype), implemented on `dev` as the single-surface import page (`frontend/src/pages/Import.tsx`, `frontend/src/components/Import/{DropZone,ImportLayout,FileList,DetailPanel,PreviewPane,UploadProgress,SuccessSummary}`, hooks `useFileIntake` / `useFileDetection` / `usePatternAlternatives`). Not a roadmap package, so no TBD.md row; recorded here because the handoff contradicted the codebase in a few places and each choice below is the maintainer's to overturn.
+
+**Severity:** P3 — every item is a product/UX decision, none blocks the flow (drop → detect → configure → import → home verified in the browser, light + dark, plus the CI gate).
+
+**Deviations, each deliberate:**
+
+1. **Topbar is the app's token topbar, not the prototype's dark strip.** The prototype's `#121215 / #26262c / #f4f4f5` are literally the dark-theme values of `--ls-panel / --ls-border / --ls-text`; using the variables gives the same strip in dark mode and keeps light mode consistent with Home and Settings. In the native shell the breadcrumb is inset 86px past the traffic-light zone (same reservation `Home.tsx` makes) and the strip carries `ls-native-chrome`. **Not watched live in the native app** (no desktop-control grant): verified only with `window.__LOGSONIC_NATIVE__` stubbed in Chrome. Manual step: `open --env STORAGE_PATH=<scratch> -a backend/dist-dev/Logsonic.app`, open Import; expected: "LogSonic / Import" starts right of the zoom button, dragging the strip moves the window.
+2. **Smart decoder default stays `true`.** The spec says "off (match current behavior)", but current behavior is `DEFAULT_SESSION_OPTIONS.smartDecoder = true` (and a store test asserts it). Flipping it would change every ingest.
+3. **Multiline folding stays a session-wide setting**, shown in every file's Options tab. `useUpload.ts` sends the store's global triple on each ingest session and the spec forbids changing `useUpload`; making it per-file is a separate contract change.
+4. **SavePatternDialog still fires before the import**, not after completion as the README says. The previous wizard moved it before the upload on purpose (it must block; a dialog over a 5-second redirect countdown is worse). Editor copy adjusted to match.
+5. **Ambiguous-timestamp "MM/DD/YYYY vs DD/MM/YYYY" buttons are not wired.** `TimestampInference` carries no alternative-format list, so the amber card shows the resolver's warnings + the existing "Looks correct" confirmation, and the tiles/time-source switch remain the way to fix it. Wiring the buttons needs `timeresolve` to expose the competing layouts — backend work.
+6. **Alternatives with match % are scored lazily** the first time a file's Pattern tab opens: one `POST /parse` per saved pattern (~90 today) against a 20-line sample, 8 in flight, cached on the file. `POST /parse` in `multi` mode returns *complementary* patterns, not alternatives, so it could not be used. Cost measured at ~1–2 s against the local server; only patterns with >0% appear (the rest sit behind "More patterns").
+7. **Native empty-state copy changed** from the handoff's "or drop a folder from Finder · paths are read in place" to "or click to browse · files opened via the Dock or Finder are read in place": window drops are not built (this file's 2026-09-07 entry, scheduled for macos-b3) and a drop onto the zone still goes through the browser File route.
+8. **The store keeps its legacy single-file fields** (`selectedFileName`, `filePreviewBuffer`, `handlePatternOperation`, global `timestamp*`, `createNewPattern*`) although the spec lists them for removal: `SavePatternDialog` and `FileSelectionService` still read them, and their tests pass. Removed only what was provably dead (`currentStep`, `readyToSelectPattern`, `readyToImportLogs`, `UploadStep`). Trimming the rest is a separate cleanup.
+
+**Consumers updated:** `frontend/e2e-test.mjs` (CI smoke — its old wizard selectors would have failed; the `Cannot update a component` console filter is gone because the countdown no longer navigates inside a state updater), `frontend/e2e-comprehensive.mjs`, `demo/logsonic-demo.mjs` + `demo/combined-demo.mjs` (re-pointed at the new controls, **not re-recorded**), `docs/System_Architecture.md` §4, `docs/timestamp-resolution.md`, and `specs/WORKFLOW.md`'s consumer table (factual fix: the native-path handoff now lives in `hooks/useFileIntake.ts`).
+
+**Left open:**
+
+- `frontend/e2e-bgl-import.mjs` was already stale before this change (it clicks an "Upload Log File" source button that the CloudWatch removal deleted, then "Next" twice). It is not in `run-e2e.sh`. Suggested: rewrite it against the new surface (drop → open the file's Timestamp tab → pick `bgl_timestamp` in "Time source" → import), since that is exactly the two-timestamp case the tab kept.
+- Pre-existing, observed while testing: `useSearchQueryParams` rewrites the URL hash to `#?since=…` on a cold load of `#/import` (the page still renders; HashRouter keeps the route). Cosmetic, not introduced here.
+- Import-button gating lives in `frontend/src/components/Import/utils/importGate.ts` (detecting / multiline regex / missing pattern / unconfirmed timestamp, in that order); `handleImport` itself re-checks only the missing-pattern case, same split as the old `HandleNavigation`.
+
+**Verified by:** vitest 299/299 (incl. new `useFileDetection` / `useFileIntake` tests that port the deleted `FileAnalyzingStep` / `FileSelection` cases); `npx tsc` clean for touched files; eslint per-file counts on edited files down (store 79→77, store test 229→224, types 5→4) and zero on new files; `npm run build`; the exact CI gate `bash .github/scripts/run-e2e.sh <embedded binary> 8090` exit 0 (network audit + smoke 30/30 + facets + sources + watch); browser walk (Playwright, light and dark) of empty → 3 files → detail panel (Pattern / Timestamp / Options) → year 2025 + Asia/Tokyo overrides → import → complete → home, with `/logs` confirming `2025-06-14T06:16:01Z` for "Jun 14 15:16:01"; custom-pattern path (editor → test → "Looks correct" → SavePatternDialog → import); progress card + cancel on a 41 MB file.
+
+---
+
 ## 2026-09-07 — Dropping a file on the app *window* does nothing; only the Dock icon and Finder "Open With" import (found during macos-b1's M1–M10 walk) — **Scheduled**
 
 **Scheduled 2026-09-16** — the maintainer chose macos-b3. `specs/macos-b3-ambient-presence.md` now carries the AppKit-layer design decision below, step 7, manual row M10, and an acceptance box. Nothing implemented yet; this entry closes when macos-b3 ships M10.
