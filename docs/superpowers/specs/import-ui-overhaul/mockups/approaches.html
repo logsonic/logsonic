@@ -1,0 +1,163 @@
+<h2>Import UI: Which approach feels right?</h2>
+<p class="subtitle">Both are full-width, progressive disclosure, "all user input is error." Pick one and we'll refine.</p>
+
+<div class="split">
+  <div class="mockup" data-choice="a" onclick="toggleSelect(this)" style="cursor: pointer;">
+    <div class="mockup-header">A: "Drop-and-Go" &mdash; Drop zone + drawer</div>
+    <div class="mockup-body" style="padding: 24px; background: #fafafa; min-height: 480px;">
+      
+      <!-- Top bar -->
+      <div style="padding: 12px 16px; background: #1e1e2e; color: #cdd6f4; border-radius: 6px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; font-size: 12px;">
+        <span style="font-weight: 600;">LogSonic</span>
+        <span style="color: #6c7086;">/</span>
+        <span>Import &middot; 3 files</span>
+        <span style="margin-left: auto; color: #a6adc8;">Back to home</span>
+      </div>
+
+      <!-- Drop zone -->
+      <div style="border: 2px dashed #cba6f7; border-radius: 8px; padding: 40px 20px; text-align: center; background: #f5f0ff; margin-bottom: 16px;">
+        <div style="font-size: 32px; margin-bottom: 8px;">&#x2B07;</div>
+        <div style="font-weight: 600; color: #1e1e2e;">Drop log files anywhere on this page</div>
+        <div style="color: #6c7086; font-size: 13px; margin-top: 4px;">or click to browse &middot; .log, .txt, .json</div>
+      </div>
+
+      <!-- File chips -->
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+        <div style="padding: 6px 12px; background: #e6e9ef; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+          <span style="color: #1e66f5;">&#x25A0;</span> app.log <span style="color: #6c7086;">2.1 MB</span>
+        </div>
+        <div style="padding: 6px 12px; background: #e6e9ef; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+          <span style="color: #1e66f5;">&#x25A0;</span> access.log <span style="color: #6c7086;">18 MB</span>
+        </div>
+        <div style="padding: 6px 12px; background: #e6e9ef; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+          <span style="color: #1e66f5;">&#x25A0;</span> errors.json <span style="color: #6c7086;">640 KB</span>
+        </div>
+      </div>
+
+      <!-- Auto-detect strip -->
+      <div style="background: #e6f7e6; border: 1px solid #a6da95; border-radius: 6px; padding: 12px 16px; margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 14px;">&#x2705;</span>
+          <span style="font-size: 13px; color: #1e5500;">3 files detected</span>
+          <span style="margin-left: auto; font-size: 12px; color: #6c7086;">syslog &times;2, json &times;1</span>
+        </div>
+      </div>
+
+      <!-- Mini cards -->
+      <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+        <div style="flex: 1; background: white; border-radius: 6px; padding: 10px; font-size: 11px; border: 1px solid #e6e9ef;">
+          <div style="font-weight: 600;">app.log</div>
+          <div style="color: #40a02b;">syslog 98%</div>
+        </div>
+        <div style="flex: 1; background: white; border-radius: 6px; padding: 10px; font-size: 11px; border: 1px solid #e6e9ef;">
+          <div style="font-weight: 600;">access.log</div>
+          <div style="color: #40a02b;">common 94%</div>
+        </div>
+        <div style="flex: 1; background: white; border-radius: 6px; padding: 10px; font-size: 11px; border: 1px solid #e6e9ef;">
+          <div style="font-weight: 600;">errors.json</div>
+          <div style="color: #40a02b;">json 99%</div>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <div style="padding: 10px 20px; background: #1e66f5; color: white; border-radius: 6px; font-size: 13px; font-weight: 600;">Import 3 files</div>
+        <div style="padding: 10px 16px; border: 1px solid #ccd0da; border-radius: 6px; font-size: 13px; color: #585b70;">Review details &rarr;</div>
+      </div>
+
+      <!-- Drawer (right side peek) -->
+      <div style="margin-top: 12px; background: white; border-left: 1px solid #ccd0da; padding: 12px; font-size: 11px; color: #6c7086; border-radius: 4px;">
+        <div style="font-weight: 600; color: #1e1e2e; margin-bottom: 6px;">Details drawer (click "Review details")</div>
+        Pattern selector &middot; Timestamp preview &middot; Multiline options &middot; Session settings
+      </div>
+
+    </div>
+  </div>
+
+  <div class="mockup" data-choice="b" onclick="toggleSelect(this)" style="cursor: pointer;">
+    <div class="mockup-header">B: "Inspect &amp; Commit" &mdash; Split pane</div>
+    <div class="mockup-body" style="padding: 24px; background: #fafafa; min-height: 480px;">
+      
+      <!-- Top bar -->
+      <div style="padding: 12px 16px; background: #1e1e2e; color: #cdd6f4; border-radius: 6px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; font-size: 12px;">
+        <span style="font-weight: 600;">LogSonic</span>
+        <span style="color: #6c7086;">/</span>
+        <span>Import &middot; 3 files</span>
+        <span style="margin-left: auto; color: #a6adc8;">Back to home</span>
+      </div>
+
+      <!-- Drop strip -->
+      <div style="border: 1.5px dashed #cba6f7; border-radius: 6px; padding: 10px; text-align: center; background: #f5f0ff; margin-bottom: 12px; font-size: 13px; color: #585b70;">
+        &#x2B07; Drop files here &middot; .log, .txt, .json
+      </div>
+
+      <!-- Split pane -->
+      <div style="display: flex; gap: 12px; min-height: 380px;">
+        
+        <!-- Left panel -->
+        <div style="width: 38%; background: white; border-radius: 6px; border: 1px solid #e6e9ef; padding: 12px; display: flex; flex-direction: column;">
+          <div style="font-weight: 600; font-size: 12px; margin-bottom: 8px; color: #1e1e2e;">Files</div>
+          
+          <div style="background: #f0f4ff; border-radius: 4px; padding: 8px; margin-bottom: 6px; font-size: 11px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="color: #40a02b;">&#x25CF;</span>
+              <span style="font-weight: 600;">app.log</span>
+              <span style="color: #6c7086;">2.1 MB</span>
+            </div>
+            <div style="color: #40a02b; margin-top: 2px;">syslog &middot; 98%</div>
+            <div style="width: 100%; height: 3px; background: #e6e9ef; border-radius: 2px; margin-top: 4px;">
+              <div style="width: 98%; height: 3px; background: #40a02b; border-radius: 2px;"></div>
+            </div>
+          </div>
+          
+          <div style="background: white; border-radius: 4px; padding: 8px; margin-bottom: 6px; font-size: 11px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="color: #40a02b;">&#x25CF;</span>
+              <span style="font-weight: 600;">access.log</span>
+              <span style="color: #6c7086;">18 MB</span>
+            </div>
+            <div style="color: #df8e1d; margin-top: 2px;">common &middot; 94%</div>
+          </div>
+          
+          <div style="background: white; border-radius: 4px; padding: 8px; margin-bottom: 6px; font-size: 11px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="color: #40a02b;">&#x25CF;</span>
+              <span style="font-weight: 600;">errors.json</span>
+              <span style="color: #6c7086;">640 KB</span>
+            </div>
+            <div style="color: #40a02b; margin-top: 2px;">json &middot; 99%</div>
+          </div>
+
+          <!-- Batch controls -->
+          <div style="margin-top: auto; padding-top: 8px; border-top: 1px solid #e6e9ef;">
+            <div style="font-size: 10px; color: #6c7086; margin-bottom: 6px;">Batch: <span style="background: #f0f4ff; padding: 2px 6px; border-radius: 3px;">syslog</span> &middot; 
+              <span style="color: #1e66f5; cursor: pointer;">apply to all</span>
+            </div>
+            <div style="padding: 10px; background: #1e66f5; color: white; border-radius: 6px; font-size: 12px; text-align: center; font-weight: 600;">Import 3 files</div>
+          </div>
+        </div>
+
+        <!-- Right panel - Preview -->
+        <div style="flex: 1; background: white; border-radius: 6px; border: 1px solid #e6e9ef; display: flex; flex-direction: column;">
+          <div style="padding: 8px 12px; border-bottom: 1px solid #e6e9ef; font-size: 11px; font-weight: 600; color: #1e1e2e;">app.log preview</div>
+          <div style="flex: 1; padding: 12px; font-family: monospace; font-size: 11px; line-height: 1.6; overflow: hidden;">
+            <div><span style="color: #6c7086;">1</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:31:22</span> <span style="background: #fef0d0; padding: 0 2px;">myhost</span> <span style="background: #e7f5e7; padding: 0 2px;">sshd[1234]</span>: <span style="background: #fdf0f5; padding: 0 2px;">Accepted publickey</span></div>
+            <div><span style="color: #6c7086;">2</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:32:05</span> <span style="background: #fef0d0; padding: 0 2px;">myhost</span> <span style="background: #e7f5e7; padding: 0 2px;">sshd[1234]</span>: <span style="background: #fdf0f5; padding: 0 2px;">Failed password</span></div>
+            <div><span style="color: #6c7086;">3</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:33:10</span> <span style="background: #fef0d0; padding: 0 2px;">myhost</span> <span style="background: #e7f5e7; padding: 0 2px;">kernel</span>: <span style="background: #fdf0f5; padding: 0 2px;">usb 1-1: reset</span></div>
+            <div><span style="color: #6c7086;">4</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:34:00</span> <span style="background: #fef0d0; padding: 0 2px;">myhost</span> <span style="background: #e7f5e7; padding: 0 2px;">CRON[5678]</span>: <span style="background: #fdf0f5; padding: 0 2px;">(root) CMD (backup.sh)</span></div>
+            <div><span style="color: #6c7086;">5</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:34:22</span> <span style="background: #fef0d0; padding: 0 2px;">myhost</span> <span style="background: #e7f5e7; padding: 0 2px;">sshd[1234]</span>: <span style="background: #fdf0f5; padding: 0 2px;">error: connect to</span></div>
+          </div>
+          <div style="padding: 8px 12px; border-top: 1px solid #e6e9ef; display: flex; gap: 8px; align-items: center; font-size: 11px;">
+            <span style="background: #f0f4ff; padding: 3px 8px; border-radius: 4px;">syslog</span>
+            <span style="color: #6c7086;">|</span>
+            <span style="color: #6c7086;">Timestamp:</span>
+            <span style="color: #40a02b;">Detected</span>
+            <span style="color: #6c7086;">&middot; Jun 15 14:31</span>
+            <span style="margin-left: auto; font-size: 10px; color: #1e66f5;">Settings</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>

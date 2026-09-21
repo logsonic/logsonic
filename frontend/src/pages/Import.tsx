@@ -7,6 +7,7 @@ import { FileList } from '@/components/Import/FileList/FileList';
 import { useFileDetection } from '@/components/Import/hooks/useFileDetection';
 import { useFileIntake } from '@/components/Import/hooks/useFileIntake';
 import useUpload from '@/components/Import/hooks/useUpload';
+import { ImportAction } from '@/components/Import/ImportAction';
 import { ImportLayout } from '@/components/Import/ImportLayout';
 import { useFileSelectionService } from '@/components/Import/LocalFileImport/FileSelectionService';
 import { PreviewPane } from '@/components/Import/PreviewPane/PreviewPane';
@@ -215,43 +216,37 @@ const Import: FC = () => {
   } else if (isUploading) {
     body = <UploadProgress onCancel={cancelUpload} />;
   } else {
-    body = (
-      <>
-        <DropZone fileCount={files.length} native={isNativeShell()} onFiles={addBrowserFiles} />
-        {hasFiles && (
-          <div className="ls-imp-split ls-rise">
-            {detailFile ? (
-              <DetailPanel
-                file={detailFile}
-                files={files}
-                gate={gate}
-                onBack={closeFileDetail}
-                onChangePattern={changePattern}
-                onImport={handleImport}
-              />
-            ) : (
-              <FileList
-                files={files}
-                selectedId={activeFileId}
-                gate={gate}
-                onSelect={setActiveFileId}
-                onConfigure={openFileDetail}
-                onRemove={removeFile}
-                onApplyPatternToAll={applyPatternToAll}
-                onRedetectAll={redetectAll}
-                onImport={handleImport}
-              />
-            )}
-            <PreviewPane
-              file={detailFile ?? activeFile}
-              onTestAnotherPattern={() => {
-                const target = detailFile ?? activeFile;
-                if (target) openFileDetail(target.id);
-              }}
-            />
-          </div>
+    body = hasFiles ? (
+      <div className={`ls-imp-split ls-rise${detailFile ? ' ls-imp-split--detail' : ''}`}>
+        {detailFile ? (
+          <DetailPanel
+            file={detailFile}
+            files={files}
+            onBack={closeFileDetail}
+            onChangePattern={changePattern}
+          />
+        ) : (
+          <FileList
+            files={files}
+            selectedId={activeFileId}
+            onSelect={setActiveFileId}
+            onConfigure={openFileDetail}
+            onRemove={removeFile}
+            onAddFiles={addBrowserFiles}
+            onApplyPatternToAll={applyPatternToAll}
+            onRedetectAll={redetectAll}
+          />
         )}
-      </>
+        <PreviewPane
+          file={detailFile ?? activeFile}
+          onTestAnotherPattern={() => {
+            const target = detailFile ?? activeFile;
+            if (target) openFileDetail(target.id);
+          }}
+        />
+      </div>
+    ) : (
+      <DropZone native={isNativeShell()} onFiles={addBrowserFiles} />
     );
   }
 
@@ -262,6 +257,11 @@ const Import: FC = () => {
         onLeave={leave}
         leaveLabel={hasFiles && phase === 'edit' ? 'Cancel' : 'Back to home'}
         leaveDisabled={isUploading}
+        actions={
+          hasFiles && phase === 'edit' && !isUploading ? (
+            <ImportAction files={files} gate={gate} onImport={handleImport} />
+          ) : null
+        }
       >
         {showSaveDialog && (
           <SavePatternDialog

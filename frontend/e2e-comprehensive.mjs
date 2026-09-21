@@ -72,8 +72,8 @@ async function main() {
       await page.waitForSelector('input[type="file"]', { state: 'attached', timeout: 10000 });
       await page.locator('input[type="file"]').setInputFiles(sampleLog);
       // Single-surface import: the file lands in the split pane and detection
-      // starts at once; the sticky footer's "Import 1 file" commits it.
-      await page.getByText('Drop more files', { exact: true }).waitFor({ state: 'visible', timeout: 20000 });
+      // starts at once; the topbar's "Import 1 file" commits it.
+      await page.locator('.ls-imp-filerow').first().waitFor({ state: 'visible', timeout: 20000 });
       await page.waitForFunction(() => !document.body.innerText.includes('Detecting'), { timeout: 30000 });
       await page.getByRole('button', { name: /^Import 1 file$/ }).click();
       await page.getByText('Import complete', { exact: true }).waitFor({ state: 'visible', timeout: 30000 });

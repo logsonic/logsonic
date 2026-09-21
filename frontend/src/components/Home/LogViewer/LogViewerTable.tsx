@@ -9,14 +9,13 @@ import {
   getSortedRowModel,
   useReactTable
 } from '@tanstack/react-table';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FileUp, GripVertical, Maximize2, Trash2, Upload } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FileUp, GripVertical, Trash2, Upload } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { ExpandedRow } from '@/components/Home/ExpandedRow';
 import { LogViewerSkeleton } from '@/components/Home/LogViewer/LogViewerSkeleton';
 import { Resizer } from '@/components/Home/Resizer';
-import { useFitRangeToData } from '@/hooks/useFitRangeToData';
 import { useSearchParser } from '@/hooks/useSearchParser.tsx';
 import { ColorRule, useColorRuleStore } from '@/stores/useColorRuleStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
@@ -320,7 +319,6 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
   const noLogsInSystem = useMemo(() => {
     return systemInfo?.storage_info?.total_log_entries === 0;
   }, [systemInfo]);
-  const fitRangeToData = useFitRangeToData();
 
   const autofitColumns = useCallback(() => {
     if (liveEnabled) return;
@@ -1199,22 +1197,10 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
         );
         }
     
-      const totalIndexed = systemInfo?.storage_info?.total_log_entries ?? 0;
+      // A no-match result is just that: no offer to widen the range.
       return (
         <div className="flex flex-col items-center justify-center h-64 gap-3">
           <p className="text-muted-foreground">No logs match the current filters.</p>
-          {totalIndexed > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={fitRangeToData}
-              className="gap-1.5"
-              title="Snap the time range to the span of indexed log data"
-            >
-              <Maximize2 className="h-3.5 w-3.5" />
-              Fit time range to {totalIndexed.toLocaleString()} indexed logs
-            </Button>
-          )}
         </div>
       );
     }

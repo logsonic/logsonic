@@ -78,7 +78,11 @@ export const PreviewPane: FC<PreviewPaneProps> = ({ file, onTestAnotherPattern }
     <section className="ls-imp-pane" aria-label="Preview">
       <div className="ls-imp-pane-head">
         <span className="ls-imp-label">Preview</span>
-        <span className="ls-imp-mono truncate" style={{ fontSize: 12, color: 'var(--ls-text)' }}>
+        <span
+          className="ls-imp-mono truncate"
+          style={{ flex: '1 1 0', minWidth: 0, fontSize: 12, color: 'var(--ls-text)' }}
+          title={file.nativePath || file.fileName}
+        >
           {file.fileName}
         </span>
         <span

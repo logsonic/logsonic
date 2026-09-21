@@ -46,22 +46,14 @@ export const FileRow: FC<FileRowProps> = ({ file, selected, onSelect, onConfigur
         aria-hidden
       />
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline" style={{ gap: 6 }}>
-          <span
-            className="truncate"
-            style={{ fontSize: 13, fontWeight: 600, color: 'var(--ls-text)' }}
-            title={file.nativePath || file.fileName}
-          >
-            {file.fileName}
-          </span>
-          {file.fileSize > 0 && (
-            <span
-              className="ls-imp-mono flex-shrink-0"
-              style={{ fontSize: 11.5, color: 'var(--ls-text-3)' }}
-            >
-              {formatSize(file.fileSize)}
-            </span>
-          )}
+        {/* The action buttons sit over the top-right corner; the name line
+            reserves their width so nothing hides under them. */}
+        <div
+          className="truncate ls-imp-row-name"
+          style={{ fontSize: 13, fontWeight: 600, color: 'var(--ls-text)' }}
+          title={file.nativePath || file.fileName}
+        >
+          {file.fileName}
         </div>
         <div
           className="ls-imp-mono flex items-baseline"
@@ -70,24 +62,38 @@ export const FileRow: FC<FileRowProps> = ({ file, selected, onSelect, onConfigur
           {busy ? (
             <span style={{ color: 'var(--ls-info)' }}>Detecting…</span>
           ) : failed ? (
-            <span style={{ color: 'var(--ls-err)' }}>
+            <span className="truncate" style={{ color: 'var(--ls-err)' }}>
               {file.selectedPattern && file.selectedPattern.name !== 'Custom Pattern'
                 ? `${file.selectedPattern.name} · failed`
                 : 'Detection failed'}
             </span>
           ) : (
-            <span className="truncate" style={{ color }}>
-              {file.selectedPattern?.name ?? 'no pattern'} · {rate}%
-            </span>
+            <>
+              <span className="truncate" style={{ color }}>
+                {file.selectedPattern?.name ?? 'no pattern'}
+              </span>
+              <span className="flex-shrink-0" style={{ color }}>
+                · {rate}%
+              </span>
+            </>
           )}
           {tsAttention && (
-            <span style={{ color: 'var(--ls-warn)' }} title="Timestamp needs confirmation">
+            <span
+              className="flex-shrink-0"
+              style={{ color: 'var(--ls-warn)' }}
+              title="Timestamp needs confirmation"
+            >
               ⚠ timestamp
             </span>
           )}
-          {file.approxLines > 0 && (
-            <span className="ml-auto flex-shrink-0" style={{ color: 'var(--ls-text-4)' }}>
-              ~{file.approxLines.toLocaleString()} lines
+          {(file.fileSize > 0 || file.approxLines > 0) && (
+            <span
+              className="ls-imp-rail-aux ml-auto flex-shrink-0"
+              style={{ color: 'var(--ls-text-4)' }}
+            >
+              {file.fileSize > 0 ? formatSize(file.fileSize) : ''}
+              {file.fileSize > 0 && file.approxLines > 0 ? ' · ' : ''}
+              {file.approxLines > 0 ? `~${file.approxLines.toLocaleString()} lines` : ''}
             </span>
           )}
         </div>
@@ -97,7 +103,7 @@ export const FileRow: FC<FileRowProps> = ({ file, selected, onSelect, onConfigur
           </div>
         )}
       </div>
-      <div className="flex flex-col" style={{ gap: 4 }}>
+      <div className="ls-imp-row-actions">
         <button
           type="button"
           className="ls-imp-cfg-btn"

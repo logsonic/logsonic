@@ -263,8 +263,8 @@ async function multiFileImportTests(browser) {
       ]);
 
       // Files land straight in the split pane (file list + preview); the
-      // compact "Drop more files" strip replaces the empty-state zone.
-      await page.waitForSelector('text=Drop more files', { timeout: 20000 });
+      // empty-state drop zone is gone and "Import N files" moves to the topbar.
+      await page.waitForSelector('.ls-imp-filerow', { timeout: 20000 });
       await assert(await page.locator('.ls-imp-filerow').count() === 3, 'All 3 files listed');
     });
 

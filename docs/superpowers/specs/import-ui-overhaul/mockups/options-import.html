@@ -1,0 +1,129 @@
+<h2>Options tab + Import CTA placement</h2>
+<p class="subtitle">The Ingest Options tab contents and where the "Import all" button lives. Click your preference.</p>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="options-import-bottom" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Options tab = 3 toggle groups. Import button at bottom of file list.</h3>
+      <p>The Options tab shows three collapsible groups: Smart Decoder (on/off), Timezone Override (dropdown), Multiline Records (mode selector + regex input if custom). The "Import N files" button lives at the bottom of the left panel (file list), always visible as a sticky footer. Options are set per-file; batch apply is available.</p>
+
+      <div style="margin-top: 12px; background: #fafafa; border-radius: 6px; padding: 16px; border: 1px solid #e6e9ef;">
+        <div style="display: flex; gap: 8px;">
+          
+          <!-- Left panel: file list + import button -->
+          <div style="width: 40%; background: white; border-radius: 4px; border: 1px solid #e6e9ef; padding: 10px; display: flex; flex-direction: column; min-height: 300px;">
+            <div style="font-weight: 600; font-size: 11px; margin-bottom: 8px;">Files</div>
+            <div style="font-size: 10px; margin-bottom: 3px;">&#x25CF; app.log &mdash; syslog 98%</div>
+            <div style="font-size: 10px; margin-bottom: 3px;">&#x25CF; access.log &mdash; common 94%</div>
+            <div style="font-size: 10px;">&#x25CF; errors.json &mdash; json 99%</div>
+
+            <!-- Sticky import button at bottom -->
+            <div style="margin-top: auto; padding-top: 10px; border-top: 1px solid #e6e9ef;">
+              <div style="padding: 9px; background: #1e66f5; color: white; border-radius: 6px; font-size: 12px; text-align: center; font-weight: 600;">Import 3 files</div>
+              <div style="font-size: 9px; color: #6c7086; text-align: center; margin-top: 4px;">~51,000 lines &middot; 20.7 MB</div>
+            </div>
+          </div>
+
+          <!-- Right panel: Options tab -->
+          <div style="flex: 1; background: white; border-radius: 4px; border: 1px solid #e6e9ef; padding: 10px;">
+            <div style="font-weight: 600; font-size: 11px; margin-bottom: 2px;">app.log</div>
+            
+            <!-- Tabs -->
+            <div style="display: flex; gap: 2px; margin-bottom: 10px; border-bottom: 1px solid #e6e9ef;">
+              <div style="padding: 4px 10px; font-size: 10px; color: #6c7086;">Pattern</div>
+              <div style="padding: 4px 10px; font-size: 10px; color: #6c7086;">Timestamp</div>
+              <div style="padding: 4px 10px; font-size: 10px; font-weight: 600; border-bottom: 2px solid #1e66f5;">Options</div>
+            </div>
+
+            <!-- Smart Decoder -->
+            <div style="margin-bottom: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <div style="font-weight: 600; font-size: 10px;">Smart decoder</div>
+                  <div style="font-size: 9px; color: #6c7086;">Auto-detect JSON/CSV inside log lines</div>
+                </div>
+                <div style="width: 28px; height: 16px; background: #1e66f5; border-radius: 8px; position: relative;">
+                  <div style="width: 12px; height: 12px; background: white; border-radius: 6px; position: absolute; top: 2px; right: 2px;"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Timezone -->
+            <div style="margin-bottom: 10px;">
+              <div style="font-weight: 600; font-size: 10px; margin-bottom: 3px;">Force timezone</div>
+              <div style="font-size: 9px; color: #6c7086; margin-bottom: 4px;">Override the timezone from auto-detection</div>
+              <select style="width: 100%; padding: 4px 8px; font-size: 10px; border: 1px solid #ccd0da; border-radius: 3px; background: white;">
+                <option>Auto (from detection)</option>
+                <option>UTC</option>
+                <option>US/Eastern</option>
+                <option>US/Pacific</option>
+                <option>Europe/London</option>
+                <option>Europe/Zurich</option>
+              </select>
+            </div>
+
+            <!-- Multiline -->
+            <div style="margin-bottom: 10px;">
+              <div style="font-weight: 600; font-size: 10px; margin-bottom: 3px;">Multiline records</div>
+              <div style="font-size: 9px; color: #6c7086; margin-bottom: 4px;">Join continuation lines to the record above</div>
+              <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                <div style="padding: 3px 8px; background: white; border: 1px solid #ccd0da; border-radius: 3px; font-size: 10px;">Off</div>
+                <div style="padding: 3px 8px; background: #f0f4ff; border: 1px solid #1e66f5; border-radius: 3px; font-size: 10px;">Indent-based</div>
+                <div style="padding: 3px 8px; background: white; border: 1px solid #ccd0da; border-radius: 3px; font-size: 10px;">ISO8601</div>
+                <div style="padding: 3px 8px; background: white; border: 1px solid #ccd0da; border-radius: 3px; font-size: 10px;">Syslog</div>
+                <div style="padding: 3px 8px; background: white; border: 1px solid #ccd0da; border-radius: 3px; font-size: 10px;">Regex</div>
+              </div>
+            </div>
+
+            <!-- Batch apply -->
+            <div style="padding-top: 8px; border-top: 1px solid #e6e9ef; font-size: 10px; color: #1e66f5;">Apply these options to all files</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="options-import-top" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Options tab = 3 toggles. Import button in top sheet bar.</h3>
+      <p>Same Options tab content, but the "Import N files" button lives in the top sheet bar (next to the "Drop more files" strip) so it's the most prominent call to action regardless of which file is selected or what tab is open. File list + detail panel stays below.</p>
+      <div style="margin-top: 12px; background: #fafafa; border-radius: 6px; padding: 16px; border: 1px solid #e6e9ef;">
+
+        <!-- Top bar with import -->
+        <div style="border: 1.5px dashed #cba6f7; border-radius: 6px; padding: 8px 12px; margin-bottom: 8px; background: #f5f0ff; display: flex; align-items: center; justify-content: space-between;">
+          <div style="font-size: 12px; color: #585b70;">&#x2B07; Drop more files &middot; 3 selected</div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="font-size: 10px; color: #6c7086;">~51K lines &middot; 20.7 MB</div>
+            <div style="padding: 7px 16px; background: #1e66f5; color: white; border-radius: 5px; font-size: 11px; font-weight: 600;">Import 3 files</div>
+          </div>
+        </div>
+
+        <!-- Split pane below -->
+        <div style="display: flex; gap: 8px;">
+          <div style="width: 38%; background: white; border-radius: 4px; border: 1px solid #e6e9ef; padding: 10px;">
+            <div style="font-weight: 600; font-size: 10px; margin-bottom: 6px;">Files</div>
+            <div style="font-size: 10px; margin-bottom: 3px;">&#x25CF; app.log &mdash; syslog 98%</div>
+            <div style="font-size: 10px; margin-bottom: 3px;">&#x25CF; access.log &mdash; common 94%</div>
+            <div style="font-size: 10px;">&#x25CF; errors.json &mdash; json 99%</div>
+          </div>
+          <div style="flex: 1; background: white; border-radius: 4px; border: 1px solid #e6e9ef; padding: 10px;">
+            <div style="font-weight: 600; font-size: 10px; margin-bottom: 4px;">app.log</div>
+            <div style="display: flex; gap: 2px; margin-bottom: 8px; border-bottom: 1px solid #e6e9ef;">
+              <div style="padding: 3px 8px; font-size: 9px; color: #6c7086;">Pattern</div>
+              <div style="padding: 3px 8px; font-size: 9px; color: #6c7086;">Timestamp</div>
+              <div style="padding: 3px 8px; font-size: 9px; font-weight: 600; border-bottom: 2px solid #1e66f5;">Options</div>
+            </div>
+            <div style="font-family: monospace; font-size: 10px; line-height: 1.4; color: #6c7086;">
+              <div>Smart Decoder: <span style="color: #40a02b;">on</span></div>
+              <div>Timezone: <span style="color: #1e66f5;">auto</span></div>
+              <div>Multiline: <span style="color: #6c7086;">off</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>

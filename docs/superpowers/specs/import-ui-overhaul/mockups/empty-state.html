@@ -1,0 +1,131 @@
+<h2>Import page: Empty state &amp; overall layout</h2>
+<p class="subtitle">Three variations for the empty state and structural layout of the "Inspect &amp; Commit" approach.</p>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="full-drop" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Full-page drop zone (empty state)</h3>
+      <p>Before files are added: a tall, centered drop zone fills the page. "Drop log files anywhere on this page." After files added: drop zone shrinks to a compact top strip, split pane appears below.</p>
+      <div style="margin-top: 12px;">
+        
+        <!-- Empty state -->
+        <div style="background: #fafafa; border-radius: 6px; padding: 20px; border: 1px solid #e6e9ef; margin-bottom: 8px;">
+          <div style="font-size: 10px; color: #6c7086; margin-bottom: 8px;">Empty state:</div>
+          <div style="border: 2px dashed #cba6f7; border-radius: 8px; padding: 60px 20px; text-align: center; background: #f5f0ff;">
+            <div style="font-size: 40px; margin-bottom: 12px;">&#x2B07;</div>
+            <div style="font-weight: 600; font-size: 16px; color: #1e1e2e; margin-bottom: 6px;">Drop log files here to get started</div>
+            <div style="color: #6c7086; font-size: 13px;">or click to browse &middot; .log, .txt, .json &middot; up to 5 GiB each</div>
+          </div>
+        </div>
+
+        <!-- After files -->
+        <div style="background: #fafafa; border-radius: 6px; padding: 16px; border: 1px solid #e6e9ef;">
+          <div style="font-size: 10px; color: #6c7086; margin-bottom: 8px;">After files added:</div>
+          <div style="border: 1.5px dashed #cba6f7; border-radius: 6px; padding: 8px; text-align: center; background: #f5f0ff; margin-bottom: 8px; font-size: 12px; color: #585b70;">
+            &#x2B07; Drop more files &middot; 3 selected
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <div style="width: 38%; background: white; border-radius: 4px; border: 1px solid #e6e9ef; padding: 10px; font-size: 10px;">
+              <div style="font-weight: 600; margin-bottom: 4px;">Files</div>
+              <div>&#x25CF; app.log &mdash; syslog 98%</div>
+              <div>&#x25CF; access.log &mdash; common 94%</div>
+              <div>&#x25CF; errors.json &mdash; json 99%</div>
+            </div>
+            <div style="flex: 1; background: white; border-radius: 4px; border: 1px solid #e6e9ef; padding: 10px; font-family: monospace; font-size: 10px; line-height: 1.4;">
+              Preview: app.log
+              <div style="color: #6c7086;">1 Jun 15 14:31:22 myhost sshd...</div>
+              <div style="color: #6c7086;">2 Jun 15 14:32:05 myhost sshd...</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="split-from-start" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Split layout from the start</h3>
+      <p>The split pane structure is always visible. The left panel shows a drop zone when empty; the right panel shows a placeholder message. Adding files populates the left panel and starts detection. No layout jump — the structure is consistent.</p>
+      <div style="margin-top: 12px;">
+        
+        <!-- Empty state with split -->
+        <div style="background: #fafafa; border-radius: 6px; padding: 16px; border: 1px solid #e6e9ef;">
+          <div style="font-size: 10px; color: #6c7086; margin-bottom: 8px;">Empty state:</div>
+          
+          <div style="border: 1.5px dashed #cba6f7; border-radius: 6px; padding: 8px; text-align: center; background: #f5f0ff; margin-bottom: 8px; font-size: 12px; color: #585b70;">
+            &#x2B07; Drop files anywhere on this page
+          </div>
+
+          <div style="display: flex; gap: 8px;">
+            <div style="width: 38%; border: 2px dashed #cba6f7; border-radius: 6px; padding: 40px 10px; text-align: center; background: #f5f0ff;">
+              <div style="font-size: 24px; margin-bottom: 4px;">&#x2B07;</div>
+              <div style="font-size: 11px; color: #585b70;">Drop files here or click to browse</div>
+            </div>
+            <div style="flex: 1; background: #fafafa; border-radius: 4px; border: 1px solid #e6e9ef; display: flex; align-items: center; justify-content: center; min-height: 120px;">
+              <div style="color: #6c7086; font-size: 12px; text-align: center;">
+                <div style="font-size: 24px; margin-bottom: 6px;">&#x1F4C4;</div>
+                Add files to see preview
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="bottom-sheet" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Drop sheet + expanding layout</h3>
+      <p>The page starts with a single focused drop zone. Files added slide up into a bottom sheet showing the file list + preview. The drop zone stays at the top as a persistent strip. Feels like a native macOS sheet that "opens" the import workspace.</p>
+      <div style="margin-top: 12px;">
+        
+        <!-- Empty state -->
+        <div style="background: #fafafa; border-radius: 6px; padding: 16px; border: 1px solid #e6e9ef;">
+          <div style="font-size: 10px; color: #6c7086; margin-bottom: 8px;">Empty state:</div>
+          
+          <div style="border: 2px dashed #cba6f7; border-radius: 8px; padding: 60px 20px; text-align: center; background: #f5f0ff;">
+            <div style="font-size: 40px; margin-bottom: 12px;">&#x2B07;</div>
+            <div style="font-weight: 600; font-size: 16px; color: #1e1e2e; margin-bottom: 6px;">Drop log files to import</div>
+            <div style="color: #6c7086; font-size: 13px;">.log, .txt, .json &middot; up to 5 GiB each</div>
+          </div>
+
+        </div>
+
+        <!-- After files -->
+        <div style="background: #fafafa; border-radius: 6px; padding: 12px; border: 1px solid #e6e9ef; margin-top: 8px;">
+          <div style="font-size: 10px; color: #6c7086; margin-bottom: 6px;">After files added:</div>
+          
+          <!-- Persistent top drop strip -->
+          <div style="border: 1.5px dashed #cba6f7; border-radius: 6px; padding: 8px; text-align: center; background: #f5f0ff; margin-bottom: 8px; font-size: 12px; color: #585b70;">
+            &#x2B07; Drop more files &middot; 3 selected
+          </div>
+
+          <!-- Bottom "sheet" -->
+          <div style="background: white; border-radius: 8px 8px 0 0; border: 1px solid #e6e9ef; border-bottom: none; padding: 12px; box-shadow: 0 -2px 12px rgba(0,0,0,0.05);">
+            <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
+              <div style="font-weight: 600; font-size: 11px;">3 files &middot; 20 MB</div>
+              <div style="margin-left: auto; padding: 6px 14px; background: #1e66f5; color: white; border-radius: 4px; font-size: 11px; font-weight: 600;">Import all</div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <div style="width: 38%; background: #fafafa; border-radius: 4px; padding: 8px; font-size: 10px;">
+                <div>&#x25CF; app.log &mdash; syslog 98%</div>
+                <div>&#x25CF; access.log &mdash; common 94%</div>
+                <div>&#x25CF; errors.json &mdash; json 99%</div>
+              </div>
+              <div style="flex: 1; background: #fafafa; border-radius: 4px; padding: 8px; font-family: monospace; font-size: 10px; line-height: 1.4;">
+                Preview: app.log
+                <div style="color: #6c7086;">1 Jun 15 14:31:22 myhost sshd...</div>
+                <div style="color: #6c7086;">2 Jun 15 14:32:05 myhost sshd...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

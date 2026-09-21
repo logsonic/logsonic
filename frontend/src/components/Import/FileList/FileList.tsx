@@ -1,41 +1,41 @@
-import { RefreshCw } from 'lucide-react';
+import { Plus, RefreshCw } from 'lucide-react';
 import { FC, useState } from 'react';
 
+import { useFilePicker } from '../hooks/useFilePicker';
+
 import { FileRow } from './FileRow';
-import { ImportFooter } from './ImportFooter';
 
 import type { ImportFile, Pattern } from '../types';
-import type { ImportGate } from '../utils/importGate';
 
 interface FileListProps {
   files: ImportFile[];
   selectedId: string | null;
-  gate: ImportGate;
   onSelect: (id: string) => void;
   onConfigure: (id: string) => void;
   onRemove: (id: string) => void;
+  onAddFiles: (files: File[]) => void;
   onApplyPatternToAll: (pattern: Pattern) => Promise<void>;
   onRedetectAll: () => void;
-  onImport: () => void;
 }
 
 /**
  * Left pane in the default working state: every added file with its
- * verdict, the batch "apply pattern to all" link, and the sticky import
- * footer.
+ * verdict and the batch "apply pattern to all" link. Once files exist
+ * this pane is the only way in for more: the Add button, or dropping
+ * onto the list.
  */
 export const FileList: FC<FileListProps> = ({
   files,
   selectedId,
-  gate,
   onSelect,
   onConfigure,
   onRemove,
+  onAddFiles,
   onApplyPatternToAll,
   onRedetectAll,
-  onImport,
 }) => {
   const [applied, setApplied] = useState<string | null>(null);
+  const { input, browse, over, dropHandlers } = useFilePicker(onAddFiles);
   const detected = files.filter((f) => f.detectionStatus === 'detected').length;
   const failed = files.filter((f) => f.detectionStatus === 'failed').length;
   const busy = files.length - detected - failed;
@@ -49,9 +49,40 @@ export const FileList: FC<FileListProps> = ({
     !!batchPattern && files.some((f) => f.selectedPattern?.pattern !== batchPattern.pattern);
 
   return (
-    <section className="ls-imp-pane" aria-label="Files">
-      <div className="ls-imp-pane-head" style={{ padding: '13px 14px 9px' }}>
+    <section
+      className={`ls-imp-pane${over ? ' ls-imp-pane--over' : ''}`}
+      aria-label="Files"
+      {...dropHandlers}
+    >
+      {input}
+      <div className="ls-imp-pane-head" style={{ padding: '12px 14px 9px' }}>
         <span className="ls-imp-label">Files</span>
+        <span className="ls-imp-mono" style={{ fontSize: 11.5, color: 'var(--ls-text-3)' }}>
+          {files.length}
+        </span>
+        <button
+          type="button"
+          className="ls-imp-cfg-btn ml-auto"
+          title="Add more files (or drop them onto this list)"
+          aria-label="Add files"
+          onClick={browse}
+        >
+          <Plus size={13} />
+        </button>
+        <button
+          type="button"
+          className="ls-imp-cfg-btn"
+          title="Re-detect all files"
+          aria-label="Re-detect all files"
+          onClick={onRedetectAll}
+          disabled={busy > 0}
+        >
+          <RefreshCw size={12} className={busy > 0 ? 'animate-spin' : undefined} />
+        </button>
+      </div>
+      {/* Verdict summary under the head: pills wrap rather than fight the
+          re-detect button for the rail's width. */}
+      <div className="flex flex-wrap" style={{ gap: 6, padding: '9px 14px 0' }}>
         {busy > 0 ? (
           <span className="ls-imp-count ls-imp-count--busy">{busy} detecting</span>
         ) : (
@@ -60,19 +91,9 @@ export const FileList: FC<FileListProps> = ({
         {failed > 0 && (
           <span className="ls-imp-count ls-imp-count--warn">{failed} need attention</span>
         )}
-        <button
-          type="button"
-          className="ls-imp-cfg-btn ml-auto"
-          title="Re-detect all files"
-          aria-label="Re-detect all files"
-          onClick={onRedetectAll}
-          disabled={busy > 0}
-        >
-          <RefreshCw size={12} />
-        </button>
       </div>
 
-      <div className="ls-imp-pane-scroll" style={{ padding: '10px 10px 4px' }}>
+      <div className="ls-imp-pane-scroll ls-imp-filelist" style={{ padding: '8px 10px 4px' }}>
         {files.map((f) => (
           <FileRow
             key={f.id}
@@ -106,8 +127,6 @@ export const FileList: FC<FileListProps> = ({
           )}
         </div>
       )}
-
-      <ImportFooter files={files} gate={gate} onImport={onImport} />
     </section>
   );
 };

@@ -1,0 +1,154 @@
+<h2>Detail panel: Pattern, Timestamp &amp; Options</h2>
+<p class="subtitle">When a user clicks a file row or "Configure," the left panel switches to settings with three tabs. Two variations for the Pattern tab. Click your preference.</p>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="smart-default" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>One-click pattern switch, custom hidden behind "More"</h3>
+      <p>Auto-detected pattern is shown as a large chip with match %. Alternative patterns are secondary chips. A "More patterns" link opens a searchable dropdown. Custom pattern editor is behind a "Write custom" link at the bottom. Default path: see the auto-detected pattern, maybe click an alternative, done.</p>
+      
+      <div style="margin-top: 12px; background: #fafafa; border-radius: 6px; padding: 16px; border: 1px solid #e6e9ef;">
+        
+        <!-- Left panel as settings -->
+        <div style="display: flex; gap: 8px;">
+          <div style="width: 40%; background: white; border-radius: 4px; border: 1px solid #e6e9ef; padding: 10px;">
+            <div style="font-size: 10px; color: #1e66f5; margin-bottom: 6px;">&#x2190; Back to files</div>
+            <div style="font-weight: 600; font-size: 11px; margin-bottom: 2px;">app.log</div>
+            <div style="font-size: 10px; color: #6c7086; margin-bottom: 8px;">2.1 MB &middot; ~12,400 lines</div>
+
+            <!-- Tabs -->
+            <div style="display: flex; gap: 2px; margin-bottom: 10px; border-bottom: 1px solid #e6e9ef;">
+              <div style="padding: 4px 10px; font-size: 10px; font-weight: 600; border-bottom: 2px solid #1e66f5;">Pattern</div>
+              <div style="padding: 4px 10px; font-size: 10px; color: #6c7086;">Timestamp</div>
+              <div style="padding: 4px 10px; font-size: 10px; color: #6c7086;">Options</div>
+            </div>
+
+            <!-- Detected pattern -->
+            <div style="margin-bottom: 10px;">
+              <div style="font-size: 9px; color: #6c7086; margin-bottom: 3px; text-transform: uppercase;">SELECTED</div>
+              <div style="background: #e7f5e7; border: 1px solid #a6da95; border-radius: 6px; padding: 8px 10px;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <div style="font-weight: 600; font-size: 12px;">syslog</div>
+                  <div style="font-size: 10px; color: #40a02b; font-weight: 600;">98% match</div>
+                </div>
+                <div style="font-size: 9px; color: #6c7086; margin-top: 2px; font-family: monospace;">%{SYSLOGTIMESTAMP:timestamp} %{SYSLOGHOST:host}</div>
+              </div>
+            </div>
+
+            <!-- Alternatives -->
+            <div style="margin-bottom: 8px;">
+              <div style="font-size: 9px; color: #6c7086; margin-bottom: 3px; text-transform: uppercase;">ALTERNATIVES</div>
+              <div style="padding: 6px 8px; border-radius: 4px; font-size: 10px; margin-bottom: 3px; border: 1px solid #e6e9ef;">
+                <span style="font-weight: 500;">common</span>
+                <span style="color: #df8e1d; margin-left: 8px;">94%</span>
+              </div>
+              <div style="padding: 6px 8px; border-radius: 4px; font-size: 10px; margin-bottom: 3px; border: 1px solid #e6e9ef;">
+                <span style="font-weight: 500;">generic-log</span>
+                <span style="color: #d20f39; margin-left: 8px;">12%</span>
+              </div>
+              <div style="font-size: 10px; color: #1e66f5; padding: 4px 0;">More patterns &rarr;</div>
+            </div>
+
+            <!-- Custom link -->
+            <div style="border-top: 1px solid #e6e9ef; padding-top: 8px;">
+              <div style="font-size: 10px; color: #1e66f5;">Write custom pattern &rarr;</div>
+            </div>
+
+          </div>
+
+          <!-- Right: preview -->
+          <div style="flex: 1; background: white; border-radius: 4px; border: 1px solid #e6e9ef; padding: 10px; font-family: monospace; font-size: 10px; line-height: 1.4;">
+            <div style="font-weight: 600; font-size: 10px; margin-bottom: 4px; font-family: system-ui;">Preview</div>
+            <div><span style="color: #6c7086;">1</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:31</span> <span style="background: #fef0d0; padding: 0 2px;">myhost</span> sshd[1234]: Accepted</div>
+            <div><span style="color: #6c7086;">2</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:32</span> <span style="background: #fef0d0; padding: 0 2px;">myhost</span> sshd[1234]: Failed</div>
+            <div><span style="color: #6c7086;">3</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:33</span> <span style="background: #fef0d0; padding: 0 2px;">myhost</span> kernel: usb reset</div>
+            <div style="color: #6c7086; margin-top: 8px;">18 more lines &middot; <span style="color: #1e66f5;">Test with another pattern</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="compact-list" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Searchable pattern list + inline test preview</h3>
+      <p>A compact search field at the top filters the pattern list below. Each pattern row shows match % as a colored bar. Click to select and see the preview update in real time. "Custom" sends you to a full pattern editor below the list. More visibility into all options, still compact.</p>
+      
+      <div style="margin-top: 12px; background: #fafafa; border-radius: 6px; padding: 16px; border: 1px solid #e6e9ef;">
+        
+        <div style="display: flex; gap: 8px;">
+          <div style="width: 40%; background: white; border-radius: 4px; border: 1px solid #e6e9ef; padding: 10px;">
+            <div style="font-size: 10px; color: #1e66f5; margin-bottom: 6px;">&#x2190; Back to files</div>
+            <div style="font-weight: 600; font-size: 11px; margin-bottom: 2px;">app.log</div>
+            <div style="font-size: 10px; color: #6c7086; margin-bottom: 8px;">2.1 MB &middot; ~12,400 lines</div>
+
+            <!-- Tabs -->
+            <div style="display: flex; gap: 2px; margin-bottom: 8px; border-bottom: 1px solid #e6e9ef;">
+              <div style="padding: 4px 10px; font-size: 10px; font-weight: 600; border-bottom: 2px solid #1e66f5;">Pattern</div>
+              <div style="padding: 4px 10px; font-size: 10px; color: #6c7086;">Timestamp</div>
+              <div style="padding: 4px 10px; font-size: 10px; color: #6c7086;">Options</div>
+            </div>
+
+            <!-- Search -->
+            <input class="mock-input" style="width: 100%; box-sizing: border-box; padding: 5px 8px; font-size: 10px; margin-bottom: 6px; border-radius: 4px; border: 1px solid #ccd0da;" placeholder="Search patterns...">
+
+            <!-- Pattern list -->
+            <div style="background: #e7f5e7; border-radius: 4px; padding: 6px 8px; margin-bottom: 3px; font-size: 10px; border: 1px solid #a6da95;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 600;">syslog</span>
+                <span style="color: #40a02b; font-weight: 600;">98%</span>
+              </div>
+              <div style="width: 100%; height: 2px; background: #e6e9ef; border-radius: 1px; margin-top: 2px;">
+                <div style="width: 98%; height: 2px; background: #40a02b; border-radius: 1px;"></div>
+              </div>
+            </div>
+
+            <div style="border-radius: 4px; padding: 6px 8px; margin-bottom: 3px; font-size: 10px; border: 1px solid transparent;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 500;">common</span>
+                <span style="color: #df8e1d;">94%</span>
+              </div>
+              <div style="width: 100%; height: 2px; background: #e6e9ef; border-radius: 1px; margin-top: 2px;">
+                <div style="width: 94%; height: 2px; background: #df8e1d; border-radius: 1px;"></div>
+              </div>
+            </div>
+
+            <div style="border-radius: 4px; padding: 6px 8px; margin-bottom: 3px; font-size: 10px; border: 1px solid transparent;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 500;">json</span>
+                <span style="color: #6c7086;">82%</span>
+              </div>
+              <div style="width: 100%; height: 2px; background: #e6e9ef; border-radius: 1px; margin-top: 2px;">
+                <div style="width: 82%; height: 2px; background: #acb0be; border-radius: 1px;"></div>
+              </div>
+            </div>
+
+            <div style="border-radius: 4px; padding: 6px 8px; margin-bottom: 3px; font-size: 10px; border: 1px solid transparent;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 500;">apache-common</span>
+                <span style="color: #6c7086;">71%</span>
+              </div>
+            </div>
+
+            <div style="border-top: 1px solid #e6e9ef; margin-top: 6px; padding-top: 6px;">
+              <div style="font-size: 10px; color: #1e66f5;">Write custom pattern &rarr;</div>
+            </div>
+          </div>
+
+          <!-- Preview -->
+          <div style="flex: 1; background: white; border-radius: 4px; border: 1px solid #e6e9ef; padding: 10px; font-family: monospace; font-size: 10px; line-height: 1.4;">
+            <div style="font-weight: 600; font-size: 10px; margin-bottom: 4px; font-family: system-ui;">Preview</div>
+            <div><span style="color: #6c7086;">1</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:31</span> <span style="background: #fef0d0; padding: 0 2px;">myhost</span> sshd[1234]: Accepted</div>
+            <div><span style="color: #6c7086;">2</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:32</span> <span style="background: #fef0d0; padding: 0 2px;">myhost</span> sshd[1234]: Failed</div>
+            <div><span style="color: #6c7086;">3</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:33</span> <span style="background: #fef0d0; padding: 0 2px;">myhost</span> kernel: usb reset</div>
+            <div style="color: #6c7086; margin-top: 8px;">18 more lines</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>

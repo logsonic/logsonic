@@ -1,7 +1,6 @@
 import { ArrowLeft } from 'lucide-react';
 import { FC } from 'react';
 
-import { ImportFooter } from '../FileList/ImportFooter';
 import { formatSize } from '../utils/importGate';
 
 import { OptionsTab } from './OptionsTab';
@@ -9,17 +8,14 @@ import { PatternTab } from './PatternTab';
 import { TimestampTab } from './TimestampTab';
 
 import type { ImportFile, Pattern } from '../types';
-import type { ImportGate } from '../utils/importGate';
 
 import { useImportStore, type DetailTab } from '@/stores/useImportStore';
 
 interface DetailPanelProps {
   file: ImportFile;
   files: ImportFile[];
-  gate: ImportGate;
   onBack: () => void;
   onChangePattern: (fileId: string, pattern: Pattern) => Promise<void>;
-  onImport: () => void;
 }
 
 const TABS: { id: DetailTab; label: string }[] = [
@@ -30,16 +26,9 @@ const TABS: { id: DetailTab; label: string }[] = [
 
 /**
  * Per-file configuration, one interaction deep: swaps in over the file
- * list (same pane) with the import footer still pinned underneath.
+ * list (same pane); the Import action stays put in the topbar.
  */
-export const DetailPanel: FC<DetailPanelProps> = ({
-  file,
-  files,
-  gate,
-  onBack,
-  onChangePattern,
-  onImport,
-}) => {
+export const DetailPanel: FC<DetailPanelProps> = ({ file, files, onBack, onChangePattern }) => {
   const tab = useImportStore((s) => s.detailTab);
   const setTab = useImportStore((s) => s.setDetailTab);
   const needsTs =
@@ -104,8 +93,6 @@ export const DetailPanel: FC<DetailPanelProps> = ({
         {tab === 'timestamp' && <TimestampTab file={file} fileCount={files.length} />}
         {tab === 'options' && <OptionsTab file={file} fileCount={files.length} />}
       </div>
-
-      <ImportFooter files={files} gate={gate} onImport={onImport} />
     </section>
   );
 };

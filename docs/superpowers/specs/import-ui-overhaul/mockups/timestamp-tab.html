@@ -1,0 +1,147 @@
+<h2>Timestamp &amp; Options tabs</h2>
+<p class="subtitle">The Timestamp and Ingest Options tabs in the detail panel. Click to approve or suggest changes.</p>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="timestamp-simple" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Timestamp tab: Simple detected / overrides behind expand</h3>
+      <p>Primary state: a large status badge (Detected/Ambiguous/Missing) with the resolved timestamp format. If ambiguous, a prompt to confirm. Year/month/day/timezone overrides are behind "Adjust timestamp" expandable. Only shown when needed.</p>
+      <div style="margin-top: 12px; background: #fafafa; border-radius: 6px; padding: 16px; border: 1px solid #e6e9ef;">
+        <div style="display: flex; gap: 8px;">
+          
+          <!-- Left panel: Timestamp tab -->
+          <div style="width: 40%; background: white; border-radius: 4px; border: 1px solid #e6e9ef; padding: 10px;">
+            <div style="font-size: 10px; color: #1e66f5; margin-bottom: 6px;">&#x2190; Back to files</div>
+            <div style="font-weight: 600; font-size: 11px; margin-bottom: 2px;">app.log</div>
+            
+            <!-- Tabs -->
+            <div style="display: flex; gap: 2px; margin-bottom: 10px; border-bottom: 1px solid #e6e9ef;">
+              <div style="padding: 4px 10px; font-size: 10px; color: #6c7086;">Pattern</div>
+              <div style="padding: 4px 10px; font-size: 10px; font-weight: 600; border-bottom: 2px solid #1e66f5;">Timestamp</div>
+              <div style="padding: 4px 10px; font-size: 10px; color: #6c7086;">Options</div>
+            </div>
+
+            <!-- Detected state -->
+            <div style="background: #e7f5e7; border: 1px solid #a6da95; border-radius: 6px; padding: 10px; margin-bottom: 8px;">
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                <span style="font-size: 14px;">&#x2705;</span>
+                <span style="font-weight: 600; font-size: 11px;">Timestamp detected</span>
+              </div>
+              <div style="font-size: 10px; color: #1e5500; font-family: monospace;">Jun 15 14:31:22</div>
+              <div style="font-size: 9px; color: #6c7086; margin-top: 2px;">Format: %b %d %H:%M:%S</div>
+            </div>
+
+            <!-- Ambiguous state (shown only when needed) -->
+            <div style="background: #fff6e6; border: 1px solid #e5c890; border-radius: 6px; padding: 10px; margin-bottom: 8px;">
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                <span style="font-size: 14px;">&#x26A0;</span>
+                <span style="font-weight: 600; font-size: 11px;">Timestamp is ambiguous</span>
+              </div>
+              <div style="font-size: 10px; color: #7c4a00;">MM/DD or DD/MM? Please confirm.</div>
+              <div style="display: flex; gap: 6px; margin-top: 6px;">
+                <div style="padding: 3px 8px; background: #e6e9ef; border-radius: 3px; font-size: 10px;">MM/DD/YYYY</div>
+                <div style="padding: 3px 8px; background: #e6e9ef; border-radius: 3px; font-size: 10px;">DD/MM/YYYY</div>
+              </div>
+            </div>
+
+            <!-- Adjust expand -->
+            <div style="font-size: 10px; color: #1e66f5; padding: 4px 0; border-top: 1px solid #e6e9ef;">
+              Adjust timestamp &#x25BC;
+            </div>
+
+            <!-- Expanded (when clicked) -->
+            <div style="margin-top: 4px; padding: 8px; background: #fafafa; border-radius: 4px; border: 1px solid #e6e9ef;">
+              <div style="font-size: 9px; color: #6c7086; margin-bottom: 4px; text-transform: uppercase;">OVERRIDES</div>
+              <div style="display: flex; gap: 4px; flex-wrap: wrap; font-size: 10px;">
+                <div style="padding: 2px 6px; background: white; border-radius: 3px; border: 1px solid #ccd0da;">Year: 2026</div>
+                <div style="padding: 2px 6px; background: white; border-radius: 3px; border: 1px solid #ccd0da;">Month: Jun</div>
+                <div style="padding: 2px 6px; background: white; border-radius: 3px; border: 1px solid #ccd0da;">Day: &mdash;</div>
+                <div style="padding: 2px 6px; background: white; border-radius: 3px; border: 1px solid #ccd0da;">TZ: UTC</div>
+              </div>
+            </div>
+
+            <!-- Apply to all -->
+            <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid #e6e9ef; font-size: 10px; color: #1e66f5;">Apply timestamp settings to all files</div>
+          </div>
+
+          <!-- Preview -->
+          <div style="flex: 1; background: white; border-radius: 4px; border: 1px solid #e6e9ef; padding: 10px; font-family: monospace; font-size: 10px; line-height: 1.4;">
+            <div style="font-weight: 600; font-size: 10px; margin-bottom: 4px; font-family: system-ui;">Preview</div>
+            <div><span style="color: #6c7086;">1</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:31:22</span> myhost sshd[1234]: Accepted</div>
+            <div><span style="color: #6c7086;">2</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:32:05</span> myhost sshd[1234]: Failed</div>
+            <div><span style="color: #6c7086;">3</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:33:10</span> myhost kernel: usb reset</div>
+            <div style="color: #6c7086; margin-top: 8px;">18 more lines</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="timestamp-full" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Timestamp tab: Full builder visible by default</h3>
+      <p>The timestamp builder tiles (Year, Month, Day, Timezone) are always visible as a grid. Each tile shows parsed value with color-coded provenance (green=read from log, amber=inferred). More config visible up front, but also more visual weight.</p>
+      <div style="margin-top: 12px; background: #fafafa; border-radius: 6px; padding: 16px; border: 1px solid #e6e9ef;">
+        <div style="display: flex; gap: 8px;">
+          
+          <div style="width: 40%; background: white; border-radius: 4px; border: 1px solid #e6e9ef; padding: 10px;">
+            <div style="font-size: 10px; color: #1e66f5; margin-bottom: 6px;">&#x2190; Back to files</div>
+            <div style="font-weight: 600; font-size: 11px; margin-bottom: 2px;">app.log</div>
+            
+            <!-- Tabs -->
+            <div style="display: flex; gap: 2px; margin-bottom: 10px; border-bottom: 1px solid #e6e9ef;">
+              <div style="padding: 4px 10px; font-size: 10px; color: #6c7086;">Pattern</div>
+              <div style="padding: 4px 10px; font-size: 10px; font-weight: 600; border-bottom: 2px solid #1e66f5;">Timestamp</div>
+              <div style="padding: 4px 10px; font-size: 10px; color: #6c7086;">Options</div>
+            </div>
+
+            <!-- Status badge -->
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+              <span style="font-size: 14px;">&#x2705;</span>
+              <span style="font-weight: 600; font-size: 11px;">Detected</span>
+              <span style="font-size: 9px; color: #6c7086;">Jun 15 14:31:22</span>
+            </div>
+
+            <!-- Builder tiles -->
+            <div style="font-size: 9px; color: #6c7086; margin-bottom: 4px; text-transform: uppercase;">RESOLUTION</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+              <div style="padding: 6px; background: #e7f5e7; border: 1px solid #a6da95; border-radius: 4px;">
+                <div style="color: #6c7086; font-size: 8px;">YEAR</div>
+                <div style="font-weight: 600; font-size: 12px; color: #40a02b;">2026</div>
+                <div style="font-size: 8px; color: #40a02b;">from log</div>
+              </div>
+              <div style="padding: 6px; background: #e7f5e7; border: 1px solid #a6da95; border-radius: 4px;">
+                <div style="color: #6c7086; font-size: 8px;">MONTH</div>
+                <div style="font-weight: 600; font-size: 12px; color: #40a02b;">Jun</div>
+                <div style="font-size: 8px; color: #40a02b;">from log</div>
+              </div>
+              <div style="padding: 6px; background: #e7f5e7; border: 1px solid #a6da95; border-radius: 4px;">
+                <div style="color: #6c7086; font-size: 8px;">DAY</div>
+                <div style="font-weight: 600; font-size: 12px; color: #40a02b;">15</div>
+                <div style="font-size: 8px; color: #40a02b;">from log</div>
+              </div>
+              <div style="padding: 6px; background: #fff6e6; border: 1px solid #e5c890; border-radius: 4px;">
+                <div style="color: #6c7086; font-size: 8px;">TIMEZONE</div>
+                <div style="font-weight: 600; font-size: 12px; color: #df8e1d;">UTC</div>
+                <div style="font-size: 8px; color: #df8e1d;">inferred</div>
+              </div>
+            </div>
+
+            <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid #e6e9ef; font-size: 10px; color: #1e66f5;">Apply to all files</div>
+          </div>
+
+          <div style="flex: 1; background: white; border-radius: 4px; border: 1px solid #e6e9ef; padding: 10px; font-family: monospace; font-size: 10px; line-height: 1.4;">
+            <div style="font-weight: 600; font-size: 10px; margin-bottom: 4px; font-family: system-ui;">Preview</div>
+            <div><span style="color: #6c7086;">1</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:31:22</span> myhost sshd[1234]</div>
+            <div><span style="color: #6c7086;">2</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:32:05</span> myhost sshd[1234]</div>
+            <div><span style="color: #6c7086;">3</span> <span style="background: #f0f4ff; padding: 0 2px;">Jun 15 14:33:10</span> myhost kernel</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

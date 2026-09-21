@@ -451,6 +451,7 @@ html, body {
 }
 
 /* empty-state drop zone */
+.ls-imp-dropwrap { padding: 48px 24px; overflow: auto; }
 .ls-imp-dropzone {
   width: min(720px, 100%);
   border: 2px dashed var(--ls-accent-border);
@@ -495,32 +496,58 @@ html, body {
   color: var(--ls-accent-text);
 }
 
-/* compact "drop more" strip once files exist */
-.ls-imp-dropstrip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 14px;
-  border: 1.5px dashed color-mix(in srgb, var(--ls-accent) 45%, var(--ls-accent-border));
-  border-radius: 8px;
-  background: var(--ls-accent-softer);
-  cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
-}
-.ls-imp-dropstrip:hover { background: var(--ls-accent-soft); }
-.ls-imp-dropstrip.ls-imp-dropzone--over { border-style: solid; border-color: var(--ls-accent); }
-
-/* split pane */
+/* split pane: the file list is a narrow rail (at most a fifth of the
+   width, never below the floor a filename + verdict needs) so the preview
+   gets the room. While a file's detail panel is open the same column
+   widens — the Pattern / Timestamp / Options tabs were laid out for
+   ~360px — and the preview still keeps the majority. Under
+   --ls-imp-stack-bp the two stack vertically. */
 .ls-imp-split {
+  --ls-imp-rail: clamp(240px, 20%, 400px);
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(280px, 38%) minmax(0, 1fr);
+  grid-template-columns: var(--ls-imp-rail) minmax(0, 1fr);
   gap: 12px;
-  padding: 0 14px 14px;
+  padding: 12px 14px 14px;
 }
-@media (max-width: 900px) {
-  .ls-imp-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(260px, 45%) minmax(0, 1fr); }
+.ls-imp-split--detail { --ls-imp-rail: clamp(360px, 32%, 520px); }
+@media (max-width: 960px) {
+  .ls-imp-split,
+  .ls-imp-split--detail {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(240px, 45%) minmax(0, 1fr);
+    gap: 10px;
+    padding: 10px;
+  }
+  /* configuring a file needs the height more than the preview does */
+  .ls-imp-split--detail { grid-template-rows: minmax(320px, 60%) minmax(140px, 1fr); }
+  /* stacked: the file pane is wide but short, so rows tile in columns */
+  .ls-imp-filelist {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 4px;
+    align-content: start;
+  }
+  .ls-imp-filelist .ls-imp-filerow { margin-bottom: 0; }
+  .ls-imp-action-meta { max-width: 200px; }
+}
+@media (max-width: 720px) {
+  /* the topbar caption beside Import goes first; the button (and its
+     title tooltip carrying the gate reason) stays */
+  .ls-imp-mode, .ls-imp-action-meta { display: none; }
+  .ls-imp-dropwrap { padding: 24px 16px; }
+  .ls-imp-dropzone { padding: 44px 20px; }
+  .ls-imp-center { padding: 20px 16px; }
+  .ls-imp-modal, .ls-imp-modal--ok { padding: 22px; }
+}
+/* wide displays: keep the preview's measure readable rather than letting
+   a wrapped line run the full width of a 4K window */
+@media (min-width: 1920px) {
+  .ls-imp-prow { padding-right: 24px; }
+  .ls-imp-line { max-width: 170ch; }
+  .ls-imp-field { font-size: 13px; }
+  .ls-imp-gutter { font-size: 12px; }
 }
 .ls-imp-pane {
   display: flex;
@@ -531,6 +558,12 @@ html, body {
   border: 1px solid var(--ls-border);
   border-radius: 10px;
   overflow: hidden;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+/* the file list is a drop target once files exist */
+.ls-imp-pane--over {
+  border-color: var(--ls-accent);
+  box-shadow: inset 0 0 0 1px var(--ls-accent), 0 0 0 3px var(--ls-accent-softer);
 }
 .ls-imp-pane-head {
   display: flex;
@@ -538,6 +571,12 @@ html, body {
   gap: 8px;
   padding: 11px 14px;
   border-bottom: 1px solid var(--ls-border-subtle);
+}
+/* the rail's secondary text (line estimates, size) yields first when the
+   column is at its floor */
+.ls-imp-filelist { container-type: inline-size; }
+@container (max-width: 280px) {
+  .ls-imp-rail-aux { display: none; }
 }
 .ls-imp-pane-scroll { flex: 1; min-height: 0; overflow: auto; }
 .ls-imp-pane-foot {
@@ -559,14 +598,18 @@ html, body {
 .ls-imp-count--busy { background: var(--ls-info-soft); color: var(--ls-info); }
 .ls-imp-count--warn { background: var(--ls-warn-soft); color: var(--ls-warn); }
 
-/* file rows */
+/* file rows: the per-row actions overlay the top-right corner and only
+   show for the selected / hovered / focused row, so the narrow rail
+   spends its width on the filename and verdict. The name line reserves
+   their width; the verdict line runs underneath at full width. */
 .ls-imp-filerow {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 9px;
   width: 100%;
   text-align: left;
-  padding: 10px 11px;
+  padding: 9px 11px;
   border-radius: 8px;
   margin-bottom: 4px;
   border: 1px solid var(--ls-border-subtle);
@@ -575,8 +618,32 @@ html, body {
   transition: border-color 120ms ease, background 120ms ease;
 }
 .ls-imp-filerow:hover { border-color: var(--ls-border-strong); }
+.ls-imp-filerow:focus-visible { outline: 2px solid var(--ls-accent); outline-offset: -1px; }
 .ls-imp-filerow--selected { background: var(--ls-accent-softer); border-color: var(--ls-accent-border); }
 .ls-imp-filerow--selected:hover { border-color: var(--ls-accent-border); }
+/* only the selected row keeps the corner clear permanently; a hovered
+   row's actions float over the end of its name on a panel-colored chip */
+.ls-imp-filerow--selected .ls-imp-row-name { padding-right: 54px; }
+.ls-imp-row-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  padding-left: 18px;
+  background: linear-gradient(90deg, transparent, var(--ls-panel) 16px);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.ls-imp-row-actions .ls-imp-cfg-btn { width: 24px; height: 24px; }
+.ls-imp-filerow:hover .ls-imp-row-actions,
+.ls-imp-filerow:focus-within .ls-imp-row-actions,
+.ls-imp-filerow--selected .ls-imp-row-actions { opacity: 1; }
+.ls-imp-filerow--selected .ls-imp-row-actions { background: none; padding-left: 0; }
+@media (hover: none) {
+  .ls-imp-row-actions { opacity: 1; }
+  .ls-imp-row-name { padding-right: 54px; }
+}
 .ls-imp-dot {
   width: 8px;
   height: 8px;
@@ -604,23 +671,36 @@ html, body {
 .ls-imp-matchbar { height: 3px; border-radius: 2px; background: var(--ls-border-subtle); overflow: hidden; margin-top: 7px; }
 .ls-imp-matchbar > div { height: 100%; border-radius: 2px; transition: width 300ms ease; }
 
-/* primary CTA + footer */
-.ls-imp-foot {
-  padding: 12px 14px 14px;
-  border-top: 1px solid var(--ls-border);
-  background: var(--ls-bg-1);
+/* primary CTA in the topbar: "Import N files" with its caption (staged
+   total, or the reason the gate is closed) to its left */
+.ls-imp-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-left: 4px;
+  padding-left: 14px;
+  border-left: 1px solid var(--ls-border);
+}
+.ls-imp-action-meta {
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
 }
 .ls-imp-primary {
-  width: 100%;
-  padding: 11px 14px;
-  border-radius: 8px;
+  height: 28px;
+  padding: 0 14px;
+  border-radius: 6px;
   border: 0;
   background: var(--ls-accent);
   color: #fff;
-  font-size: 13.5px;
+  font-size: 12.5px;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
-  box-shadow: 0 10px 22px -14px color-mix(in srgb, var(--ls-accent) 55%, transparent);
+  box-shadow: 0 6px 16px -10px color-mix(in srgb, var(--ls-accent) 60%, transparent);
   transition: filter 120ms ease, background 120ms ease;
 }
 .ls-imp-primary:hover:not(:disabled) { filter: brightness(1.06); }
