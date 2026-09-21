@@ -64,11 +64,7 @@ export const DetailPanel: FC<DetailPanelProps> = ({ file, files, onBack, onChang
         </div>
       </div>
 
-      <div
-        className="flex"
-        style={{ padding: '0 6px', borderBottom: '1px solid var(--ls-border-subtle)' }}
-        role="tablist"
-      >
+      <div className="ls-imp-tabs" role="tablist">
         {TABS.map((t) => (
           <button
             key={t.id}

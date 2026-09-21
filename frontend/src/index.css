@@ -408,21 +408,22 @@ html, body {
   border: 1px solid var(--ls-border);
 }
 
-/* ── Import surface — recreated from the Claude Design import handoff ──
+/* ── Import surface — "quiet instrument" restyle ──────────────────────
    Single-surface "inspect & commit" layout: drop zone → file list + preview
-   split → per-file detail panel → progress → complete. Every color is a
-   token so the same rules serve light and dark; the handoff's literal hexes
-   were the light values of these variables. */
+   split → per-file detail panel → progress → complete. Chrome is quiet —
+   hairline borders, flat surfaces — so the purple accent only appears where
+   it means something: the primary action, the selected row, the active drop
+   state. Every color is a token so the same rules serve light and dark. */
 .ls-imp-label {
   font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ls-text-3);
 }
 .ls-imp-mono { font-family: var(--ls-font-mono); }
 .ls-imp-link {
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--ls-accent);
   background: transparent;
@@ -450,50 +451,42 @@ html, body {
   flex-direction: column;
 }
 
-/* empty-state drop zone */
+/* empty-state drop zone: a flat panel with a neutral dashed outline that
+   only lights up purple while hovering or dragging over it */
 .ls-imp-dropwrap { padding: 48px 24px; overflow: auto; }
 .ls-imp-dropzone {
-  width: min(720px, 100%);
-  border: 2px dashed var(--ls-accent-border);
-  border-radius: 12px;
-  background: linear-gradient(180deg, var(--ls-accent-softer), var(--ls-accent-soft));
-  padding: 68px 28px;
+  width: min(640px, 100%);
+  border: 1.5px dashed var(--ls-border-strong);
+  border-radius: 16px;
+  background: var(--ls-panel);
+  padding: 64px 32px;
   text-align: center;
   cursor: pointer;
-  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  transition: border-color 150ms ease, background 150ms ease;
 }
 .ls-imp-dropzone:hover {
-  transform: scale(1.01);
-  box-shadow: 0 24px 50px -34px color-mix(in srgb, var(--ls-accent) 45%, transparent);
+  border-color: var(--ls-accent-border);
+  background: var(--ls-accent-softer);
 }
 .ls-imp-dropzone--over {
   border-style: solid;
   border-color: var(--ls-accent);
-  background: var(--ls-accent-soft);
-  transform: scale(1.02) !important;
+  background: var(--ls-accent-softer);
 }
 .ls-imp-drop-icon {
-  width: 54px;
-  height: 54px;
-  border-radius: 14px;
-  background: var(--ls-panel);
-  border: 1px solid var(--ls-accent-border);
-  box-shadow: 0 8px 20px -14px color-mix(in srgb, var(--ls-accent) 50%, transparent);
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
   color: var(--ls-accent);
   margin-bottom: 18px;
 }
 .ls-imp-pill {
   display: inline-block;
   font-family: var(--ls-font-mono);
-  font-size: 11.5px;
-  padding: 5px 10px;
-  border-radius: 6px;
-  background: var(--ls-panel);
-  border: 1px solid var(--ls-accent-border);
-  color: var(--ls-accent-text);
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--ls-bg-2);
+  border: 1px solid var(--ls-border);
+  color: var(--ls-text-3);
 }
 
 /* split pane: the file list is a narrow rail (at most a fifth of the
@@ -535,11 +528,11 @@ html, body {
 @media (max-width: 720px) {
   /* the topbar caption beside Import goes first; the button (and its
      title tooltip carrying the gate reason) stays */
-  .ls-imp-mode, .ls-imp-action-meta { display: none; }
+  .ls-imp-mode-pill, .ls-imp-action-meta { display: none; }
   .ls-imp-dropwrap { padding: 24px 16px; }
   .ls-imp-dropzone { padding: 44px 20px; }
   .ls-imp-center { padding: 20px 16px; }
-  .ls-imp-modal, .ls-imp-modal--ok { padding: 22px; }
+  .ls-imp-modal { padding: 24px 22px; }
 }
 /* wide displays: keep the preview's measure readable rather than letting
    a wrapped line run the full width of a 4K window */
@@ -556,20 +549,20 @@ html, body {
   min-width: 0;
   background: var(--ls-panel);
   border: 1px solid var(--ls-border);
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 /* the file list is a drop target once files exist */
 .ls-imp-pane--over {
   border-color: var(--ls-accent);
-  box-shadow: inset 0 0 0 1px var(--ls-accent), 0 0 0 3px var(--ls-accent-softer);
+  box-shadow: inset 0 0 0 1px var(--ls-accent);
 }
 .ls-imp-pane-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 11px 14px;
+  padding: 12px 14px 11px;
   border-bottom: 1px solid var(--ls-border-subtle);
 }
 /* the rail's secondary text (line estimates, size) yields first when the
@@ -584,24 +577,25 @@ html, body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 9px 14px;
+  padding: 10px 14px;
   border-top: 1px solid var(--ls-border-subtle);
 }
 .ls-imp-count {
   font-family: var(--ls-font-mono);
   font-size: 10.5px;
-  padding: 3px 7px;
-  border-radius: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
   background: var(--ls-ok-soft);
   color: var(--ls-ok);
 }
 .ls-imp-count--busy { background: var(--ls-info-soft); color: var(--ls-info); }
 .ls-imp-count--warn { background: var(--ls-warn-soft); color: var(--ls-warn); }
 
-/* file rows: the per-row actions overlay the top-right corner and only
-   show for the selected / hovered / focused row, so the narrow rail
-   spends its width on the filename and verdict. The name line reserves
-   their width; the verdict line runs underneath at full width. */
+/* file rows: borderless — selection is a soft accent wash, hover a muted
+   surface. The per-row actions overlay the top-right corner and only show
+   for the selected / hovered / focused row, so the narrow rail spends its
+   width on the filename and verdict. The name line reserves their width;
+   the verdict line runs underneath at full width. */
 .ls-imp-filerow {
   position: relative;
   display: flex;
@@ -609,20 +603,19 @@ html, body {
   gap: 9px;
   width: 100%;
   text-align: left;
-  padding: 9px 11px;
+  padding: 9px 10px;
   border-radius: 8px;
-  margin-bottom: 4px;
-  border: 1px solid var(--ls-border-subtle);
+  margin-bottom: 2px;
+  border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition: background 120ms ease;
 }
-.ls-imp-filerow:hover { border-color: var(--ls-border-strong); }
+.ls-imp-filerow:hover { background: var(--ls-bg-2); }
 .ls-imp-filerow:focus-visible { outline: 2px solid var(--ls-accent); outline-offset: -1px; }
-.ls-imp-filerow--selected { background: var(--ls-accent-softer); border-color: var(--ls-accent-border); }
-.ls-imp-filerow--selected:hover { border-color: var(--ls-accent-border); }
-/* only the selected row keeps the corner clear permanently; a hovered
-   row's actions float over the end of its name on a panel-colored chip */
+.ls-imp-filerow--selected,
+.ls-imp-filerow--selected:hover { background: var(--ls-accent-softer); }
+/* only the selected row keeps the corner clear permanently */
 .ls-imp-filerow--selected .ls-imp-row-name { padding-right: 54px; }
 .ls-imp-row-actions {
   position: absolute;
@@ -630,121 +623,165 @@ html, body {
   right: 6px;
   display: flex;
   gap: 4px;
-  padding-left: 18px;
-  background: linear-gradient(90deg, transparent, var(--ls-panel) 16px);
   opacity: 0;
   transition: opacity 120ms ease;
 }
-.ls-imp-row-actions .ls-imp-cfg-btn { width: 24px; height: 24px; }
+.ls-imp-row-actions .ls-imp-cfg-btn {
+  width: 24px;
+  height: 24px;
+  background: var(--ls-panel);
+  border-color: var(--ls-border);
+}
 .ls-imp-filerow:hover .ls-imp-row-actions,
 .ls-imp-filerow:focus-within .ls-imp-row-actions,
 .ls-imp-filerow--selected .ls-imp-row-actions { opacity: 1; }
-.ls-imp-filerow--selected .ls-imp-row-actions { background: none; padding-left: 0; }
 @media (hover: none) {
   .ls-imp-row-actions { opacity: 1; }
   .ls-imp-row-name { padding-right: 54px; }
 }
 .ls-imp-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex: 0 0 auto;
-  margin-top: 5px;
+  margin-top: 5.5px;
 }
 .ls-imp-dot--busy { background: var(--ls-info); animation: ls-imp-pulse 1.2s ease-in-out infinite; }
 @keyframes ls-imp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 .ls-imp-cfg-btn {
   width: 26px;
   height: 26px;
-  border-radius: 6px;
-  border: 1px solid var(--ls-border);
-  background: var(--ls-panel);
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--ls-text-3);
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
   cursor: pointer;
-  transition: color 120ms ease, border-color 120ms ease;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
-.ls-imp-cfg-btn:hover { color: var(--ls-accent); border-color: var(--ls-accent); }
-.ls-imp-cfg-btn.danger:hover { color: var(--ls-err); border-color: var(--ls-err); }
-.ls-imp-matchbar { height: 3px; border-radius: 2px; background: var(--ls-border-subtle); overflow: hidden; margin-top: 7px; }
-.ls-imp-matchbar > div { height: 100%; border-radius: 2px; transition: width 300ms ease; }
+.ls-imp-cfg-btn:hover { color: var(--ls-text); background: var(--ls-bg-2); border-color: var(--ls-border); }
+.ls-imp-cfg-btn.danger:hover { color: var(--ls-err); background: var(--ls-err-soft); border-color: transparent; }
+.ls-imp-matchbar { height: 2px; border-radius: 1px; background: var(--ls-border-subtle); overflow: hidden; margin-top: 8px; }
+.ls-imp-matchbar > div { height: 100%; border-radius: 1px; transition: width 300ms ease; }
 
-/* primary CTA in the topbar: "Import N files" with its caption (staged
-   total, or the reason the gate is closed) to its left */
+/* commit action bar: a full-width strip pinned to the bottom of the page
+   with the primary button — large and right-aligned — and its caption
+   (staged total, or the reason the gate is closed) to its left */
+.ls-imp-footbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  padding: 10px 16px;
+  border-top: 1px solid var(--ls-border);
+  background: var(--ls-panel);
+}
 .ls-imp-action {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
-  margin-left: 4px;
-  padding-left: 14px;
-  border-left: 1px solid var(--ls-border);
 }
 .ls-imp-action-meta {
-  font-size: 11.5px;
+  font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 320px;
 }
 .ls-imp-primary {
-  height: 28px;
-  padding: 0 14px;
-  border-radius: 6px;
+  height: 38px;
+  padding: 0 22px;
+  border-radius: 9px;
   border: 0;
   background: var(--ls-accent);
   color: #fff;
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  box-shadow: 0 6px 16px -10px color-mix(in srgb, var(--ls-accent) 60%, transparent);
-  transition: filter 120ms ease, background 120ms ease;
+  transition: background 120ms ease;
 }
-.ls-imp-primary:hover:not(:disabled) { filter: brightness(1.06); }
-.ls-imp-primary:disabled { background: var(--ls-text-4); box-shadow: none; cursor: not-allowed; }
+.ls-imp-primary:hover:not(:disabled) { background: var(--ls-accent-hover); }
+.ls-imp-primary:disabled { background: var(--ls-text-4); cursor: not-allowed; }
 .ls-imp-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 7px 12px;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 0;
   background: var(--ls-accent);
   color: #fff;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  transition: background 120ms ease;
 }
 .ls-imp-btn:hover:not(:disabled) { background: var(--ls-accent-hover); }
 .ls-imp-btn:disabled { background: var(--ls-text-4); cursor: not-allowed; }
 .ls-imp-btn--ghost {
-  background: var(--ls-panel);
+  background: transparent;
   color: var(--ls-text-2);
-  border: 1px solid var(--ls-border-strong);
+  border: 1px solid var(--ls-border);
 }
 .ls-imp-btn--ghost:hover:not(:disabled) { background: var(--ls-bg-2); color: var(--ls-text); }
 
-/* detail panel tabs */
+/* the mode indicator in the topbar: a quiet pill, not a tracked-out badge */
+.ls-imp-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ls-text-3);
+  background: var(--ls-bg-2);
+  border: 1px solid var(--ls-border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+.ls-imp-mode-pill::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ls-text-4);
+}
+
+/* detail panel tabs: a segmented control */
+.ls-imp-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 12px 14px 0;
+  padding: 2px;
+  background: var(--ls-bg-2);
+  border-radius: 9px;
+}
 .ls-imp-tab {
-  padding: 10px 11px 9px;
+  flex: 1;
+  padding: 5px 10px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--ls-text-3);
   background: transparent;
   border: 0;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
+  border-radius: 7px;
   cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
 }
-.ls-imp-tab:hover { color: var(--ls-text-2); }
-.ls-imp-tab--active { color: var(--ls-text); border-bottom-color: var(--ls-accent); }
+.ls-imp-tab:hover { color: var(--ls-text); }
+.ls-imp-tab--active {
+  background: var(--ls-panel);
+  color: var(--ls-text);
+  box-shadow: var(--ls-shadow-sm);
+}
 
 /* status cards (ok / warn) */
 .ls-imp-card {
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 12px;
   border: 1px solid var(--ls-border);
   background: var(--ls-bg-1);
@@ -763,27 +800,34 @@ html, body {
   width: 100%;
   text-align: left;
   padding: 9px 10px;
-  border-radius: 7px;
+  border-radius: 8px;
   border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
+  transition: background 120ms ease;
 }
-.ls-imp-altrow:hover { background: var(--ls-bg-1); border-color: var(--ls-border); }
+.ls-imp-altrow:hover { background: var(--ls-bg-1); }
 
 /* chips: mode selector + option buttons */
 .ls-imp-chip {
   font-size: 11.5px;
   font-weight: 500;
-  padding: 7px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--ls-border-strong);
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--ls-border);
   background: var(--ls-panel);
   color: var(--ls-text-2);
   cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
-.ls-imp-chip:hover { border-color: var(--ls-accent-border); color: var(--ls-text); }
-.ls-imp-chip--selected { background: var(--ls-accent); border-color: var(--ls-accent); color: #fff; }
-.ls-imp-chip--selected:hover { color: #fff; }
+.ls-imp-chip:hover { border-color: var(--ls-border-strong); color: var(--ls-text); }
+.ls-imp-chip--selected,
+.ls-imp-chip--selected:hover {
+  background: var(--ls-accent-softer);
+  border-color: var(--ls-accent);
+  color: var(--ls-accent-text);
+  font-weight: 600;
+}
 
 /* grok token chips */
 .ls-imp-token {
@@ -808,19 +852,21 @@ html, body {
   width: 100%;
   font-size: 12.5px;
   padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--ls-border-strong);
+  border-radius: 8px;
+  border: 1px solid var(--ls-border);
   background: var(--ls-panel);
   color: var(--ls-text);
   outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
 }
+.ls-imp-input:hover { border-color: var(--ls-border-strong); }
 .ls-imp-input:focus { border-color: var(--ls-accent); box-shadow: 0 0 0 3px var(--ls-accent-softer); }
 .ls-imp-input::placeholder { color: var(--ls-text-4); }
 .ls-imp-input--mono { font-family: var(--ls-font-mono); font-size: 12px; line-height: 1.6; }
 .ls-imp-echo {
   background: var(--ls-bg-1);
   border: 1px solid var(--ls-border-subtle);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 8px 10px;
   font-family: var(--ls-font-mono);
   font-size: 11.5px;
@@ -844,14 +890,16 @@ html, body {
 .ls-imp-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .ls-imp-tile {
   text-align: left;
-  padding: 10px;
-  border-radius: 7px;
+  padding: 10px 12px;
+  border-radius: 10px;
   border: 1px solid var(--ls-border);
-  background: var(--ls-bg-2);
+  background: var(--ls-panel);
   cursor: pointer;
   min-width: 0;
+  transition: border-color 120ms ease;
 }
-.ls-imp-tile .ls-imp-tile-label { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ls-text-3); }
+.ls-imp-tile:hover { border-color: var(--ls-border-strong); }
+.ls-imp-tile .ls-imp-tile-label { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ls-text-3); }
 .ls-imp-tile .ls-imp-tile-value { display: block; font-family: var(--ls-font-mono); font-size: 16px; font-weight: 600; color: var(--ls-text); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ls-imp-tile .ls-imp-tile-src { font-size: 10.5px; font-weight: 500; color: var(--ls-text-2); margin-top: 2px; }
 .ls-imp-tile--log { background: var(--ls-ok-soft); border-color: color-mix(in srgb, var(--ls-ok) 30%, transparent); }
@@ -866,7 +914,7 @@ html, body {
   margin-top: 10px;
   background: var(--ls-accent-softer);
   border: 1px solid var(--ls-accent-border);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 12px;
   animation: ls-rise 0.16s ease;
 }
@@ -876,7 +924,7 @@ html, body {
   align-items: flex-start;
   gap: 1px;
   padding: 6px 9px;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1px solid var(--ls-border);
   background: var(--ls-panel);
   color: var(--ls-text);
@@ -884,6 +932,7 @@ html, body {
   font-size: 11.5px;
   cursor: pointer;
   text-align: left;
+  transition: border-color 120ms ease;
 }
 .ls-imp-opt small { font-family: var(--ls-font-sans); font-size: 9.5px; color: var(--ls-text-3); }
 .ls-imp-opt:hover:not(:disabled) { border-color: var(--ls-accent-border); }
@@ -899,7 +948,7 @@ html, body {
   justify-content: space-between;
   gap: 8px;
   padding: 9px 11px;
-  border-radius: 7px;
+  border-radius: 8px;
   border: 1px solid var(--ls-border);
   background: var(--ls-panel);
   color: var(--ls-text);
@@ -907,6 +956,7 @@ html, body {
   font-size: 12px;
   cursor: pointer;
   text-align: left;
+  transition: border-color 120ms ease;
 }
 .ls-imp-select:hover { border-color: var(--ls-border-strong); }
 .ls-imp-switch { width: 40px !important; height: 22px !important; }
@@ -940,7 +990,7 @@ html, body {
   font-size: 12.5px;
   line-height: 1.7;
   padding: 1px 3px;
-  border-radius: 3px;
+  border-radius: 4px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -953,7 +1003,8 @@ html, body {
 .ls-imp-field--red { background: var(--ls-hl-red); color: var(--ls-err); }
 .ls-imp-field--gray { background: var(--ls-bg-2); color: var(--ls-text-2); }
 
-/* progress + complete cards */
+/* progress + complete cards: a neutral floating card — the status color
+   lives in the icon and headline, not a tinted background */
 .ls-imp-center {
   flex: 1;
   min-height: 0;
@@ -964,90 +1015,77 @@ html, body {
   overflow: auto;
 }
 .ls-imp-modal {
-  width: min(560px, 100%);
+  width: min(520px, 100%);
   background: var(--ls-panel);
   border: 1px solid var(--ls-border);
-  border-radius: 12px;
-  padding: 32px;
-  box-shadow: 0 24px 50px -40px rgba(24, 24, 27, 0.5);
+  border-radius: 16px;
+  padding: 36px 32px;
+  box-shadow: var(--ls-shadow-lg);
   text-align: center;
-  animation: ls-rise 0.4s ease;
-}
-.ls-imp-modal--ok {
-  width: min(520px, 100%);
-  padding: 30px;
-  background: var(--ls-ok-soft);
-  border-color: color-mix(in srgb, var(--ls-ok) 30%, transparent);
-  box-shadow: 0 24px 50px -40px color-mix(in srgb, var(--ls-ok) 35%, transparent);
-}
-.ls-imp-modal--warn {
-  background: var(--ls-warn-soft);
-  border-color: color-mix(in srgb, var(--ls-warn) 40%, transparent);
+  animation: ls-rise 0.3s ease;
 }
 .ls-imp-spinner {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  border: 3px solid var(--ls-accent-soft);
+  border: 2.5px solid var(--ls-accent-softer);
   border-top-color: var(--ls-accent);
-  animation: ls-imp-rotate 0.8s linear infinite;
-  margin: 0 auto 16px;
+  animation: ls-imp-rotate 0.7s linear infinite;
+  margin: 0 auto 18px;
 }
 @keyframes ls-imp-rotate { to { transform: rotate(360deg); } }
 .ls-imp-progress {
   height: 6px;
-  border-radius: 3px;
-  background: var(--ls-border);
+  border-radius: 999px;
+  background: var(--ls-bg-2);
   overflow: hidden;
-  margin: 14px auto 0;
-  width: 84%;
+  margin: 18px auto 0;
+  width: 100%;
 }
 .ls-imp-progress-fill {
   height: 100%;
-  border-radius: 3px;
-  background: repeating-linear-gradient(115deg, var(--ls-accent) 0 12px, color-mix(in srgb, var(--ls-accent) 70%, #fff) 12px 20px);
-  background-size: 40px 100%;
-  animation: ls-imp-stripe 0.7s linear infinite;
-  transition: width 180ms linear;
+  border-radius: 999px;
+  background: var(--ls-accent);
+  transition: width 200ms ease;
 }
-@keyframes ls-imp-stripe { to { background-position: 40px 0; } }
 .ls-imp-check {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  background: var(--ls-panel);
-  border: 1px solid color-mix(in srgb, var(--ls-ok) 30%, transparent);
+  background: var(--ls-ok-soft);
+  color: var(--ls-ok);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--ls-ok);
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
+.ls-imp-check--warn { background: var(--ls-warn-soft); color: var(--ls-warn); }
 .ls-imp-ok-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 16px;
+  padding: 9px 16px;
   border-radius: 8px;
-  background: var(--ls-panel);
-  border: 1px solid color-mix(in srgb, var(--ls-ok) 30%, transparent);
-  color: var(--ls-ok);
+  background: var(--ls-accent);
+  border: 0;
+  color: #fff;
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
+  transition: background 120ms ease;
 }
-.ls-imp-ok-btn:hover { background: var(--ls-bg-1); }
+.ls-imp-ok-btn:hover { background: var(--ls-accent-hover); }
 .ls-imp-cancel-link { font-size: 12px; font-weight: 500; color: var(--ls-err); background: transparent; border: 0; cursor: pointer; }
 .ls-imp-cancel-link:hover { filter: brightness(0.85); }
 
 @keyframes ls-rise {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
 }
-.ls-rise { animation: ls-rise 0.18s ease; }
+.ls-rise { animation: ls-rise 0.2s ease; }
 @media (prefers-reduced-motion: reduce) {
   .ls-rise, .ls-imp-picker, .ls-imp-modal, .ls-imp-dropzone { animation: none; transition: none; }
-  .ls-imp-dot--busy, .ls-imp-progress-fill { animation: none; }
+  .ls-imp-dot--busy { animation: none; }
 }
 
 @layer base {

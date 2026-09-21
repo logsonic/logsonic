@@ -15,7 +15,8 @@ interface ImportLayoutProps {
   onLeave: () => void;
   leaveLabel: string;
   leaveDisabled?: boolean;
-  // Right-edge commit action (the Import button) while files are staged.
+  // Commit action (the Import button) while files are staged; rendered in
+  // the bottom bar, not the topbar.
   actions?: ReactNode;
   children: ReactNode;
 }
@@ -62,17 +63,7 @@ export const ImportLayout: FC<ImportLayoutProps> = ({
           )}
         </div>
         <div className="flex items-center" style={{ gap: 12 }}>
-          <span
-            className="ls-imp-mono ls-imp-mode"
-            style={{
-              fontSize: 10.5,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: 'var(--ls-text-4)',
-            }}
-          >
-            {native ? 'native path mode' : 'browser upload'}
-          </span>
+          <span className="ls-imp-mode-pill">{native ? 'Native path' : 'Browser upload'}</span>
           <button
             type="button"
             onClick={onLeave}
@@ -84,10 +75,10 @@ export const ImportLayout: FC<ImportLayoutProps> = ({
             <ArrowLeft size={13} />
             <span>{leaveLabel}</span>
           </button>
-          {actions}
         </div>
       </div>
       <div className="ls-imp-body">{children}</div>
+      {actions && <div className="ls-imp-footbar">{actions}</div>}
     </div>
   );
 };

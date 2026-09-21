@@ -1,4 +1,4 @@
-import { ArrowDown } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import { FC } from 'react';
 
 import { useFilePicker } from './hooks/useFilePicker';
@@ -33,9 +33,9 @@ export const DropZone: FC<DropZoneProps> = ({ native, onFiles }) => {
       >
         {input}
         <div className="ls-imp-drop-icon">
-          <ArrowDown size={26} strokeWidth={2.4} />
+          <Upload size={28} strokeWidth={2} />
         </div>
-        <div style={{ fontSize: 19, fontWeight: 600, lineHeight: 1.3, color: 'var(--ls-text)' }}>
+        <div style={{ fontSize: 17, fontWeight: 600, lineHeight: 1.3, color: 'var(--ls-text)' }}>
           Drop log files here to get started
         </div>
         <div style={{ marginTop: 8, fontSize: 13.5, lineHeight: 1.5, color: 'var(--ls-text-2)' }}>

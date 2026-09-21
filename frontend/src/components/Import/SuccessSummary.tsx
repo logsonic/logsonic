@@ -62,11 +62,8 @@ export const SuccessSummary: FC = () => {
 
   return (
     <div className="ls-imp-center">
-      <div
-        className={`ls-imp-modal ls-imp-modal--ok${allOk ? '' : ' ls-imp-modal--warn'}`}
-        role="status"
-      >
-        <div className="ls-imp-check" style={allOk ? undefined : { color: 'var(--ls-warn)' }}>
+      <div className="ls-imp-modal" role="status">
+        <div className={`ls-imp-check${allOk ? '' : ' ls-imp-check--warn'}`}>
           {allOk ? (
             <Check size={22} strokeWidth={2.5} />
           ) : (
