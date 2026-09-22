@@ -21,6 +21,10 @@ type TimestampPreviewRequest struct {
 	CustomPatterns map[string]string      `json:"custom_patterns,omitempty"`
 	Resolution     timeresolve.Resolution `json:"resolution"`
 	SourceMTime    *time.Time             `json:"source_mtime,omitempty"`
+	// Multiline folds Logs the way the file's ingest session will, so the
+	// preview rows line up with the folded records the import surface
+	// shows. Absent or disabled: one record per line (no auto-detect).
+	Multiline *types.MultilineConfig `json:"multiline,omitempty"`
 }
 
 type TimestampPreviewResponse struct {
@@ -60,6 +64,26 @@ func (h *Services) HandleTimestampPreview(w http.ResponseWriter, r *http.Request
 			Status: "error", Error: "Invalid request body", Code: "INVALID_REQUEST", Details: err.Error(),
 		})
 		return
+	}
+
+	multilineCfg, err := buildMultilineConfig(req.Multiline)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(types.ErrorResponse{
+			Status: "error", Error: "Invalid multiline configuration", Code: "MULTILINE_CONFIG_ERROR", Details: err.Error(),
+		})
+		return
+	}
+	if multilineCfg != nil {
+		folded, err := l2g.JoinMultilineStrings(req.Logs, *multilineCfg)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(types.ErrorResponse{
+				Status: "error", Error: "Failed to fold multiline records", Code: "MULTILINE_ERROR", Details: err.Error(),
+			})
+			return
+		}
+		req.Logs = folded
 	}
 
 	pattern := req.GrokPattern

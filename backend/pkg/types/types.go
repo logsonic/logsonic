@@ -33,9 +33,11 @@ type IngestSessionOptions struct {
 	// Multiline configures folding of physical lines into logical log
 	// records before pattern matching, for formats where a single log
 	// statement spans multiple lines (stack traces, multi-line JSON,
-	// etc). Nil/disabled preserves the historical one-line-per-record
+	// etc). Disabled preserves the historical one-line-per-record
 	// behaviour. Folding is applied on /parse (including autosuggest)
-	// as well as ingest and live tail.
+	// as well as ingest and live tail. On /parse only, an absent field
+	// (nil) means "auto-detect a layout from the sample"; an explicit
+	// {"enabled": false} means "do not fold", the same as on ingest.
 	Multiline *MultilineConfig `json:"multiline,omitempty"`
 }
 

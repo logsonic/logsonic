@@ -1,12 +1,17 @@
 import { ChevronDown } from 'lucide-react';
-import { FC, useState } from 'react';
+import { FC, useEffect, useRef, useState } from 'react';
 
-import { MULTILINE_PRESETS, presetFromState, stateFromPreset } from '../utils/multilinePresets';
+import {
+  isHeaderPatternMissing,
+  MULTILINE_PRESETS,
+  presetFromState,
+  stateFromPreset,
+} from '../utils/multilinePresets';
 import { timezonePatch } from '../utils/timestampParts';
 
 import { TimezonePicker } from './TimezonePicker';
 
-import type { ImportFile } from '../types';
+import type { FileMultiline, ImportFile } from '../types';
 
 import { Switch } from '@/components/ui/switch';
 import { useImportStore } from '@/stores/useImportStore';
@@ -14,7 +19,12 @@ import { useImportStore } from '@/stores/useImportStore';
 interface OptionsTabProps {
   file: ImportFile;
   fileCount: number;
+  // Re-parse a file's preview after its multiline folding changed.
+  onReparse: (fileId: string) => Promise<void>;
 }
+
+// Typing a header regex re-parses the preview per keystroke otherwise.
+const REGEX_REPARSE_MS = 400;
 
 const Group: FC<{
   title: string;
@@ -35,31 +45,38 @@ const Group: FC<{
 );
 
 /**
- * Per-file ingest options. Smart decoder and the forced timezone are
- * per-file (the upload path reads `sessionOptions` per file); multiline
- * folding is a session-wide setting (useUpload sends the store's global
- * triple) and re-runs detection for every file when changed.
+ * Per-file ingest options: the upload path reads `sessionOptions` per
+ * file, so every group here -- smart decoder, forced timezone and the
+ * multiline folding -- applies to this file's ingest session only. A
+ * folding change re-parses the file's preview so the verdict reflects it.
  */
-export const OptionsTab: FC<OptionsTabProps> = ({ file, fileCount }) => {
+export const OptionsTab: FC<OptionsTabProps> = ({ file, fileCount, onReparse }) => {
   const updateFileSessionOptions = useImportStore((s) => s.updateFileSessionOptions);
   const patchOverride = useImportStore((s) => s.patchFileTimestampOverride);
-  const setAllFilesOptions = useImportStore((s) => s.setAllFilesOptions);
-  const multilineEnabled = useImportStore((s) => s.sessionOptionsMultilineEnabled);
-  const multilineMode = useImportStore((s) => s.sessionOptionsMultilineMode);
-  const multilineHeader = useImportStore((s) => s.sessionOptionsMultilineHeaderPattern);
-  const setMultilineEnabled = useImportStore((s) => s.setSessionOptionMultilineEnabled);
-  const setMultilineMode = useImportStore((s) => s.setSessionOptionMultilineMode);
-  const setMultilineHeader = useImportStore((s) => s.setSessionOptionMultilineHeaderPattern);
 
   const [tzOpen, setTzOpen] = useState(false);
   const [appliedAll, setAppliedAll] = useState(false);
+  const regexTimer = useRef<number | null>(null);
 
-  const multilineState = {
-    sessionOptionsMultilineEnabled: multilineEnabled,
-    sessionOptionsMultilineMode: multilineMode,
-    sessionOptionsMultilineHeaderPattern: multilineHeader,
+  const multiline = file.sessionOptions.multiline;
+  const preset = presetFromState(multiline);
+
+  const setMultiline = (next: FileMultiline, debounce = false) => {
+    updateFileSessionOptions(file.id, { multiline: next });
+    if (regexTimer.current) window.clearTimeout(regexTimer.current);
+    if (isHeaderPatternMissing(next)) return; // the gate explains; nothing to parse yet
+    if (debounce) {
+      regexTimer.current = window.setTimeout(() => onReparse(file.id), REGEX_REPARSE_MS);
+    } else {
+      onReparse(file.id);
+    }
   };
-  const preset = presetFromState(multilineState);
+  useEffect(
+    () => () => {
+      if (regexTimer.current) window.clearTimeout(regexTimer.current);
+    },
+    []
+  );
   const forcedTz =
     file.timestampOverrides.timezone?.kind === 'forced'
       ? file.timestampOverrides.timezone.value || 'UTC'
@@ -111,10 +128,7 @@ export const OptionsTab: FC<OptionsTabProps> = ({ file, fileCount }) => {
               type="button"
               className={`ls-imp-chip${preset === p.id ? ' ls-imp-chip--selected' : ''}`}
               onClick={() => {
-                const next = stateFromPreset(p.id, multilineState);
-                setMultilineEnabled(next.sessionOptionsMultilineEnabled);
-                setMultilineMode(next.sessionOptionsMultilineMode);
-                setMultilineHeader(next.sessionOptionsMultilineHeaderPattern);
+                if (preset !== p.id) setMultiline(stateFromPreset(p.id, multiline));
               }}
             >
               {p.label}
@@ -126,14 +140,14 @@ export const OptionsTab: FC<OptionsTabProps> = ({ file, fileCount }) => {
             className="ls-imp-input ls-imp-input--mono ls-rise"
             style={{ marginTop: 8 }}
             placeholder={String.raw`e.g. ^\s+|^\d{4}-`}
-            value={multilineHeader}
-            onChange={(e) => setMultilineHeader(e.target.value)}
+            value={multiline.headerPattern}
+            onChange={(e) => setMultiline({ ...multiline, headerPattern: e.target.value }, true)}
             aria-label="New-record regex"
           />
         )}
         {preset !== 'off' && (
           <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ls-text-3)' }}>
-            Applies to every file in this import; detection re-runs with the new folding.
+            Applies to this file only; the preview re-parses with the new folding.
           </div>
         )}
       </Group>
@@ -149,18 +163,23 @@ export const OptionsTab: FC<OptionsTabProps> = ({ file, fileCount }) => {
             className="ls-imp-link"
             style={{ fontSize: 12 }}
             onClick={() => {
-              setAllFilesOptions(file.sessionOptions);
+              // Everything but the folding: multiline is what a file's own
+              // detection found in it, and stamping one file's header onto
+              // the rest is exactly how a batch collapses.
+              const { multiline: _own, ...shared } = file.sessionOptions;
               const tzPatch = timezonePatch(forcedTz);
               useImportStore
                 .getState()
                 .files.filter((f) => f.id !== file.id)
                 .forEach((f) => {
+                  updateFileSessionOptions(f.id, shared);
                   if (forcedTz || f.timestampOverrides.timezone) patchOverride(f.id, tzPatch);
                 });
               setAppliedAll(true);
             }}
+            title="Smart decoder and timezone; multiline folding stays per file"
           >
-            Apply these options to all files →
+            Apply decoder &amp; timezone to all files →
           </button>
         ))}
     </div>

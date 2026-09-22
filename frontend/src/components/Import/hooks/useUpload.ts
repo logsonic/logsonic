@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 
 import { LogSourceProviderService } from '../types';
+import { multilineConfigOf } from '../utils/multilinePresets';
 
 import { waitForIngestJob } from './ingestJobEvents';
 
@@ -14,7 +15,7 @@ import {
   useIngestStart,
 } from '@/hooks/useApi';
 import { IngestSessionOptions } from '@/lib/api-types';
-import { sessionMultilineOption, useImportStore } from '@/stores/useImportStore';
+import { useImportStore } from '@/stores/useImportStore';
 
 export const useUpload = (): UploadProgressHookResult => {
   const {
@@ -91,7 +92,7 @@ export const useUpload = (): UploadProgressHookResult => {
               ?? (importFile.file?.lastModified ? new Date(importFile.file.lastModified).toISOString() : undefined),
             timestamp_config: fileTsConfig,
             meta: { _src: `file.${importFile.fileName}` },
-            multiline: sessionMultilineOption(useImportStore.getState()),
+            multiline: multilineConfigOf(importFile.sessionOptions.multiline),
           };
 
           const startResponse = await ingestStartApi.execute(sessionOptions, abortController.signal);

@@ -489,14 +489,14 @@ html, body {
   color: var(--ls-text-3);
 }
 
-/* split pane: the file list is a narrow rail (at most a fifth of the
-   width, never below the floor a filename + verdict needs) so the preview
-   gets the room. While a file's detail panel is open the same column
+/* split pane: the file list is a narrow rail (about a fifth of the
+   width, never below the floor a filename + verdict + size needs) so the
+   preview gets the room. While a file's detail panel is open the same column
    widens — the Pattern / Timestamp / Options tabs were laid out for
    ~360px — and the preview still keeps the majority. Under
    --ls-imp-stack-bp the two stack vertically. */
 .ls-imp-split {
-  --ls-imp-rail: clamp(240px, 20%, 400px);
+  --ls-imp-rail: clamp(260px, 22%, 400px);
   flex: 1;
   min-height: 0;
   display: grid;
@@ -565,10 +565,15 @@ html, body {
   padding: 12px 14px 11px;
   border-bottom: 1px solid var(--ls-border-subtle);
 }
-/* the rail's secondary text (line estimates, size) yields first when the
-   column is at its floor */
+/* the rail's secondary text yields first as the column narrows: the line
+   estimate goes once the verdict line cannot hold both, the size only at
+   the rail's floor. (The container is the list's content box, ~20px
+   narrower than the rail.) */
 .ls-imp-filelist { container-type: inline-size; }
-@container (max-width: 280px) {
+@container (max-width: 360px) {
+  .ls-imp-rail-lines { display: none; }
+}
+@container (max-width: 230px) {
   .ls-imp-rail-aux { display: none; }
 }
 .ls-imp-pane-scroll { flex: 1; min-height: 0; overflow: auto; }

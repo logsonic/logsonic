@@ -761,15 +761,26 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
   )
 );
 
+// Whether the hash is the landing route (home): empty, "#", "#/" or a
+// "#?…" query. A sub-route such as "#/import" or "#/settings/storage" is
+// not, and must keep its hash -- pushing "#?…" over it would make a reload
+// or bookmark of that page land on home.
+function isLandingRoute(hash: string): boolean {
+  return hash === '' || hash === '#' || hash === '#/' || hash.startsWith('#?');
+}
+
 // Initialize URL parameters if not present
 if (typeof window !== 'undefined') {
   const initialUrlParams = getUrlParams();
   if (!initialUrlParams || Object.keys(initialUrlParams).length === 0) {
-    // If no URL parameters, set them based on current store state
-    setTimeout(() => {
-      const store = useSearchQueryParamsStore.getState();
-      store.updateUrlParams();
-    }, 0);
+    // If no URL parameters, set them based on current store state --
+    // but only on the landing route.
+    if (isLandingRoute(window.location.hash)) {
+      setTimeout(() => {
+        const store = useSearchQueryParamsStore.getState();
+        store.updateUrlParams();
+      }, 0);
+    }
   } else {
     // If URL parameters exist, make sure they're properly applied to the store
     // This ensures the search UI components reflect the URL state.

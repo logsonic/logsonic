@@ -24,6 +24,13 @@ definitions:
         items:
           type: string
         type: array
+      multiline:
+        allOf:
+        - $ref: '#/definitions/types.MultilineConfig'
+        description: |-
+          Multiline folds Logs the way the file's ingest session will, so the
+          preview rows line up with the folded records the import surface
+          shows. Absent or disabled: one record per line (no auto-detect).
       resolution:
         $ref: '#/definitions/timeresolve.Resolution'
       source_mtime:
@@ -411,9 +418,11 @@ definitions:
           Multiline configures folding of physical lines into logical log
           records before pattern matching, for formats where a single log
           statement spans multiple lines (stack traces, multi-line JSON,
-          etc). Nil/disabled preserves the historical one-line-per-record
+          etc). Disabled preserves the historical one-line-per-record
           behaviour. Folding is applied on /parse (including autosuggest)
-          as well as ingest and live tail.
+          as well as ingest and live tail. On /parse only, an absent field
+          (nil) means "auto-detect a layout from the sample"; an explicit
+          {"enabled": false} means "do not fold", the same as on ingest.
       name:
         type: string
       pattern:

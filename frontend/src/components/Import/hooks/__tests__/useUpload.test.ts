@@ -6,7 +6,7 @@ import { useUpload } from '../useUpload';
 import type { ImportFile } from '../../types';
 import type { IngestJob } from '@/lib/api-types';
 
-import { useImportStore } from '@/stores/useImportStore';
+import { DEFAULT_SESSION_OPTIONS, useImportStore } from '@/stores/useImportStore';
 
 const { ingestStart, ingestEnd, ingestLogs, ingestFile, listIngestJobs, cancelIngestJob } =
   vi.hoisted(() => ({
@@ -76,7 +76,7 @@ function makeImportFile(overrides: Partial<ImportFile>): ImportFile {
     uploadProgress: 0,
     uploadError: null,
     totalLinesProcessed: 0,
-    sessionOptions: { smartDecoder: true, timezone: '', year: '', month: '', day: '' },
+    sessionOptions: { ...DEFAULT_SESSION_OPTIONS },
     timestampInference: null,
     timestampOverrides: {},
     timestampConfirmed: false,

@@ -1,6 +1,6 @@
-import type { ImportFile } from '../types';
+import { isHeaderPatternMissing } from './multilinePresets';
 
-import { isMultilineHeaderInvalid } from '@/stores/useImportStore';
+import type { ImportFile } from '../types';
 
 export interface ImportGate {
   disabled: boolean;
@@ -20,15 +20,7 @@ export function fileNeedsTimestampConfirmation(f: ImportFile): boolean {
 // The same gates the wizard's Next button enforced on its pattern step,
 // in the order the user can act on them, each with the reason the button
 // shows. Empty file list is handled by the caller (no button at all).
-export function importGate(
-  files: ImportFile[],
-  multiline: {
-    sessionOptionsMultilineEnabled: boolean;
-    sessionOptionsMultilineMode: 'header' | 'indent';
-    sessionOptionsMultilineHeaderPattern: string;
-  },
-  isUploading: boolean
-): ImportGate {
+export function importGate(files: ImportFile[], isUploading: boolean): ImportGate {
   if (isUploading) return { disabled: true, reason: null };
   const detecting = files.filter(
     (f) => f.detectionStatus === 'detecting' || f.detectionStatus === 'pending'
@@ -39,8 +31,15 @@ export function importGate(
       reason: `Detecting patterns — ${detecting} file${detecting === 1 ? '' : 's'} pending`,
     };
   }
-  if (isMultilineHeaderInvalid(multiline)) {
-    return { disabled: true, reason: 'Fix the multiline regex before importing' };
+  const badRegex = files.filter((f) => isHeaderPatternMissing(f.sessionOptions.multiline));
+  if (badRegex.length > 0) {
+    return {
+      disabled: true,
+      reason:
+        badRegex.length === 1
+          ? `Fix the multiline regex on ${badRegex[0].fileName} before importing`
+          : `Fix the multiline regex on ${badRegex.length} files before importing`,
+    };
   }
   const missing = files.filter((f) => !f.selectedPattern).length;
   if (missing > 0) {

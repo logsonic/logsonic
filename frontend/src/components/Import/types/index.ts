@@ -88,12 +88,30 @@ export interface ImportFile {
   sourceMTime: string | null;
 }
 
+// Multiline folding for one file. The ingest session is per file, so the
+// folding is too: a stack-trace file's ISO8601 header must never fold a
+// syslog file in the same batch into one record.
+export interface FileMultiline {
+  enabled: boolean;
+  mode: 'header' | 'indent';
+  headerPattern: string;
+}
+
+export const DEFAULT_MULTILINE: FileMultiline = {
+  enabled: false,
+  mode: 'header',
+  headerPattern: '',
+};
+
 export interface FileSessionOptions {
   smartDecoder: boolean;
   timezone: string;
   year: string;
   month: string;
   day: string;
+  // Auto-filled by detection when the suggester finds a multiline layout
+  // in this file; editable in the Options tab.
+  multiline: FileMultiline;
 }
 
 // --- Upload hook types ---
@@ -107,7 +125,10 @@ export interface UploadProgressHookResult {
   isUploading: boolean;
   uploadProgress: number;
   approxLines: number;
-  handleMultiFileUpload: (files: ImportFile[], fileService: LogSourceProviderService) => Promise<MultiFileUploadResult>;
+  handleMultiFileUpload: (
+    files: ImportFile[],
+    fileService: LogSourceProviderService
+  ) => Promise<MultiFileUploadResult>;
   cancelUpload: () => void;
 }
 
@@ -119,9 +140,12 @@ export interface LogSourceProviderService {
     filehandle: object,
     chunkSize: number,
     callback: (chunk: FileImportChunk) => Promise<void>,
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ) => Promise<void>;
-  handleFilePreview: (filehandle: object, onPreviewReadyCallback: (lines: string[]) => void) => Promise<void>;
+  handleFilePreview: (
+    filehandle: object,
+    onPreviewReadyCallback: (lines: string[]) => void
+  ) => Promise<void>;
 }
 
 export interface FileImportChunk {

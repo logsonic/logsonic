@@ -60,8 +60,13 @@ func (h *Services) HandleParse(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	// Auto-detect a multiline layout only when the caller said nothing
+	// about folding. An explicit {"enabled": false} means "do not fold",
+	// the same thing it means to /ingest/start -- otherwise a preview
+	// with folding switched off would still show folded records that the
+	// ingest would never produce.
 	usedMultiline := req.IngestSessionOptions.Multiline
-	if multilineCfg == nil {
+	if usedMultiline == nil {
 		if detected := detectMultilineConfig(req.Logs); detected != nil {
 			usedMultiline = detected
 			multilineCfg, err = buildMultilineConfig(detected)

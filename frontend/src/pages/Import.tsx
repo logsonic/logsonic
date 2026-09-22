@@ -35,15 +35,12 @@ const Import: FC = () => {
   const fileService = useFileSelectionService();
   const { handleMultiFileUpload, cancelUpload } = useUpload();
   const { addBrowserFiles } = useFileIntake();
-  const { changePattern, applyPatternToAll, redetectAll } = useFileDetection();
+  const { changePattern, applyPatternToAll, redetectAll, reparseFile } = useFileDetection();
 
   const files = useImportStore((s) => s.files);
   const isUploading = useImportStore((s) => s.isUploading);
   const activeFileId = useImportStore((s) => s.activeFileId);
   const detailPanelFileId = useImportStore((s) => s.detailPanelFileId);
-  const multilineEnabled = useImportStore((s) => s.sessionOptionsMultilineEnabled);
-  const multilineMode = useImportStore((s) => s.sessionOptionsMultilineMode);
-  const multilineHeader = useImportStore((s) => s.sessionOptionsMultilineHeaderPattern);
   const setActiveFileId = useImportStore((s) => s.setActiveFileId);
   const openFileDetail = useImportStore((s) => s.openFileDetail);
   const closeFileDetail = useImportStore((s) => s.closeFileDetail);
@@ -99,15 +96,7 @@ const Import: FC = () => {
     }
   }, [files, activeFileId, setActiveFileId]);
 
-  const gate = importGate(
-    files,
-    {
-      sessionOptionsMultilineEnabled: multilineEnabled,
-      sessionOptionsMultilineMode: multilineMode,
-      sessionOptionsMultilineHeaderPattern: multilineHeader,
-    },
-    isUploading
-  );
+  const gate = importGate(files, isUploading);
 
   // Runs the actual multi-file import and moves to the completion card.
   // Split out of handleImport so it can be deferred until after the
@@ -206,6 +195,29 @@ const Import: FC = () => {
     navigate('/');
   }, [navigate, reset]);
 
+  // The whole page accepts drops while files can be staged. Without this
+  // a drop that misses a target (the preview pane is the largest surface)
+  // makes the browser navigate to the file and the staged session is gone.
+  // The targets' own handlers stop propagation, so nothing is added twice.
+  const canStage = phase === 'edit' && !isUploading;
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = canStage ? 'copy' : 'none';
+    };
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault();
+      const dropped = Array.from(e.dataTransfer?.files ?? []);
+      if (canStage && dropped.length > 0) addBrowserFiles(dropped);
+    };
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, [addBrowserFiles, canStage]);
+
   const activeFile = files.find((f) => f.id === activeFileId) ?? null;
   const detailFile = files.find((f) => f.id === detailPanelFileId) ?? null;
   const hasFiles = files.length > 0;
@@ -224,6 +236,7 @@ const Import: FC = () => {
             files={files}
             onBack={closeFileDetail}
             onChangePattern={changePattern}
+            onReparse={reparseFile}
           />
         ) : (
           <FileList

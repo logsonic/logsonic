@@ -765,3 +765,87 @@ func TestIngestJavaStack_OneDocumentPerTimestampedRecord(t *testing.T) {
 		t.Fatal("stored ERROR document did not contain the full stack (exception + frames + Caused by)")
 	}
 }
+
+// HandleParse: an explicit {"enabled": false} must not fall back to
+// auto-detection -- it is the preview's only way to show what the ingest
+// (which never auto-detects) will actually produce.
+func TestHandleParse_ExplicitMultilineOffSkipsAutodetect(t *testing.T) {
+	h, _ := setupHandler(t)
+	lines := []string{
+		"2026-04-01 09:15:01 ERROR [main] c.l.App - failed",
+		"java.lang.IllegalStateException: boom",
+		"\tat com.logsonic.App.run(App.java:1)",
+		"\tat com.logsonic.App.main(App.java:2)",
+		"2026-04-01 09:15:02 INFO [main] c.l.App - retrying",
+	}
+	pattern := `%{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:level} \[%{DATA:thread}\] %{DATA:logger} - %{GREEDYDATA:message}`
+
+	parse := func(ml *types.MultilineConfig) types.ParseResponse {
+		t.Helper()
+		body, _ := json.Marshal(types.ParseRequest{
+			Logs:                 lines,
+			GrokPattern:          pattern,
+			IngestSessionOptions: types.IngestSessionOptions{Multiline: ml},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/parse", bytes.NewReader(body))
+		w := httptest.NewRecorder()
+		h.HandleParse(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var resp types.ParseResponse
+		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+
+	if auto := parse(nil); len(auto.Logs) != 2 {
+		t.Errorf("absent config: expected 2 auto-folded records, got %d", len(auto.Logs))
+	}
+	if off := parse(&types.MultilineConfig{Enabled: false}); len(off.Logs) != len(lines) {
+		t.Errorf("explicit off: expected %d unfolded lines, got %d", len(lines), len(off.Logs))
+	}
+}
+
+// HandleTimestampPreview folds the sample the way the file's ingest will,
+// so its preview rows line up with the folded records the import surface
+// shows (one verdict per record, not per physical line).
+func TestHandleTimestampPreview_FoldsWithMultiline(t *testing.T) {
+	h, _ := setupHandler(t)
+	lines := []string{
+		"2026-04-01 09:15:01 ERROR [main] c.l.App - failed",
+		"java.lang.IllegalStateException: boom",
+		"\tat com.logsonic.App.run(App.java:1)",
+		"2026-04-01 09:15:02 INFO [main] c.l.App - retrying",
+	}
+	pattern := `%{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:level} \[%{DATA:thread}\] %{DATA:logger} - %{GREEDYDATA:message}`
+
+	preview := func(ml *types.MultilineConfig) TimestampPreviewResponse {
+		t.Helper()
+		body, _ := json.Marshal(TimestampPreviewRequest{Logs: lines, GrokPattern: pattern, Multiline: ml})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/timestamp/preview", bytes.NewReader(body))
+		w := httptest.NewRecorder()
+		h.HandleTimestampPreview(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var resp TimestampPreviewResponse
+		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+
+	// Only matched records get a preview row, so both requests yield two;
+	// the difference is whether the first row's raw text carries the
+	// stack frames that were folded into it.
+	flat := preview(nil)
+	if len(flat.Inference.Preview) != 2 || strings.Contains(flat.Inference.Preview[0].Raw, "boom") {
+		t.Errorf("no multiline: expected 2 unfolded rows without the trace, got %+v", flat.Inference.Preview)
+	}
+	folded := preview(&types.MultilineConfig{Enabled: true, Mode: "header", HeaderPattern: `^\d{4}-\d{2}-\d{2}`})
+	if len(folded.Inference.Preview) != 2 || !strings.Contains(folded.Inference.Preview[0].Raw, "boom") {
+		t.Errorf("folded: expected 2 rows with the trace folded into the first, got %+v", folded.Inference.Preview)
+	}
+}

@@ -1781,6 +1781,14 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "multiline": {
+                    "description": "Multiline folds Logs the way the file's ingest session will, so the\npreview rows line up with the folded records the import surface\nshows. Absent or disabled: one record per line (no auto-detect).",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.MultilineConfig"
+                        }
+                    ]
+                },
                 "resolution": {
                     "$ref": "#/definitions/timeresolve.Resolution"
                 },
@@ -2310,7 +2318,7 @@ const docTemplate = `{
                     "additionalProperties": true
                 },
                 "multiline": {
-                    "description": "Multiline configures folding of physical lines into logical log\nrecords before pattern matching, for formats where a single log\nstatement spans multiple lines (stack traces, multi-line JSON,\netc). Nil/disabled preserves the historical one-line-per-record\nbehaviour. Folding is applied on /parse (including autosuggest)\nas well as ingest and live tail.",
+                    "description": "Multiline configures folding of physical lines into logical log\nrecords before pattern matching, for formats where a single log\nstatement spans multiple lines (stack traces, multi-line JSON,\netc). Disabled preserves the historical one-line-per-record\nbehaviour. Folding is applied on /parse (including autosuggest)\nas well as ingest and live tail. On /parse only, an absent field\n(nil) means \"auto-detect a layout from the sample\"; an explicit\n{\"enabled\": false} means \"do not fold\", the same as on ingest.",
                     "allOf": [
                         {
                             "$ref": "#/definitions/types.MultilineConfig"

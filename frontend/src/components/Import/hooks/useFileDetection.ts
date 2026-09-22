@@ -1,21 +1,19 @@
 import { useCallback, useEffect, useRef } from 'react';
 
 import { readFilePreview } from '../LocalFileImport/FileSelectionService';
+import { multilineConfigOf, multilineFromConfig } from '../utils/multilinePresets';
 import { extractFields } from '../utils/patternUtils';
 
-import type { ImportFile, Pattern } from '../types';
-import type { GrokPatternRequest, MultilineConfig, TimestampInference } from '@/lib/api-types';
+import type { FileMultiline, ImportFile, Pattern } from '../types';
+import type { GrokPatternRequest, TimestampInference } from '@/lib/api-types';
 
 import { parseLogs, previewFile, suggestPatterns } from '@/lib/api-client';
-import { DEFAULT_PATTERN, sessionMultilineOption, useImportStore } from '@/stores/useImportStore';
+import { DEFAULT_PATTERN, useImportStore } from '@/stores/useImportStore';
 
 // How many files are detected at once. Detection is one preview read plus
 // two small POSTs per file; three in flight keeps a 20-file drop snappy
 // without hammering the local server.
 const DETECT_CONCURRENCY = 3;
-// Debounce for re-detecting every file after the multiline setting changes.
-const MULTILINE_REDETECT_MS = 400;
-
 export const NO_PATTERN_DETECTED = 'No pattern auto-detected. Please select a pattern manually.';
 
 // The file mtime the resolver anchors year-less timestamps against.
@@ -29,15 +27,15 @@ function sourceMtimeOf(file: ImportFile): string | undefined {
 // Everything detection needs that is not on the file itself.
 export interface DetectContext {
   availablePatterns: GrokPatternRequest[];
-  multiline: MultilineConfig | undefined;
 }
 
 export interface DetectOutcome {
   updates: Partial<ImportFile>;
   inference: TimestampInference | null;
-  // Multiline config the suggester found on this file, if any. The hook
-  // applies it globally (same as the wizard did) and re-detects the rest.
-  detectedMultiline: MultilineConfig | null;
+  // Multiline layout the suggester found on this file, if any. It applies
+  // to this file only: the ingest session is per file, and a stack-trace
+  // header must not fold the other files in the batch.
+  detectedMultiline: FileMultiline | null;
 }
 
 // Native-path files (spec now-08) have no browser File to read a preview
@@ -88,18 +86,21 @@ export async function detectPatternForFile(
       };
     }
     const { previewLines, approxLines } = preview;
+    // Detection leaves the folding unspecified while the file has none,
+    // so POST /parse auto-detects a layout (reported back in `multiline`).
+    const current = file.sessionOptions.multiline.enabled
+      ? multilineConfigOf(file.sessionOptions.multiline)
+      : undefined;
 
     // Auto-suggest patterns against folded records when multiline is on.
     const suggestResponse = await suggestPatterns({
       logs: previewLines,
-      session_options: { multiline: ctx.multiline },
+      session_options: { multiline: current },
     });
 
     if (suggestResponse.results && suggestResponse.results.length > 0) {
       const bestMatch = suggestResponse.results[0];
-      const detectedMultiline = suggestResponse.multiline?.enabled
-        ? suggestResponse.multiline
-        : null;
+      const detectedMultiline = multilineFromConfig(suggestResponse.multiline);
 
       // Test the best match. Pass source_mtime so the resolver anchors
       // year-less / 2-digit-year timestamps against the file rather than
@@ -110,7 +111,7 @@ export async function detectPatternForFile(
         custom_patterns: bestMatch.custom_patterns || {},
         session_options: {
           source_mtime: sourceMtimeIso,
-          multiline: detectedMultiline ?? ctx.multiline,
+          multiline: detectedMultiline ? multilineConfigOf(detectedMultiline) : current,
         },
       });
 
@@ -179,13 +180,13 @@ export async function detectPatternForFile(
   }
 }
 
-// Re-parse a file's preview with an explicitly chosen pattern. Returns the
-// per-file updates plus the fresh timestamp inference (the pattern decides
-// which capture is the timestamp, so the inference has to move with it).
+// Re-parse a file's preview with an explicitly chosen pattern, under the
+// file's own multiline folding. Returns the per-file updates plus the
+// fresh timestamp inference (the pattern decides which capture is the
+// timestamp, so the inference has to move with it).
 export async function parseFileWithPattern(
   file: ImportFile,
-  pattern: Pattern,
-  multiline: MultilineConfig | undefined
+  pattern: Pattern
 ): Promise<{ updates: Partial<ImportFile>; inference: TimestampInference | null }> {
   const isCustom = pattern.name === DEFAULT_PATTERN.name;
   try {
@@ -193,7 +194,10 @@ export async function parseFileWithPattern(
       logs: file.previewLines,
       grok_pattern: pattern.pattern,
       custom_patterns: pattern.custom_patterns || {},
-      session_options: { source_mtime: sourceMtimeOf(file), multiline },
+      session_options: {
+        source_mtime: sourceMtimeOf(file),
+        multiline: multilineConfigOf(file.sessionOptions.multiline),
+      },
     });
     return {
       updates: {
@@ -229,51 +233,31 @@ export function matchRateOf(parsedLogs: Record<string, unknown>[], previewLines:
 /**
  * Runs pattern detection for every file that enters the list, in
  * parallel (capped), the moment it is added -- there is no step to wait
- * for any more. Also owns the two follow-ups the wizard had: applying a
- * suggester-detected multiline config globally, and re-detecting every
- * file when the user changes the multiline setting.
+ * for any more. A multiline layout the suggester finds is stored on that
+ * file alone; the Options tab re-parses a file when its folding changes.
  */
 export function useFileDetection() {
   const inFlight = useRef<Set<string>>(new Set());
   const queue = useRef<string[]>([]);
-  // The multiline key detection itself last applied, so the "user changed
-  // multiline" effect can tell an auto-apply from a user edit and not
-  // re-fire against a batch that is still running.
-  const autoAppliedMultilineKey = useRef<string | null>(null);
 
   const files = useImportStore((s) => s.files);
-  const multilineEnabled = useImportStore((s) => s.sessionOptionsMultilineEnabled);
-  const multilineMode = useImportStore((s) => s.sessionOptionsMultilineMode);
-  const multilineHeader = useImportStore((s) => s.sessionOptionsMultilineHeaderPattern);
-  const multilineKey = `${multilineEnabled}|${multilineMode}|${multilineHeader}`;
 
-  const currentMultiline = useCallback(() => sessionMultilineOption(useImportStore.getState()), []);
-
-  const detectOne = useCallback(
-    async (fileId: string) => {
-      const store = useImportStore.getState();
-      const file = store.files.find((f) => f.id === fileId);
-      if (!file) return;
-      const outcome = await detectPatternForFile(file, {
-        availablePatterns: store.availablePatterns,
-        multiline: currentMultiline(),
-      });
-      const after = useImportStore.getState();
-      // The file may have been removed while detection ran.
-      if (!after.files.some((f) => f.id === fileId)) return;
-      if (outcome.detectedMultiline) {
-        const m = outcome.detectedMultiline;
-        const mode = m.mode === 'indent' || m.mode === 'header' ? m.mode : 'header';
-        autoAppliedMultilineKey.current = `true|${mode}|${m.header_pattern || ''}`;
-        after.setSessionOptionMultilineEnabled(true);
-        after.setSessionOptionMultilineMode(mode);
-        after.setSessionOptionMultilineHeaderPattern(m.header_pattern || '');
-      }
-      after.updateFile(fileId, outcome.updates);
-      if (outcome.inference) after.setFileTimestampInference(fileId, outcome.inference);
-    },
-    [currentMultiline]
-  );
+  const detectOne = useCallback(async (fileId: string) => {
+    const store = useImportStore.getState();
+    const file = store.files.find((f) => f.id === fileId);
+    if (!file) return;
+    const outcome = await detectPatternForFile(file, {
+      availablePatterns: store.availablePatterns,
+    });
+    const after = useImportStore.getState();
+    // The file may have been removed while detection ran.
+    if (!after.files.some((f) => f.id === fileId)) return;
+    if (outcome.detectedMultiline) {
+      after.updateFileSessionOptions(fileId, { multiline: outcome.detectedMultiline });
+    }
+    after.updateFile(fileId, outcome.updates);
+    if (outcome.inference) after.setFileTimestampInference(fileId, outcome.inference);
+  }, []);
 
   const pump = useCallback(() => {
     while (inFlight.current.size < DETECT_CONCURRENCY && queue.current.length > 0) {
@@ -318,33 +302,37 @@ export function useFileDetection() {
     enqueue(ids);
   }, [enqueue]);
 
-  // Multiline changed by the user → re-detect every file against the new
-  // folding. Skipped on first render and when the change was detection's
-  // own auto-apply (that batch already used the new config).
-  const lastSeenKey = useRef(multilineKey);
-  useEffect(() => {
-    if (lastSeenKey.current === multilineKey) return;
-    lastSeenKey.current = multilineKey;
-    if (autoAppliedMultilineKey.current === multilineKey) return;
-    if (useImportStore.getState().files.length === 0) return;
-    const timer = window.setTimeout(redetectAll, MULTILINE_REDETECT_MS);
-    return () => window.clearTimeout(timer);
-  }, [multilineKey, redetectAll]);
-
   // User picked (or edited) a pattern for one file: re-parse its preview.
-  const changePattern = useCallback(
-    async (fileId: string, pattern: Pattern) => {
-      const store = useImportStore.getState();
-      const file = store.files.find((f) => f.id === fileId);
+  const changePattern = useCallback(async (fileId: string, pattern: Pattern) => {
+    const store = useImportStore.getState();
+    const file = store.files.find((f) => f.id === fileId);
+    if (!file) return;
+    store.updateFile(fileId, { detectionStatus: 'detecting' });
+    const { updates, inference } = await parseFileWithPattern(file, pattern);
+    const after = useImportStore.getState();
+    if (!after.files.some((f) => f.id === fileId)) return;
+    after.updateFile(fileId, updates);
+    if (inference) after.setFileTimestampInference(fileId, inference);
+  }, []);
+
+  // The file's multiline folding changed: re-parse its preview with the
+  // pattern it already has (so the verdict, match rate and preview reflect
+  // the folding), or run detection afresh when it has none yet. Not a
+  // re-detect: the suggester would only hand back the layout the user
+  // just overrode.
+  const reparseFile = useCallback(
+    async (fileId: string) => {
+      const file = useImportStore.getState().files.find((f) => f.id === fileId);
       if (!file) return;
-      store.updateFile(fileId, { detectionStatus: 'detecting' });
-      const { updates, inference } = await parseFileWithPattern(file, pattern, currentMultiline());
-      const after = useImportStore.getState();
-      if (!after.files.some((f) => f.id === fileId)) return;
-      after.updateFile(fileId, updates);
-      if (inference) after.setFileTimestampInference(fileId, inference);
+      if (file.selectedPattern && file.previewLines.length > 0) {
+        // The alternatives' match rates were scored under the old folding.
+        useImportStore.getState().updateFile(fileId, { patternMatches: undefined });
+        await changePattern(fileId, file.selectedPattern);
+      } else {
+        enqueue([fileId]);
+      }
     },
-    [currentMultiline]
+    [changePattern, enqueue]
   );
 
   // "Apply <pattern> to all N files": set, then re-parse each so match
@@ -362,7 +350,7 @@ export function useFileDetection() {
     (f) => f.detectionStatus === 'detecting' || f.detectionStatus === 'pending'
   );
 
-  return { changePattern, applyPatternToAll, redetectAll, isDetecting };
+  return { changePattern, applyPatternToAll, redetectAll, reparseFile, isDetecting };
 }
 
 export default useFileDetection;

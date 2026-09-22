@@ -16,6 +16,8 @@ interface DetailPanelProps {
   files: ImportFile[];
   onBack: () => void;
   onChangePattern: (fileId: string, pattern: Pattern) => Promise<void>;
+  // Re-parse a file's preview after its multiline folding changed.
+  onReparse: (fileId: string) => Promise<void>;
 }
 
 const TABS: { id: DetailTab; label: string }[] = [
@@ -28,7 +30,13 @@ const TABS: { id: DetailTab; label: string }[] = [
  * Per-file configuration, one interaction deep: swaps in over the file
  * list (same pane); the Import action stays put in the topbar.
  */
-export const DetailPanel: FC<DetailPanelProps> = ({ file, files, onBack, onChangePattern }) => {
+export const DetailPanel: FC<DetailPanelProps> = ({
+  file,
+  files,
+  onBack,
+  onChangePattern,
+  onReparse,
+}) => {
   const tab = useImportStore((s) => s.detailTab);
   const setTab = useImportStore((s) => s.setDetailTab);
   const needsTs =
@@ -87,7 +95,9 @@ export const DetailPanel: FC<DetailPanelProps> = ({ file, files, onBack, onChang
       <div className="ls-imp-pane-scroll" style={{ padding: 14 }}>
         {tab === 'pattern' && <PatternTab file={file} onChangePattern={onChangePattern} />}
         {tab === 'timestamp' && <TimestampTab file={file} fileCount={files.length} />}
-        {tab === 'options' && <OptionsTab file={file} fileCount={files.length} />}
+        {tab === 'options' && (
+          <OptionsTab file={file} fileCount={files.length} onReparse={onReparse} />
+        )}
       </div>
     </section>
   );

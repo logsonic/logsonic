@@ -1,6 +1,7 @@
 import { AlertTriangle, Check, Loader2 } from 'lucide-react';
 import { FC, useEffect, useMemo, useRef, useState } from 'react';
 
+import { multilineConfigOf } from '../utils/multilinePresets';
 import {
   buildState,
   currentYearChoice,
@@ -99,6 +100,7 @@ export const TimestampTab: FC<TimestampTabProps> = ({ file, fileCount }) => {
           custom_patterns: file.selectedPattern!.custom_patterns || {},
           resolution: eff || {},
           source_mtime: file.sourceMTime || undefined,
+          multiline: multilineConfigOf(file.sessionOptions.multiline),
         });
         if (
           res.status === 'success' &&

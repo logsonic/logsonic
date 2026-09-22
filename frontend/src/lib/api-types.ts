@@ -388,6 +388,8 @@ export interface TimestampPreviewRequest {
   custom_patterns?: Record<string, string>;
   resolution: Partial<TimestampResolution>;
   source_mtime?: string;
+  // Folds `logs` the way the file's ingest will; absent = one record per line.
+  multiline?: MultilineConfig;
 }
 
 export interface TimestampPreviewResponse {

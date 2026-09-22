@@ -130,24 +130,78 @@ describe('useFileDetection — detection starts on drop, for every pending file'
     expect(suggestPatterns).toHaveBeenCalledTimes(2);
   });
 
-  it('applies a suggester-detected multiline config globally', async () => {
+  it('stores a suggester-detected multiline config on that file only', async () => {
     previewFile.mockResolvedValue({ lines: ['a', ' b'], approx_lines: 2 });
-    suggestPatterns.mockResolvedValue({
-      ...suggestion,
-      multiline: { enabled: true, mode: 'indent' },
-    });
+    // The stack-trace file's suggestion carries a multiline layout; the
+    // syslog file's does not.
+    suggestPatterns
+      .mockResolvedValueOnce({ ...suggestion, multiline: { enabled: true, mode: 'indent' } })
+      .mockResolvedValueOnce(suggestion);
     parseLogs.mockResolvedValue({ logs: [{ message: 'a b' }], timestamp_inference: null });
 
-    useImportStore.getState().addNativePathFiles(['/abs/stack.log']);
+    useImportStore.getState().addNativePathFiles(['/abs/stack.log', '/abs/syslog.log']);
     renderHook(() => useFileDetection());
 
     await waitFor(() => {
+      expect(useImportStore.getState().files.every((f) => f.detectionStatus === 'detected')).toBe(
+        true
+      );
+    });
+    const [stack, syslog] = useImportStore.getState().files;
+    expect(stack.sessionOptions.multiline).toEqual({
+      enabled: true,
+      mode: 'indent',
+      headerPattern: '',
+    });
+    expect(syslog.sessionOptions.multiline.enabled).toBe(false);
+    // The global (legacy) triple is untouched: it is not what the upload
+    // sends any more, and flipping it would have folded every file.
+    expect(useImportStore.getState().sessionOptionsMultilineEnabled).toBe(false);
+    // The stack file's own parse ran under its folding, the syslog file's
+    // with none specified (so the server could auto-detect one).
+    const parseCalls = parseLogs.mock.calls.map((c) => c[0].session_options?.multiline);
+    expect(parseCalls).toContainEqual({ enabled: true, mode: 'indent', header_pattern: undefined });
+    expect(parseCalls).toContainEqual(undefined);
+    // Nothing re-fires detection against the batch.
+    await new Promise((r) => setTimeout(r, 500));
+    expect(suggestPatterns).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('useFileDetection — reparseFile', () => {
+  it('re-parses a detected file under its own folding without re-running the suggester', async () => {
+    previewFile.mockResolvedValue({ lines: ['a', ' b'], approx_lines: 2 });
+    suggestPatterns.mockResolvedValue(suggestion);
+    parseLogs.mockResolvedValue({
+      logs: [{ message: 'a' }, { message: ' b' }],
+      timestamp_inference: null,
+    });
+    useImportStore.getState().addNativePathFiles(['/abs/app.log']);
+    const fileId = useImportStore.getState().files[0].id;
+    const { result } = renderHook(() => useFileDetection());
+    await waitFor(() => {
       expect(useImportStore.getState().files[0].detectionStatus).toBe('detected');
     });
-    expect(useImportStore.getState().sessionOptionsMultilineEnabled).toBe(true);
-    expect(useImportStore.getState().sessionOptionsMultilineMode).toBe('indent');
-    // The auto-apply must not re-fire detection against the same batch.
-    await new Promise((r) => setTimeout(r, 500));
+    expect(suggestPatterns).toHaveBeenCalledTimes(1);
+
+    useImportStore.getState().updateFileSessionOptions(fileId, {
+      multiline: { enabled: true, mode: 'indent', headerPattern: '' },
+    });
+    parseLogs.mockResolvedValue({ logs: [{ message: 'a b' }], timestamp_inference: null });
+    await act(async () => {
+      await result.current.reparseFile(fileId);
+    });
+
+    const f = useImportStore.getState().files[0];
+    expect(f.parsedLogs).toEqual([{ message: 'a b' }]);
+    expect(f.selectedPattern?.name).toBe('Generic');
+    expect(parseLogs).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        session_options: expect.objectContaining({
+          multiline: { enabled: true, mode: 'indent', header_pattern: undefined },
+        }),
+      })
+    );
     expect(suggestPatterns).toHaveBeenCalledTimes(1);
   });
 });

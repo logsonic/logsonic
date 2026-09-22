@@ -1,8 +1,9 @@
-import { Settings2, Trash2 } from 'lucide-react';
+import { Settings2, Trash2, WrapText } from 'lucide-react';
 import { FC } from 'react';
 
 import { matchRateOf } from '../hooks/useFileDetection';
 import { formatSize, matchColor } from '../utils/importGate';
+import { multilineLabel } from '../utils/multilinePresets';
 
 import type { ImportFile } from '../types';
 
@@ -25,6 +26,7 @@ export const FileRow: FC<FileRowProps> = ({ file, selected, onSelect, onConfigur
     (file.timestampInference.status === 'ambiguous' ||
       file.timestampInference.status === 'missing') &&
     !file.timestampConfirmed;
+  const folding = multilineLabel(file.sessionOptions.multiline);
 
   return (
     <div
@@ -86,14 +88,30 @@ export const FileRow: FC<FileRowProps> = ({ file, selected, onSelect, onConfigur
               ⚠ timestamp
             </span>
           )}
+          {folding && (
+            <span
+              className="inline-flex flex-shrink-0 self-center"
+              style={{ color: 'var(--ls-text-3)' }}
+              title={`Multiline folding: ${folding} (this file only)`}
+              aria-label={`Multiline folding: ${folding}`}
+              role="img"
+            >
+              <WrapText size={12} />
+            </span>
+          )}
+          {/* Size always; the line estimate only once the rail has room
+              for it (the detail header and the preview footer carry it). */}
           {(file.fileSize > 0 || file.approxLines > 0) && (
             <span
               className="ls-imp-rail-aux ml-auto flex-shrink-0"
               style={{ color: 'var(--ls-text-4)' }}
             >
               {file.fileSize > 0 ? formatSize(file.fileSize) : ''}
-              {file.fileSize > 0 && file.approxLines > 0 ? ' · ' : ''}
-              {file.approxLines > 0 ? `~${file.approxLines.toLocaleString()} lines` : ''}
+              {file.approxLines > 0 && (
+                <span className="ls-imp-rail-lines">
+                  {file.fileSize > 0 ? ' · ' : ''}~{file.approxLines.toLocaleString()} lines
+                </span>
+              )}
             </span>
           )}
         </div>

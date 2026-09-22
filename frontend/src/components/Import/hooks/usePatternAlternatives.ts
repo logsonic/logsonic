@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { multilineConfigOf } from '../utils/multilinePresets';
+
 import { matchRateOf } from './useFileDetection';
 
 import type { ImportFile } from '../types';
 import type { GrokPatternRequest } from '@/lib/api-types';
 
 import { parseLogs } from '@/lib/api-client';
-import { DEFAULT_PATTERN, sessionMultilineOption, useImportStore } from '@/stores/useImportStore';
+import { DEFAULT_PATTERN, useImportStore } from '@/stores/useImportStore';
 
 // How many preview lines each candidate is tested against, and how many
 // POST /parse calls run at once. Every saved pattern is scored (there are
@@ -68,7 +70,7 @@ export function usePatternAlternatives(file: ImportFile | null): {
     const current = store.files.find((f) => f.id === fileId);
     if (!current) return;
     const lines = current.previewLines.slice(0, SAMPLE_LINES);
-    const multiline = sessionMultilineOption(store);
+    const multiline = multilineConfigOf(current.sessionOptions.multiline);
     setScoring(true);
     mapLimited(candidates, SCORE_CONCURRENCY, async (p) => {
       try {

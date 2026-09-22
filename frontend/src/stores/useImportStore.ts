@@ -1,4 +1,4 @@
-import { DetectionResult, FilePreview, FileSessionOptions, ImportFile, Pattern } from '@/components/Import/types';
+import { DEFAULT_MULTILINE, DetectionResult, FilePreview, FileSessionOptions, ImportFile, Pattern } from '@/components/Import/types';
 import { parseLogs } from '@/lib/api-client';
 import {
   GrokPatternRequest,
@@ -26,7 +26,13 @@ export const DEFAULT_SESSION_OPTIONS: FileSessionOptions = {
   year: '',
   month: '',
   day: '',
+  multiline: { ...DEFAULT_MULTILINE },
 };
+
+// The global sessionOptionsMultiline* triple below is legacy: the import
+// surface keeps multiline per file (ImportFile.sessionOptions.multiline)
+// and useUpload sends that file's own config on its ingest session. Only
+// handlePatternOperation (the single-file path) still reads the triple.
 
 export function sessionMultilineOption(state: {
   sessionOptionsMultilineEnabled: boolean;
