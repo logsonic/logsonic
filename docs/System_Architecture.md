@@ -130,9 +130,10 @@ sequenceDiagram
     UI->>API: POST /api/v1/parse {logs: preview_lines} (no grok_pattern → autosuggest)
     API->>Tok: Try registered patterns against the sample
     API-->>UI: SuggestResponse {results[0] = best fit, multiline?}
-    UI->>API: POST /api/v1/parse {logs, grok_pattern: best, source_mtime}
+    UI->>API: POST /api/v1/parse {logs, grok_pattern: best, source_mtime, multiline}
     API-->>UI: ParseResponse {logs, timestamp_inference}
     UI->>Store: updateFile(fileId, {selectedPattern, parsedLogs, status: "detected"}) + setFileTimestampInference
+    Note over UI,Store: A detected multiline layout is stored on that file only (sessionOptions.multiline)
 
     Note over User,UI: Inspect — file list + preview; detail panel on demand
     alt User picks an alternative or saved pattern (Pattern tab)
@@ -150,13 +151,18 @@ sequenceDiagram
         UI->>API: POST /api/v1/timestamp/preview (debounced)
         API-->>UI: fresh TimestampInference
     end
+    opt Options tab: multiline folding (per file)
+        UI->>Store: updateFileSessionOptions(fileId, {multiline})
+        UI->>API: POST /api/v1/parse {logs, grok_pattern, multiline} (explicit {enabled: false} = no folding, no auto-detect)
+        API-->>UI: ParseResponse → preview shows the records the ingest will produce
+    end
 
     Note over User,UI: Commit — "Import N files"
     opt A file uses a custom pattern
         UI->>User: SavePatternDialog (Save Pattern → POST /api/v1/grok, or Skip)
     end
     loop Per file in ImportFile[] (useUpload)
-        UI->>API: POST /api/v1/ingest/start {pattern, source, session_options, timestamp_config}
+        UI->>API: POST /api/v1/ingest/start {pattern, source, session_options, timestamp_config, multiline: this file's}
         API->>Tok: Create dedicated session Tokenizer
         API-->>UI: {session_id: uuid}
         alt Browser File
