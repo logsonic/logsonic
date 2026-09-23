@@ -1,12 +1,13 @@
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useFitRangeToData, useHasDataOutsideRange } from '@/hooks/useFitRangeToData';
 import { LogResponse } from '@/lib/api-types';
 import { cn } from '@/lib/utils';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { parseISO } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
-import { ChevronDown, ChevronUp, Loader2, RefreshCw, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Loader2, Maximize2, RefreshCw, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bar,
@@ -247,6 +248,8 @@ export default function LogDistributionChart() {
   
   const searchStore = useSearchQueryParamsStore();
   const { logData, isLoading } = useLogResultStore();
+  const fitRangeToData = useFitRangeToData();
+  const hasDataOutsideRange = useHasDataOutsideRange();
 
   // Ref to the chart container
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -652,7 +655,26 @@ export default function LogDistributionChart() {
               {isLoading ? (
                 <span>Loading chart data...</span>
               ) : (
-                <span>No data in the selected time range.</span>
+                <>
+                  <span>No data in the selected time range.</span>
+                  {hasDataOutsideRange && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={fitRangeToData}
+                      className="gap-1.5"
+                      style={{
+                        borderColor: 'var(--ls-border-strong)',
+                        background: 'var(--ls-panel)',
+                        color: 'var(--ls-text-2)',
+                      }}
+                      title="Snap the time range to the span of indexed log data"
+                    >
+                      <Maximize2 className="h-3.5 w-3.5" />
+                      Fit time range to indexed data
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           ) : (
