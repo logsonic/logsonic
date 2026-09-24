@@ -6,6 +6,9 @@ Findings that need a human decision, or are worth knowing about, surfaced while 
 
 ## Open items
 
+### A theme-notification bug fix is sitting uncommitted, waiting on a decision (2026-09-24)
+Someone (unclear who) fixed a real bug and left it unstaged in the working tree: the app was calling a `window.__logsonicNotifyTheme` function that was never actually defined anywhere, so clicking the theme toggle silently failed to repaint the native window background (only OS-driven theme changes worked, through a separate path). The fix posts to the correct native message channel (`webkit.messageHandlers.logsonicTheme`) instead. Touches `frontend/src/lib/native.ts`, `frontend/src/stores/useThemeStore.ts`, and its test. All tests pass with the fix in place. Left out of the synonym-search commit since it's an unrelated change — needs a decision to commit it (as its own commit) or drop it.
+
 ### Import UI redesign: deliberate deviations from the design handoff (2026-09-19)
 Product/UX calls made while shipping the single-surface import page — each is the maintainer's to overturn, none blocks the shipped flow:
 - Topbar uses the app's own theme tokens, not the prototype's hardcoded colors (keeps dark mode consistent; not yet watched live in the native app).
