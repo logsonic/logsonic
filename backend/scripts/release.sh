@@ -103,7 +103,6 @@ if [ "$MODE" = "release" ]; then
   command -v codesign >/dev/null || err "codesign is required for a production macOS artifact"
   command -v xcrun >/dev/null || err "xcrun is required for macOS notarization"
   command -v swiftc >/dev/null || err "swiftc is required to build Logsonic.app"
-  command -v lipo >/dev/null || err "lipo is required to build the universal Logsonic.app launcher"
   "$BACKEND/scripts/signing-identity.sh" >/dev/null || err "a unique Developer ID Application identity is required"
   if [[ "$EXTRA_ARGS" != *"--skip=publish"* ]]; then
     command -v gh >/dev/null || err "gh is required to attach the macOS app before publishing the draft release"
@@ -155,8 +154,8 @@ notarize_darwin() {
   trap 'rm -rf "$tmp"' RETURN
   local failed=0
 
-  # Use glob patterns to find darwin binaries (robust to GoReleaser path changes).
-  for bin in dist/logsonic_darwin_*/logsonic dist/logsonic-universal_*/logsonic; do
+  # Use a glob pattern to find the darwin binary (robust to GoReleaser path changes).
+  for bin in dist/logsonic-darwin_darwin_*/logsonic; do
     [ -f "$bin" ] || { info "notarize: missing $bin, skipping"; continue; }
 
     # Verify binary is signed before notarizing.
@@ -198,27 +197,28 @@ notarize_darwin() {
 
 notarize_darwin
 
-# Wrap the universal darwin binary in a signed + notarized + STAPLED .app bundle,
+# Wrap the arm64 darwin binary in a signed + notarized + STAPLED .app bundle,
 # zip it, attach it to the GitHub release, and publish a Homebrew cask pointing at
 # it. macOS ships ONLY this way — there is no darwin .tar.gz (a bare binary can't
 # be stapled, so it forces an online Gatekeeper check and trips a dialog on
 # Finder-extracted downloads). The stapled .app carries its notarization ticket,
 # installs into /Applications with no sudo (cask `app` stanza), and symlinks the
-# `logsonic` CLI into the Homebrew prefix. See scripts/app-macos.sh and
-# scripts/publish-cask.sh. Skipped only on snapshot.
+# `logsonic` CLI into the Homebrew prefix. Apple Silicon (arm64) only for now —
+# see ISSUES.md. See scripts/app-macos.sh and scripts/publish-cask.sh. Skipped
+# only on snapshot.
 build_macos_app() {
   if [ "$MODE" = "snapshot" ]; then
     info "skipping .app build (snapshot mode)"
     return
   fi
-  local ubin="dist/logsonic-universal_darwin_all/logsonic"
-  [ -f "$ubin" ] || err "universal binary not found at $ubin"
+  local bin="dist/logsonic-darwin_darwin_arm64_v8.0/logsonic"
+  [ -f "$bin" ] || err "darwin arm64 binary not found at $bin"
 
   local version; version="$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')"
   [ -n "$version" ] || err "build_macos_app: cannot determine version from git tags"
 
   info "building macOS .app bundle"
-  scripts/app-macos.sh "$ubin" "$version" dist
+  scripts/app-macos.sh "$bin" "$version" dist
   local zip="dist/logsonic_${version}_macos.zip"
 
   # Attach to the GitHub release + publish the Homebrew cask, unless publishing

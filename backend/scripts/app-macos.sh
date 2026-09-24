@@ -14,7 +14,11 @@
 # also the CLI the Homebrew cask symlinks. Both inner binaries are signed; the
 # GUI is what a double-click runs.
 #
-# Usage: app-macos.sh <universal-binary> <version> <out-dir> [icon-png]
+# Usage: app-macos.sh <arm64-binary> <version> <out-dir> [icon-png]
+#
+# Apple Silicon (arm64) only — Intel was dropped from this build because the
+# installed toolchain no longer ships x86_64 Swift compatibility libraries
+# (see backend/.goreleaser.yaml comments and ISSUES.md).
 #
 # Requires a "Developer ID Application" identity in the Keychain, `swiftc`
 # (Xcode command line tools), and the MACOS_NOTARY_* credentials. Release
@@ -59,7 +63,7 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/logsonic"
 chmod 755 "$app/Contents/MacOS/logsonic"
 
-# Build the native AppKit GUI shell (universal) — the bundle's CFBundleExecutable.
+# Build the native AppKit GUI shell (arm64 only) — the bundle's CFBundleExecutable.
 command -v swiftc >/dev/null || { echo "app-macos.sh: swiftc not found (install Xcode command line tools)" >&2; exit 1; }
 [ -f "$swift_src" ] || { echo "app-macos.sh: missing GUI source at $swift_src" >&2; exit 1; }
 [ -f "$listening_src" ] || { echo "app-macos.sh: missing GUI source at $listening_src" >&2; exit 1; }
@@ -74,10 +78,8 @@ cleanup() {
 }
 trap cleanup EXIT
 swift_flags=(-O -framework AppKit -framework WebKit)
-swiftc "${swift_flags[@]}" -target arm64-apple-macos11  "$listening_src" "$dragstrip_src" "$swift_src" -o "$swift_build/LogsonicApp-arm64"
-swiftc "${swift_flags[@]}" -target x86_64-apple-macos11 "$listening_src" "$dragstrip_src" "$swift_src" -o "$swift_build/LogsonicApp-x86_64"
-lipo -create "$swift_build/LogsonicApp-arm64" "$swift_build/LogsonicApp-x86_64" \
-  -o "$app/Contents/MacOS/LogsonicApp"
+swiftc "${swift_flags[@]}" -target arm64-apple-macos11 "$listening_src" "$dragstrip_src" "$swift_src" -o "$swift_build/LogsonicApp-arm64"
+cp "$swift_build/LogsonicApp-arm64" "$app/Contents/MacOS/LogsonicApp"
 chmod 755 "$app/Contents/MacOS/LogsonicApp"
 rm -rf "$swift_build"
 swift_build=""

@@ -6,6 +6,9 @@ Findings that need a human decision, or are worth knowing about, surfaced while 
 
 ## Open items
 
+### v1.7.0 macOS build is Apple Silicon (arm64) only for now (2026-09-24)
+The v1.7.0 release build failed to link the x86_64 half of the universal macOS app: the installed Command Line Tools (27.0) no longer ship x86_64 Swift compatibility libraries (`libswiftCompatibility56`, `libswiftCompatibilityConcurrency`), so `swiftc -target x86_64-apple-macos11` fails at link time. Decision made: drop Intel from this release rather than block it — `backend/.goreleaser.yaml`, `backend/scripts/app-macos.sh`, and `backend/scripts/release.sh` now build/sign/notarize an arm64-only `Logsonic.app` (no more `lipo`/universal binary). Re-adding Intel support needs either an older Xcode/CLT with x86_64 Swift libs, or waiting on Apple's toolchain. The Go binary itself is unaffected (`goos: darwin, goarch: [arm64]` only — was already cross-compiled, no toolchain dependency there).
+
 ### A theme-notification bug fix is sitting uncommitted, waiting on a decision (2026-09-24)
 Someone (unclear who) fixed a real bug and left it unstaged in the working tree: the app was calling a `window.__logsonicNotifyTheme` function that was never actually defined anywhere, so clicking the theme toggle silently failed to repaint the native window background (only OS-driven theme changes worked, through a separate path). The fix posts to the correct native message channel (`webkit.messageHandlers.logsonicTheme`) instead. Touches `frontend/src/lib/native.ts`, `frontend/src/stores/useThemeStore.ts`, and its test. All tests pass with the fix in place. Left out of the synonym-search commit since it's an unrelated change — needs a decision to commit it (as its own commit) or drop it.
 

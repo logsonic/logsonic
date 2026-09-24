@@ -50,7 +50,6 @@ builds:
     goos:
       - darwin
     goarch:
-      - amd64
       - arm64
     ldflags:
       - -s -w
@@ -68,21 +67,10 @@ builds:
       post:
         - 'scripts/sign-macos.sh "{{ .Path }}"'
 
-universal_binaries:
-  - id: logsonic-universal
-    ids: [logsonic-darwin]
-    replace: false
-    name_template: logsonic
-    # lipo strips per-arch signatures when merging — re-sign the fat binary.
-    # This universal binary is NOT archived; scripts/app-macos.sh wraps it into
-    # the stapled Logsonic.app that release.sh builds and uploads after notarization.
-    hooks:
-      post: 'scripts/sign-macos.sh "{{ .Path }}"'
-
 archives:
   - id: default
-    # Linux + Windows only. darwin (logsonic-darwin / logsonic-universal) is
-    # deliberately excluded — macOS is distributed as a notarized .app + cask.
+    # Linux + Windows only. darwin (logsonic-darwin) is deliberately excluded —
+    # macOS is distributed as a notarized .app + cask.
     ids: [logsonic]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
@@ -98,11 +86,15 @@ checksum:
   name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
   algorithm: sha256
 
-# macOS code signing is done in-place via build/universal post-hooks above
+# macOS code signing is done in-place via the darwin build's post-hook above
 # (scripts/sign-macos.sh), so the signed binary is what gets archived. We do NOT
 # use a binary_signs/signs block: those are for detached signature files and
 # create uploadable Signature artifacts, which breaks publishing when codesign
 # embeds the signature in the binary instead of writing a separate file.
+#
+# Apple Silicon (arm64) only for now: the installed Swift toolchain no longer
+# ships x86_64 compatibility libs, so the universal (lipo'd) binary this repo
+# used to build can't link for x86_64. See ISSUES.md.
 
 # No `brews:` (formula) block. The Homebrew tap ships ONLY a cask named
 # `logsonic` (scripts/publish-cask.sh), pointing at the notarized Logsonic.app
