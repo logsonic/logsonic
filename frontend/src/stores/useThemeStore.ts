@@ -54,7 +54,17 @@ function resolveEffective(theme: Theme, systemAppearance: EffectiveTheme): Effec
 function applyEffectiveTheme(effective: EffectiveTheme) {
   document.documentElement.setAttribute('data-theme', effective);
   document.documentElement.classList.toggle('dark', effective === 'dark');
-  window.__logsonicNotifyTheme?.(effective);
+  // Post to the "logsonicTheme" WKScriptMessageHandler (LogsonicApp.swift's
+  // handleThemeMessage) -- there is no window.__logsonicNotifyTheme
+  // function; that was never defined anywhere and the call silently no-op'd
+  // via optional chaining, so an explicit user choice never repainted the
+  // window background (only OS-driven changes did, via Swift's own KVO
+  // observer).
+  (
+    window as unknown as {
+      webkit?: { messageHandlers?: { logsonicTheme?: { postMessage: (m: unknown) => void } } };
+    }
+  ).webkit?.messageHandlers?.logsonicTheme?.postMessage(effective);
 }
 
 export const useThemeStore = create<ThemeState>()(

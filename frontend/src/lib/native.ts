@@ -21,10 +21,6 @@ declare global {
     // Shell -> page: called when NSApp.effectiveAppearance changes after
     // load, so a theme in 'auto' mode can keep following the OS.
     __logsonicSetSystemAppearance?: (appearance: NativeAppearance) => void;
-    // Page -> shell: called whenever the effective (resolved) theme
-    // changes, so the native window background can repaint before the
-    // next resize instead of flashing the previous theme's color.
-    __logsonicNotifyTheme?: (effective: NativeAppearance) => void;
   }
 }
 

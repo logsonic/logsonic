@@ -82,14 +82,16 @@ describe('useThemeStore', () => {
 
   it('notifies the native shell of the effective theme on every change', () => {
     const calls: string[] = [];
-    window.__logsonicNotifyTheme = (effective) => calls.push(effective);
+    (window as unknown as { webkit: { messageHandlers: { logsonicTheme: { postMessage: (m: unknown) => void } } } }).webkit = {
+      messageHandlers: { logsonicTheme: { postMessage: (m) => calls.push(m as string) } },
+    };
 
     useThemeStore.getState().setTheme('dark');
     useThemeStore.getState().setTheme('auto');
     useThemeStore.getState().setSystemAppearance('dark');
 
     expect(calls).toEqual(['dark', 'light', 'dark']);
-    delete window.__logsonicNotifyTheme;
+    delete (window as unknown as { webkit?: unknown }).webkit;
   });
 
   it('wires window.__logsonicSetSystemAppearance to the store', () => {
