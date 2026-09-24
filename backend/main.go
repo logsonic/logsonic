@@ -69,6 +69,7 @@ func main() {
 	hostFlag := flag.String("host", "", "Host address to bind to (default: localhost or HOST env var)")
 	portFlag := flag.String("port", "", "Port to listen on (default: 8080 or PORT env var)")
 	storageFlag := flag.String("storage", "", "Path to storage directory (default: per-user app data dir)")
+	storageEngineFlag := flag.String("storage-engine", "", "Storage engine: auto, bleve, or template (default: auto; also LOGSONIC_STORAGE_ENGINE)")
 	openFlag := flag.Bool("open", false, "Open the web UI in your browser once the server starts")
 	browserFlag := flag.Bool("browser", false, "Same as -open: serve the UI in a browser (does not launch Logsonic.app)")
 	autoPortFlag := flag.Bool("auto-port", true, "If the port is busy, bind the next free port instead of failing")
@@ -120,6 +121,10 @@ func main() {
 		}
 		storagePath = p
 	}
+	storageEngine, err := resolveStorageEngine(*storageEngineFlag, os.Getenv("LOGSONIC_STORAGE_ENGINE"))
+	if err != nil {
+		log.Fatalf("invalid storage engine: %v", err)
+	}
 
 	// The macOS .app launches with no flags and cwd "/". Its Info.plist sets
 	// LSEnvironment LOGSONIC_APP=1, which LaunchServices injects ONLY on
@@ -167,6 +172,7 @@ func main() {
 		Host:          host,
 		Port:          port,
 		StoragePath:   storagePath,
+		StorageEngine: storageEngine,
 		Timeout:       60 * time.Second,
 		OpenBrowser:   openBrowser,
 		AutoPort:      autoPort,
@@ -195,6 +201,25 @@ func main() {
 			os.Exit(1)
 		}
 		log.Fatalf("Server failed: %v", err)
+	}
+}
+
+// resolveStorageEngine applies command-line > environment > default precedence
+// and rejects unknown values before the server opens any storage files.
+func resolveStorageEngine(flagValue, envValue string) (string, error) {
+	engine := strings.TrimSpace(flagValue)
+	if engine == "" {
+		engine = strings.TrimSpace(envValue)
+	}
+	if engine == "" {
+		engine = "auto"
+	}
+	engine = strings.ToLower(engine)
+	switch engine {
+	case "auto", "bleve", "template":
+		return engine, nil
+	default:
+		return "", fmt.Errorf("%q: expected auto, bleve, or template", engine)
 	}
 }
 
@@ -253,6 +278,7 @@ func printUsage() {
 	fmt.Println("  -host string      Host address to bind to (default: localhost or HOST env var)")
 	fmt.Println("  -port string      Port to listen on (default: 8080 or PORT env var)")
 	fmt.Println("  -storage string   Path to storage directory (default: per-user app data dir)")
+	fmt.Println("  -storage-engine   Storage engine: auto, bleve, or template (default auto; also LOGSONIC_STORAGE_ENGINE)")
 	fmt.Println("  -open             Open the web UI in your browser once the server starts")
 	fmt.Println("  -browser          Same as -open (CLI; does not launch the macOS app window)")
 	fmt.Println("  -auto-port        If the port is busy, bind the next free port instead of failing (default true; use -auto-port=false to disable)")
@@ -264,6 +290,7 @@ func printUsage() {
 	fmt.Println("  HOST                  Host address to bind to")
 	fmt.Println("  PORT                  Port to listen on")
 	fmt.Println("  STORAGE_PATH          Path to storage directory")
+	fmt.Println("  LOGSONIC_STORAGE_ENGINE Storage engine: auto, bleve, or template")
 	fmt.Println("  LOGSONIC_OPEN_BROWSER Open the web UI on start (1/true/yes/on)")
 	fmt.Println("  LOGSONIC_BROWSER      Same as LOGSONIC_OPEN_BROWSER; on Logsonic.app, skip the in-app window")
 	fmt.Println("  LOGSONIC_AUTO_PORT    Auto-select a free port if busy (1/true/yes/on)")

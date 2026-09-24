@@ -2,9 +2,11 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,13 +17,16 @@ import (
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/index/upsidedown/store/goleveldb"
 	"github.com/blevesearch/bleve/v2/mapping"
+	bolt "go.etcd.io/bbolt"
 )
 
 // Storage handles log data persistence using Bleve with time-based sharding
 type Storage struct {
-	baseDir string
-	mu      sync.RWMutex           // protects indices map
-	indices map[string]bleve.Index // Map of date -> index
+	baseDir    string
+	memoryOnly bool                   // Query cache for TemplateStorage; never creates persistent Bleve files.
+	mu         sync.RWMutex           // protects indices map
+	indices    map[string]bleve.Index // Map of date -> index
+	writerLock *bolt.DB
 }
 
 // StorageInterface defines the methods implemented by *Storage.
@@ -45,7 +50,7 @@ type StorageInterface interface {
 }
 
 // NewStorage initializes a new Storage instance
-func NewStorage(baseDir string) (*Storage, error) {
+func NewStorage(baseDir string) (_ *Storage, err error) {
 	// Canonicalize the path to prevent directory traversal via symlinks or
 	// relative segments before we create or open anything under it.
 	absDir, err := filepath.Abs(baseDir)
@@ -54,13 +59,25 @@ func NewStorage(baseDir string) (*Storage, error) {
 	}
 	baseDir = absDir
 
-	if err := os.MkdirAll(baseDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create storage directory: %w", err)
+	lock, err := openStorageLock(baseDir)
+	if err != nil {
+		return nil, err
 	}
 
 	storage := &Storage{
-		baseDir: baseDir,
-		indices: make(map[string]bleve.Index),
+		baseDir:    baseDir,
+		indices:    make(map[string]bleve.Index),
+		writerLock: lock,
+	}
+	defer func() {
+		if err != nil {
+			_ = storage.Close()
+		}
+	}()
+	if _, statErr := os.Stat(filepath.Join(baseDir, templateDirectory)); statErr == nil {
+		return nil, errors.New("storage contains template data; use storage-engine auto/template or a separate directory")
+	} else if !os.IsNotExist(statErr) {
+		return nil, statErr
 	}
 
 	// Attempt to load existing indices
@@ -101,6 +118,10 @@ func (s *Storage) Close() error {
 			firstErr = fmt.Errorf("failed to close index %s: %w", date, err)
 		}
 		delete(s.indices, date)
+	}
+	if s.writerLock != nil {
+		firstErr = errors.Join(firstErr, s.writerLock.Close())
+		s.writerLock = nil
 	}
 	return firstErr
 }
@@ -202,7 +223,9 @@ func (s *Storage) getOrCreateIndex(date string) (bleve.Index, error) {
 	indexPath := filepath.Join(s.baseDir, fmt.Sprintf("logs-%s.bleve", date))
 	var err error
 
-	if _, statErr := os.Stat(indexPath); os.IsNotExist(statErr) {
+	if s.memoryOnly {
+		index, err = bleve.NewUsing("", buildIndexMapping(), "scorch", bleve.Config.DefaultMemKVStore, nil)
+	} else if _, statErr := os.Stat(indexPath); os.IsNotExist(statErr) {
 		indexConfig := map[string]interface{}{"store": kvConfig}
 		index, err = bleve.NewUsing(indexPath, buildIndexMapping(), "scorch", goleveldb.Name, indexConfig)
 	} else {
@@ -394,6 +417,16 @@ func (s *Storage) PruneOlderThan(maxAge time.Duration) (int, error) {
 
 // List returns all available dates that have indices
 func (s *Storage) List() ([]string, error) {
+	if s.memoryOnly {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		dates := make([]string, 0, len(s.indices))
+		for date := range s.indices {
+			dates = append(dates, date)
+		}
+		sort.Strings(dates)
+		return dates, nil
+	}
 
 	// Get all .bleve directories in baseDir
 	pattern := filepath.Join(s.baseDir, "logs-*.bleve")

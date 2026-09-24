@@ -1,9 +1,11 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -25,6 +27,13 @@ func BenchmarkIndexSizeSpread(b *testing.B) {
 }
 
 func benchmarkIndexSize(b *testing.B, days int) {
+	benchmarkIndexSizeEngine(b, days, "bleve")
+}
+
+func BenchmarkTemplateIndexSizeDense(b *testing.B)  { benchmarkIndexSizeEngine(b, 1, "template") }
+func BenchmarkTemplateIndexSizeSpread(b *testing.B) { benchmarkIndexSizeEngine(b, 365, "template") }
+
+func benchmarkIndexSizeEngine(b *testing.B, days int, engine string) {
 	targetBytes := int64(defaultSizeBenchmarkMiB * 1024 * 1024)
 	if raw := os.Getenv("LOGSONIC_SIZE_BENCH_MB"); raw != "" {
 		mib, err := strconv.Atoi(raw)
@@ -37,10 +46,11 @@ func benchmarkIndexSize(b *testing.B, days int) {
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		dir := filepath.Join(b.TempDir(), "index")
-		store, err := NewStorage(dir)
+		store, err := NewStorageWithEngine(dir, engine)
 		if err != nil {
 			b.Fatal(err)
 		}
+		ingestStart := time.Now()
 
 		const batchSize = 10_000
 		base := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -91,6 +101,8 @@ func benchmarkIndexSize(b *testing.B, days int) {
 		if err := store.Close(); err != nil {
 			b.Fatal(err)
 		}
+		b.ReportMetric(time.Since(ingestStart).Seconds(), "ingest-s")
+		b.StopTimer()
 		indexBytes, err := directorySize(dir)
 		if err != nil {
 			b.Fatal(err)
@@ -100,6 +112,31 @@ func benchmarkIndexSize(b *testing.B, days int) {
 		b.ReportMetric(float64(indexBytes)/(1024*1024), "index-MiB")
 		b.ReportMetric(float64(indexBytes)/float64(rawBytes), "index/raw")
 		b.ReportMetric(float64(seq), "docs")
+		// Report the query-cache tradeoff separately from timed ingestion.
+		runtime.GC()
+		var after runtime.MemStats
+		reopenStart := time.Now()
+		reopened, err := NewStorageWithEngine(dir, "auto")
+		if err != nil {
+			b.Fatal(err)
+		}
+		b.ReportMetric(time.Since(reopenStart).Seconds(), "reopen-s")
+		runtime.GC()
+		runtime.ReadMemStats(&after)
+		// Absolute live Go heap after GC, not RSS or peak memory. Subtracting
+		// a pre-open sample is misleading while old indexes release caches.
+		b.ReportMetric(float64(after.HeapAlloc)/(1024*1024), "reopen-heap-MiB")
+		queryStart := time.Now()
+		result, err := reopened.SearchPage(context.Background(), SearchOptions{Query: "message:timeout", StartDate: base, EndDate: base.AddDate(0, 0, days), Limit: 100, SortBy: "timestamp", SortOrder: "desc", SkipDistribution: true})
+		if err != nil || int64(result.TotalCount) != seq {
+			_ = reopened.Close()
+			b.Fatalf("reopened query: count=%d want=%d err=%v", result.TotalCount, seq, err)
+		}
+		b.ReportMetric(float64(time.Since(queryStart).Microseconds())/1000, "query-ms")
+		if err := reopened.Close(); err != nil {
+			b.Fatal(err)
+		}
+		b.StartTimer()
 	}
 }
 

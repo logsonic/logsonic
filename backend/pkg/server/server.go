@@ -61,10 +61,11 @@ const contentSecurityPolicy = "default-src 'self'; img-src 'self' data: blob:; s
 // @BasePath /api/v1
 
 type Config struct {
-	Port        string
-	StoragePath string
-	Timeout     time.Duration
-	Host        string
+	Port          string
+	StoragePath   string
+	StorageEngine string
+	Timeout       time.Duration
+	Host          string
 
 	// OpenBrowser opens the web UI in the default browser once the server is
 	// listening. AutoPort makes Start scan upward from Port for a free port
@@ -110,7 +111,11 @@ func NewServer(cfg Config) (*Server, error) {
 	docs.SwaggerInfo.BasePath = "/api/v1"
 	docs.SwaggerInfo.Schemes = []string{"http"}
 
-	store, err := storage.NewStorage(cfg.StoragePath)
+	storageEngine := cfg.StorageEngine
+	if storageEngine == "" {
+		storageEngine = "auto"
+	}
+	store, err := storage.NewStorageWithEngine(cfg.StoragePath, storageEngine)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
 	}
@@ -121,6 +126,9 @@ func NewServer(cfg Config) (*Server, error) {
 	// directory) so it lives in a stable, writable location — the .app launches
 	// with cwd "/", where a relative .log2grok could not be created.
 	if err := l2g.LoadConfig(filepath.Join(cfg.StoragePath, "log2grok"), os.Stderr); err != nil {
+		if closeErr := store.Close(); closeErr != nil {
+			return nil, fmt.Errorf("failed to initialize log2grok config: %w (storage close: %v)", err, closeErr)
+		}
 		return nil, fmt.Errorf("failed to initialize log2grok config: %w", err)
 	}
 	// Initialize router with middleware
