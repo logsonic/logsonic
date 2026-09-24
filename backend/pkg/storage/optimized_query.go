@@ -2,8 +2,10 @@ package storage
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 
 	"github.com/blevesearch/bleve/v2/analysis"
 	"github.com/blevesearch/bleve/v2/mapping"
@@ -225,11 +227,16 @@ func (q *allFieldsQuery) Searcher(
 	}
 
 	searchers := make([]search.Searcher, 0, len(fields))
-	originalField := q.child.Field()
-	defer q.child.SetField(originalField)
 	for _, field := range fields {
-		q.child.SetField(field)
-		fieldSearcher, err := q.child.Searcher(ctx, reader, indexMapping, options)
+		fieldQuery, err := cloneFieldableQuery(q.child)
+		if err != nil {
+			for _, opened := range searchers {
+				_ = opened.Close()
+			}
+			return nil, err
+		}
+		fieldQuery.SetField(field)
+		fieldSearcher, err := fieldQuery.Searcher(ctx, reader, indexMapping, options)
 		if err != nil {
 			for _, opened := range searchers {
 				_ = opened.Close()
@@ -242,6 +249,42 @@ func (q *allFieldsQuery) Searcher(
 		return query.NewMatchNoneQuery().Searcher(ctx, reader, indexMapping, options)
 	}
 	return searcher.NewDisjunctionSearcher(ctx, reader, searchers, 0, options)
+}
+
+// A multi-index search invokes Searcher concurrently for each shard. Clone the
+// child before assigning a field so neither another shard nor the caller sees
+// a temporary field. Term ranges need a value copy: their compact numeric
+// bounds can contain non-UTF-8 bytes that JSON would replace.
+func cloneFieldableQuery(original query.FieldableQuery) (query.FieldableQuery, error) {
+	if termRange, ok := original.(*query.TermRangeQuery); ok {
+		clone := *termRange
+		if termRange.InclusiveMin != nil {
+			value := *termRange.InclusiveMin
+			clone.InclusiveMin = &value
+		}
+		if termRange.InclusiveMax != nil {
+			value := *termRange.InclusiveMax
+			clone.InclusiveMax = &value
+		}
+		if termRange.BoostVal != nil {
+			value := *termRange.BoostVal
+			clone.BoostVal = &value
+		}
+		return &clone, nil
+	}
+	kind := reflect.TypeOf(original)
+	if kind.Kind() != reflect.Pointer || kind.Elem().Kind() != reflect.Struct {
+		return nil, fmt.Errorf("cannot clone field query %T", original)
+	}
+	encoded, err := json.Marshal(original)
+	if err != nil {
+		return nil, fmt.Errorf("encode field query %T: %w", original, err)
+	}
+	clone := reflect.New(kind.Elem()).Interface()
+	if err := json.Unmarshal(encoded, clone); err != nil {
+		return nil, fmt.Errorf("decode field query %T: %w", original, err)
+	}
+	return clone.(query.FieldableQuery), nil
 }
 
 func searchableFields(reader index.IndexReader) ([]string, error) {

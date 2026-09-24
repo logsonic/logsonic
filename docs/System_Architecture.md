@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-LogSonic is an offline-first, desktop log analytics tool built as a single self-contained Go binary that embeds a React SPA frontend. It ingests logs from local files, parses them with Grok patterns, indexes them in time-sharded Bleve indices, and provides full-text search with visualization. An MCP server extension allows external AI agents (Claude Desktop, Cursor, Windsurf) to query logs programmatically.
+LogSonic is an offline-first, desktop log analytics tool built as a single self-contained Go binary that embeds a React SPA frontend. It ingests logs from local files, parses them with Grok patterns, stores rows in time-sharded indexes, and provides full-text search with visualization. Bleve remains the default storage engine; an opt-in template-compressed experiment stores compressed segments and rebuilds an in-memory Bleve search index. An MCP server extension allows external AI agents (Claude Desktop, Cursor, Windsurf) to query logs programmatically.
 
 ---
 
@@ -449,6 +449,8 @@ graph TB
 ---
 
 ## 10. Storage Engine Deep Dive
+
+Bleve remains the default for new storage directories. The opt-in template engine stores compressed row segments under `template-v1` and rebuilds disposable in-memory Scorch indexes on open; it preserves the current search evaluator and does not migrate Bleve data. See [Template-compressed storage](template-storage.md) for selection, trade-offs, and durability limits.
 
 ### Time-Sharding Strategy
 
