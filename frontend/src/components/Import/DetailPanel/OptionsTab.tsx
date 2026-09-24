@@ -62,9 +62,11 @@ export const OptionsTab: FC<OptionsTabProps> = ({ file, fileCount, onReparse }) 
   const preset = presetFromState(multiline);
 
   const setMultiline = (next: FileMultiline, debounce = false) => {
-    updateFileSessionOptions(file.id, { multiline: next });
+    const manual = { ...next };
+    delete manual.autoDetected;
+    updateFileSessionOptions(file.id, { multiline: manual });
     if (regexTimer.current) window.clearTimeout(regexTimer.current);
-    if (isHeaderPatternMissing(next)) return; // the gate explains; nothing to parse yet
+    if (isHeaderPatternMissing(manual)) return; // the gate explains; nothing to parse yet
     if (debounce) {
       regexTimer.current = window.setTimeout(() => onReparse(file.id), REGEX_REPARSE_MS);
     } else {
@@ -128,7 +130,9 @@ export const OptionsTab: FC<OptionsTabProps> = ({ file, fileCount, onReparse }) 
               type="button"
               className={`ls-imp-chip${preset === p.id ? ' ls-imp-chip--selected' : ''}`}
               onClick={() => {
-                if (preset !== p.id) setMultiline(stateFromPreset(p.id, multiline));
+                if (preset !== p.id || multiline.autoDetected) {
+                  setMultiline(stateFromPreset(p.id, multiline));
+                }
               }}
             >
               {p.label}

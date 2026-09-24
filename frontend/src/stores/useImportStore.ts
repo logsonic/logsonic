@@ -366,7 +366,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
     set(state => ({
       files: state.files.map(f =>
         f.id === fileId
-          ? { ...f, selectedPattern: pattern, isCustomPattern: pattern.name === DEFAULT_PATTERN.name }
+          ? { ...f, selectedPattern: pattern, automaticPattern: false, isCustomPattern: pattern.name === DEFAULT_PATTERN.name }
           : f
       ),
     }));
@@ -387,6 +387,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
       files: state.files.map(f => ({
         ...f,
         selectedPattern: pattern,
+        automaticPattern: false,
         isCustomPattern: pattern.name === DEFAULT_PATTERN.name,
       })),
     }));

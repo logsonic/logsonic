@@ -48,6 +48,9 @@ export interface ImportFile {
   // Pattern detection
   detectedPattern: Pattern | null;
   selectedPattern: Pattern | null;
+  // True only while the pattern is an automatic preview suggestion. Older
+  // file records without this flag retain literal-pattern upload behavior.
+  automaticPattern?: boolean;
   isCustomPattern: boolean;
   customPattern: Pattern | null;
   customPatternTokens: Record<string, string>;
@@ -95,6 +98,9 @@ export interface FileMultiline {
   enabled: boolean;
   mode: 'header' | 'indent';
   headerPattern: string;
+  // The backend treats an inferred header as a hint for mixed streams.
+  // Explicit user edits remove this marker and keep strict folding.
+  autoDetected?: boolean;
 }
 
 export const DEFAULT_MULTILINE: FileMultiline = {

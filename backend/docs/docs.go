@@ -2445,6 +2445,10 @@ const docTemplate = `{
         "types.MultilineConfig": {
             "type": "object",
             "properties": {
+                "auto_detected": {
+                    "description": "AutoDetected limits header folding to recognizable continuation lines.\nExplicit header configurations keep their original catch-all behavior.",
+                    "type": "boolean"
+                },
                 "enabled": {
                     "type": "boolean"
                 },
@@ -2681,7 +2685,8 @@ const docTemplate = `{
                 "day_rows": {
                     "type": "object",
                     "additionalProperties": {
-                        "type": "integer"
+                        "type": "integer",
+                        "format": "int64"
                     }
                 },
                 "days": {
