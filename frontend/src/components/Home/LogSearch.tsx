@@ -1,6 +1,7 @@
 import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";
 import { useQueryHistoryRecall } from "@/hooks/useQueryHistoryRecall";
 import type { LogResponse, WorkspaceTime } from "@/lib/api-types";
+import { applySynonymSuggestion, findSynonymSuggestions } from "@/lib/search-synonyms";
 import { cn } from "@/lib/utils";
 import { applyWorkspaceTimeToSearchState, searchStateToWorkspaceTime } from "@/lib/workspace-utils";
 import { useLogResultStore } from "@/stores/useLogResultStore";
@@ -179,6 +180,23 @@ export const LogSearch = ({
       .slice(0, 6); // Show at most 6 column suggestions
   }, [store.availableColumns]);
 
+  // Synonym suggestions for the terms already typed: "error" offers
+  // "exception", "fatal"… Purely a prompt -- the dictionary is static and the
+  // query is only rewritten when the user clicks a chip.
+  const synonymSuggestions = useMemo(
+    () => findSynonymSuggestions(localSearchQuery),
+    [localSearchQuery]
+  );
+
+  // Clicking a suggestion appends its term and refocuses, matching the syntax
+  // hints: it composes the query, it does not run the search.
+  const handleSynonymInsert = useCallback((term: string) => {
+    const suggestion = synonymSuggestions.find((s) => s.term === term);
+    if (!suggestion) return;
+    setLocalSearchQuery((current) => applySynonymSuggestion(current, suggestion));
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, [synonymSuggestions]);
+
   // Show hints when input focused or has content (but not when loading)
   const showHints = (isInputFocused || localSearchQuery.length > 0) && !isLoading;
 
@@ -340,6 +358,45 @@ export const LogSearch = ({
                 ))}
               </>
             )}
+          </div>
+        )}
+
+        {/* Synonym suggestions - related terms for what the user has typed */}
+        {showHints && synonymSuggestions.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 px-1 animate-in fade-in duration-150">
+            <span
+              className="text-[10px] font-semibold uppercase tracking-wider mr-0.5"
+              style={{ color: 'var(--ls-text-3)' }}
+            >
+              Also search:
+            </span>
+            {synonymSuggestions.map((suggestion) => (
+              <button
+                key={suggestion.term}
+                type="button"
+                onClick={() => handleSynonymInsert(suggestion.term)}
+                title={`Also search for "${suggestion.term}" (related to "${suggestion.matched}")`}
+                className="inline-flex items-center px-2 py-0.5 transition-colors"
+                style={{
+                  borderRadius: 4,
+                  border: '1px solid var(--ls-border)',
+                  background: 'var(--ls-bg-1)',
+                  fontFamily: 'var(--ls-font-mono)',
+                  fontSize: 11,
+                  color: 'var(--ls-text-2)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--ls-accent)';
+                  e.currentTarget.style.color = 'var(--ls-accent-text)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--ls-border)';
+                  e.currentTarget.style.color = 'var(--ls-text-2)';
+                }}
+              >
+                + {suggestion.term}
+              </button>
+            ))}
           </div>
         )}
 
