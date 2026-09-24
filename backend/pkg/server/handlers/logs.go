@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"logsonic/pkg/catalog"
 	storagepkg "logsonic/pkg/storage"
 	"logsonic/pkg/types"
 	"net/http"
@@ -28,9 +29,10 @@ import (
 // @Param start_date query string false "Start date for log retrieval (RFC3339 format)"
 // @Param end_date query string false "End date for log retrieval (RFC3339 format)"
 // @Param query query string false "Optional search query to filter logs"
-// @Param _src query string false "Optional comma-separated source filter"
+// @Param _src query string false "Optional comma-separated source filter. Stored _src names, or a source's display name / former display name (PATCH /sources/{name}), which resolve to the stored name"
 // @Param fields query string false "Optional comma-separated fields to return"
 // @Param include_distribution query boolean false "Include chart distribution metadata (default: true)"
+// @Param include_facets query boolean false "Include a field/value facet summary of the window (default: false; bounded scan of the newest rows, see facets.computed_over/sampled)"
 // @Success 200 {object} types.LogResponse "Logs with pagination, sorting, and time distribution metadata"
 // @Failure 400 {object} types.ErrorResponse "Bad request due to invalid parameters"
 // @Failure 500 {object} types.ErrorResponse "Internal server error"
@@ -131,6 +133,21 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 		}
 		includeDistribution = parsed
 	}
+	includeFacets := false
+	if raw := query.Get("include_facets"); raw != "" {
+		parsed, parseErr := strconv.ParseBool(raw)
+		if parseErr != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(types.ErrorResponse{
+				Status:  "error",
+				Error:   "Invalid include_facets parameter",
+				Code:    "INVALID_PARAMETER",
+				Details: "include_facets must be true or false",
+			})
+			return
+		}
+		includeFacets = parsed
+	}
 
 	// Set default date range (1 year ago to now)
 	now := time.Now()
@@ -196,6 +213,13 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 				sources = append(sources, source)
 			}
 		}
+		// Display names and aliases (PATCH /sources/{name}) resolve to the
+		// stored _src here, so a renamed source is searchable by any name it
+		// has had. Only this parameter resolves; _src:… inside the query
+		// string is a raw field match.
+		if h.Catalog != nil && len(sources) > 0 {
+			sources = h.Catalog.ResolveSources(sources)
+		}
 		if len(sources) == 0 {
 			totalTime := time.Since(startTime)
 			json.NewEncoder(w).Encode(types.LogResponse{
@@ -225,6 +249,7 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 	var logDistributionEntries []types.LogDistributionEntry
 	var totalCount int
 	var indexQueryTime time.Duration
+	var facets *types.FacetsResponse
 	var err error
 
 	if sortBy == "timestamp" {
@@ -241,6 +266,17 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 			SkipDistribution: !includeDistribution,
 		})
 		err = searchErr
+		if err == nil && includeFacets {
+			// Opt-in bounded scan of the window (not the page): see
+			// storage.Facets for why the counts are per-window, capped, and
+			// reported through computed_over / sampled.
+			facets, err = h.storage.Facets(r.Context(), storagepkg.SearchOptions{
+				Query:     searchQuery,
+				StartDate: startDate,
+				EndDate:   endDate,
+				Sources:   sources,
+			})
+		}
 		if err == nil {
 			pageLogs = pageResult.Logs
 			totalCount = pageResult.TotalCount
@@ -262,6 +298,10 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 		// bounded supported-sort policy.
 		allLogs, indexQueryTime, err = h.storage.Search(searchQuery, &startDate, &endDate, sources)
 		if err == nil {
+			if includeFacets {
+				// The legacy path already holds the whole window in memory.
+				facets = storagepkg.AggregateFacets(allLogs)
+			}
 			totalCount = len(allLogs)
 			endIndex := offset + limit
 			if endIndex > totalCount {
@@ -302,6 +342,10 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if facets != nil {
+		h.overlaySourceFacet(facets)
+	}
+
 	if offset >= totalCount {
 		offset = 0
 		pageLogs = []map[string]interface{}{}
@@ -329,6 +373,7 @@ func (h *Services) HandleReadAll(w http.ResponseWriter, r *http.Request) {
 		EndDate:          endDate.Format(time.RFC3339),
 		AvailableColumns: availableColumns,
 		LogDistribution:  logDistributionEntries,
+		Facets:           facets,
 	})
 }
 
@@ -545,8 +590,10 @@ func (h *Services) HandleClear(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Invalidate the system info cache since log data has changed
+	// Invalidate the system info cache since log data has changed, and
+	// reconcile the catalog (Clear bypasses the write path).
 	h.InvalidateInfoCache()
+	h.rebuildCatalog()
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":  "success",
@@ -620,8 +667,12 @@ func (h *Services) HandleDeleteByIds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Invalidate the system info cache since log data has changed
+	// Invalidate the system info cache since log data has changed, and
+	// reconcile the catalog for the days those IDs could live in.
 	h.InvalidateInfoCache()
+	if deletedCount > 0 {
+		h.rebuildCatalog(catalog.DaysForDocIDs(request.Ids)...)
+	}
 
 	// Return success response
 	json.NewEncoder(w).Encode(map[string]interface{}{

@@ -3,15 +3,36 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"logsonic/pkg/types"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/shirou/gopsutil/v3/host"
 )
+
+// osTypeOnce caches the platform string. gopsutil's host.Info() shells out
+// to the OS (measured 22 ms per call on macOS, which was the entire warm
+// cost of /info and blew spec now-10 C6's 20 ms budget on a cache hit);
+// the OS release cannot change while this process runs.
+var (
+	osTypeOnce sync.Once
+	osTypeStr  string
+)
+
+func osType() string {
+	osTypeOnce.Do(func() {
+		osTypeStr = runtime.GOOS
+		if hostInfo, err := host.Info(); err == nil {
+			osTypeStr = fmt.Sprintf("%s %s", hostInfo.Platform, hostInfo.PlatformVersion)
+		}
+	})
+	return osTypeStr
+}
 
 // @Summary Get system and storage information
 // @Description Retrieve detailed information about the system, storage, and application
@@ -45,21 +66,27 @@ func (h *Services) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	response := types.SystemInfoResponse{
 		Status: "success",
 	}
+	response.App.Version = h.Build.Version
+	if response.App.Version == "" {
+		response.App.Version = "dev"
+	}
+	response.App.Commit = h.Build.Commit
+	response.App.BuildDate = h.Build.BuildDate
 
 	// Define the StorageInfo type for consistent handling
 	type StorageInfoType struct {
-		TotalIndices     int      `json:"total_indices"`
-		AvailableDates   []string `json:"available_dates"`
-		TotalLogEntries  int      `json:"total_log_entries"`
-		StorageDirectory string   `json:"storage_directory"`
-		StorageSize      int64    `json:"storage_size_bytes"`
-		SourceNames      []string `json:"source_names"`
+		TotalIndices     int                     `json:"total_indices"`
+		AvailableDates   []string                `json:"available_dates"`
+		TotalLogEntries  int                     `json:"total_log_entries"`
+		StorageDirectory string                  `json:"storage_directory"`
+		StorageSize      int64                   `json:"storage_size_bytes"`
+		SourceNames      []string                `json:"source_names"`
+		Sources          []types.SourceRowsEntry `json:"sources"`
 	}
 
 	// Storage Information section - check cache first
 	var storageInfo StorageInfoType
 	var availableDates []string
-	var sourceNames []string
 	var totalLogEntries int
 	var storageSize int64
 	var storagePath string
@@ -90,17 +117,9 @@ func (h *Services) HandleInfo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		sourceNames, err = h.storage.GetSourceNames()
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(types.ErrorResponse{
-				Status:  "error",
-				Error:   "Failed to retrieve source names",
-				Code:    "SOURCE_NAMES_ERROR",
-				Details: err.Error(),
-			})
-			return
-		}
+		// Source names and row counts come from the catalog (now-10),
+		// not from a per-index scan; see pkg/catalog.
+		sourceNames, sources := h.catalogSources()
 
 		// Calculate total log entries and storage size
 		totalLogEntries = 0
@@ -122,7 +141,7 @@ func (h *Services) HandleInfo(w http.ResponseWriter, r *http.Request) {
 		storagePath = filepath.Clean(storagePath)
 
 		// Add protection against accessing directories outside of the expected area
-		err = filepath.Walk(storagePath, func(path string, info os.FileInfo, walkErr error) error {
+		walkErr := filepath.Walk(storagePath, func(path string, info os.FileInfo, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
 			}
@@ -147,6 +166,11 @@ func (h *Services) HandleInfo(w http.ResponseWriter, r *http.Request) {
 			}
 			return nil
 		})
+		if walkErr != nil {
+			// A partially unreadable storage dir is a diagnostics concern
+			// (now-13), not a reason to fail /info: report what was summed.
+			log.Printf("info: storage size walk incomplete: %v", walkErr)
+		}
 
 		// Create storage info structure
 		storageInfo = StorageInfoType{
@@ -156,6 +180,7 @@ func (h *Services) HandleInfo(w http.ResponseWriter, r *http.Request) {
 			StorageDirectory: storagePath,
 			StorageSize:      storageSize,
 			SourceNames:      sourceNames,
+			Sources:          sources,
 		}
 
 		// Cache the storage info
@@ -175,15 +200,6 @@ func (h *Services) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
-	// Host info
-	hostInfo, hostErr := host.Info()
-
-	// Prepare OS information
-	osType := runtime.GOOS
-	if hostErr == nil {
-		osType = fmt.Sprintf("%s %s", hostInfo.Platform, hostInfo.PlatformVersion)
-	}
-
 	response.SystemInfo = struct {
 		Hostname     string `json:"hostname"`
 		OSType       string `json:"os_type"`
@@ -198,7 +214,7 @@ func (h *Services) HandleInfo(w http.ResponseWriter, r *http.Request) {
 		} `json:"memory_usage"`
 	}{
 		Hostname:     hostname,
-		OSType:       osType,
+		OSType:       osType(),
 		Architecture: runtime.GOARCH,
 		GoVersion:    runtime.Version(),
 		NumCPU:       runtime.NumCPU(),

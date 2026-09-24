@@ -16,7 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import { ExpandedRow } from '@/components/Home/ExpandedRow';
 import { LogViewerSkeleton } from '@/components/Home/LogViewer/LogViewerSkeleton';
 import { Resizer } from '@/components/Home/Resizer';
-import { useFitRangeToData } from '@/hooks/useFitRangeToData';
+import { useFitRangeToData, useHasDataOutsideRange } from '@/hooks/useFitRangeToData';
 import { useSearchParser } from '@/hooks/useSearchParser.tsx';
 import { ColorRule, useColorRuleStore } from '@/stores/useColorRuleStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
@@ -321,6 +321,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
     return systemInfo?.storage_info?.total_log_entries === 0;
   }, [systemInfo]);
   const fitRangeToData = useFitRangeToData();
+  const hasDataOutsideRange = useHasDataOutsideRange();
 
   const autofitColumns = useCallback(() => {
     if (liveEnabled) return;
@@ -1203,7 +1204,7 @@ export const LogViewerTable = React.forwardRef((props, ref) => {
       return (
         <div className="flex flex-col items-center justify-center h-64 gap-3">
           <p className="text-muted-foreground">No logs match the current filters.</p>
-          {totalIndexed > 0 && (
+          {hasDataOutsideRange && (
             <Button
               variant="outline"
               size="sm"

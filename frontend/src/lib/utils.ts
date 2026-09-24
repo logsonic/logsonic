@@ -1,6 +1,9 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+// Bleve clause helpers used by the Fields panel (and later autocomplete).
+export * from "./query-clauses";
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }

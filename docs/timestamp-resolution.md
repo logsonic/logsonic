@@ -21,7 +21,7 @@ The anchor is the absolute reference used to fill missing components. It is chos
 2. The first fully qualified timestamp in the sample.
 3. Wall-clock now as a last resort.
 
-The import wizard previews each row's resolved timestamp with a confidence label: `exact`, `inferred`, `carried`, or `synthetic`.
+The import page's preview pane carries each row's resolved timestamp and confidence label (`exact`, `inferred`, `carried`, or `synthetic`) in the line-number gutter: hover a number to read the resolved value; amber means the resolver had to fill something in, red that it could not.
 
 ## When To Override
 

@@ -25,6 +25,30 @@ func setupTestStorage(t *testing.T) (*Storage, string) {
 	return store, dir
 }
 
+// sourceNamesForTest unions SourceStats over every day, standing in for the
+// deleted scan in tests that only care about the name set.
+func sourceNamesForTest(store *Storage) ([]string, error) {
+	dates, err := store.List()
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool)
+	for _, date := range dates {
+		stats, err := store.SourceStats(date)
+		if err != nil {
+			return nil, err
+		}
+		for _, s := range stats {
+			seen[s.Source] = true
+		}
+	}
+	names := make([]string, 0, len(seen))
+	for n := range seen {
+		names = append(names, n)
+	}
+	return names, nil
+}
+
 func makeLogs(timestamps []time.Time, source string) []map[string]interface{} {
 	logs := make([]map[string]interface{}, len(timestamps))
 	for i, ts := range timestamps {
@@ -462,19 +486,19 @@ func TestDeleteByIds_DoesNotCountMissingIDs(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// GetSourceNames (integration)
+// SourceStats (integration; per-day stats replaced the GetSourceNames scan)
 // ---------------------------------------------------------------------------
 
-func TestGetSourceNames(t *testing.T) {
+func TestSourceStatsListsEverySource(t *testing.T) {
 	store, _ := setupTestStorage(t)
 
 	ts := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
 	_ = store.Store(makeLogs([]time.Time{ts}, "app.log"), "app.log")
 	_ = store.Store(makeLogs([]time.Time{ts.Add(time.Hour)}, "sys.log"), "sys.log")
 
-	sources, err := store.GetSourceNames()
+	sources, err := sourceNamesForTest(store)
 	if err != nil {
-		t.Fatalf("GetSourceNames failed: %v", err)
+		t.Fatalf("SourceStats failed: %v", err)
 	}
 	if len(sources) < 2 {
 		t.Errorf("expected at least 2 sources, got %d: %v", len(sources), sources)
@@ -589,9 +613,9 @@ func TestStore_MultipleSourcesSameDate(t *testing.T) {
 		t.Errorf("expected 3 docs from 3 sources, got %d", count)
 	}
 
-	sources, err := store.GetSourceNames()
+	sources, err := sourceNamesForTest(store)
 	if err != nil {
-		t.Fatalf("GetSourceNames failed: %v", err)
+		t.Fatalf("SourceStats failed: %v", err)
 	}
 	if len(sources) != 3 {
 		t.Errorf("expected 3 source names, got %d: %v", len(sources), sources)
@@ -796,16 +820,16 @@ func TestSearch_MultipleSourcesKeepIndependentFields(t *testing.T) {
 		}
 	})
 
-	sources, err := store.GetSourceNames()
+	sources, err := sourceNamesForTest(store)
 	if err != nil {
-		t.Fatalf("GetSourceNames failed: %v", err)
+		t.Fatalf("SourceStats failed: %v", err)
 	}
 	sourceSet := make(map[string]bool, len(sources))
 	for _, source := range sources {
 		sourceSet[source] = true
 	}
 	if !sourceSet["nginx.access.log"] || !sourceSet["app.service.log"] || len(sourceSet) != 2 {
-		t.Fatalf("GetSourceNames returned wrong sources: %v", sources)
+		t.Fatalf("SourceStats returned wrong sources: %v", sources)
 	}
 }
 

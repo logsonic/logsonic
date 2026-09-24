@@ -1,0 +1,105 @@
+# Nightly bench + full E2E (spec: specs/now-11-ci-quality-gate.md, phase
+# 2b-ii). Separate from ci.yml because the §8-scale bench harness (a 10M-line
+# corpus, 365 real day-indices) takes far longer than a PR gate should, and
+# because §8 says budgets are "enforced as CI regressions... not absolute
+# gates, until two releases of data exist" -- that comparison only makes
+# sense against yesterday's numbers, which is a nightly cadence, not a PR one.
+#
+# The compare-against-baseline step is conditional on a committed
+# backend/bench/baseline.json existing: this repo has never run the harness
+# at full 10M-line scale (see TBD.md/ISSUES.md -- dev-machine runs so far are
+# at the 100k-line default, which is a correctness check, not a real
+# baseline), so there is nothing honest to compare against yet. A human
+# commits backend/bench/baseline.json from a real nightly run's bench.json
+# once the workflow has actually executed on a runner; until then this step
+# is a no-op, not a failure.
+name: Nightly bench
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  bench:
+    name: Bench harness (§8 budgets)
+    runs-on: ubuntu-latest
+    # A stuck search-after cursor (see pkg/storage/facets.go's stuck-cursor
+    # guard, added alongside this workflow) turned a dev-machine run of this
+    # exact harness into a 100%-CPU hang discovered by hand; the guard fixes
+    # that case, but an explicit ceiling is cheap insurance against a
+    # different pathology at 10M rows on an unfamiliar runner. 90m budget: at
+    # ~20k lines/sec (this machine's measured import rate) 10M lines is ~8
+    # minutes; histogram is the one scenario whose cost scales with corpus
+    # size and hasn't been measured past 100k rows.
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Run bench harness at §8 scale
+        # 10M lines / one day (dense import+search, matching §8's "10M rows"
+        # scenarios) and 365 day-indices at 50 docs/day (storage_open --
+        # measures per-index open overhead, not row count; see
+        # backend/bench/scenarios.go).
+        run: go run ./bench -out bench/output/bench.json
+        env:
+          LOGSONIC_BENCH_LINES: "10000000"
+          LOGSONIC_BENCH_DAYS: "1"
+          LOGSONIC_BENCH_STARTUP_DAYS: "365"
+          LOGSONIC_BENCH_STARTUP_DOCS_PER_DAY: "50"
+          LOGSONIC_BENCH_ITERATIONS: "30"
+          LOGSONIC_BENCH_WARMUP: "5"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: backend/bench/output/bench.json
+          retention-days: 90
+      - uses: actions/setup-node@v4
+        if: hashFiles('backend/bench/baseline.json') != ''
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Compare against committed baseline
+        if: hashFiles('backend/bench/baseline.json') != ''
+        run: node ../.github/scripts/compare-bench.mjs bench/baseline.json bench/output/bench.json
+      - name: Index-size amplification benchmark
+        run: go test ./pkg/storage -run '^$' -bench 'BenchmarkIndexSize' -benchtime=1x -v
+
+  e2e-full:
+    name: Full E2E set on the embedded build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - name: Playwright browser
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Build and embed the real frontend
+        run: npm run build && npm run build:copy
+        working-directory: frontend
+      - name: Build the embedded binary
+        run: go build -o /tmp/logsonic-embedded .
+        working-directory: backend
+      - name: Full E2E set (same driver ci.yml's e2e job uses)
+        run: bash .github/scripts/run-e2e.sh /tmp/logsonic-embedded

@@ -2,6 +2,7 @@
 
 > **Drop a log file or livestream one. Search it in seconds. Keep it fully offline. Let your AI agent query it.**
 
+[![CI](https://github.com/logsonic/logsonic/actions/workflows/ci.yml/badge.svg)](https://github.com/logsonic/logsonic/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/logsonic/logsonic?label=release)](https://github.com/logsonic/logsonic/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/logsonic/logsonic?style=social)](https://github.com/logsonic/logsonic/stargazers)
@@ -10,13 +11,14 @@ LogSonic is a local-first log analytics app for Windows, Mac, and Linux. One sel
 
 <img src="demo/demo.gif" alt="LogSonic demo: import logs, search them, then livestream rows with pause and resume" width="1000" />
 
-## New in v1.6.0
+## New in v1.7.0
 
-- **Native macOS app.** Install a signed, notarized, and stapled `Logsonic.app` with Homebrew, then launch it from Applications, Spotlight, Launchpad, or Finder.
-- **Self-contained desktop experience.** The app starts LogSonic on an available loopback port, displays the UI in its own native window, and shuts down the server when you quit.
-- **Desktop controls when you need them.** Open the same session in a browser, inspect the server log, or use the bundled `logsonic` CLI without installing anything else.
-- **Faster large-log exploration.** Search results render before deferred chart metadata, responses can return only visible fields, and long tables keep only nearby rows mounted for smoother scrolling.
-- **Private by default.** The native app keeps its unauthenticated server bound to `127.0.0.1`, so it is not exposed to other devices on your network.
+- **Redesigned import flow.** A single-surface import page replaces the old wizard, with async ingest jobs, live SSE progress, cancellation, and path-based preview for large files.
+- **Sources catalog.** Manage imported sources from a Storage settings page — rename, re-import (without losing history or aliases), or delete a source, with per-day retention overrides.
+- **Watched folders.** Point LogSonic at a folder and it ingests new files automatically, with a settings page and status-bar indicator.
+- **Saved queries and query history**, plus a Fields panel for click-to-filter/exclude facets.
+- **`logsonic open`** launches with pattern auto-detection and a bundled sample import for a zero-config first run.
+- **Hardening and fixes.** Tighter CSP and Host-header allow-listing, JSON-only mutating routes, fixed double-decoding of search queries (`%` in queries), corrected sort order for rows sharing a timestamp, and a fix for facet scans hanging on a stuck cursor.
 
 ## Livestream
 
@@ -90,6 +92,7 @@ For Linux, Windows, Docker, source builds, storage locations, and the macOS app 
 - Saved local workspaces for recurring investigations.
 - Color rules, event histogram, source filters, and dark/light themes.
 - Local file-based storage with retention controls.
+- `logsonic open app.log` from any terminal imports a file into the running app (starting it if needed) and prints the link to it.
 
 ## Documentation
 
@@ -99,8 +102,8 @@ For Linux, Windows, Docker, source builds, storage locations, and the macOS app 
 - [Live Streaming](docs/live-streaming.md): `logsonic tail`, stdin streaming, server-side file following, and demos.
 - [Timestamp Resolution](docs/timestamp-resolution.md): how LogSonic derives real timestamps and when to override.
 - [Development](docs/development.md): local backend/frontend setup, tests, E2E, and Swagger generation.
-- [Architecture](docs/Architecture.md): backend, frontend, storage, and MCP architecture.
-- [Production Readiness Plan](docs/production-readiness-plan.md): bounded import and search, automated releases, secure self-update, rollout gates, and deferred hardening.
+- [Architecture](docs/System_Architecture.md): backend, frontend, storage, ingest, search, and MCP architecture.
+- [Roadmap](ROADMAP.md): the desktop-first principles, what is planned for the next releases, and what is deliberately out of scope.
 - [MCP Setup](mcp/README.md): configure Claude Desktop, Cursor, Windsurf, or another MCP client.
 - [Agent Playbook](mcp/SKILLS.md): query patterns and workflow guidance for AI clients.
 

@@ -1,11 +1,10 @@
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useFitRangeToData } from '@/hooks/useFitRangeToData';
+import { useFitRangeToData, useHasDataOutsideRange } from '@/hooks/useFitRangeToData';
 import { LogResponse } from '@/lib/api-types';
 import { cn } from '@/lib/utils';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
-import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import { parseISO } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { ChevronDown, ChevronUp, Loader2, Maximize2, RefreshCw, X } from 'lucide-react';
@@ -249,8 +248,8 @@ export default function LogDistributionChart() {
   
   const searchStore = useSearchQueryParamsStore();
   const { logData, isLoading } = useLogResultStore();
-  const { systemInfo } = useSystemInfoStore();
   const fitRangeToData = useFitRangeToData();
+  const hasDataOutsideRange = useHasDataOutsideRange();
 
   // Ref to the chart container
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -658,7 +657,7 @@ export default function LogDistributionChart() {
               ) : (
                 <>
                   <span>No data in the selected time range.</span>
-                  {(systemInfo?.storage_info?.total_log_entries ?? 0) > 0 && (
+                  {hasDataOutsideRange && (
                     <Button
                       variant="outline"
                       size="sm"

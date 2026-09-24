@@ -1,0 +1,20 @@
+# lychee config (spec: specs/now-11-ci-quality-gate.md, phase 2, external
+# link check). Lychee 0.24 has no config-file key for input paths -- `inputs`
+# is positional-only -- so the file set lives in docs.yml's `lychee` step
+# args, not here; keep it matching the default set in check-links.sh's own
+# file list so the two checkers agree on what "the docs" are.
+max_retries = 3
+timeout = 20
+exclude_loopback = true
+
+exclude = [
+  # No workflow has ever run on GitHub for this repo (the badge only exists
+  # once a run has happened, and this branch is never pushed), so the badge
+  # image 404s. Remove this line once dev/main has been pushed and a CI run
+  # has completed at least once.
+  '''https://github\.com/logsonic/logsonic/actions/workflows/ci\.yml/badge\.svg''',
+  # GitHub returns a generic 404 for unauthenticated/non-browser requests to
+  # /stargazers regardless of a GITHUB_TOKEN (verified by hand 2026-09-02:
+  # the repo is real, public, and has stars via the API) -- not a dead link.
+  '''https://github\.com/logsonic/logsonic/stargazers''',
+]

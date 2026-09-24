@@ -33,9 +33,11 @@ type IngestSessionOptions struct {
 	// Multiline configures folding of physical lines into logical log
 	// records before pattern matching, for formats where a single log
 	// statement spans multiple lines (stack traces, multi-line JSON,
-	// etc). Nil/disabled preserves the historical one-line-per-record
+	// etc). Disabled preserves the historical one-line-per-record
 	// behaviour. Folding is applied on /parse (including autosuggest)
-	// as well as ingest and live tail.
+	// as well as ingest and live tail. On /parse only, an absent field
+	// (nil) means "auto-detect a layout from the sample"; an explicit
+	// {"enabled": false} means "do not fold", the same as on ingest.
 	Multiline *MultilineConfig `json:"multiline,omitempty"`
 }
 
@@ -89,10 +91,82 @@ type ParseRequest struct {
 	Multi bool `json:"multi,omitempty"`
 }
 
-// IngestFileRequest represents the structure of the file-based ingest API request
+// IngestFileRequest asks the server to ingest a file it can read by absolute
+// path into an existing ingest session (spec now-08). LogFileName is the
+// pre-1.7 name of the same field, accepted for one release.
 type IngestFileRequest struct {
-	LogFileName string `json:"log_file_name"`
-	SessionID   string `json:"session_id,omitempty"`
+	SessionID string `json:"session_id"`
+	Path      string `json:"path"`
+	// Deprecated: use Path.
+	LogFileName string `json:"log_file_name,omitempty"`
+	// IncludeRotated also ingests app.log.N / app-YYYY-MM-DD.log siblings,
+	// oldest first, under the same session and source.
+	IncludeRotated bool `json:"include_rotated,omitempty"`
+}
+
+// IngestFileResponse is the immediate 202 response to POST /ingest/file: the
+// job has been accepted and started in the background (spec now-08 phase 2).
+// Progress and the final result arrive via IngestJob, either polled from
+// GET /ingest/jobs or pushed as "ingest_progress" SSE events on
+// GET /live/events.
+type IngestFileResponse struct {
+	Status  string   `json:"status"` // "accepted"
+	JobID   string   `json:"job_id"`
+	Path    string   `json:"path"`    // canonical path of the base file
+	Members []string `json:"members"` // every file that will be read, in order
+}
+
+// IngestJob reports the live or final state of one path-based ingest
+// (spec now-08 phase 2). State is one of running|done|cancelled|error.
+type IngestJob struct {
+	JobID         string   `json:"job_id"`
+	SessionID     string   `json:"session_id"`
+	Path          string   `json:"path"`
+	Members       []string `json:"members"`
+	Compression   string   `json:"compression,omitempty"`
+	BytesRead     int64    `json:"bytes_read"`
+	BytesTotal    int64    `json:"bytes_total,omitempty"`
+	Lines         int64    `json:"lines"`
+	RowsStored    int64    `json:"rows_stored"`
+	RowsFailed    int64    `json:"rows_failed"`
+	RateLinesPerS float64  `json:"rate_lines_per_s"`
+	State         string   `json:"state"`
+	Error         string   `json:"error,omitempty"`
+}
+
+// IngestJobsListResponse is the body of GET /ingest/jobs.
+type IngestJobsListResponse struct {
+	Jobs []IngestJob `json:"jobs"`
+}
+
+// PreviewFileRequest asks for the first few lines of a file by absolute
+// path, without creating an ingest session (spec now-08's "Preview by path
+// too" decision) -- the native-drop wizard flow uses this instead of a
+// browser File read, since a native drop only ever gets a path.
+type PreviewFileRequest struct {
+	Path string `json:"path"`
+	// Lines caps how many lines to read; default 100, capped server-side.
+	Lines int `json:"lines,omitempty"`
+}
+
+// PreviewFileResponse is the first N lines plus enough to estimate the
+// file's shape without reading all of it. ApproxLines is exact once the
+// whole file fit within the requested Lines; otherwise, for an uncompressed
+// file, it's extrapolated from the sample's average bytes-per-line against
+// SizeBytes; for a compressed file it's only the count of lines actually
+// returned (a lower bound), since the on-disk size is the compressed size
+// and the true line count depends on a compression ratio this endpoint
+// doesn't know without decompressing the whole file.
+type PreviewFileResponse struct {
+	Lines       []string `json:"lines"`
+	ApproxLines int64    `json:"approx_lines"`
+	Compressed  string   `json:"compressed,omitempty"`
+	SizeBytes   int64    `json:"size_bytes"`
+}
+
+// IngestJobActionResponse is the body of DELETE /ingest/jobs/{id}.
+type IngestJobActionResponse struct {
+	Status string `json:"status"` // "cancelling", or the job's terminal state if it had already finished
 }
 
 type IngestResponse struct {
@@ -190,14 +264,25 @@ type ErrorResponse struct {
 
 // SystemInfoResponse contains detailed information about the system and storage
 type SystemInfoResponse struct {
-	Status      string `json:"status"`
+	Status string `json:"status"`
+	// App identifies the server binary (from goreleaser ldflags). The UI
+	// prefers this over its own bundle version so a stale app shell or a
+	// mismatched CLI is visible in the status bar and About page.
+	App struct {
+		Version   string `json:"version"`
+		Commit    string `json:"commit,omitempty"`
+		BuildDate string `json:"build_date,omitempty"`
+	} `json:"app"`
 	StorageInfo struct {
 		TotalIndices     int      `json:"total_indices"`
 		AvailableDates   []string `json:"available_dates"`
 		TotalLogEntries  int      `json:"total_log_entries"`
 		StorageDirectory string   `json:"storage_directory"`
 		StorageSize      int64    `json:"storage_size_bytes"`
-		SourceNames      []string `json:"source_names"`
+		// SourceNames is kept for existing clients; Sources carries the
+		// same names with their row counts from the sources catalog.
+		SourceNames []string          `json:"source_names"`
+		Sources     []SourceRowsEntry `json:"sources"`
 	} `json:"storage_info"`
 	SystemInfo struct {
 		Hostname     string `json:"hostname"`
@@ -252,6 +337,32 @@ type LogDistributionEntry struct {
 	SourceCounts map[string]int `json:"source_counts"`
 }
 
+// FacetValue is one value of a faceted field with its count in the window.
+type FacetValue struct {
+	Value     string `json:"value"`
+	Count     int    `json:"count"`
+	Truncated bool   `json:"truncated"`
+}
+
+// FacetField is one parsed field with its distinct-value count and, unless
+// it is high-cardinality (IDs, sequence numbers), its top values.
+type FacetField struct {
+	Name            string       `json:"name"`
+	Distinct        int          `json:"distinct"`
+	HighCardinality bool         `json:"high_cardinality"`
+	Values          []FacetValue `json:"values"`
+}
+
+// FacetsResponse is the opt-in (include_facets=true) field/value summary of
+// the current search window. Counts are exact for the rows aggregated
+// (ComputedOver); when the window held more rows than the scan cap, Sampled
+// is true and the counts describe the newest rows only.
+type FacetsResponse struct {
+	ComputedOver int          `json:"computed_over"`
+	Sampled      bool         `json:"sampled"`
+	Fields       []FacetField `json:"fields"`
+}
+
 // LogResponse represents the response for log retrieval with distribution
 type LogResponse struct {
 	Status           string                   `json:"status"`
@@ -269,6 +380,8 @@ type LogResponse struct {
 	EndDate          string                   `json:"end_date"`
 	AvailableColumns []string                 `json:"available_columns"`
 	LogDistribution  []LogDistributionEntry   `json:"log_distribution"`
+	// Facets is present only when the request asked for include_facets=true.
+	Facets *FacetsResponse `json:"facets,omitempty"`
 }
 
 // WorkspaceTime captures either a relative time range that should be
@@ -315,8 +428,28 @@ type Workspace struct {
 	FacetFields   []string               `json:"facet_fields,omitempty"`
 	Visualization WorkspaceVisualization `json:"visualization"`
 	Favorite      bool                   `json:"favorite"`
-	CreatedAt     string                 `json:"created_at"`
-	UpdatedAt     string                 `json:"updated_at"`
+	// SavedQueries are named query+time+source snapshots a user starred
+	// while investigating in this workspace (spec now-03). Omitted (not an
+	// empty array) on a workspace with none, so a pre-now-03 workspace file
+	// unmarshals with a nil slice, not a JSON parse error.
+	SavedQueries []SavedQuery `json:"saved_queries,omitempty"`
+	CreatedAt    string       `json:"created_at"`
+	UpdatedAt    string       `json:"updated_at"`
+}
+
+// SavedQuery is one starred query+time+source snapshot inside a Workspace
+// (spec now-03). CreatedAt is a string, matching Workspace's own
+// CreatedAt/UpdatedAt convention (RFC3339Nano via the frontend or
+// pkg/workspaces/store.go's nowString()), not time.Time -- this struct is
+// always built client-side and round-tripped, never parsed from a
+// less-structured source that would need time.Time's stricter unmarshaling.
+type SavedQuery struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Query     string         `json:"query,omitempty"`
+	Time      *WorkspaceTime `json:"time,omitempty"`
+	Sources   []string       `json:"sources,omitempty"`
+	CreatedAt string         `json:"created_at"`
 }
 
 type WorkspaceListResponse struct {
@@ -379,4 +512,201 @@ type LogDistributionResponse struct {
 	StartDate       string                 `json:"start_date"`
 	EndDate         string                 `json:"end_date"`
 	LogDistribution []LogDistributionEntry `json:"log_distribution"`
+}
+
+// SourceRowsEntry is the compact per-source line on /info.
+type SourceRowsEntry struct {
+	Name string `json:"name"`
+	Rows int64  `json:"rows"`
+}
+
+// SourceOrigin records where a source's rows came from. Kind is one of
+// file | stdin | tail | watch | otlp | case | unknown ("unknown" is what a
+// catalog rebuild assigns to a source it discovered in the index without
+// ever having seen an ingest for it).
+type SourceOrigin struct {
+	Kind string `json:"kind"`
+	Path string `json:"path,omitempty"`
+	Host string `json:"host,omitempty"`
+}
+
+// SourceImport is one ingest session/job that contributed rows to a source.
+type SourceImport struct {
+	At    time.Time `json:"at"`
+	Rows  int64     `json:"rows"`
+	Path  string    `json:"path,omitempty"`
+	JobID string    `json:"job_id,omitempty"`
+}
+
+// SourceEntry is one row of the sources catalog (<storage>/sources.json),
+// keyed by Name, which is the stored _src value.
+type SourceEntry struct {
+	Name string `json:"name"`
+	// DisplayName is a UI-level rename (spec now-10 "Rename"); the index
+	// keeps Name as _src. Every past DisplayName is kept in Aliases so a
+	// search by any of them resolves to Name (see catalog.ResolveSources).
+	DisplayName string       `json:"display_name,omitempty"`
+	Aliases     []string     `json:"aliases"`
+	Origin      SourceOrigin `json:"origin"`
+	PatternName string       `json:"pattern_name,omitempty"`
+	Pattern     string       `json:"pattern,omitempty"`
+	// ImportOptions is the last path-backed ingest session's full options
+	// (pattern, custom patterns, timestamp config, meta._src …) — what a
+	// re-import replays so the rows land under the same _src. Only set by
+	// imports that have an origin path; browser uploads can't be replayed.
+	ImportOptions *IngestSessionOptions `json:"import_options,omitempty"`
+	Rows          int64                 `json:"rows"`
+	BytesRaw      int64                 `json:"bytes_raw"`
+	FirstTS       *time.Time            `json:"first_ts,omitempty"`
+	LastTS        *time.Time            `json:"last_ts,omitempty"`
+	// Days lists every day-index holding rows for this source (sorted);
+	// DayRows is the per-day count behind it, which is what lets a rebuild
+	// after a prune or a row delete touch only the affected days.
+	Days      []string         `json:"days"`
+	DayRows   map[string]int64 `json:"day_rows"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
+	Imports   []SourceImport   `json:"imports"`
+}
+
+// SourcesResponse is GET /sources and POST /sources/rebuild.
+type SourcesResponse struct {
+	Sources []SourceEntry `json:"sources"`
+}
+
+// SourceDeleteResponse is DELETE /sources/{name}.
+type SourceDeleteResponse struct {
+	Status      string   `json:"status"`
+	Name        string   `json:"name"`
+	RowsDeleted int      `json:"rows_deleted"`
+	DaysTouched []string `json:"days_touched"`
+	// DaysRemoved lists day-indices deleted from disk because the source
+	// was the last thing in them.
+	DaysRemoved []string `json:"days_removed"`
+}
+
+// SourceRenameRequest is the PATCH /sources/{name} body.
+type SourceRenameRequest struct {
+	DisplayName string `json:"display_name"`
+}
+
+// SourceReimportResponse is POST /sources/{name}/reimport: the old rows are
+// gone and a path-ingest job (see IngestJob) is running for the same path
+// with the recorded options.
+type SourceReimportResponse struct {
+	Status      string `json:"status"`
+	JobID       string `json:"job_id"`
+	SessionID   string `json:"session_id"`
+	Path        string `json:"path"`
+	RowsDeleted int    `json:"rows_deleted"`
+}
+
+// StorageDay is one row of the per-day table on GET /storage.
+type StorageDay struct {
+	Date  string `json:"date"`
+	Rows  int64  `json:"rows"`
+	Bytes int64  `json:"bytes"`
+}
+
+// StorageResponse is GET /storage and PUT /storage. RetentionDays is the
+// value in effect; RetentionSource says where it came from — "config"
+// (<storage>/config.json, set from the UI), "flag" (-retention-days or
+// RETENTION_DAYS), or "none" (nothing set; 0 = keep everything).
+// RetentionDefault is what the flag/env provides, i.e. what clearing the
+// override falls back to.
+type StorageResponse struct {
+	Status           string       `json:"status"`
+	RetentionDays    int          `json:"retention_days"`
+	RetentionSource  string       `json:"retention_source"`
+	RetentionDefault int          `json:"retention_default"`
+	Days             []StorageDay `json:"days"`
+	// TotalBytes is the sum of the day-index directories only — not the
+	// whole storage dir (which /info reports and which also holds
+	// sources.json, workspaces.json and the pattern library).
+	TotalBytes int64  `json:"total_bytes"`
+	Path       string `json:"path"`
+	ConfigPath string `json:"config_path"`
+}
+
+// StorageUpdateRequest is the PUT /storage body. A null retention_days
+// clears the override so the flag/env default applies again; 0 keeps
+// everything.
+type StorageUpdateRequest struct {
+	RetentionDays *int `json:"retention_days"`
+}
+
+// StorageDayDeleteResponse is DELETE /storage/days/{date}.
+type StorageDayDeleteResponse struct {
+	Status      string `json:"status"`
+	Date        string `json:"date"`
+	RowsDeleted int64  `json:"rows_deleted"`
+}
+
+// WatchRequest creates a folder watch (spec now-04): every file in Dir whose
+// base name matches Glob is ingested when it appears and followed as it
+// grows. Pattern is "" or "auto" for per-file detection, else a saved Grok
+// pattern name.
+type WatchRequest struct {
+	Dir       string `json:"dir"`
+	Glob      string `json:"glob,omitempty"`
+	Pattern   string `json:"pattern,omitempty"`
+	Recursive bool   `json:"recursive,omitempty"`
+}
+
+// WatchFile is one tracked file's status. State is pending | ingesting |
+// following | done | skipped | error — "done" is a compressed file whose
+// one-shot ingest finished (it cannot be followed); "skipped" is a file
+// beyond the 100-per-watch cap.
+type WatchFile struct {
+	Path    string `json:"path"`
+	Offset  int64  `json:"offset"`
+	Size    int64  `json:"size"`
+	State   string `json:"state"`
+	Error   string `json:"error,omitempty"`
+	Source  string `json:"source"`
+	Pattern string `json:"pattern,omitempty"`
+}
+
+// Watch is a folder watch with its live file snapshot.
+type Watch struct {
+	ID string `json:"id"`
+	WatchRequest
+	Paused    bool      `json:"paused"`
+	CreatedAt time.Time `json:"created_at"`
+	// Error is set when the directory itself can't be read (deleted,
+	// permissions); the watch keeps sweeping and clears it when it can.
+	Error string      `json:"error,omitempty"`
+	Files []WatchFile `json:"files"`
+}
+
+// WatchesResponse is GET /watches.
+type WatchesResponse struct {
+	Watches []Watch `json:"watches"`
+}
+
+// SampleInfo describes one bundled sample log (GET /samples).
+type SampleInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Lines       int    `json:"lines"`
+	Bytes       int    `json:"bytes"`
+	License     string `json:"license"`
+	Source      string `json:"source"`
+	PatternName string `json:"pattern_name"`
+}
+
+// SamplesResponse is GET /samples.
+type SamplesResponse struct {
+	Samples []SampleInfo `json:"samples"`
+}
+
+// UIFocusRequest is POST /ui/focus: ask the app window to come to the
+// front, optionally at a route (a "#/..." hash).
+type UIFocusRequest struct {
+	Route string `json:"route,omitempty"`
+}
+
+// UIFocusEvent is the "ui_focus" SSE broadcast on /live/events.
+type UIFocusEvent struct {
+	Route string `json:"route,omitempty"`
 }

@@ -27,6 +27,7 @@ outdir="${3:?app-macos.sh: missing output dir}"
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 swift_src="$script_dir/../macos/LogsonicApp.swift"
 listening_src="$script_dir/../macos/ListeningURL.swift"
+dragstrip_src="$script_dir/../macos/DragStrip.swift"
 # App icon source: the square "blitz" mark only (no wordmark). Defaults to the
 # committed SVG, with a pre-rendered PNG as the no-librsvg fallback. We do NOT
 # use the wide logo.png — squished into a square icon it distorts badly.
@@ -62,6 +63,7 @@ chmod 755 "$app/Contents/MacOS/logsonic"
 command -v swiftc >/dev/null || { echo "app-macos.sh: swiftc not found (install Xcode command line tools)" >&2; exit 1; }
 [ -f "$swift_src" ] || { echo "app-macos.sh: missing GUI source at $swift_src" >&2; exit 1; }
 [ -f "$listening_src" ] || { echo "app-macos.sh: missing GUI source at $listening_src" >&2; exit 1; }
+[ -f "$dragstrip_src" ] || { echo "app-macos.sh: missing GUI source at $dragstrip_src" >&2; exit 1; }
 swift_build=$(mktemp -d)
 icon_tmp=""
 notary_tmp=""
@@ -72,8 +74,8 @@ cleanup() {
 }
 trap cleanup EXIT
 swift_flags=(-O -framework AppKit -framework WebKit)
-swiftc "${swift_flags[@]}" -target arm64-apple-macos11  "$listening_src" "$swift_src" -o "$swift_build/LogsonicApp-arm64"
-swiftc "${swift_flags[@]}" -target x86_64-apple-macos11 "$listening_src" "$swift_src" -o "$swift_build/LogsonicApp-x86_64"
+swiftc "${swift_flags[@]}" -target arm64-apple-macos11  "$listening_src" "$dragstrip_src" "$swift_src" -o "$swift_build/LogsonicApp-arm64"
+swiftc "${swift_flags[@]}" -target x86_64-apple-macos11 "$listening_src" "$dragstrip_src" "$swift_src" -o "$swift_build/LogsonicApp-x86_64"
 lipo -create "$swift_build/LogsonicApp-arm64" "$swift_build/LogsonicApp-x86_64" \
   -o "$app/Contents/MacOS/LogsonicApp"
 chmod 755 "$app/Contents/MacOS/LogsonicApp"

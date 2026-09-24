@@ -1,7 +1,11 @@
 import { DateTimeRangeButton } from "@/components/DateRangePicker/DateTimeRangeButton";
-import type { LogResponse } from "@/lib/api-types";
+import { useQueryHistoryRecall } from "@/hooks/useQueryHistoryRecall";
+import type { LogResponse, WorkspaceTime } from "@/lib/api-types";
+import { applySynonymSuggestion, findSynonymSuggestions } from "@/lib/search-synonyms";
 import { cn } from "@/lib/utils";
+import { applyWorkspaceTimeToSearchState, searchStateToWorkspaceTime } from "@/lib/workspace-utils";
 import { useLogResultStore } from "@/stores/useLogResultStore";
+import type { QueryHistoryEntry } from "@/stores/useQueryHistoryStore";
 import { useSearchQueryParamsStore } from "@/stores/useSearchQueryParams";
 import { ArrowRight, HelpCircle, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -9,6 +13,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { PerformanceMetricsPopover } from "./PerformanceMetricsPopover";
 import { QueryHelperPopover } from "./QueryHelperPopover";
+import { SavedQueriesMenu } from "./SavedQueriesMenu";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 
 // Syntax hint chips shown below the search bar when focused
@@ -72,27 +77,84 @@ export const LogSearch = ({
     setLocalSearchQuery(e.target.value);
   }, []);
 
+  // ↑/↓ shell-style history recall (spec now-03). Recalling restores the
+  // full search context (query + time + sources), not just the input text
+  // -- but does not execute a search; Enter/Search still does that, the
+  // same as normal typing.
+  const handleRecallContext = useCallback((entry: QueryHistoryEntry) => {
+    const search = useSearchQueryParamsStore.getState();
+    search.setSources(entry.sources ?? []);
+    useSearchQueryParamsStore.setState(applyWorkspaceTimeToSearchState(entry.time, search));
+  }, []);
+
+  // What time/sources looked like before a recall session started, so
+  // cancelling it (Esc, or ↓ past the newest entry) restores them -- a
+  // recall session changes context as a preview, not a commit.
+  const preRecallContextRef = useRef<{ time: WorkspaceTime; sources: string[] } | null>(null);
+  const handleRecallSessionStart = useCallback(() => {
+    const search = useSearchQueryParamsStore.getState();
+    preRecallContextRef.current = {
+      time: searchStateToWorkspaceTime(search),
+      sources: [...search.sources],
+    };
+  }, []);
+  const handleRecallSessionEnd = useCallback(() => {
+    const captured = preRecallContextRef.current;
+    if (!captured) return;
+    preRecallContextRef.current = null;
+    const search = useSearchQueryParamsStore.getState();
+    search.setSources(captured.sources);
+    useSearchQueryParamsStore.setState(applyWorkspaceTimeToSearchState(captured.time, search));
+  }, []);
+
+  const recall = useQueryHistoryRecall(
+    localSearchQuery,
+    setLocalSearchQuery,
+    handleRecallContext,
+    handleRecallSessionStart,
+    handleRecallSessionEnd
+  );
+
   const handleSearch = useCallback(() => {
     store.resetPagination();
     store.setSearchQuery(localSearchQuery);
     store.triggerSearch();
-  }, [localSearchQuery, store]);
+    recall.reset();
+  }, [localSearchQuery, store, recall]);
 
   const handleClearSearch = useCallback(() => {
     setLocalSearchQuery('');
     store.clearSearchQuery();
 
     store.resetPagination();
-  }, [store]);
+    recall.reset();
+  }, [store, recall]);
+
+  // Applying a saved query or a history entry from the dropdown is a
+  // deliberate click, not passive ↑/↓ browsing -- unlike recall, it runs
+  // the search immediately (spec now-03 step 5: "click = apply").
+  const handleApplyEntry = useCallback((query: string, time?: WorkspaceTime, sources?: string[]) => {
+    setLocalSearchQuery(query);
+    const search = useSearchQueryParamsStore.getState();
+    search.setSources(sources ?? []);
+    useSearchQueryParamsStore.setState(applyWorkspaceTimeToSearchState(time, search));
+    search.resetPagination();
+    search.setSearchQuery(query);
+    search.triggerSearch();
+    recall.reset();
+  }, [recall]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    recall.onKeyDown(e);
+    if (e.defaultPrevented) return;
+
     if (e.key === "Enter") {
       handleSearch();
     } else if (e.key === "Escape") {
       // Match the behavior of most editor-style apps: Escape releases focus.
       inputRef.current?.blur();
     }
-  }, [handleSearch]);
+  }, [handleSearch, recall]);
 
   // Insert a hint snippet into the search input and focus it so the user
   // can keep typing without a second click.
@@ -118,6 +180,23 @@ export const LogSearch = ({
       .slice(0, 6); // Show at most 6 column suggestions
   }, [store.availableColumns]);
 
+  // Synonym suggestions for the terms already typed: "error" offers
+  // "exception", "fatal"… Purely a prompt -- the dictionary is static and the
+  // query is only rewritten when the user clicks a chip.
+  const synonymSuggestions = useMemo(
+    () => findSynonymSuggestions(localSearchQuery),
+    [localSearchQuery]
+  );
+
+  // Clicking a suggestion appends its term and refocuses, matching the syntax
+  // hints: it composes the query, it does not run the search.
+  const handleSynonymInsert = useCallback((term: string) => {
+    const suggestion = synonymSuggestions.find((s) => s.term === term);
+    if (!suggestion) return;
+    setLocalSearchQuery((current) => applySynonymSuggestion(current, suggestion));
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, [synonymSuggestions]);
+
   // Show hints when input focused or has content (but not when loading)
   const showHints = (isInputFocused || localSearchQuery.length > 0) && !isLoading;
 
@@ -138,13 +217,14 @@ export const LogSearch = ({
             <Input
               ref={inputRef}
               type="text"
+              aria-label="Search logs"
               value={localSearchQuery}
               onChange={handleInputChange}
               placeholder={isInputFocused
                 ? 'Try level:error or "connection timeout"'
                 : 'Search logs… (/ or ⌘K)'}
               className={cn(
-                "w-full pl-10 pr-10 text-sm rounded-md shadow-sm focus-visible:ring-2 focus-visible:ring-offset-0",
+                "w-full pl-10 pr-20 text-sm rounded-md shadow-sm focus-visible:ring-2 focus-visible:ring-offset-0",
                 "focus-visible:ring-[var(--ls-accent-softer)] focus-visible:border-[var(--ls-accent)]",
                 isInputFocused && "border-[var(--ls-accent)]"
               )}
@@ -161,20 +241,22 @@ export const LogSearch = ({
               onBlur={() => setTimeout(() => setIsInputFocused(false), 150)}
             />
             
-            {/* Remove AI Query Button and keep only the clear search button */}
-            {localSearchQuery && (
-              <button
-                type="button"
-                onClick={handleClearSearch}
-                className="absolute right-2 inset-y-0 h-full flex items-center justify-center focus:outline-none"
-                aria-label="Clear search"
-                title="Clear search"
-              >
-                <div className="h-6 w-6 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
-                  <X size={14} className="text-gray-600" />
-                </div>
-              </button>
-            )}
+            <div className="absolute right-1.5 inset-y-0 flex items-center gap-0.5">
+              <SavedQueriesMenu currentQuery={localSearchQuery} onApply={handleApplyEntry} />
+              {localSearchQuery && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  className="h-full flex items-center justify-center focus:outline-none"
+                  aria-label="Clear search"
+                  title="Clear search"
+                >
+                  <div className="h-6 w-6 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
+                    <X size={14} className="text-gray-600" />
+                  </div>
+                </button>
+              )}
+            </div>
           </div>
           
           {/* Merged date range and search panel button */}
@@ -276,6 +358,45 @@ export const LogSearch = ({
                 ))}
               </>
             )}
+          </div>
+        )}
+
+        {/* Synonym suggestions - related terms for what the user has typed */}
+        {showHints && synonymSuggestions.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 px-1 animate-in fade-in duration-150">
+            <span
+              className="text-[10px] font-semibold uppercase tracking-wider mr-0.5"
+              style={{ color: 'var(--ls-text-3)' }}
+            >
+              Also search:
+            </span>
+            {synonymSuggestions.map((suggestion) => (
+              <button
+                key={suggestion.term}
+                type="button"
+                onClick={() => handleSynonymInsert(suggestion.term)}
+                title={`Also search for "${suggestion.term}" (related to "${suggestion.matched}")`}
+                className="inline-flex items-center px-2 py-0.5 transition-colors"
+                style={{
+                  borderRadius: 4,
+                  border: '1px solid var(--ls-border)',
+                  background: 'var(--ls-bg-1)',
+                  fontFamily: 'var(--ls-font-mono)',
+                  fontSize: 11,
+                  color: 'var(--ls-text-2)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--ls-accent)';
+                  e.currentTarget.style.color = 'var(--ls-accent-text)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--ls-border)';
+                  e.currentTarget.style.color = 'var(--ls-text-2)';
+                }}
+              >
+                + {suggestion.term}
+              </button>
+            ))}
           </div>
         )}
 

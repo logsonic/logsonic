@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -51,8 +49,8 @@
   --ls-shadow-md: 0 4px 12px -2px rgba(24,24,27,0.08), 0 2px 4px rgba(24,24,27,0.04);
   --ls-shadow-lg: 0 12px 32px -6px rgba(24,24,27,0.16), 0 4px 8px rgba(24,24,27,0.06);
 
-  --ls-font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --ls-font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --ls-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --ls-font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 
   --ls-topbar-h: 44px;
   --ls-rail-w: 56px;
@@ -132,6 +130,13 @@ html, body {
   font-feature-settings: "cv11", "ss01", "ss03";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* macos-b1: the brand cell / topbar / nav rail double as the window's drag
+   region (see dragStripHookJS in LogsonicApp.swift) -- text selection there
+   fights with dragging. Scoped to chrome only, never log content. */
+.is-native-macos .ls-native-chrome {
+  user-select: none;
 }
 
 /* Search-metadata chips (sources / query / range). Token-based so they
@@ -263,7 +268,10 @@ html, body {
    a filter search box. Design tokens remapped to the project's --ls-* set. */
 .ls-set-grid {
   display: grid;
-  grid-template-columns: 200px 1fr;
+  /* minmax(0, 1fr), not 1fr: a bare 1fr is minmax(auto, 1fr), so a long
+     unbreakable value (a watched folder's path) would widen the column past
+     the viewport instead of truncating inside its card. */
+  grid-template-columns: 200px minmax(0, 1fr);
   gap: 36px;
   align-items: start;
 }
@@ -398,6 +406,691 @@ html, body {
   padding: 1px 5px;
   border-radius: 3px;
   border: 1px solid var(--ls-border);
+}
+
+/* ── Import surface — "quiet instrument" restyle ──────────────────────
+   Single-surface "inspect & commit" layout: drop zone → file list + preview
+   split → per-file detail panel → progress → complete. Chrome is quiet —
+   hairline borders, flat surfaces — so the purple accent only appears where
+   it means something: the primary action, the selected row, the active drop
+   state. Every color is a token so the same rules serve light and dark. */
+.ls-imp-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ls-text-3);
+}
+.ls-imp-mono { font-family: var(--ls-font-mono); }
+.ls-imp-link {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ls-accent);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.ls-imp-link:hover { color: var(--ls-accent-hover); text-decoration: underline; }
+.ls-imp-link:disabled { color: var(--ls-text-4); cursor: default; text-decoration: none; }
+
+/* full-viewport page column: topbar + body */
+.ls-imp-page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--ls-bg-1);
+  color: var(--ls-text);
+}
+.ls-imp-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* empty-state drop zone: a flat panel with a neutral dashed outline that
+   only lights up purple while hovering or dragging over it */
+.ls-imp-dropwrap { padding: 48px 24px; overflow: auto; }
+.ls-imp-dropzone {
+  width: min(640px, 100%);
+  border: 1.5px dashed var(--ls-border-strong);
+  border-radius: 16px;
+  background: var(--ls-panel);
+  padding: 64px 32px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+.ls-imp-dropzone:hover {
+  border-color: var(--ls-accent-border);
+  background: var(--ls-accent-softer);
+}
+.ls-imp-dropzone--over {
+  border-style: solid;
+  border-color: var(--ls-accent);
+  background: var(--ls-accent-softer);
+}
+.ls-imp-drop-icon {
+  display: inline-flex;
+  color: var(--ls-accent);
+  margin-bottom: 18px;
+}
+.ls-imp-pill {
+  display: inline-block;
+  font-family: var(--ls-font-mono);
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--ls-bg-2);
+  border: 1px solid var(--ls-border);
+  color: var(--ls-text-3);
+}
+
+/* split pane: the file list is a narrow rail (about a fifth of the
+   width, never below the floor a filename + verdict + size needs) so the
+   preview gets the room. While a file's detail panel is open the same column
+   widens — the Pattern / Timestamp / Options tabs were laid out for
+   ~360px — and the preview still keeps the majority. Under
+   --ls-imp-stack-bp the two stack vertically. */
+.ls-imp-split {
+  --ls-imp-rail: clamp(260px, 22%, 400px);
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--ls-imp-rail) minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px 14px 14px;
+}
+.ls-imp-split--detail { --ls-imp-rail: clamp(360px, 32%, 520px); }
+@media (max-width: 960px) {
+  .ls-imp-split,
+  .ls-imp-split--detail {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(240px, 45%) minmax(0, 1fr);
+    gap: 10px;
+    padding: 10px;
+  }
+  /* configuring a file needs the height more than the preview does */
+  .ls-imp-split--detail { grid-template-rows: minmax(320px, 60%) minmax(140px, 1fr); }
+  /* stacked: the file pane is wide but short, so rows tile in columns */
+  .ls-imp-filelist {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 4px;
+    align-content: start;
+  }
+  .ls-imp-filelist .ls-imp-filerow { margin-bottom: 0; }
+  .ls-imp-action-meta { max-width: 200px; }
+}
+@media (max-width: 720px) {
+  /* the topbar caption beside Import goes first; the button (and its
+     title tooltip carrying the gate reason) stays */
+  .ls-imp-mode-pill, .ls-imp-action-meta { display: none; }
+  .ls-imp-dropwrap { padding: 24px 16px; }
+  .ls-imp-dropzone { padding: 44px 20px; }
+  .ls-imp-center { padding: 20px 16px; }
+  .ls-imp-modal { padding: 24px 22px; }
+}
+/* wide displays: keep the preview's measure readable rather than letting
+   a wrapped line run the full width of a 4K window */
+@media (min-width: 1920px) {
+  .ls-imp-prow { padding-right: 24px; }
+  .ls-imp-line { max-width: 170ch; }
+  .ls-imp-field { font-size: 13px; }
+  .ls-imp-gutter { font-size: 12px; }
+}
+.ls-imp-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--ls-panel);
+  border: 1px solid var(--ls-border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+/* the file list is a drop target once files exist */
+.ls-imp-pane--over {
+  border-color: var(--ls-accent);
+  box-shadow: inset 0 0 0 1px var(--ls-accent);
+}
+.ls-imp-pane-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 11px;
+  border-bottom: 1px solid var(--ls-border-subtle);
+}
+/* the rail's secondary text yields first as the column narrows: the line
+   estimate goes once the verdict line cannot hold both, the size only at
+   the rail's floor. (The container is the list's content box, ~20px
+   narrower than the rail.) */
+.ls-imp-filelist { container-type: inline-size; }
+@container (max-width: 360px) {
+  .ls-imp-rail-lines { display: none; }
+}
+@container (max-width: 230px) {
+  .ls-imp-rail-aux { display: none; }
+}
+.ls-imp-pane-scroll { flex: 1; min-height: 0; overflow: auto; }
+.ls-imp-pane-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--ls-border-subtle);
+}
+.ls-imp-count {
+  font-family: var(--ls-font-mono);
+  font-size: 10.5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--ls-ok-soft);
+  color: var(--ls-ok);
+}
+.ls-imp-count--busy { background: var(--ls-info-soft); color: var(--ls-info); }
+.ls-imp-count--warn { background: var(--ls-warn-soft); color: var(--ls-warn); }
+
+/* file rows: borderless — selection is a soft accent wash, hover a muted
+   surface. The per-row actions overlay the top-right corner and only show
+   for the selected / hovered / focused row, so the narrow rail spends its
+   width on the filename and verdict. The name line reserves their width;
+   the verdict line runs underneath at full width. */
+.ls-imp-filerow {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 8px;
+  margin-bottom: 2px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.ls-imp-filerow:hover { background: var(--ls-bg-2); }
+.ls-imp-filerow:focus-visible { outline: 2px solid var(--ls-accent); outline-offset: -1px; }
+.ls-imp-filerow--selected,
+.ls-imp-filerow--selected:hover { background: var(--ls-accent-softer); }
+/* only the selected row keeps the corner clear permanently */
+.ls-imp-filerow--selected .ls-imp-row-name { padding-right: 54px; }
+.ls-imp-row-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.ls-imp-row-actions .ls-imp-cfg-btn {
+  width: 24px;
+  height: 24px;
+  background: var(--ls-panel);
+  border-color: var(--ls-border);
+}
+.ls-imp-filerow:hover .ls-imp-row-actions,
+.ls-imp-filerow:focus-within .ls-imp-row-actions,
+.ls-imp-filerow--selected .ls-imp-row-actions { opacity: 1; }
+@media (hover: none) {
+  .ls-imp-row-actions { opacity: 1; }
+  .ls-imp-row-name { padding-right: 54px; }
+}
+.ls-imp-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  margin-top: 5.5px;
+}
+.ls-imp-dot--busy { background: var(--ls-info); animation: ls-imp-pulse 1.2s ease-in-out infinite; }
+@keyframes ls-imp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.ls-imp-cfg-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ls-text-3);
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.ls-imp-cfg-btn:hover { color: var(--ls-text); background: var(--ls-bg-2); border-color: var(--ls-border); }
+.ls-imp-cfg-btn.danger:hover { color: var(--ls-err); background: var(--ls-err-soft); border-color: transparent; }
+.ls-imp-matchbar { height: 2px; border-radius: 1px; background: var(--ls-border-subtle); overflow: hidden; margin-top: 8px; }
+.ls-imp-matchbar > div { height: 100%; border-radius: 1px; transition: width 300ms ease; }
+
+/* commit action bar: a full-width strip pinned to the bottom of the page
+   with the primary button — large and right-aligned — and its caption
+   (staged total, or the reason the gate is closed) to its left */
+.ls-imp-footbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  padding: 10px 16px;
+  border-top: 1px solid var(--ls-border);
+  background: var(--ls-panel);
+}
+.ls-imp-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.ls-imp-action-meta {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+.ls-imp-primary {
+  height: 38px;
+  padding: 0 22px;
+  border-radius: 9px;
+  border: 0;
+  background: var(--ls-accent);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.ls-imp-primary:hover:not(:disabled) { background: var(--ls-accent-hover); }
+.ls-imp-primary:disabled { background: var(--ls-text-4); cursor: not-allowed; }
+.ls-imp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 0;
+  background: var(--ls-accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.ls-imp-btn:hover:not(:disabled) { background: var(--ls-accent-hover); }
+.ls-imp-btn:disabled { background: var(--ls-text-4); cursor: not-allowed; }
+.ls-imp-btn--ghost {
+  background: transparent;
+  color: var(--ls-text-2);
+  border: 1px solid var(--ls-border);
+}
+.ls-imp-btn--ghost:hover:not(:disabled) { background: var(--ls-bg-2); color: var(--ls-text); }
+
+/* the mode indicator in the topbar: a quiet pill, not a tracked-out badge */
+.ls-imp-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ls-text-3);
+  background: var(--ls-bg-2);
+  border: 1px solid var(--ls-border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+.ls-imp-mode-pill::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ls-text-4);
+}
+
+/* detail panel tabs: a segmented control */
+.ls-imp-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 12px 14px 0;
+  padding: 2px;
+  background: var(--ls-bg-2);
+  border-radius: 9px;
+}
+.ls-imp-tab {
+  flex: 1;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ls-text-3);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.ls-imp-tab:hover { color: var(--ls-text); }
+.ls-imp-tab--active {
+  background: var(--ls-panel);
+  color: var(--ls-text);
+  box-shadow: var(--ls-shadow-sm);
+}
+
+/* status cards (ok / warn) */
+.ls-imp-card {
+  border-radius: 10px;
+  padding: 12px;
+  border: 1px solid var(--ls-border);
+  background: var(--ls-bg-1);
+}
+.ls-imp-card--ok { background: var(--ls-ok-soft); border-color: color-mix(in srgb, var(--ls-ok) 30%, transparent); }
+.ls-imp-card--warn { background: var(--ls-warn-soft); border-color: color-mix(in srgb, var(--ls-warn) 40%, transparent); }
+.ls-imp-card--err { background: var(--ls-err-soft); border-color: color-mix(in srgb, var(--ls-err) 30%, transparent); }
+.ls-imp-card--accent { background: var(--ls-accent-softer); border-color: var(--ls-accent-border); }
+
+/* alternative rows */
+.ls-imp-altrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.ls-imp-altrow:hover { background: var(--ls-bg-1); }
+
+/* chips: mode selector + option buttons */
+.ls-imp-chip {
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--ls-border);
+  background: var(--ls-panel);
+  color: var(--ls-text-2);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.ls-imp-chip:hover { border-color: var(--ls-border-strong); color: var(--ls-text); }
+.ls-imp-chip--selected,
+.ls-imp-chip--selected:hover {
+  background: var(--ls-accent-softer);
+  border-color: var(--ls-accent);
+  color: var(--ls-accent-text);
+  font-weight: 600;
+}
+
+/* grok token chips */
+.ls-imp-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--ls-font-mono);
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  background: var(--ls-hl-blue);
+  border: 1px solid var(--ls-info-soft);
+  color: var(--ls-info);
+  cursor: grab;
+  user-select: none;
+}
+.ls-imp-token:hover { border-color: var(--ls-info); }
+.ls-imp-token--custom { background: var(--ls-ok-soft); border-color: color-mix(in srgb, var(--ls-ok) 30%, transparent); color: var(--ls-ok); }
+.ls-imp-token--selected { background: var(--ls-accent); border-color: var(--ls-accent); color: #fff; }
+.ls-imp-token--add { background: var(--ls-accent-softer); border: 1px dashed var(--ls-accent-border); color: var(--ls-accent-text); cursor: pointer; }
+.ls-imp-input {
+  width: 100%;
+  font-size: 12.5px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--ls-border);
+  background: var(--ls-panel);
+  color: var(--ls-text);
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.ls-imp-input:hover { border-color: var(--ls-border-strong); }
+.ls-imp-input:focus { border-color: var(--ls-accent); box-shadow: 0 0 0 3px var(--ls-accent-softer); }
+.ls-imp-input::placeholder { color: var(--ls-text-4); }
+.ls-imp-input--mono { font-family: var(--ls-font-mono); font-size: 12px; line-height: 1.6; }
+.ls-imp-echo {
+  background: var(--ls-bg-1);
+  border: 1px solid var(--ls-border-subtle);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: var(--ls-font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.ls-imp-grok-brace { color: var(--ls-info); }
+.ls-imp-grok-name { color: var(--ls-trace); font-weight: 600; }
+.ls-imp-grok-sep { color: var(--ls-text-3); }
+.ls-imp-grok-field { color: var(--ls-ok); font-weight: 600; }
+.ls-imp-grok-text { color: var(--ls-text-2); }
+.ls-imp-fieldchip {
+  display: inline-block;
+  font-family: var(--ls-font-mono);
+  font-size: 10.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* timestamp resolution tiles + picker */
+.ls-imp-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ls-imp-tile {
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--ls-border);
+  background: var(--ls-panel);
+  cursor: pointer;
+  min-width: 0;
+  transition: border-color 120ms ease;
+}
+.ls-imp-tile:hover { border-color: var(--ls-border-strong); }
+.ls-imp-tile .ls-imp-tile-label { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ls-text-3); }
+.ls-imp-tile .ls-imp-tile-value { display: block; font-family: var(--ls-font-mono); font-size: 16px; font-weight: 600; color: var(--ls-text); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ls-imp-tile .ls-imp-tile-src { font-size: 10.5px; font-weight: 500; color: var(--ls-text-2); margin-top: 2px; }
+.ls-imp-tile--log { background: var(--ls-ok-soft); border-color: color-mix(in srgb, var(--ls-ok) 30%, transparent); }
+.ls-imp-tile--log .ls-imp-tile-src { color: var(--ls-ok); }
+.ls-imp-tile--inferred { background: var(--ls-warn-soft); border-color: color-mix(in srgb, var(--ls-warn) 40%, transparent); }
+.ls-imp-tile--inferred .ls-imp-tile-src { color: var(--ls-warn); }
+.ls-imp-tile--manual { background: var(--ls-accent-softer); border-color: var(--ls-accent-border); }
+.ls-imp-tile--manual .ls-imp-tile-src { color: var(--ls-accent-text); }
+.ls-imp-tile--open { outline: 2px solid color-mix(in srgb, var(--ls-accent) 45%, transparent); outline-offset: 1px; }
+.ls-imp-tile:disabled { cursor: default; }
+.ls-imp-picker {
+  margin-top: 10px;
+  background: var(--ls-accent-softer);
+  border: 1px solid var(--ls-accent-border);
+  border-radius: 10px;
+  padding: 12px;
+  animation: ls-rise 0.16s ease;
+}
+.ls-imp-opt {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--ls-border);
+  background: var(--ls-panel);
+  color: var(--ls-text);
+  font-family: var(--ls-font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 120ms ease;
+}
+.ls-imp-opt small { font-family: var(--ls-font-sans); font-size: 9.5px; color: var(--ls-text-3); }
+.ls-imp-opt:hover:not(:disabled) { border-color: var(--ls-accent-border); }
+.ls-imp-opt--selected { background: var(--ls-accent-soft); border-color: var(--ls-accent); color: var(--ls-accent-text); }
+.ls-imp-opt--selected small { color: var(--ls-accent-text); }
+.ls-imp-opt:disabled { opacity: 0.5; cursor: default; }
+
+/* option rows (switch / select) */
+.ls-imp-select {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--ls-border);
+  background: var(--ls-panel);
+  color: var(--ls-text);
+  font-family: var(--ls-font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 120ms ease;
+}
+.ls-imp-select:hover { border-color: var(--ls-border-strong); }
+.ls-imp-switch { width: 40px !important; height: 22px !important; }
+.ls-imp-switch[data-state='checked'] { background: var(--ls-accent) !important; }
+.ls-imp-switch[data-state='unchecked'] { background: var(--ls-border-strong) !important; }
+.ls-imp-switch > span { width: 18px !important; height: 18px !important; background: #fff !important; }
+.ls-imp-switch[data-state='checked'] > span { transform: translateX(18px) !important; }
+
+/* preview rows */
+.ls-imp-prow {
+  display: flex;
+  gap: 10px;
+  padding: 3px 14px 3px 0;
+}
+.ls-imp-prow:hover { background: var(--ls-bg-1); }
+.ls-imp-gutter {
+  width: 44px;
+  flex: 0 0 44px;
+  text-align: right;
+  font-family: var(--ls-font-mono);
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--ls-text-4);
+  user-select: none;
+}
+.ls-imp-gutter--warn { color: var(--ls-warn); }
+.ls-imp-gutter--err { color: var(--ls-err); }
+.ls-imp-line { display: flex; flex-wrap: wrap; min-width: 0; align-items: baseline; }
+.ls-imp-field {
+  font-family: var(--ls-font-mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  padding: 1px 3px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ls-imp-field--plain { color: var(--ls-text); }
+.ls-imp-field--muted { color: var(--ls-text-3); }
+.ls-imp-field--blue { background: var(--ls-hl-blue); color: var(--ls-info); }
+.ls-imp-field--amber { background: var(--ls-hl-amber); color: var(--ls-warn); }
+.ls-imp-field--green { background: var(--ls-hl-green); color: var(--ls-ok); }
+.ls-imp-field--violet { background: var(--ls-trace-soft); color: var(--ls-trace); }
+.ls-imp-field--red { background: var(--ls-hl-red); color: var(--ls-err); }
+.ls-imp-field--gray { background: var(--ls-bg-2); color: var(--ls-text-2); }
+
+/* progress + complete cards: a neutral floating card — the status color
+   lives in the icon and headline, not a tinted background */
+.ls-imp-center {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  overflow: auto;
+}
+.ls-imp-modal {
+  width: min(520px, 100%);
+  background: var(--ls-panel);
+  border: 1px solid var(--ls-border);
+  border-radius: 16px;
+  padding: 36px 32px;
+  box-shadow: var(--ls-shadow-lg);
+  text-align: center;
+  animation: ls-rise 0.3s ease;
+}
+.ls-imp-spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2.5px solid var(--ls-accent-softer);
+  border-top-color: var(--ls-accent);
+  animation: ls-imp-rotate 0.7s linear infinite;
+  margin: 0 auto 18px;
+}
+@keyframes ls-imp-rotate { to { transform: rotate(360deg); } }
+.ls-imp-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--ls-bg-2);
+  overflow: hidden;
+  margin: 18px auto 0;
+  width: 100%;
+}
+.ls-imp-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--ls-accent);
+  transition: width 200ms ease;
+}
+.ls-imp-check {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--ls-ok-soft);
+  color: var(--ls-ok);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.ls-imp-check--warn { background: var(--ls-warn-soft); color: var(--ls-warn); }
+.ls-imp-ok-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: 8px;
+  background: var(--ls-accent);
+  border: 0;
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.ls-imp-ok-btn:hover { background: var(--ls-accent-hover); }
+.ls-imp-cancel-link { font-size: 12px; font-weight: 500; color: var(--ls-err); background: transparent; border: 0; cursor: pointer; }
+.ls-imp-cancel-link:hover { filter: brightness(0.85); }
+
+@keyframes ls-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.ls-rise { animation: ls-rise 0.2s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .ls-rise, .ls-imp-picker, .ls-imp-modal, .ls-imp-dropzone { animation: none; transition: none; }
+  .ls-imp-dot--busy { animation: none; }
 }
 
 @layer base {

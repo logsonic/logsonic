@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -20,9 +22,12 @@ import (
 	"logsonic/docs"
 	lsmcp "logsonic/pkg/mcp"
 	"logsonic/pkg/server/handlers"
+	"logsonic/pkg/types"
 
+	"logsonic/pkg/appconfig"
 	"logsonic/pkg/static"
 	"logsonic/pkg/storage"
+	"logsonic/pkg/watch"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -30,6 +35,24 @@ import (
 	l2g "github.com/logsonic/log2grok/pkg/log2grok"
 	httpSwagger "github.com/swaggo/http-swagger"
 )
+
+// contentSecurityPolicy is applied only to the HTML document response (the
+// SPA shell), not to JSON/SSE responses, which have no script/style
+// execution context for CSP to constrain. It makes the "no network calls"
+// promise browser-enforced: the SPA's own build emits no inline scripts
+// (verified against the Vite output), so script-src 'self' costs nothing and
+// blocks any future accidental third-party script tag outright.
+//
+// connect-src deliberately lists one non-http scheme. 'self' does NOT
+// cover it (CSP matches 'self' by scheme+origin, and a blob: URL has a
+// different scheme), and it is fetched by the app itself: the macOS shell's
+// download hook (LogsonicApp.swift, blobDownloadHookJS) does
+// fetch(anchor.href) on the export blob to hand it to NSSavePanel. Verified
+// in Chrome: without blob: here the fetch is refused with
+// violatedDirective=connect-src. (A second scheme, logsonicfile:, was
+// listed here until now-08 replaced the shell's byte handoff with paths;
+// the scheme handler was deleted with it.)
+const contentSecurityPolicy = "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' blob:; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
 
 // @title LogSonic API
 // @version 1.0
@@ -40,7 +63,6 @@ import (
 type Config struct {
 	Port        string
 	StoragePath string
-	WorkDir     string // Directory where log files are stored
 	Timeout     time.Duration
 	Host        string
 
@@ -53,6 +75,21 @@ type Config struct {
 	// RetentionDays deletes indexed logs older than N days on startup and once
 	// a day thereafter. 0 disables retention (keep everything).
 	RetentionDays int
+
+	// AllowedHosts extends the Host-header allow-list beyond the fixed
+	// loopback set (localhost/127.0.0.1/::1). It only matters when Host is
+	// non-loopback (e.g. "0.0.0.0"): there, the allow-list is enforced only
+	// if this is non-empty, so LAN and Docker deployments keep working
+	// unchanged unless the operator opts in. See hostcheck.go.
+	AllowedHosts []string
+
+	// Version, Commit, BuildDate identify the binary (goreleaser ldflags;
+	// "dev" / "" for local builds). Exposed on /api/v1/info so the UI can
+	// show the server's version rather than its own bundle's, which makes an
+	// app-vs-CLI mismatch visible.
+	Version   string
+	Commit    string
+	BuildDate string
 }
 
 type Server struct {
@@ -89,7 +126,10 @@ func NewServer(cfg Config) (*Server, error) {
 	// Initialize router with middleware
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	// middleware.RealIP is deliberately not used: it rewrites RemoteAddr from
+	// X-Forwarded-For / X-Real-IP whether or not a trusted proxy set them
+	// (GHSA-3fxj-6jh8-hvhx), and this server has no proxy in front of it —
+	// nothing here reads RemoteAddr except the request logger.
 	// Skip logging for ping route
 	r.Use(middleware.WithValue("skipper", func(r *http.Request) bool {
 		return r.URL.Path == "/api/v1/ping"
@@ -128,8 +168,38 @@ func NewServer(cfg Config) (*Server, error) {
 		MaxAge:           300, // Maximum value not ignored by any of major browsers
 	}))
 
+	// Host-header allow-list. CORS above only stops a cross-origin fetch;
+	// it does nothing against DNS rebinding, where a page on an
+	// attacker-controlled domain that resolves to 127.0.0.1 is loaded
+	// same-origin and can call the API directly. Mounted before MCP, the
+	// live routes, the API group, and the SPA catch-all so every one of
+	// them is protected. See hostcheck.go.
+	if hosts, enforce := allowedHosts(cfg); enforce {
+		r.Use(hostAllowlistMiddleware(hosts))
+	} else if !isLoopbackHost(cfg.Host) {
+		fmt.Fprintf(os.Stderr, "security: binding to non-loopback host %q with no -allowed-hosts configured — Host header checking is disabled; pass -allowed-hosts to enable it\n", cfg.Host)
+	}
+
 	// Initialize handler
 	h := handlers.NewHandler(store, cfg.StoragePath)
+	h.Build = handlers.BuildInfo{Version: cfg.Version, Commit: cfg.Commit, BuildDate: cfg.BuildDate}
+	// Retention: <storage>/config.json (set from the UI) overrides the CLI
+	// flag / env value main.go resolved into cfg.RetentionDays.
+	appCfg, err := appconfig.Open(cfg.StoragePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "appconfig: %v; retention settings cannot be saved this run\n", err)
+	}
+	handlers.NewRetentionManager(h, appCfg, cfg.RetentionDays)
+	// LOGSONIC_WATCH_SWEEP shortens the folder-watch reconciliation sweep
+	// (default 60s) — for the E2E suite and for checking a mount where
+	// fsnotify is unreliable. Not a user-facing setting.
+	if v := os.Getenv("LOGSONIC_WATCH_SWEEP"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d >= 100*time.Millisecond {
+			watch.SweepInterval = d
+		} else {
+			fmt.Fprintf(os.Stderr, "LOGSONIC_WATCH_SWEEP=%q ignored: want a duration of at least 100ms\n", v)
+		}
+	}
 	srv := &Server{
 		services: h,
 		store:    store,
@@ -208,6 +278,7 @@ func NewServer(cfg Config) (*Server, error) {
 			}
 
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Content-Security-Policy", contentSecurityPolicy)
 			w.Write(indexData)
 			return
 		}
@@ -232,11 +303,23 @@ func NewServer(cfg Config) (*Server, error) {
 	// security headers, and CORS from the root router.
 	r.Get("/api/v1/live/events", h.HandleLiveEvents)
 	r.Post("/api/v1/live/stdin", h.HandleLiveStdin)
+	// Per-source delete (spec now-10) is synchronous by contract — it
+	// returns the rows removed — and a multi-million-row source takes longer
+	// than the API timeout; a timeout mid-way would leave a half-deleted
+	// source. No body, so the JSON-body rule the group enforces is moot.
+	r.Delete("/api/v1/sources/{name}", h.HandleDeleteSource)
 
 	// Set up API routes
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Timeout(cfg.Timeout))
 		r.Use(middleware.ThrottleBacklog(10, 50, 5*time.Second))
+		// Reject a POST/PUT/PATCH that carries a body in anything but JSON —
+		// the classic cross-site vector is a form-encoded POST, which a
+		// browser can send cross-origin without a CORS preflight. Scoped to
+		// this group only, so /live/stdin and /live/events (registered
+		// directly on the root router above, outside this group) are
+		// unaffected.
+		r.Use(requireJSONBody)
 		r.Route("/api/v1", func(r chi.Router) {
 			// Swagger UI endpoint
 			r.Get("/swagger/*", httpSwagger.Handler(
@@ -253,9 +336,17 @@ func NewServer(cfg Config) (*Server, error) {
 			r.Post("/ingest/logs", h.HandleIngest)
 			r.Post("/ingest/start", h.HandleIngestStart)
 			r.Post("/ingest/end", h.HandleIngestEnd)
+			// Path-based ingest (spec now-08). The route itself returns in
+			// milliseconds (202, job accepted) so — unlike /live/stdin and
+			// /live/events above — it belongs in the normal timeout group;
+			// the read runs on its own goroutine past this request's return.
+			r.Post("/ingest/file", h.HandleIngestFile)
+			r.Get("/ingest/jobs", h.HandleListIngestJobs)
+			r.Delete("/ingest/jobs/{id}", h.HandleCancelIngestJob)
 
 			// Parse endpoints
 			r.Post("/parse", h.HandleParse)
+			r.Post("/parse/preview-file", h.HandlePreviewFile)
 			r.Post("/timestamp/preview", h.HandleTimestampPreview)
 			r.Route("/logs", func(r chi.Router) {
 				r.Get("/", h.HandleReadAll)
@@ -271,6 +362,28 @@ func NewServer(cfg Config) (*Server, error) {
 				r.Delete("/{id}", h.HandleDeleteWorkspace)
 			})
 			r.Get("/info", h.HandleInfo)
+			r.Route("/sources", func(r chi.Router) {
+				r.Get("/", h.HandleListSources)
+				r.Post("/rebuild", h.HandleRebuildSources)
+				r.Get("/{name}", h.HandleGetSource)
+				r.Patch("/{name}", h.HandleRenameSource)
+				r.Post("/{name}/reimport", h.HandleReimportSource)
+			})
+			r.Route("/storage", func(r chi.Router) {
+				r.Get("/", h.HandleGetStorage)
+				r.Put("/", h.HandlePutStorage)
+				r.Delete("/days/{date}", h.HandleDeleteStorageDay)
+			})
+			r.Get("/samples", h.HandleListSamples)
+			r.Post("/samples/{name}/import", h.HandleImportSample)
+			r.Post("/ui/focus", h.HandleUIFocus)
+			r.Route("/watches", func(r chi.Router) {
+				r.Get("/", h.HandleListWatches)
+				r.Post("/", h.HandleCreateWatch)
+				r.Delete("/{id}", h.HandleDeleteWatch)
+				r.Post("/{id}/pause", h.HandlePauseWatch)
+				r.Post("/{id}/resume", h.HandleResumeWatch)
+			})
 
 			// Live-tail controls are short-lived JSON calls and can use the
 			// normal API timeout/throttle budget.
@@ -330,9 +443,17 @@ func (s *Server) Start() error {
 	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
 	handlers.StartSessionCleanup(cleanupCtx, s.services)
 	s.services.StartLive(cleanupCtx)
+	s.services.StartWatches(cleanupCtx)
+	s.services.StartIngestJobs(cleanupCtx)
+	handlers.StartIngestJobCleanup(cleanupCtx)
+	if s.services.Catalog != nil {
+		s.services.Catalog.Start(cleanupCtx)
+	}
 
 	// Apply retention now and once a day; cancelled on shutdown.
-	s.startRetention(cleanupCtx)
+	if s.services.Retention != nil {
+		s.services.Retention.Start(cleanupCtx)
+	}
 
 	// Open the web UI once the listener is up.
 	if s.config.OpenBrowser {
@@ -379,6 +500,29 @@ func (s *Server) Start() error {
 // tried (scanning up to portScanRange ports); otherwise a busy port is fatal.
 // The returned port may differ from the configured one, so callers use it (not
 // config.Port) for the URL.
+// Handler exposes the router so an in-process test (the CLI's) can serve it
+// on an httptest listener without Start's signal handling. Background
+// services (StartLive, StartWatches, …) are Start's job and are not run.
+func (s *Server) Handler() http.Handler { return s.router }
+
+// StartBackground runs the background services Start would run — live tail,
+// folder watches, path-ingest jobs, retention — on ctx, for a caller that
+// serves the router itself (tests). Cancel ctx to stop them.
+func (s *Server) StartBackground(ctx context.Context) {
+	handlers.StartSessionCleanup(ctx, s.services)
+	s.services.StartLive(ctx)
+	s.services.StartWatches(ctx)
+	s.services.StartIngestJobs(ctx)
+	handlers.StartIngestJobCleanup(ctx)
+	if s.services.Catalog != nil {
+		s.services.Catalog.Start(ctx)
+	}
+}
+
+// Close flushes and closes storage and the side files (what Start does
+// after shutdown).
+func (s *Server) Close() error { return s.services.CloseStorage() }
+
 func (s *Server) listen() (net.Listener, int, error) {
 	const portScanRange = 100
 
@@ -401,41 +545,6 @@ func (s *Server) listen() (net.Listener, int, error) {
 	return nil, 0, fmt.Errorf("no free port found in range %d-%d", basePort, basePort+portScanRange-1)
 }
 
-// startRetention deletes indices older than RetentionDays now, then once a day
-// until ctx is cancelled. A non-positive RetentionDays disables it entirely.
-func (s *Server) startRetention(ctx context.Context) {
-	if s.config.RetentionDays <= 0 {
-		return
-	}
-	maxAge := time.Duration(s.config.RetentionDays) * 24 * time.Hour
-
-	prune := func() {
-		removed, err := s.store.PruneOlderThan(maxAge)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "retention: prune failed: %v\n", err)
-			return
-		}
-		if removed > 0 {
-			fmt.Printf("retention: removed %d index(es) older than %d day(s)\n", removed, s.config.RetentionDays)
-		}
-	}
-
-	prune() // sweep once at startup
-
-	go func() {
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				prune()
-			}
-		}
-	}()
-}
-
 // parsePort turns a ":8080" or "8080" config value into an integer.
 func parsePort(p string) (int, error) {
 	n, err := strconv.Atoi(strings.TrimPrefix(p, ":"))
@@ -449,6 +558,47 @@ func parsePort(p string) (int, error) {
 func isAddrInUse(err error) bool {
 	return errors.Is(err, syscall.EADDRINUSE) ||
 		strings.Contains(err.Error(), "address already in use")
+}
+
+// requireJSONBody rejects a POST/PUT/PATCH request that carries a body whose
+// Content-Type is not application/json. Body-less requests of any method
+// (a plain pause/resume POST, a DELETE with no payload) are untouched — this
+// only closes the vector where a request actually has a payload the handler
+// will try to json.Decode.
+func requireJSONBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost, http.MethodPut, http.MethodPatch:
+			if hasRequestBody(r) && !isJSONContentType(r.Header.Get("Content-Type")) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnsupportedMediaType)
+				json.NewEncoder(w).Encode(types.ErrorResponse{
+					Status: "error",
+					Error:  "Request body must be application/json",
+					Code:   "UNSUPPORTED_MEDIA_TYPE",
+				})
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// hasRequestBody reports whether r appears to carry a body. Go sets
+// ContentLength to -1 for a chunked/unknown-length body and to 0 when there
+// is definitively no body; only 0 means "no body".
+func hasRequestBody(r *http.Request) bool {
+	return r.ContentLength != 0
+}
+
+// isJSONContentType reports whether contentType names application/json,
+// ignoring parameters such as a charset (mime.ParseMediaType strips them).
+func isJSONContentType(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	return mediaType == "application/json"
 }
 
 // openBrowser opens url in the user's default browser, per platform. It returns

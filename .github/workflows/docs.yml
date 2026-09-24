@@ -1,0 +1,72 @@
+# Docs gate (spec: specs/now-11-ci-quality-gate.md, phase 1 + phase 2:
+# external links and the doc-command executor). The dev-commands job runs
+# the literal `go run .` / `npm` lines docs/development.md tells a new
+# contributor to run; it does not re-verify that a *code* change breaks
+# `go run .` on every PR touching backend/ or frontend/ -- ci.yml's own
+# `go build` / `npm run build` steps already do that on every code change.
+# This job's job is doc drift (the command itself changing or rotting), so
+# its trigger is scoped to docs + the scripts that implement these checks.
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - "**/*.md"
+      - ".github/scripts/check-links.sh"
+      - ".github/scripts/check-dev-commands.sh"
+      - ".github/lychee.toml"
+      - ".github/workflows/docs.yml"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  LYCHEE_VERSION: 0.24.2
+  NODE_VERSION: "22"
+
+jobs:
+  links:
+    name: Relative links resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash .github/scripts/check-links.sh
+
+  external-links:
+    name: External links resolve (lychee)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install lychee
+        run: |
+          curl -sSL -o /tmp/lychee.tar.gz \
+            "https://github.com/lycheeverse/lychee/releases/download/lychee-v${{ env.LYCHEE_VERSION }}/lychee-x86_64-unknown-linux-gnu.tar.gz"
+          mkdir -p /tmp/lychee-extract
+          tar -xzf /tmp/lychee.tar.gz -C /tmp/lychee-extract
+          sudo mv /tmp/lychee-extract/lychee-x86_64-unknown-linux-gnu/lychee /usr/local/bin/lychee
+          lychee --version
+      - name: lychee
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          lychee --config .github/lychee.toml \
+            README.md ROADMAP.md CONTRIBUTING.md TBD.md ISSUES.md RELEASE.md \
+            docs/*.md specs/*.md mcp/*.md
+
+  dev-commands:
+    name: docs/development.md commands still work
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: bash .github/scripts/check-dev-commands.sh

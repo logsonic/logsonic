@@ -1,4 +1,4 @@
-import { DetectionResult, FilePreview, FileSessionOptions, ImportFile, Pattern } from '@/components/Import/types';
+import { DEFAULT_MULTILINE, DetectionResult, FilePreview, FileSessionOptions, ImportFile, Pattern } from '@/components/Import/types';
 import { parseLogs } from '@/lib/api-client';
 import {
   GrokPatternRequest,
@@ -26,7 +26,13 @@ export const DEFAULT_SESSION_OPTIONS: FileSessionOptions = {
   year: '',
   month: '',
   day: '',
+  multiline: { ...DEFAULT_MULTILINE },
 };
+
+// The global sessionOptionsMultiline* triple below is legacy: the import
+// surface keeps multiline per file (ImportFile.sessionOptions.multiline)
+// and useUpload sends that file's own config on its ingest session. Only
+// handlePatternOperation (the single-file path) still reads the triple.
 
 export function sessionMultilineOption(state: {
   sessionOptionsMultilineEnabled: boolean;
@@ -54,7 +60,6 @@ export function isMultilineHeaderInvalid(state: {
 // Add a type for the provider upload handler
 export type ProviderUploadHandler = (handleImport: (chunkSize: number, callback: (lines: string[], totalLines: number, next: () => void) => Promise<void>) => Promise<void>) => Promise<void>;
 
-export type UploadStep = 1 | 2 | 3;
 export type ImportSource = string | null;
 
 let fileIdCounter = 0;
@@ -62,19 +67,29 @@ export function generateFileId(): string {
   return `file-${Date.now()}-${++fileIdCounter}`;
 }
 
-interface ImportState {
-  // Upload step tracking
-  currentStep: UploadStep;
+// The browser has no path.basename; a native path can be POSIX or Windows
+// (spec now-08 requires both to work), so split on either separator.
+export function basenameOfPath(path: string): string {
+  const parts = path.split(/[\\/]/);
+  return parts[parts.length - 1] || path;
+}
 
+export type DetailTab = 'pattern' | 'timestamp' | 'options';
+
+interface ImportState {
   // Import source name
   importSource: ImportSource;
 
-  readyToSelectPattern: boolean;
-  readyToImportLogs: boolean;
-
   // --- Multi-file state ---
   files: ImportFile[];
-  activeFileId: string | null; // Which file is currently being configured in detail
+  // The file whose preview is shown (the selected row). Also the file
+  // the SavePatternDialog captures a timestamp resolution from.
+  activeFileId: string | null;
+  // Non-null while the per-file detail panel replaces the file list.
+  detailPanelFileId: string | null;
+  detailTab: DetailTab;
+  // Upload-progress UI: whether the per-file rows are expanded.
+  isExpandedPerFileDetails: boolean;
 
   // --- Legacy single-file state ---
   selectedFileName: string | null;
@@ -138,13 +153,19 @@ interface ImportState {
 
   // --- Multi-file actions ---
   addFiles: (newFiles: File[]) => void;
+  addNativePathFiles: (paths: string[], mtimes?: (string | null)[]) => void;
   removeFile: (fileId: string) => void;
   setActiveFileId: (fileId: string | null) => void;
   updateFile: (fileId: string, updates: Partial<ImportFile>) => void;
   updateFilePattern: (fileId: string, pattern: Pattern) => void;
   updateFileSessionOptions: (fileId: string, options: Partial<FileSessionOptions>) => void;
   setAllFilesPattern: (pattern: Pattern) => void;
+  setAllFilesOptions: (options: FileSessionOptions) => void;
   getActiveFile: () => ImportFile | null;
+  openFileDetail: (fileId: string) => void;
+  closeFileDetail: () => void;
+  setDetailTab: (tab: DetailTab) => void;
+  togglePerFileDetails: () => void;
 
   // Per-file timestamp resolution actions. The TimestampPanel writes
   // through these in multi-file mode so each file keeps its own
@@ -159,14 +180,12 @@ interface ImportState {
   applyTimestampToAllFiles: (sourceFileId: string) => void;
 
   // --- Legacy actions ---
-  setCurrentStep: (step: UploadStep) => void;
   setImportSource: (source: ImportSource) => void;
   setSelectedFileName: (filename: string | null) => void;
   setSelectedFileHandle: (fileHandle: any | null) => void;
   setFilePreviewBuffer: (preview: FilePreview | null) => void;
   setAvailablePatterns: (patterns: GrokPatternRequest[]) => void;
   setSelectedPattern: (pattern: Pattern | null) => void;
-  setReadyToImportLogs: (ready: boolean) => void;
   setCreateNewPattern: (pattern: Pattern) => void;
   setCreateNewPatternTokens: (tokens: Record<string, string>) => void;
   setCreateNewPatternName: (name: string) => void;
@@ -197,7 +216,6 @@ interface ImportState {
   setParsedLogs: (logs: Record<string, string>[]) => void;
   setIsTestingPattern: (isTestingPattern: boolean) => void;
   setMetadata: (metadata: Record<string, string | number | boolean>) => void;
-  setReadyToSelectPattern: (ready: boolean) => void;
   handlePatternOperation: (pattern: Pattern, updateStore?: boolean, onSuccess?: (parsedLogs: Record<string, string>[]) => void, onError?: (error: string) => void) => Promise<void>;
   testPattern: () => Promise<void>;
   reset: () => void;
@@ -211,13 +229,10 @@ interface ImportState {
  */
 export const useImportStore = create<ImportState>((set, get) => ({
 
-  currentStep: 1,
   importSource: null,
   selectedFileName: null,
   selectedFileHandle: null,
   filePreviewBuffer: null,
-  readyToSelectPattern: false,
-  readyToImportLogs: false,
   availablePatterns: [DEFAULT_PATTERN as unknown as GrokPatternRequest],
   selectedPattern: DEFAULT_PATTERN,
   createNewPattern: DEFAULT_PATTERN,
@@ -256,6 +271,9 @@ export const useImportStore = create<ImportState>((set, get) => ({
   // Multi-file state
   files: [],
   activeFileId: null,
+  detailPanelFileId: null,
+  detailTab: 'pattern',
+  isExpandedPerFileDetails: false,
 
   // --- Multi-file actions ---
 
@@ -291,10 +309,48 @@ export const useImportStore = create<ImportState>((set, get) => ({
     set(state => ({ files: [...state.files, ...importFiles] }));
   },
 
+  // Native-path files (spec now-08 phase 5's FileSelection.tsx wiring is
+  // the only intended caller): fileSize/previewLines/approxLines are left
+  // at zero/empty here since getting them means an extra request
+  // (POST /parse/preview-file) the caller makes once, not per store call.
+  // `mtimes[i]` (already ISO 8601, from the macOS shell's own stat() of
+  // the path -- the browser has none) anchors year-less/2-digit-year
+  // timestamps the same way a browser File's lastModified does; missing
+  // or shorter than `paths` falls back to null per entry, same as before.
+  addNativePathFiles: (paths: string[], mtimes?: (string | null)[]) => {
+    const importFiles: ImportFile[] = paths.map((path, i) => ({
+      id: generateFileId(),
+      nativePath: path,
+      fileName: basenameOfPath(path),
+      fileSize: 0,
+      previewLines: [],
+      approxLines: 0,
+      detectedPattern: null,
+      selectedPattern: null,
+      isCustomPattern: false,
+      customPattern: null,
+      customPatternTokens: {},
+      detectionStatus: 'pending',
+      detectionError: null,
+      parsedLogs: [],
+      uploadStatus: 'pending',
+      uploadProgress: 0,
+      uploadError: null,
+      totalLinesProcessed: 0,
+      sessionOptions: { ...DEFAULT_SESSION_OPTIONS },
+      timestampInference: null,
+      timestampOverrides: {},
+      timestampConfirmed: false,
+      sourceMTime: mtimes?.[i] ?? null,
+    }));
+    set(state => ({ files: [...state.files, ...importFiles] }));
+  },
+
   removeFile: (fileId: string) => {
-    set(state => ({
-      files: state.files.filter(f => f.id !== fileId),
+    set((state) => ({
+      files: state.files.filter((f) => f.id !== fileId),
       activeFileId: state.activeFileId === fileId ? null : state.activeFileId,
+      detailPanelFileId: state.detailPanelFileId === fileId ? null : state.detailPanelFileId,
     }));
   },
 
@@ -336,10 +392,26 @@ export const useImportStore = create<ImportState>((set, get) => ({
     }));
   },
 
+  setAllFilesOptions: (options: FileSessionOptions) => {
+    set((state) => ({
+      files: state.files.map((f) => ({ ...f, sessionOptions: { ...options } })),
+    }));
+  },
+
   getActiveFile: () => {
     const { files, activeFileId } = get();
     return files.find(f => f.id === activeFileId) || null;
   },
+
+  // Opening a file's detail also selects it, so the preview pane and the
+  // panel always describe the same file. The tab resets to Pattern on
+  // every open (per the handoff), not per file.
+  openFileDetail: (fileId: string) =>
+    set({ detailPanelFileId: fileId, activeFileId: fileId, detailTab: 'pattern' }),
+  closeFileDetail: () => set({ detailPanelFileId: null }),
+  setDetailTab: (detailTab: DetailTab) => set({ detailTab }),
+  togglePerFileDetails: () =>
+    set((state) => ({ isExpandedPerFileDetails: !state.isExpandedPerFileDetails })),
 
   setFileTimestampInference: (fileId, inference) => {
     // status="exact" means no user intervention is needed; auto-confirm
@@ -407,13 +479,10 @@ export const useImportStore = create<ImportState>((set, get) => ({
   },
 
   // --- Legacy actions (unchanged) ---
-  setCurrentStep: (currentStep) => set({ currentStep }),
   setImportSource: (importSource) => set({ importSource }),
   setSelectedFileName: (selectedFileName) => set({ selectedFileName }),
   setSelectedFileHandle: (selectedFileHandle) => set({ selectedFileHandle }),
   setFilePreviewBuffer: (filePreviewBuffer) => set({ filePreviewBuffer }),
-  setReadyToSelectPattern: (readyToSelectPattern) => set({ readyToSelectPattern }),
-  setReadyToImportLogs: (readyToImportLogs) => set({ readyToImportLogs }),
 
   setAvailablePatterns: (availablePatterns) => {
     const patternsWithCustom = [
@@ -568,7 +637,6 @@ export const useImportStore = create<ImportState>((set, get) => ({
   reset: () => {
     console.log("Resetting import store");
     set({
-      currentStep: 1,
       importSource: null,
       selectedFileName: null,
       selectedFileHandle: null,
@@ -606,6 +674,9 @@ export const useImportStore = create<ImportState>((set, get) => ({
       providerUploadHandler: null,
       files: [],
       activeFileId: null,
+      detailPanelFileId: null,
+      detailTab: 'pattern',
+      isExpandedPerFileDetails: false,
     });
   },
 

@@ -307,12 +307,12 @@ async function openImportWizard(page) {
   } else {
     await page.goto(`${FRONTEND}/#/import`, { waitUntil: 'domcontentloaded' });
   }
-  await page.getByText('Import logs', { exact: true }).waitFor({ timeout: 10000 });
+  await page.getByText('Drop log files here', { exact: false }).waitFor({ timeout: 10000 });
   await step(page);
 }
 
 async function getImportButton(page) {
-  const counted = page.getByRole('button', { name: /^Import\s+\d+\s+Files?$/ }).first();
+  const counted = page.getByRole('button', { name: /^Import\s+\d+\s+files?$/i }).first();
   if (await counted.count()) return counted;
   return page.getByRole('button', { name: /^Import$/ }).last();
 }
@@ -326,7 +326,7 @@ async function settleTimestampGate(page) {
     await step(page);
   }
 
-  const settingsBtn = page.getByRole('button', { name: /Settings/ }).first();
+  const settingsBtn = page.getByRole('button', { name: /^Configure /, exact: false }).first();
   if (await settingsBtn.isVisible().catch(() => false)) {
     log('Showing timestamp settings');
     await settingsBtn.scrollIntoViewIfNeeded().catch(() => {});
@@ -361,8 +361,8 @@ async function importSampleLogs(page) {
   await importBtn.waitFor({ timeout: 20000 });
   await page.waitForFunction(() => {
     const buttons = [...document.querySelectorAll('button')];
-    const imp = buttons.find((button) => /^Import\s+\d+\s+Files?$/.test(button.textContent?.trim() ?? ''));
-    const hasSettings = buttons.some((button) => /Settings/.test(button.textContent ?? ''));
+    const imp = buttons.find((button) => /^Import\s+\d+\s+files?$/i.test(button.textContent?.trim() ?? ''));
+    const hasSettings = buttons.some((button) => /^Configure /.test(button.getAttribute('aria-label') ?? ''));
     return (imp && !imp.disabled) || hasSettings;
   }, null, { timeout: 30000 }).catch(() => {});
 
@@ -370,7 +370,7 @@ async function importSampleLogs(page) {
 
   await page.waitForFunction(() => {
     const button = [...document.querySelectorAll('button')].find((item) =>
-      /^Import\s+\d+\s+Files?$/.test(item.textContent?.trim() ?? ''),
+      /^Import\s+\d+\s+files?$/i.test(item.textContent?.trim() ?? ''),
     );
     return button && !button.disabled;
   }, null, { timeout: 20000 });
@@ -385,7 +385,7 @@ async function importSampleLogs(page) {
     await skipSave.click();
   }
 
-  const homeBtn = page.getByRole('button', { name: 'Home', exact: true });
+  const homeBtn = page.getByRole('button', { name: 'View in LogSonic →', exact: true });
   await homeBtn.waitFor({ timeout: 30000 });
   await step(page);
   await homeBtn.click();

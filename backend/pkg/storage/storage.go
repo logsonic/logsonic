@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"logsonic/pkg/types"
+
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/index/upsidedown/store/goleveldb"
 	"github.com/blevesearch/bleve/v2/mapping"
@@ -28,12 +30,17 @@ type StorageInterface interface {
 	StoreWithIDs(logs []map[string]interface{}, source string) ([]string, error)
 	Search(query string, startDate, endDate *time.Time, sources []string) ([]map[string]interface{}, time.Duration, error)
 	SearchPage(ctx context.Context, options SearchOptions) (SearchPageResult, error)
+	Facets(ctx context.Context, options SearchOptions) (*types.FacetsResponse, error)
 	List() ([]string, error)
-	GetSourceNames() ([]string, error)
+	SourceStats(date string) ([]SourceDayStats, error)
+	LegacySourceShard(date string) bool
 	Clear() error
 	BaseDir() string
 	GetDocCount(date string) (uint64, error)
 	DeleteByIds(ids []string) (int, error)
+	DeleteBySource(ctx context.Context, source string, dates []string) (rows int, daysTouched []string, err error)
+	RemoveDay(date string) error
+	IndexDirSize(date string) (int64, error)
 	PruneOlderThan(maxAge time.Duration) (int, error)
 }
 
@@ -123,6 +130,23 @@ func buildIndexMapping() mapping.IndexMapping {
 	textField.DocValues = false
 	logMapping.AddFieldMappingsAt("_raw", textField)
 
+	// _src is the source name the catalog (pkg/catalog) and the per-source
+	// filter key on. It is an identifier, not prose: the standard analyzer
+	// would split "app.log.1" into ["app.log", "1"] and lowercase "My App",
+	// so a _src facet returned tokens and a _src:app.log filter also matched
+	// app.log.1. Keyword analysis stores the whole value as one term, and
+	// DocValues lets scorch facet on it (SourceStats). Shards created before
+	// this mapping keep the tokenized field; SourceStats detects them through
+	// the shard's own mapping and reads stored fields instead.
+	srcField := bleve.NewTextFieldMapping()
+	srcField.Analyzer = "keyword"
+	srcField.Store = true
+	srcField.Index = true
+	srcField.IncludeInAll = false
+	srcField.IncludeTermVectors = false
+	srcField.DocValues = true
+	logMapping.AddFieldMappingsAt("_src", srcField)
+
 	// _seq is internal ordering metadata (the sort tie-breaker). Persist it
 	// so it round-trips for sorting, but keep it out of the field index.
 	seqField := bleve.NewNumericFieldMapping()
@@ -194,12 +218,20 @@ func (s *Storage) getOrCreateIndex(date string) (bleve.Index, error) {
 
 // BuildDocID returns the Bleve document ID used for a row. It is shared by
 // StoreWithIDs and live publishing so callers do not duplicate ID semantics.
+//
+// The seq is zero-padded because the ID is also the sort tie-breaker: _seq
+// is stored but not indexed (no doc values), so SearchPage's SortField on
+// it falls through to Bleve's final SortDocID, and IDs compare as strings.
+// Unpadded, twelve rows at one timestamp came back 1, 10, 11, 12, 2, 3, …
+// (found by now-12's O2). Twelve digits keep string order equal to numeric
+// order up to 10^12 rows per session; rows written before this change keep
+// their old IDs and their old tie order.
 func BuildDocID(log map[string]interface{}, source string, fallbackSeq int) string {
 	seqID := int64(fallbackSeq)
 	if v, ok := log["_seq"].(int64); ok {
 		seqID = v
 	}
-	return fmt.Sprintf("%d-%s-%d", log["timestamp"].(time.Time).UnixNano(), source, seqID)
+	return fmt.Sprintf("%d-%s-%012d", log["timestamp"].(time.Time).UnixNano(), source, seqID)
 }
 
 // Store saves the parsed log data to appropriate daily indices.
@@ -381,6 +413,26 @@ func (s *Storage) List() ([]string, error) {
 	}
 
 	return dates, nil
+}
+
+// IndexDirSize is the on-disk size of one day-index directory (the sum of
+// its files), for the per-day table on GET /storage. A missing day is 0.
+func (s *Storage) IndexDirSize(date string) (int64, error) {
+	var total int64
+	root := filepath.Join(s.baseDir, "logs-"+date+".bleve")
+	err := filepath.Walk(root, func(_ string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			if os.IsNotExist(walkErr) {
+				return nil
+			}
+			return walkErr
+		}
+		if !info.IsDir() {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total, err
 }
 
 // BaseDir returns the base directory for storage

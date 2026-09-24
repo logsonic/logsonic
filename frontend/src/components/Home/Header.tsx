@@ -15,17 +15,20 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useToast } from '@/hooks/use-toast';
 import { useClearLogs } from '@/hooks/useApi';
 import { getSystemInfo } from '@/lib/api-client';
+import { isNativeShell } from '@/lib/native';
 import { formatBytes } from "@/lib/utils";
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import { useThemeStore } from '@/stores/useThemeStore';
-import { Bot, ExternalLink, HardDrive, Moon, Sun, Trash2 } from 'lucide-react';
+import { Bot, ExternalLink, HardDrive, Monitor, Moon, Sun, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SystemInfoModal from './SystemInfoModal';
 
-type ActiveSection = 'filter' | 'styling' | null;
+// Mirrors SidebarTabId in SidebarPanel.tsx (kept local: this file's import
+// block predates the import/order rule and any new import here fails lint).
+type ActiveSection = 'filter' | 'fields' | 'sources' | 'styling' | null;
 
 interface HeaderProps {
   activeSection?: ActiveSection;
@@ -33,6 +36,8 @@ interface HeaderProps {
 
 const SECTION_LABEL: Record<Exclude<ActiveSection, null>, string> = {
   filter: 'Filter',
+  fields: 'Fields',
+  sources: 'Sources',
   styling: 'Coloring',
 };
 
@@ -46,7 +51,10 @@ export const Header = ({ activeSection = null }: HeaderProps = {}) => {
   const [systemInfoOpen, setSystemInfoOpen] = useState(false);
   const { systemInfo, setSystemInfo } = useSystemInfoStore();
   const theme = useThemeStore((s) => s.theme);
+  const effectiveTheme = useThemeStore((s) => s.effectiveTheme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
+  const cycleTheme = useThemeStore((s) => s.cycleTheme);
+  const native = isNativeShell();
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const resetLogResults = useLogResultStore(state => state.reset);
@@ -111,42 +119,80 @@ export const Header = ({ activeSection = null }: HeaderProps = {}) => {
           <TooltipProvider>
             <Tooltip delayDuration={300}>
               <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  style={{ color: 'var(--ls-text-2)' }}
-                  onClick={toggleTheme}
-                  aria-label="Toggle theme"
-                >
-                  {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-                </Button>
+                {native ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    style={{ color: 'var(--ls-text-2)' }}
+                    onClick={cycleTheme}
+                    aria-label="Cycle theme (auto / light / dark)"
+                  >
+                    {theme === 'auto' ? (
+                      <Sun className="h-3.5 w-3.5" />
+                    ) : theme === 'light' ? (
+                      <Moon className="h-3.5 w-3.5" />
+                    ) : (
+                      <Monitor className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    style={{ color: 'var(--ls-text-2)' }}
+                    onClick={toggleTheme}
+                    aria-label="Toggle theme"
+                  >
+                    {effectiveTheme === 'dark' ? (
+                      <Sun className="h-3.5 w-3.5" />
+                    ) : (
+                      <Moon className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                )}
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs">
-                <p>{theme === 'dark' ? 'Light theme' : 'Dark theme'}</p>
+                {native ? (
+                  <p>
+                    {theme === 'auto'
+                      ? 'Light theme'
+                      : theme === 'light'
+                        ? 'Dark theme'
+                        : 'Auto (follow system)'}
+                  </p>
+                ) : (
+                  <p>{effectiveTheme === 'dark' ? 'Light theme' : 'Dark theme'}</p>
+                )}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
 
-          <TooltipProvider>
-            <Tooltip delayDuration={300}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  style={{ color: 'var(--ls-text-2)' }}
-                  onClick={() => window.open('https://logsonic.io', '_blank', 'noopener,noreferrer')}
-                  aria-label="Visit logsonic.io"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">
-                <p>Visit logsonic.io</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          {/* The shell's View menu already offers "Open in Browser" for this
+              app instance -- an external marketing link is browser-redundant
+              chrome inside the native window (macos-b1). */}
+          {!native && (
+            <TooltipProvider>
+              <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    style={{ color: 'var(--ls-text-2)' }}
+                    onClick={() => window.open('https://logsonic.io', '_blank', 'noopener,noreferrer')}
+                    aria-label="Visit logsonic.io"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  <p>Visit logsonic.io</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
 
           <TooltipProvider>
             <Tooltip delayDuration={300}>

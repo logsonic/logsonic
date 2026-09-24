@@ -34,8 +34,70 @@ export interface IngestRequest {
 }
 
 export interface IngestFileRequest {
+  session_id: string;
+  /** Absolute path to a file the server can read; gzip/zstd detected by magic bytes. */
+  path: string;
+  /** @deprecated pre-1.7 name of `path`; accepted for one release. */
   log_file_name?: string;
-  session_id?: string;
+  /** Also ingest app.log.N / app-YYYY-MM-DD.log siblings, oldest first. */
+  include_rotated?: boolean;
+}
+
+/** The 202 response to POST /ingest/file: the job has been accepted and
+ * started in the background. Progress and the final result arrive via
+ * IngestJob, either polled from GET /ingest/jobs or pushed as
+ * "ingest_progress" SSE events on GET /live/events. */
+export interface IngestFileResponse {
+  /** "accepted" */
+  status: string;
+  job_id: string;
+  path: string;
+  members: string[];
+}
+
+/** The live or final state of one path-based ingest. */
+export interface IngestJob {
+  job_id: string;
+  session_id: string;
+  path: string;
+  members: string[];
+  compression?: string;
+  bytes_read: number;
+  bytes_total?: number;
+  lines: number;
+  rows_stored: number;
+  rows_failed: number;
+  rate_lines_per_s: number;
+  state: 'running' | 'done' | 'cancelled' | 'error';
+  error?: string;
+}
+
+export interface IngestJobsListResponse {
+  jobs: IngestJob[];
+}
+
+export interface IngestJobActionResponse {
+  /** "cancelling", or the job's terminal state if it had already finished */
+  status: string;
+}
+
+/** Read the first few lines of a file by absolute path, without creating an
+ * ingest session -- the native-drop wizard flow uses this instead of a
+ * browser File read, since a native drop only ever has a path. */
+export interface PreviewFileRequest {
+  path: string;
+  /** Caps how many lines to read; default 100, capped server-side. */
+  lines?: number;
+}
+
+export interface PreviewFileResponse {
+  lines: string[];
+  /** Exact once the whole file fit within the requested `lines`; otherwise
+   * an estimate for an uncompressed file, or just the count of lines
+   * actually returned (a lower bound) for a compressed one. */
+  approx_lines: number;
+  compressed?: string;
+  size_bytes: number;
 }
 
 export interface IngestResponse {
@@ -195,6 +257,28 @@ export interface LogDistributionEntry {
 }
 
 
+export interface FacetValue {
+  value: string;
+  count: number;
+  truncated: boolean;
+}
+
+export interface FacetField {
+  name: string;
+  distinct: number;
+  high_cardinality: boolean;
+  values: FacetValue[];
+}
+
+/** Opt-in (include_facets=true) field/value summary of the search window.
+ *  Counts are exact for the `computed_over` rows aggregated; `sampled` means
+ *  the window held more rows than the scan cap and only the newest were used. */
+export interface FacetsResponse {
+  computed_over: number;
+  sampled: boolean;
+  fields: FacetField[];
+}
+
 export interface LogResponse {
   available_columns?: string[];
   count?: number;
@@ -211,6 +295,7 @@ export interface LogResponse {
   time_taken?: number;
   index_query_time?: number;
   total_count?: number;
+  facets?: FacetsResponse;
 }
 
 export interface WorkspaceTime {
@@ -236,6 +321,17 @@ export interface WorkspaceVisualization {
   bucket?: string;
 }
 
+// SavedQuery is one starred query+time+source snapshot inside a Workspace
+// (spec now-03). Mirrors backend/pkg/types/types.go's SavedQuery.
+export interface SavedQuery {
+  id: string;
+  name: string;
+  query?: string;
+  time?: WorkspaceTime;
+  sources?: string[];
+  created_at: string;
+}
+
 export interface Workspace {
   id?: string;
   name: string;
@@ -251,6 +347,7 @@ export interface Workspace {
   facet_fields?: string[];
   visualization: WorkspaceVisualization;
   favorite?: boolean;
+  saved_queries?: SavedQuery[];
   created_at?: string;
   updated_at?: string;
 }
@@ -270,6 +367,7 @@ export interface ParseRequest {
   custom_patterns?: Record<string, string>;
   grok_pattern?: string;
   logs?: string[];
+  multi?: boolean;
   session_options?: IngestSessionOptions;
 }
 
@@ -290,6 +388,8 @@ export interface TimestampPreviewRequest {
   custom_patterns?: Record<string, string>;
   resolution: Partial<TimestampResolution>;
   source_mtime?: string;
+  // Folds `logs` the way the file's ingest will; absent = one record per line.
+  multiline?: MultilineConfig;
 }
 
 export interface TimestampPreviewResponse {
@@ -299,12 +399,16 @@ export interface TimestampPreviewResponse {
 
 // Suggest Types
 export interface AutosuggestResult {
+  coverage?: number;
   custom_patterns?: Record<string, string>;
   parsed_logs?: Record<string, any>[];
   pattern?: string;
   pattern_description?: string;
   pattern_name?: string;
   score?: number;
+  timestamp_field?: string;
+  timestamp_layout?: string;
+  timestamp_source?: string;
 }
 
 export interface SuggestResponse {
@@ -334,7 +438,9 @@ export interface SystemInfo {
 
 export interface StorageInfo {
   available_dates?: string[];
+  /** Kept for existing readers; `sources` carries the same names with row counts. */
   source_names?: string[];
+  sources?: SourceRowsEntry[];
   storage_directory?: string;
   storage_size_bytes?: number;
   total_indices?: number;
@@ -346,10 +452,199 @@ export interface TokenizerInfo {
   persistent_patterns?: string[];
 }
 
+export interface AppBuildInfo {
+  version?: string;
+  commit?: string;
+  build_date?: string;
+}
+
 export interface SystemInfoResponse {
   status?: string;
+  app?: AppBuildInfo;
   storage_info?: StorageInfo;
   system_info?: SystemInfo;
+}
+
+// --- Sources catalog (mirrors backend pkg/types Source*; spec now-10) ---
+
+/** Compact per-source line on /info. */
+export interface SourceRowsEntry {
+  name: string;
+  rows: number;
+}
+
+/** Where a source's rows came from. */
+export interface SourceOrigin {
+  kind: 'file' | 'stdin' | 'tail' | 'watch' | 'otlp' | 'case' | 'unknown';
+  path?: string;
+  host?: string;
+}
+
+/** One ingest session/job that contributed rows to a source. */
+export interface SourceImport {
+  at: string;
+  rows: number;
+  path?: string;
+  job_id?: string;
+}
+
+/** One row of the sources catalog (`<storage>/sources.json`), keyed by `name` (the stored `_src`). */
+export interface SourceEntry {
+  name: string;
+  /** UI-level rename; the index keeps `name` as `_src`. Every past display name is kept in `aliases`. */
+  display_name?: string;
+  aliases: string[];
+  origin: SourceOrigin;
+  pattern_name?: string;
+  pattern?: string;
+  /** Last path-backed import's options — what a re-import replays. Absent for browser uploads / streams. */
+  import_options?: IngestSessionOptions;
+  rows: number;
+  bytes_raw: number;
+  first_ts?: string;
+  last_ts?: string;
+  /** Every day-index holding rows for this source (sorted); `day_rows` is the per-day count behind it. */
+  days: string[];
+  day_rows: Record<string, number>;
+  created_at: string;
+  updated_at: string;
+  imports: SourceImport[];
+}
+
+/** GET /sources and POST /sources/rebuild. */
+export interface SourcesResponse {
+  sources: SourceEntry[];
+}
+
+/** DELETE /sources/{name}. Not undoable. */
+export interface SourceDeleteResponse {
+  status: string;
+  name: string;
+  rows_deleted: number;
+  days_touched: string[];
+  /** Day-indices deleted from disk because the source was the last thing in them. */
+  days_removed: string[];
+}
+
+/** PATCH /sources/{name} body; empty clears the display name. */
+export interface SourceRenameRequest {
+  display_name: string;
+}
+
+/** POST /sources/{name}/reimport (202): old rows gone, a path-ingest job is running. */
+export interface SourceReimportResponse {
+  status: string;
+  job_id: string;
+  session_id: string;
+  path: string;
+  rows_deleted: number;
+}
+
+// --- Storage settings (mirrors backend pkg/types Storage*; spec now-10) ---
+
+/** One row of the per-day table on GET /storage. */
+export interface StorageDay {
+  date: string;
+  rows: number;
+  bytes: number;
+}
+
+/** GET /storage and PUT /storage. */
+export interface StorageResponse {
+  status: string;
+  /** Retention in effect; 0 = keep everything. */
+  retention_days: number;
+  /** Where it came from: `config.json` (set from the UI), the CLI flag/env, or nothing. */
+  retention_source: 'config' | 'flag' | 'none';
+  /** The flag/env value clearing the override falls back to. */
+  retention_default: number;
+  days: StorageDay[];
+  /** Sum of the day-index directories only (not the whole storage dir). */
+  total_bytes: number;
+  path: string;
+  config_path: string;
+}
+
+/** PUT /storage body. `null` clears the override; 0 keeps everything. */
+export interface StorageUpdateRequest {
+  retention_days: number | null;
+}
+
+/** DELETE /storage/days/{date}. Not undoable. */
+export interface StorageDayDeleteResponse {
+  status: string;
+  date: string;
+  rows_deleted: number;
+}
+
+// --- Folder watches (mirrors backend pkg/types Watch*; spec now-04) ---
+
+/** Create a folder watch: matching files in `dir` are ingested when they appear and followed as they grow. */
+export interface WatchRequest {
+  /** Absolute path of an existing directory. */
+  dir: string;
+  /** Base-name glob, default `*.log`. */
+  glob?: string;
+  /** `""` or `"auto"` for per-file detection, else a saved Grok pattern name. */
+  pattern?: string;
+  recursive?: boolean;
+}
+
+/** One tracked file. `done` = a compressed file's one-shot ingest finished; `skipped` = beyond the 100-file cap. */
+export interface WatchFile {
+  path: string;
+  offset: number;
+  size: number;
+  state: 'pending' | 'ingesting' | 'following' | 'done' | 'skipped' | 'error';
+  error?: string;
+  /** The `_src` rows are stored under: `watch.<dirname>.<filename>`. */
+  source: string;
+  pattern?: string;
+}
+
+/** A folder watch with its live file snapshot. The server always fills `glob` (default `*.log`). */
+export interface Watch extends Omit<WatchRequest, 'glob'> {
+  id: string;
+  glob: string;
+  paused: boolean;
+  created_at: string;
+  /** Set while the directory itself can't be read; cleared when it can. */
+  error?: string;
+  files: WatchFile[];
+}
+
+/** GET /watches. */
+export interface WatchesResponse {
+  watches: Watch[];
+}
+
+// --- Bundled samples and UI focus (mirrors backend pkg/types; spec now-12) ---
+
+/** One sample log embedded in the binary. */
+export interface SampleInfo {
+  name: string;
+  description: string;
+  lines: number;
+  bytes: number;
+  license: string;
+  /** The `_src` it imports under. */
+  source: string;
+  pattern_name: string;
+}
+
+/** GET /samples. */
+export interface SamplesResponse {
+  samples: SampleInfo[];
+}
+
+/** POST /ui/focus body: bring the app window to the front, optionally at a `#/...` route. */
+export interface UIFocusRequest {
+  route?: string;
+}
+
+/** The `ui_focus` SSE event on /live/events. */
+export interface UIFocusEvent {
+  route?: string;
 }
 
 // Query Parameters
@@ -366,4 +661,5 @@ export interface LogQueryParams {
   fields?: string;
   /** Defer the chart aggregation so the first result rows are not blocked by it. */
   include_distribution?: boolean;
+  include_facets?: boolean;
 }

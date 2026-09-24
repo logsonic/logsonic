@@ -33,6 +33,9 @@ const (
 	maxQueryLen       = 5000
 	maxListItems      = 200
 	maxFieldLen       = 256
+	// maxSavedQueryNameLen matches spec now-03's "1..60 chars" -- tighter
+	// than maxNameLen since it's a short label, not a workspace title.
+	maxSavedQueryNameLen = 60
 )
 
 type diskFile struct {
@@ -379,19 +382,8 @@ func validate(ws types.Workspace) error {
 	if ws.SortOrder != "asc" && ws.SortOrder != "desc" {
 		return fmt.Errorf("%w: sort_order must be asc or desc", ErrValidation)
 	}
-	if ws.Time.Mode != "relative" && ws.Time.Mode != "absolute" {
-		return fmt.Errorf("%w: time.mode must be relative or absolute", ErrValidation)
-	}
-	if ws.Time.Mode == "absolute" {
-		if _, err := time.Parse(time.RFC3339Nano, ws.Time.Start); err != nil {
-			return fmt.Errorf("%w: time.start must be RFC3339", ErrValidation)
-		}
-		if _, err := time.Parse(time.RFC3339Nano, ws.Time.End); err != nil {
-			return fmt.Errorf("%w: time.end must be RFC3339", ErrValidation)
-		}
-	}
-	if ws.Time.Mode == "relative" && ws.Time.Relative == "" {
-		return fmt.Errorf("%w: time.relative is required", ErrValidation)
+	if err := validateTime(ws.Time); err != nil {
+		return err
 	}
 	if err := validateStrings("source", ws.Sources, 100); err != nil {
 		return err
@@ -432,6 +424,54 @@ func validate(ws types.Workspace) error {
 	if err := validateStrings("facet field", ws.FacetFields, 100); err != nil {
 		return err
 	}
+	if err := validateSavedQueries(ws.SavedQueries); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateTime is shared by Workspace.Time and each SavedQuery's own Time
+// (spec now-03) -- a saved query's time range is validated exactly like a
+// workspace's, since it round-trips through the same WorkspaceTime shape.
+func validateTime(t types.WorkspaceTime) error {
+	if t.Mode != "relative" && t.Mode != "absolute" {
+		return fmt.Errorf("%w: time.mode must be relative or absolute", ErrValidation)
+	}
+	if t.Mode == "absolute" {
+		if _, err := time.Parse(time.RFC3339Nano, t.Start); err != nil {
+			return fmt.Errorf("%w: time.start must be RFC3339", ErrValidation)
+		}
+		if _, err := time.Parse(time.RFC3339Nano, t.End); err != nil {
+			return fmt.Errorf("%w: time.end must be RFC3339", ErrValidation)
+		}
+	}
+	if t.Mode == "relative" && t.Relative == "" {
+		return fmt.Errorf("%w: time.relative is required", ErrValidation)
+	}
+	return nil
+}
+
+func validateSavedQueries(queries []types.SavedQuery) error {
+	if len(queries) > maxListItems {
+		return fmt.Errorf("%w: too many saved queries", ErrValidation)
+	}
+	for _, sq := range queries {
+		name := strings.TrimSpace(sq.Name)
+		if name == "" || len(sq.Name) > maxSavedQueryNameLen {
+			return fmt.Errorf("%w: saved query name must be 1-%d characters", ErrValidation, maxSavedQueryNameLen)
+		}
+		if len(sq.Query) > maxQueryLen {
+			return fmt.Errorf("%w: saved query %q: query exceeds %d characters", ErrValidation, sq.Name, maxQueryLen)
+		}
+		if sq.Time != nil {
+			if err := validateTime(*sq.Time); err != nil {
+				return err
+			}
+		}
+		if err := validateStrings("source", sq.Sources, 100); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -458,6 +498,18 @@ func cloneWorkspace(ws types.Workspace) types.Workspace {
 			widths[k] = v
 		}
 		ws.ColumnWidths = widths
+	}
+	if ws.SavedQueries != nil {
+		queries := make([]types.SavedQuery, len(ws.SavedQueries))
+		for i, sq := range ws.SavedQueries {
+			sq.Sources = append([]string(nil), sq.Sources...)
+			if sq.Time != nil {
+				t := *sq.Time
+				sq.Time = &t
+			}
+			queries[i] = sq
+		}
+		ws.SavedQueries = queries
 	}
 	return ws
 }

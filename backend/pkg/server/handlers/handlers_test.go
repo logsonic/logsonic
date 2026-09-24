@@ -100,9 +100,23 @@ func (m *mockStorage) SearchPage(ctx context.Context, options storagepkg.SearchO
 	}, nil
 }
 
+func (m *mockStorage) Facets(ctx context.Context, options storagepkg.SearchOptions) (*types.FacetsResponse, error) {
+	return storagepkg.AggregateFacets(m.logs), nil
+}
+
 func (m *mockStorage) List() ([]string, error) { return m.listDates, nil }
 
-func (m *mockStorage) GetSourceNames() ([]string, error) { return m.sourceNames, nil }
+// SourceStats reports every configured sourceName as one row on every
+// listed date — enough for the catalog to rebuild the name set.
+func (m *mockStorage) SourceStats(date string) ([]storagepkg.SourceDayStats, error) {
+	stats := make([]storagepkg.SourceDayStats, 0, len(m.sourceNames))
+	for _, name := range m.sourceNames {
+		stats = append(stats, storagepkg.SourceDayStats{Source: name, Rows: 1})
+	}
+	return stats, nil
+}
+
+func (m *mockStorage) LegacySourceShard(date string) bool { return false }
 
 func (m *mockStorage) Clear() error {
 	if m.clearErr != nil {
@@ -117,6 +131,14 @@ func (m *mockStorage) BaseDir() string { return m.baseDir }
 func (m *mockStorage) GetDocCount(date string) (uint64, error) { return m.docCounts[date], nil }
 
 func (m *mockStorage) DeleteByIds(ids []string) (int, error) { return len(ids), nil }
+
+func (m *mockStorage) DeleteBySource(ctx context.Context, source string, dates []string) (int, []string, error) {
+	return 0, nil, nil
+}
+
+func (m *mockStorage) RemoveDay(date string) error { return nil }
+
+func (m *mockStorage) IndexDirSize(date string) (int64, error) { return 0, nil }
 
 func (m *mockStorage) PruneOlderThan(maxAge time.Duration) (int, error) { return 0, nil }
 
@@ -533,6 +555,12 @@ func TestHandleInfo_Success(t *testing.T) {
 	store.listDates = []string{"2024-01-15"}
 	store.sourceNames = []string{"app.log"}
 	store.docCounts = map[string]uint64{"2024-01-15": 42}
+	// The catalog was opened (and rebuilt over zero dates) inside
+	// NewHandler; rebuild again now that the mock has a date so the
+	// source names actually reach /info through the catalog.
+	if err := h.Catalog.Rebuild(); err != nil {
+		t.Fatal(err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/info", nil)
 	w := httptest.NewRecorder()
@@ -547,6 +575,12 @@ func TestHandleInfo_Success(t *testing.T) {
 	json.NewDecoder(w.Body).Decode(&resp)
 	if resp.Status != "success" {
 		t.Errorf("expected 'success', got '%s'", resp.Status)
+	}
+	if names := resp.StorageInfo.SourceNames; len(names) != 1 || names[0] != "app.log" {
+		t.Errorf("source_names from the catalog: %v", names)
+	}
+	if s := resp.StorageInfo.Sources; len(s) != 1 || s[0].Name != "app.log" || s[0].Rows != 1 {
+		t.Errorf("sources from the catalog: %+v", s)
 	}
 }
 
@@ -565,7 +599,6 @@ func TestHandleInfo_MethodNotAllowed(t *testing.T) {
 func TestHandleInfo_CacheInvalidation(t *testing.T) {
 	h, store := setupHandler(t)
 	store.listDates = []string{"2024-01-15"}
-	store.sourceNames = []string{"app.log"}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/info", nil)
 	w := httptest.NewRecorder()
@@ -591,7 +624,6 @@ func TestHandleInfo_CacheInvalidation(t *testing.T) {
 func TestHandleInfo_RefreshParam(t *testing.T) {
 	h, store := setupHandler(t)
 	store.listDates = []string{}
-	store.sourceNames = []string{}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/info", nil)
 	w := httptest.NewRecorder()

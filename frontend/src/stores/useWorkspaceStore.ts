@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { Workspace, WorkspaceColorRule } from '@/lib/api-types';
+import type { SavedQuery, Workspace, WorkspaceColorRule } from '@/lib/api-types';
 import type { ColorRule } from '@/stores/useColorRuleStore';
 
 import {
@@ -11,9 +11,13 @@ import {
   listWorkspaces,
   updateWorkspace,
 } from '@/lib/api-client';
-import { calculateRelativeDateRange } from '@/lib/date-utils';
-import { normalizeWorkspaceColumnWidths } from '@/lib/workspace-utils';
+import {
+  applyWorkspaceTimeToSearchState,
+  normalizeWorkspaceColumnWidths,
+  searchStateToWorkspaceTime,
+} from '@/lib/workspace-utils';
 import { useColorRuleStore } from '@/stores/useColorRuleStore';
+import { useSavedQueryDraftStore } from '@/stores/useSavedQueryDraftStore';
 import {
   SearchQueryParamsStoreState,
   useSearchQueryParamsStore,
@@ -40,6 +44,7 @@ export const buildWorkspaceFromState = (
   description: string,
   search: SearchQueryParamsStoreState,
   colorRules: ColorRule[],
+  savedQueries: SavedQuery[],
   existing?: Workspace
 ): Workspace => ({
   id: existing?.id,
@@ -47,23 +52,7 @@ export const buildWorkspaceFromState = (
   description: description.trim(),
   query: search.searchQuery,
   sources: [...search.sources],
-  time: search.isRelative
-    ? search.relativeValue === 'custom'
-      ? {
-          mode: 'relative',
-          relative: search.relativeValue,
-          custom_relative_count: search.customRelativeCount,
-          custom_relative_unit: search.customRelativeUnit,
-        }
-      : {
-          mode: 'relative',
-          relative: search.relativeValue,
-        }
-    : {
-        mode: 'absolute',
-        start: search.UTCTimeSince.toISOString(),
-        end: search.UTCTimeTo.toISOString(),
-      },
+  time: searchStateToWorkspaceTime(search),
   sort_by: search.sortBy,
   sort_order: search.sortOrder === 'asc' ? 'asc' : 'desc',
   columns: [...search.selectedColumns],
@@ -72,22 +61,18 @@ export const buildWorkspaceFromState = (
   facet_fields: existing?.facet_fields ? [...existing.facet_fields] : [],
   visualization: existing?.visualization ?? { type: 'logs', bucket: 'auto' },
   favorite: existing?.favorite ?? false,
+  saved_queries: [...savedQueries],
   created_at: existing?.created_at,
   updated_at: existing?.updated_at,
 });
 
 export const applyWorkspaceToCurrentState = (workspace: Workspace) => {
   const search = useSearchQueryParamsStore.getState();
-  const isRelative = workspace.time?.mode !== 'absolute';
-  const timeState = isRelative ? relativeTimeState(workspace) : absoluteTimeState(workspace);
+  const timeState = applyWorkspaceTimeToSearchState(workspace.time, search);
 
   useSearchQueryParamsStore.setState({
     searchQuery: workspace.query ?? '',
     sources: workspace.sources ?? [],
-    isRelative,
-    relativeValue: workspace.time?.relative || search.relativeValue,
-    customRelativeCount: workspace.time?.custom_relative_count || search.customRelativeCount,
-    customRelativeUnit: workspace.time?.custom_relative_unit || search.customRelativeUnit,
     sortBy: workspace.sort_by || 'timestamp',
     sortOrder: workspace.sort_order === 'asc' ? 'asc' : 'desc',
     selectedColumns:
@@ -100,13 +85,18 @@ export const applyWorkspaceToCurrentState = (workspace: Workspace) => {
   });
 
   useColorRuleStore.getState().setRules((workspace.color_rules ?? []).map(toColorRule));
+  // A saved query is *loaded into the dropdown*, not auto-run (spec now-03
+  // step 6) -- this only replaces the draft's own saved-query list; it must
+  // not touch searchQuery/time/sources above.
+  useSavedQueryDraftStore.getState().setAll(workspace.saved_queries ?? []);
   useSearchQueryParamsStore.getState().triggerSearch();
 };
 
 export const isWorkspaceDirty = (
   workspace: Workspace | undefined,
   search: SearchQueryParamsStoreState,
-  colorRules: ColorRule[]
+  colorRules: ColorRule[],
+  savedQueries: SavedQuery[]
 ): boolean => {
   if (!workspace) return false;
   const current = buildWorkspaceFromState(
@@ -114,6 +104,7 @@ export const isWorkspaceDirty = (
     workspace.description ?? '',
     search,
     colorRules,
+    savedQueries,
     workspace
   );
   return stableWorkspaceSnapshot(current) !== stableWorkspaceSnapshot(workspace);
@@ -142,7 +133,8 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set, get) => ({
         name,
         description,
         useSearchQueryParamsStore.getState(),
-        useColorRuleStore.getState().colorRules
+        useColorRuleStore.getState().colorRules,
+        useSavedQueryDraftStore.getState().savedQueries
       );
       const response = await createWorkspace(workspace);
       const saved = response.workspace;
@@ -172,6 +164,7 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set, get) => ({
         active.description ?? '',
         useSearchQueryParamsStore.getState(),
         useColorRuleStore.getState().colorRules,
+        useSavedQueryDraftStore.getState().savedQueries,
         active
       );
       const response = await updateWorkspace(active.id, workspace);
@@ -215,11 +208,15 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       await deleteWorkspaceRequest(id);
+      const wasActive = get().activeWorkspaceId === id;
       set((state) => ({
         workspaces: state.workspaces.filter((workspace) => workspace.id !== id),
-        activeWorkspaceId: state.activeWorkspaceId === id ? null : state.activeWorkspaceId,
+        activeWorkspaceId: wasActive ? null : state.activeWorkspaceId,
         isLoading: false,
       }));
+      // Otherwise its saved queries linger in the draft and get silently
+      // attached to the next workspace someone saves.
+      if (wasActive) useSavedQueryDraftStore.getState().setAll([]);
     } catch (error) {
       const message = errorMessage(error);
       set({ error: message, isLoading: false });
@@ -273,37 +270,6 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set, get) => ({
   setActiveWorkspaceId: (id) => set({ activeWorkspaceId: id }),
   clearError: () => set({ error: null }),
 }));
-
-const relativeTimeState = (workspace: Workspace) => {
-  const search = useSearchQueryParamsStore.getState();
-  const relativeValue = workspace.time?.relative || search.relativeValue;
-  const unit = workspace.time?.custom_relative_unit || search.customRelativeUnit;
-  const count = workspace.time?.custom_relative_count || search.customRelativeCount;
-  const { startDate, endDate } = calculateRelativeDateRange(relativeValue, unit, count);
-  return {
-    UTCTimeSince: startDate,
-    UTCTimeTo: endDate,
-    UTCTimeSinceMs: startDate.getTime(),
-    UTCTimeToMs: endDate.getTime(),
-  };
-};
-
-const absoluteTimeState = (workspace: Workspace) => {
-  const start = workspace.time?.start
-    ? new Date(workspace.time.start)
-    : new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const end = workspace.time?.end ? new Date(workspace.time.end) : new Date();
-  const safeStart = Number.isNaN(start.getTime())
-    ? new Date(Date.now() - 24 * 60 * 60 * 1000)
-    : start;
-  const safeEnd = Number.isNaN(end.getTime()) ? new Date() : end;
-  return {
-    UTCTimeSince: safeStart,
-    UTCTimeTo: safeEnd,
-    UTCTimeSinceMs: safeStart.getTime(),
-    UTCTimeToMs: safeEnd.getTime(),
-  };
-};
 
 const toWorkspaceColorRule = (rule: ColorRule): WorkspaceColorRule => ({
   id: rule.id,
@@ -360,6 +326,14 @@ const stableWorkspaceSnapshot = (workspace: Workspace): string => {
     facet_fields: workspace.facet_fields ?? [],
     visualization: workspace.visualization ?? { type: 'logs', bucket: 'auto' },
     favorite: !!workspace.favorite,
+    saved_queries: (workspace.saved_queries ?? []).map((sq) => ({
+      id: sq.id,
+      name: sq.name,
+      query: sq.query ?? '',
+      time: sq.time,
+      sources: sq.sources ?? [],
+      created_at: sq.created_at,
+    })),
   };
   return JSON.stringify(normalized);
 };

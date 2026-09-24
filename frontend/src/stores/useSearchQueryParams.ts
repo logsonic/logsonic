@@ -1,5 +1,6 @@
 import { calculatePresetRelativeDate, calculateRelativeDate, calculateRelativeDateRange, RELATIVE_DATE_PRESETS } from '@/lib/date-utils';
-import { normalizeWorkspaceColumnWidths } from '@/lib/workspace-utils';
+import { normalizeWorkspaceColumnWidths, searchStateToWorkspaceTime } from '@/lib/workspace-utils';
+import { useQueryHistoryStore } from '@/stores/useQueryHistoryStore';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
@@ -334,7 +335,26 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
             hasSearched: true,
             searchNonce: currentState.searchNonce + 1,
           });
-          
+
+          // History records *executed* queries, not keystrokes (spec
+          // now-03) -- this is the one place every real search execution
+          // passes through: the search bar's Enter/Search button, a facet
+          // click, a workspace load (applyWorkspaceToCurrentState calls
+          // this too, which is correct -- loading a workspace's query is
+          // itself an executed search), and the initial URL-query cold
+          // load. Skip an empty query so a default/no-query load doesn't
+          // push a blank entry. syncWithUrlParams's own browser-navigation
+          // path bumps searchNonce directly rather than calling this
+          // action, so back/forward doesn't push a duplicate -- intentional,
+          // not an oversight.
+          if (currentState.searchQuery) {
+            useQueryHistoryStore.getState().push({
+              query: currentState.searchQuery,
+              time: searchStateToWorkspaceTime(currentState),
+              sources: currentState.sources.length > 0 ? [...currentState.sources] : undefined,
+            });
+          }
+
           // Update URL parameters when search is triggered
           currentState.updateUrlParams();
         },
@@ -741,15 +761,26 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
   )
 );
 
+// Whether the hash is the landing route (home): empty, "#", "#/" or a
+// "#?…" query. A sub-route such as "#/import" or "#/settings/storage" is
+// not, and must keep its hash -- pushing "#?…" over it would make a reload
+// or bookmark of that page land on home.
+function isLandingRoute(hash: string): boolean {
+  return hash === '' || hash === '#' || hash === '#/' || hash.startsWith('#?');
+}
+
 // Initialize URL parameters if not present
 if (typeof window !== 'undefined') {
   const initialUrlParams = getUrlParams();
   if (!initialUrlParams || Object.keys(initialUrlParams).length === 0) {
-    // If no URL parameters, set them based on current store state
-    setTimeout(() => {
-      const store = useSearchQueryParamsStore.getState();
-      store.updateUrlParams();
-    }, 0);
+    // If no URL parameters, set them based on current store state --
+    // but only on the landing route.
+    if (isLandingRoute(window.location.hash)) {
+      setTimeout(() => {
+        const store = useSearchQueryParamsStore.getState();
+        store.updateUrlParams();
+      }, 0);
+    }
   } else {
     // If URL parameters exist, make sure they're properly applied to the store
     // This ensures the search UI components reflect the URL state.

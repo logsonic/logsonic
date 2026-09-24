@@ -2,6 +2,9 @@ import {
   GrokPatternRequest,
   GrokPatternResponse,
   IngestFileRequest,
+  IngestFileResponse,
+  IngestJobActionResponse,
+  IngestJobsListResponse,
   IngestRequest,
   IngestResponse,
   IngestSessionOptions,
@@ -10,10 +13,23 @@ import {
   LogResponse,
   ParseRequest,
   ParseResponse,
+  PreviewFileRequest,
+  PreviewFileResponse,
+  SourceDeleteResponse,
+  SourceEntry,
+  SourceReimportResponse,
+  SourceRenameRequest,
+  SourcesResponse,
+  StorageDayDeleteResponse,
+  StorageResponse,
+  StorageUpdateRequest,
   SuggestResponse,
   SystemInfoResponse,
   TimestampPreviewRequest,
   TimestampPreviewResponse,
+  Watch,
+  WatchesResponse,
+  WatchRequest,
   Workspace,
   WorkspaceListResponse,
   WorkspaceResponse,
@@ -29,6 +45,26 @@ export const API_BASE_URL = (import.meta.env.DEV
 export const liveEventsURL = () => `${API_BASE_URL}/live/events`;
 
 // Helper function for API requests
+/**
+ * An API error with the server's structured fields attached. `message` is
+ * what callers have always received (the server's `error` line), so existing
+ * string matching keeps working; `code` and `details` let a caller map a
+ * known failure to user copy instead of showing operator text verbatim.
+ */
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  details?: string;
+
+  constructor(message: string, status: number, code?: string, details?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
+
 async function apiRequest<T = unknown>(
   endpoint: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' = 'GET',
@@ -74,7 +110,9 @@ async function apiRequest<T = unknown>(
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
     const errorMessage = errorData?.detail || errorData?.error || `API request failed with status ${response.status}`;
-    throw new Error(errorMessage);
+    // The backend's ErrorResponse field is `details` (plural); `detail` is
+    // kept above only because it was always read first.
+    throw new ApiError(errorMessage, response.status, errorData?.code, errorData?.details);
   }
   
   if (response.status === 204) {
@@ -128,8 +166,23 @@ export async function ingestLogs(request: IngestRequest, signal?: AbortSignal): 
   return apiRequest<IngestResponse>('/ingest/logs', 'POST', request, undefined, signal);
 }
 
-export async function ingestFile(request: IngestFileRequest): Promise<IngestResponse> {
-  return apiRequest<IngestResponse>('/ingestFile', 'POST', request);
+/**
+ * Server-side ingest by absolute path (spec now-08 phase 2). Resolves as
+ * soon as the job is accepted (202) -- it does not wait for the file to be
+ * read. Track progress with listIngestJobs() or the "ingest_progress" SSE
+ * event on the live stream; the wizard wiring that consumes those is not
+ * built yet (phase 3).
+ */
+export async function ingestFile(request: IngestFileRequest): Promise<IngestFileResponse> {
+  return apiRequest<IngestFileResponse>('/ingest/file', 'POST', request);
+}
+
+export async function listIngestJobs(signal?: AbortSignal): Promise<IngestJobsListResponse> {
+  return apiRequest<IngestJobsListResponse>('/ingest/jobs', 'GET', undefined, undefined, signal);
+}
+
+export async function cancelIngestJob(jobId: string): Promise<IngestJobActionResponse> {
+  return apiRequest<IngestJobActionResponse>(`/ingest/jobs/${encodeURIComponent(jobId)}`, 'DELETE');
 }
 
 export async function pauseLiveSubscriber(subscriberId: string): Promise<LiveControlResponse> {
@@ -179,6 +232,16 @@ export async function parseLogs(request: ParseRequest): Promise<ParseResponse> {
   return apiRequest<ParseResponse>('/parse', 'POST', request);
 }
 
+/**
+ * Preview the first few lines of a file by absolute path (spec now-08),
+ * without an ingest session. For a native drop (a path, not a browser
+ * File), this is how the wizard gets a preview -- the wizard wiring that
+ * calls it is not built yet.
+ */
+export async function previewFile(request: PreviewFileRequest): Promise<PreviewFileResponse> {
+  return apiRequest<PreviewFileResponse>('/parse/preview-file', 'POST', request);
+}
+
 // Live timestamp re-preview for the import wizard's knob panel.
 export async function previewTimestamps(request: TimestampPreviewRequest): Promise<TimestampPreviewResponse> {
   return apiRequest<TimestampPreviewResponse>('/timestamp/preview', 'POST', request);
@@ -218,4 +281,76 @@ export async function pingServer(): Promise<PingResponse> {
 // Delete logs by document IDs
 export async function deleteLogsById(ids: string[]): Promise<any> {
   return apiRequest<any>('/logs/ids', 'DELETE', { ids });
+}
+
+// Sources catalog (spec now-10)
+
+export async function listSources(signal?: AbortSignal): Promise<SourcesResponse> {
+  return apiRequest<SourcesResponse>('/sources', 'GET', undefined, undefined, signal);
+}
+
+export async function getSource(name: string): Promise<SourceEntry> {
+  return apiRequest<SourceEntry>(`/sources/${encodeURIComponent(name)}`, 'GET');
+}
+
+export async function deleteSource(name: string): Promise<SourceDeleteResponse> {
+  return apiRequest<SourceDeleteResponse>(`/sources/${encodeURIComponent(name)}`, 'DELETE');
+}
+
+export async function renameSource(
+  name: string,
+  request: SourceRenameRequest
+): Promise<SourceEntry> {
+  return apiRequest<SourceEntry>(`/sources/${encodeURIComponent(name)}`, 'PATCH', request);
+}
+
+export async function reimportSource(name: string): Promise<SourceReimportResponse> {
+  return apiRequest<SourceReimportResponse>(
+    `/sources/${encodeURIComponent(name)}/reimport`,
+    'POST',
+    {}
+  );
+}
+
+export async function rebuildSources(): Promise<SourcesResponse> {
+  return apiRequest<SourcesResponse>('/sources/rebuild', 'POST', {});
+}
+
+// Storage settings (spec now-10)
+
+export async function getStorage(signal?: AbortSignal): Promise<StorageResponse> {
+  return apiRequest<StorageResponse>('/storage', 'GET', undefined, undefined, signal);
+}
+
+export async function updateStorage(request: StorageUpdateRequest): Promise<StorageResponse> {
+  return apiRequest<StorageResponse>('/storage', 'PUT', request);
+}
+
+export async function deleteStorageDay(date: string): Promise<StorageDayDeleteResponse> {
+  return apiRequest<StorageDayDeleteResponse>(
+    `/storage/days/${encodeURIComponent(date)}`,
+    'DELETE'
+  );
+}
+
+// Folder watches (spec now-04)
+
+export async function listWatches(signal?: AbortSignal): Promise<WatchesResponse> {
+  return apiRequest<WatchesResponse>('/watches', 'GET', undefined, undefined, signal);
+}
+
+export async function createWatch(request: WatchRequest): Promise<Watch> {
+  return apiRequest<Watch>('/watches', 'POST', request);
+}
+
+export async function deleteWatch(id: string): Promise<void> {
+  return apiRequest<void>(`/watches/${encodeURIComponent(id)}`, 'DELETE');
+}
+
+export async function pauseWatch(id: string): Promise<Watch> {
+  return apiRequest<Watch>(`/watches/${encodeURIComponent(id)}/pause`, 'POST', {});
+}
+
+export async function resumeWatch(id: string): Promise<Watch> {
+  return apiRequest<Watch>(`/watches/${encodeURIComponent(id)}/resume`, 'POST', {});
 }

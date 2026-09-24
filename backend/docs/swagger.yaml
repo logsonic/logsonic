@@ -24,6 +24,13 @@ definitions:
         items:
           type: string
         type: array
+      multiline:
+        allOf:
+        - $ref: '#/definitions/types.MultilineConfig'
+        description: |-
+          Multiline folds Logs the way the file's ingest session will, so the
+          preview rows line up with the folded records the import surface
+          shows. Absent or disabled: one record per line (no auto-detect).
       resolution:
         $ref: '#/definitions/timeresolve.Resolution'
       source_mtime:
@@ -208,6 +215,39 @@ definitions:
         description: Status will always be "error" for error responses
         type: string
     type: object
+  types.FacetField:
+    properties:
+      distinct:
+        type: integer
+      high_cardinality:
+        type: boolean
+      name:
+        type: string
+      values:
+        items:
+          $ref: '#/definitions/types.FacetValue'
+        type: array
+    type: object
+  types.FacetValue:
+    properties:
+      count:
+        type: integer
+      truncated:
+        type: boolean
+      value:
+        type: string
+    type: object
+  types.FacetsResponse:
+    properties:
+      computed_over:
+        type: integer
+      fields:
+        items:
+          $ref: '#/definitions/types.FacetField'
+        type: array
+      sampled:
+        type: boolean
+    type: object
   types.GrokPatternRequest:
     description: Request structure for creating or updating Grok patterns
     properties:
@@ -250,6 +290,82 @@ definitions:
       status:
         description: Status of the operation
         type: string
+    type: object
+  types.IngestFileRequest:
+    properties:
+      include_rotated:
+        description: |-
+          IncludeRotated also ingests app.log.N / app-YYYY-MM-DD.log siblings,
+          oldest first, under the same session and source.
+        type: boolean
+      log_file_name:
+        description: 'Deprecated: use Path.'
+        type: string
+      path:
+        type: string
+      session_id:
+        type: string
+    type: object
+  types.IngestFileResponse:
+    properties:
+      job_id:
+        type: string
+      members:
+        description: every file that will be read, in order
+        items:
+          type: string
+        type: array
+      path:
+        description: canonical path of the base file
+        type: string
+      status:
+        description: '"accepted"'
+        type: string
+    type: object
+  types.IngestJob:
+    properties:
+      bytes_read:
+        type: integer
+      bytes_total:
+        type: integer
+      compression:
+        type: string
+      error:
+        type: string
+      job_id:
+        type: string
+      lines:
+        type: integer
+      members:
+        items:
+          type: string
+        type: array
+      path:
+        type: string
+      rate_lines_per_s:
+        type: number
+      rows_failed:
+        type: integer
+      rows_stored:
+        type: integer
+      session_id:
+        type: string
+      state:
+        type: string
+    type: object
+  types.IngestJobActionResponse:
+    properties:
+      status:
+        description: '"cancelling", or the job''s terminal state if it had already
+          finished'
+        type: string
+    type: object
+  types.IngestJobsListResponse:
+    properties:
+      jobs:
+        items:
+          $ref: '#/definitions/types.IngestJob'
+        type: array
     type: object
   types.IngestRequest:
     properties:
@@ -302,9 +418,11 @@ definitions:
           Multiline configures folding of physical lines into logical log
           records before pattern matching, for formats where a single log
           statement spans multiple lines (stack traces, multi-line JSON,
-          etc). Nil/disabled preserves the historical one-line-per-record
+          etc). Disabled preserves the historical one-line-per-record
           behaviour. Folding is applied on /parse (including autosuggest)
-          as well as ingest and live tail.
+          as well as ingest and live tail. On /parse only, an absent field
+          (nil) means "auto-detect a layout from the sample"; an explicit
+          {"enabled": false} means "do not fold", the same as on ingest.
       name:
         type: string
       pattern:
@@ -352,6 +470,10 @@ definitions:
         type: integer
       end_date:
         type: string
+      facets:
+        allOf:
+        - $ref: '#/definitions/types.FacetsResponse'
+        description: Facets is present only when the request asked for include_facets=true.
       index_query_time:
         type: integer
       limit:
@@ -469,6 +591,245 @@ definitions:
           timestamps in this sample. Drives the wizard's diagnostic chip
           and live preview. Empty when no logs were provided.
     type: object
+  types.PreviewFileRequest:
+    properties:
+      lines:
+        description: Lines caps how many lines to read; default 100, capped server-side.
+        type: integer
+      path:
+        type: string
+    type: object
+  types.PreviewFileResponse:
+    properties:
+      approx_lines:
+        type: integer
+      compressed:
+        type: string
+      lines:
+        items:
+          type: string
+        type: array
+      size_bytes:
+        type: integer
+    type: object
+  types.SampleInfo:
+    properties:
+      bytes:
+        type: integer
+      description:
+        type: string
+      license:
+        type: string
+      lines:
+        type: integer
+      name:
+        type: string
+      pattern_name:
+        type: string
+      source:
+        type: string
+    type: object
+  types.SamplesResponse:
+    properties:
+      samples:
+        items:
+          $ref: '#/definitions/types.SampleInfo'
+        type: array
+    type: object
+  types.SavedQuery:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      query:
+        type: string
+      sources:
+        items:
+          type: string
+        type: array
+      time:
+        $ref: '#/definitions/types.WorkspaceTime'
+    type: object
+  types.SourceDeleteResponse:
+    properties:
+      days_removed:
+        description: |-
+          DaysRemoved lists day-indices deleted from disk because the source
+          was the last thing in them.
+        items:
+          type: string
+        type: array
+      days_touched:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+      rows_deleted:
+        type: integer
+      status:
+        type: string
+    type: object
+  types.SourceEntry:
+    properties:
+      aliases:
+        items:
+          type: string
+        type: array
+      bytes_raw:
+        type: integer
+      created_at:
+        type: string
+      day_rows:
+        additionalProperties:
+          type: integer
+        type: object
+      days:
+        description: |-
+          Days lists every day-index holding rows for this source (sorted);
+          DayRows is the per-day count behind it, which is what lets a rebuild
+          after a prune or a row delete touch only the affected days.
+        items:
+          type: string
+        type: array
+      display_name:
+        description: |-
+          DisplayName is a UI-level rename (spec now-10 "Rename"); the index
+          keeps Name as _src. Every past DisplayName is kept in Aliases so a
+          search by any of them resolves to Name (see catalog.ResolveSources).
+        type: string
+      first_ts:
+        type: string
+      import_options:
+        allOf:
+        - $ref: '#/definitions/types.IngestSessionOptions'
+        description: |-
+          ImportOptions is the last path-backed ingest session's full options
+          (pattern, custom patterns, timestamp config, meta._src …) — what a
+          re-import replays so the rows land under the same _src. Only set by
+          imports that have an origin path; browser uploads can't be replayed.
+      imports:
+        items:
+          $ref: '#/definitions/types.SourceImport'
+        type: array
+      last_ts:
+        type: string
+      name:
+        type: string
+      origin:
+        $ref: '#/definitions/types.SourceOrigin'
+      pattern:
+        type: string
+      pattern_name:
+        type: string
+      rows:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  types.SourceImport:
+    properties:
+      at:
+        type: string
+      job_id:
+        type: string
+      path:
+        type: string
+      rows:
+        type: integer
+    type: object
+  types.SourceOrigin:
+    properties:
+      host:
+        type: string
+      kind:
+        type: string
+      path:
+        type: string
+    type: object
+  types.SourceReimportResponse:
+    properties:
+      job_id:
+        type: string
+      path:
+        type: string
+      rows_deleted:
+        type: integer
+      session_id:
+        type: string
+      status:
+        type: string
+    type: object
+  types.SourceRenameRequest:
+    properties:
+      display_name:
+        type: string
+    type: object
+  types.SourceRowsEntry:
+    properties:
+      name:
+        type: string
+      rows:
+        type: integer
+    type: object
+  types.SourcesResponse:
+    properties:
+      sources:
+        items:
+          $ref: '#/definitions/types.SourceEntry'
+        type: array
+    type: object
+  types.StorageDay:
+    properties:
+      bytes:
+        type: integer
+      date:
+        type: string
+      rows:
+        type: integer
+    type: object
+  types.StorageDayDeleteResponse:
+    properties:
+      date:
+        type: string
+      rows_deleted:
+        type: integer
+      status:
+        type: string
+    type: object
+  types.StorageResponse:
+    properties:
+      config_path:
+        type: string
+      days:
+        items:
+          $ref: '#/definitions/types.StorageDay'
+        type: array
+      path:
+        type: string
+      retention_days:
+        type: integer
+      retention_default:
+        type: integer
+      retention_source:
+        type: string
+      status:
+        type: string
+      total_bytes:
+        description: |-
+          TotalBytes is the sum of the day-index directories only — not the
+          whole storage dir (which /info reports and which also holds
+          sources.json, workspaces.json and the pattern library).
+        type: integer
+    type: object
+  types.StorageUpdateRequest:
+    properties:
+      retention_days:
+        type: integer
+    type: object
   types.SuggestResponse:
     properties:
       combined_coverage:
@@ -499,6 +860,19 @@ definitions:
     type: object
   types.SystemInfoResponse:
     properties:
+      app:
+        description: |-
+          App identifies the server binary (from goreleaser ldflags). The UI
+          prefers this over its own bundle version so a stale app shell or a
+          mismatched CLI is visible in the status bar and About page.
+        properties:
+          build_date:
+            type: string
+          commit:
+            type: string
+          version:
+            type: string
+        type: object
       status:
         type: string
       storage_info:
@@ -508,8 +882,15 @@ definitions:
               type: string
             type: array
           source_names:
+            description: |-
+              SourceNames is kept for existing clients; Sources carries the
+              same names with their row counts from the sources catalog.
             items:
               type: string
+            type: array
+          sources:
+            items:
+              $ref: '#/definitions/types.SourceRowsEntry'
             type: array
           storage_directory:
             type: string
@@ -545,6 +926,72 @@ definitions:
             type: string
         type: object
     type: object
+  types.UIFocusRequest:
+    properties:
+      route:
+        type: string
+    type: object
+  types.Watch:
+    properties:
+      created_at:
+        type: string
+      dir:
+        type: string
+      error:
+        description: |-
+          Error is set when the directory itself can't be read (deleted,
+          permissions); the watch keeps sweeping and clears it when it can.
+        type: string
+      files:
+        items:
+          $ref: '#/definitions/types.WatchFile'
+        type: array
+      glob:
+        type: string
+      id:
+        type: string
+      pattern:
+        type: string
+      paused:
+        type: boolean
+      recursive:
+        type: boolean
+    type: object
+  types.WatchFile:
+    properties:
+      error:
+        type: string
+      offset:
+        type: integer
+      path:
+        type: string
+      pattern:
+        type: string
+      size:
+        type: integer
+      source:
+        type: string
+      state:
+        type: string
+    type: object
+  types.WatchRequest:
+    properties:
+      dir:
+        type: string
+      glob:
+        type: string
+      pattern:
+        type: string
+      recursive:
+        type: boolean
+    type: object
+  types.WatchesResponse:
+    properties:
+      watches:
+        items:
+          $ref: '#/definitions/types.Watch'
+        type: array
+    type: object
   types.Workspace:
     properties:
       color_rules:
@@ -575,6 +1022,15 @@ definitions:
         type: string
       query:
         type: string
+      saved_queries:
+        description: |-
+          SavedQueries are named query+time+source snapshots a user starred
+          while investigating in this workspace (spec now-03). Omitted (not an
+          empty array) on a workspace with none, so a pre-now-03 workspace file
+          unmarshals with a nil slice, not a JSON parse error.
+        items:
+          $ref: '#/definitions/types.SavedQuery'
+        type: array
       sort_by:
         type: string
       sort_order:
@@ -832,6 +1288,77 @@ paths:
       summary: End log ingest session
       tags:
       - ingest
+  /ingest/file:
+    post:
+      consumes:
+      - application/json
+      description: Start ingesting a log file the server can access (absolute path;
+        gzip and zstd are detected by magic bytes) into an existing ingest session,
+        optionally with its rotated siblings. Accepted immediately (202); the read
+        runs in the background. Poll GET /ingest/jobs or listen for "ingest_progress"
+        on GET /live/events for progress and the final state. Call POST /ingest/end
+        only after the job reaches a terminal state (done|cancelled|error) -- ending
+        the session while the job is still running fails its next batch with an invalid-session
+        error.
+      parameters:
+      - description: Session and absolute path
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.IngestFileRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/types.IngestFileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Ingest a file by path
+      tags:
+      - ingest
+  /ingest/jobs:
+    get:
+      description: List every path-based ingest job started this server run (running
+        or finished), for a UI reconnecting to a job it lost SSE contact with.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.IngestJobsListResponse'
+      summary: List path-ingest jobs
+      tags:
+      - ingest
+  /ingest/jobs/{id}:
+    delete:
+      description: Cancel a running path-based ingest job. A no-op (200, the job's
+        own terminal state) if it already finished.
+      parameters:
+      - description: Job ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.IngestJobActionResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Cancel a path-ingest job
+      tags:
+      - ingest
   /ingest/logs:
     post:
       consumes:
@@ -956,10 +1483,25 @@ paths:
         in: query
         name: query
         type: string
-      - description: Optional comma-separated source filter
+      - description: Optional comma-separated source filter. Stored _src names, or
+          a source's display name / former display name (PATCH /sources/{name}), which
+          resolve to the stored name
         in: query
         name: _src
         type: string
+      - description: Optional comma-separated fields to return
+        in: query
+        name: fields
+        type: string
+      - description: 'Include chart distribution metadata (default: true)'
+        in: query
+        name: include_distribution
+        type: boolean
+      - description: 'Include a field/value facet summary of the window (default:
+          false; bounded scan of the newest rows, see facets.computed_over/sampled)'
+        in: query
+        name: include_facets
+        type: boolean
       produces:
       - application/json
       responses:
@@ -1043,6 +1585,39 @@ paths:
       summary: Parse logs or suggest patterns
       tags:
       - parsing
+  /parse/preview-file:
+    post:
+      consumes:
+      - application/json
+      description: Read the first few lines of a file the server can access (absolute
+        path; gzip and zstd detected by magic bytes), without creating an ingest session.
+        Used by the native-drop wizard flow, which only ever has a path, not a browser
+        File to read.
+      parameters:
+      - description: Absolute path and optional line count
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.PreviewFileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.PreviewFileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Preview a file by path
+      tags:
+      - ingest
   /ping:
     get:
       description: Check if the API is running
@@ -1056,6 +1631,349 @@ paths:
       summary: Ping the API
       tags:
       - System
+  /samples:
+    get:
+      description: The sample files embedded in the binary for a first run, with the
+        source name and pattern each imports under.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.SamplesResponse'
+      summary: List bundled sample logs
+      tags:
+      - samples
+  /samples/{name}/import:
+    post:
+      description: 'Ingest a bundled sample straight from the binary into the index
+        (nothing is written to disk) under its fixed source name with its pinned pattern.
+        Runs as a path-ingest job: 202 with the job id, progress as "ingest_progress"
+        on /live/events, the session ends itself. Importing the same sample twice
+        upserts the same rows.'
+      parameters:
+      - description: Sample name (GET /samples)
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/types.IngestFileResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Import a bundled sample
+      tags:
+      - samples
+  /sources:
+    get:
+      description: 'Every source in the catalog (<storage>/sources.json): origin,
+        pattern, rows, bytes, timestamp span, the day-indices holding it, and its
+        import history. Maintained on the ingest write path; see POST /sources/rebuild
+        to reconcile with the indices.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.SourcesResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: List sources
+      tags:
+      - sources
+  /sources/{name}:
+    delete:
+      description: Delete every row stored under this source (its exact stored _src)
+        from every day-index holding it, remove day-indices that end up empty, and
+        drop the catalog entry. Not undoable. Refused with 409 while a live tail or
+        a path-ingest job is still writing to the source.
+      parameters:
+      - description: Source name (stored _src)
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.SourceDeleteResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Delete a source
+      tags:
+      - sources
+    get:
+      description: One catalog entry by source name (the stored _src value).
+      parameters:
+      - description: Source name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.SourceEntry'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Get one source
+      tags:
+      - sources
+    patch:
+      consumes:
+      - application/json
+      description: Set or clear a display name. The index keeps the stored _src; every
+        display name ever set is kept as an alias, and the _src query parameter on
+        GET /logs resolves aliases to the stored name. The display name must not collide
+        with another source's name, display name or alias.
+      parameters:
+      - description: Source name (stored _src)
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: New display name; empty clears it
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.SourceRenameRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.SourceEntry'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Rename a source (display name)
+      tags:
+      - sources
+  /sources/{name}/reimport:
+    post:
+      description: Requires an origin path that is still readable and the options
+        recorded at its last path import. Validates the path and compiles the pattern
+        first, then deletes the source's rows and starts a path-ingest job (same as
+        POST /ingest/file) that stores them again under the same _src. The catalog
+        entry is kept with zero rows — display name, aliases, origin, pattern and
+        import history survive — and fills as the job runs. 409 while a tail or job
+        is writing to the source; 400 when the path is gone or the source was never
+        path-imported.
+      parameters:
+      - description: Source name (stored _src)
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/types.SourceReimportResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Re-import a source from its origin path
+      tags:
+      - sources
+  /sources/rebuild:
+    post:
+      description: Recomputes rows, days and timestamp bounds for every source from
+        the day-indices (one size-0 facet per day on current indices; a stored-field
+        read on indices created before v1.8's keyword _src mapping). Origin, pattern
+        and import history are kept; sources with no rows left are dropped. Idempotent.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.SourcesResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Rebuild the sources catalog from the indices
+      tags:
+      - sources
+  /storage:
+    get:
+      description: 'Retention in effect (with its source: config.json, the CLI flag/env,
+        or none) and a per-day table of row counts and on-disk bytes. total_bytes
+        sums the day-index directories only; /info''s storage_size_bytes walks the
+        whole storage dir.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.StorageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Storage overview and retention setting
+      tags:
+      - storage
+    put:
+      consumes:
+      - application/json
+      description: Writes retention_days to <storage>/config.json, which takes precedence
+        over -retention-days / RETENTION_DAYS; null clears the override (the flag/env
+        default applies again); 0 keeps everything. The prune runs synchronously before
+        the response, so the first PUT on a long-lived store may take a moment while
+        old day-indices are removed.
+      parameters:
+      - description: 'retention_days: 0–3650, or null to clear'
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.StorageUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.StorageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Set the retention override
+      tags:
+      - storage
+  /storage/days/{date}:
+    delete:
+      description: Remove the day-index for a date (every source's rows for that day)
+        from disk and reconcile the catalog. Not undoable. 409 while a live tail or
+        a running path-ingest job is storing rows for a source that has rows on that
+        day.
+      parameters:
+      - description: Day, YYYY-MM-DD
+        in: path
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.StorageDayDeleteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Delete one day of logs
+      tags:
+      - storage
   /timestamp/preview:
     post:
       consumes:
@@ -1088,6 +2006,155 @@ paths:
       summary: Preview timestamp resolution
       tags:
       - parsing
+  /ui/focus:
+    post:
+      consumes:
+      - application/json
+      description: Broadcasts a "ui_focus" event on /live/events; the macOS shell
+        raises its window and, when a route is given, navigates to it. In browser
+        mode nothing listens — the CLI prints the URL instead.
+      parameters:
+      - description: 'Optional route (a #/... hash)'
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/types.UIFocusRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+      summary: Bring the app window to the front
+      tags:
+      - ui
+  /watches:
+    get:
+      description: Every folder watch with its live per-file snapshot (state pending
+        | ingesting | following | done | skipped | error, offset, size, source name).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.WatchesResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: List folder watches
+      tags:
+      - watches
+    post:
+      consumes:
+      - application/json
+      description: 'Watch an absolute, existing directory: every file whose base name
+        matches glob (default *.log) is ingested when it appears and followed as it
+        grows, under the source name watch.<dirname>.<filename>. pattern is "" or
+        "auto" for per-file detection, else a saved Grok pattern name. Persisted in
+        <storage>/watches.json and resumed after a restart.'
+      parameters:
+      - description: Watch to create
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.WatchRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/types.Watch'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Create a folder watch
+      tags:
+      - watches
+  /watches/{id}:
+    delete:
+      description: Stop following and forget the watch. Rows already indexed stay.
+      parameters:
+      - description: Watch ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Delete a folder watch
+      tags:
+      - watches
+  /watches/{id}/pause:
+    post:
+      description: Stop detection and following; offsets are kept, so resume continues
+        where each file was left.
+      parameters:
+      - description: Watch ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.Watch'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Pause a folder watch
+      tags:
+      - watches
+  /watches/{id}/resume:
+    post:
+      description: Sweep the directory now and continue following from the stored
+        offsets.
+      parameters:
+      - description: Watch ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.Watch'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Resume a folder watch
+      tags:
+      - watches
   /workspaces:
     get:
       produces:
