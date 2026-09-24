@@ -135,6 +135,7 @@ export interface MultilineConfig {
   enabled: boolean;
   mode: 'header' | 'indent';
   header_pattern?: string;
+  auto_detected?: boolean;
   max_lines?: number;
   max_bytes?: number;
 }

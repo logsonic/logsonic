@@ -73,15 +73,32 @@ export const useUpload = (): UploadProgressHookResult => {
           // overlaid with this file's own overrides. Falls through to
           // undefined when the file has no inference yet, in which case
           // the backend re-derives defaults (legacy behaviour).
-          const fileTsConfig = importFile.timestampInference
-            ? { ...importFile.timestampInference.resolution, ...importFile.timestampOverrides }
-            : undefined;
+          const timestampOverrides = Object.fromEntries(
+            Object.entries(importFile.timestampOverrides).filter(([, value]) => value !== undefined)
+          );
+          // Preview inference describes only its sample. In auto mode the
+          // backend resolves each discovered format; retain user choices only.
+          // The generated API type still expects a complete resolution, but
+          // the wire accepts partial explicit overrides.
+          const fileTsConfig = (importFile.automaticPattern === true
+            ? Object.keys(timestampOverrides).length > 0
+              ? timestampOverrides
+              : undefined
+            : importFile.timestampInference
+              ? { ...importFile.timestampInference.resolution, ...importFile.timestampOverrides }
+              : undefined) as IngestSessionOptions['timestamp_config'];
 
           const sessionOptions: IngestSessionOptions = {
-            pattern: importFile.selectedPattern?.pattern || '%{GREEDYDATA:message}',
+            pattern: importFile.automaticPattern === true
+              ? 'auto'
+              : importFile.selectedPattern?.pattern || '%{GREEDYDATA:message}',
             name: importFile.selectedPattern?.name || 'Custom Pattern',
-            custom_patterns: importFile.selectedPattern?.custom_patterns || {},
-            priority: importFile.selectedPattern?.priority || 0,
+            custom_patterns: importFile.automaticPattern === true
+              ? {}
+              : importFile.selectedPattern?.custom_patterns || {},
+            priority: importFile.automaticPattern === true
+              ? 0
+              : importFile.selectedPattern?.priority || 0,
             source: importFile.fileName,
             smart_decoder: importFile.sessionOptions.smartDecoder,
             force_timezone: importFile.sessionOptions.timezone || undefined,

@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -46,8 +47,36 @@ func postProcess(results []l2g.LineResult, opts types.IngestSessionOptions, seq 
 	// The inference returned to /parse should preview the actual
 	// resolution used, including any overrides. Build a fresh preview
 	// that reflects what the wire payload contains.
-	inference.Preview = buildPreviewFromResults(results, resolution, syntheticMode, anchorVal)
+	inference.Preview = buildPreviewFromResults(results, resolution, syntheticMode, anchorVal, opts.Pattern == "auto" && opts.TimestampConfig == nil)
 	return parsedLogs, success, failed, inference
+}
+
+// automaticTimestampState keeps the resolution and previous timestamp across
+// chunks of one automatic import. A raw-only first chunk can start in synthetic
+// mode; the first later chunk with real time captures replaces that resolver.
+// The lock serializes concurrent HTTP chunks that share an ingest session.
+type automaticTimestampState struct {
+	mu        sync.Mutex
+	resolver  *timeresolve.Resolver
+	synthetic bool
+	anchor    time.Time
+}
+
+func newAutomaticTimestampState() *automaticTimestampState {
+	return &automaticTimestampState{}
+}
+
+func (s *automaticTimestampState) process(results []l2g.LineResult, opts types.IngestSessionOptions, seq *atomic.Int64) ([]map[string]interface{}, int, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.resolver == nil || s.synthetic {
+		resolution, inference := buildResolution(results, opts)
+		if s.resolver == nil || inference.Status != timeresolve.StatusMissing {
+			s.resolver = timeresolve.New(resolution)
+			s.synthetic, s.anchor = syntheticTimestampSettings(inference, resolution)
+		}
+	}
+	return postProcessWithResolver(results, opts, s.resolver, seq, s.synthetic, s.anchor)
 }
 
 func syntheticTimestampSettings(inference timeresolve.Inference, resolution timeresolve.Resolution) (bool, time.Time) {
@@ -85,7 +114,12 @@ func postProcessWithResolver(results []l2g.LineResult, opts types.IngestSessionO
 				row[k] = v
 			}
 
-			ts, _ := resolver.Resolve(r.Fields)
+			var ts time.Time
+			if opts.Pattern == "auto" && opts.TimestampConfig == nil {
+				ts, _ = resolver.ResolveAutomatic(r.Fields)
+			} else {
+				ts, _ = resolver.Resolve(r.Fields)
+			}
 			if syntheticMode {
 				ts = anchorVal.Add(time.Duration(s) * time.Microsecond)
 			}
@@ -95,6 +129,7 @@ func postProcessWithResolver(results []l2g.LineResult, opts types.IngestSessionO
 			for k, v := range r.Smart {
 				row[k] = v
 			}
+			row["_raw"] = r.Raw
 
 			parsedLogs = append(parsedLogs, row)
 			success++
@@ -115,6 +150,7 @@ func postProcessWithResolver(results []l2g.LineResult, opts types.IngestSessionO
 		}
 		row := map[string]interface{}{
 			"error":     errorMsg,
+			"_src":      opts.Source,
 			"_raw":      r.Raw,
 			"message":   r.Raw,
 			"timestamp": ts,
@@ -123,6 +159,7 @@ func postProcessWithResolver(results []l2g.LineResult, opts types.IngestSessionO
 		for k, v := range opts.Meta {
 			row[k] = v
 		}
+		row["_raw"] = r.Raw
 		parsedLogs = append(parsedLogs, row)
 		failed++
 	}
@@ -223,7 +260,7 @@ func mergeResolution(base, over timeresolve.Resolution) timeresolve.Resolution {
 	return base
 }
 
-func buildPreviewFromResults(results []l2g.LineResult, res timeresolve.Resolution, syntheticMode bool, anchor time.Time) []timeresolve.PreviewRow {
+func buildPreviewFromResults(results []l2g.LineResult, res timeresolve.Resolution, syntheticMode bool, anchor time.Time, automatic ...bool) []timeresolve.PreviewRow {
 	// Match the frontend's preview page size so every visible row in
 	// the fused log-preview/timestamp UI has a resolved timestamp.
 	const maxRows = 20
@@ -236,7 +273,13 @@ func buildPreviewFromResults(results []l2g.LineResult, res timeresolve.Resolutio
 		if !lr.Matched {
 			continue
 		}
-		ts, conf := r.Resolve(lr.Fields)
+		var ts time.Time
+		var conf string
+		if len(automatic) > 0 && automatic[0] {
+			ts, conf = r.ResolveAutomatic(lr.Fields)
+		} else {
+			ts, conf = r.Resolve(lr.Fields)
+		}
 		if syntheticMode {
 			// Mirror postProcess exactly: it stamps anchor + seq·1µs for
 			// *every* line (matched and unmatched), with seq starting at 1.
@@ -263,4 +306,16 @@ func buildPreviewFromResults(results []l2g.LineResult, res timeresolve.Resolutio
 		}
 	}
 	return out
+}
+
+// Automatic routing exposes raw fallback without pretending a catchall is a
+// successful structured parse. Reserved metadata also makes these rows filterable.
+func markAutomaticRows(rows []map[string]interface{}, results []l2g.LineResult) {
+	for i, row := range rows {
+		row["_parse_status"] = "raw"
+		if results[i].Matched {
+			row["_parse_status"] = "parsed"
+			row["_parse_pattern"] = results[i].Pattern
+		}
+	}
 }

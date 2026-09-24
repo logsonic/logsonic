@@ -67,6 +67,7 @@ describe('useFileDetection — native-path files (spec now-08 phase 5)', () => {
     expect(updated.approxLines).toBe(5000);
     expect(updated.selectedPattern?.name).toBe('Generic');
     expect(updated.isCustomPattern).toBe(false);
+    expect(updated.automaticPattern).toBe(true);
     expect(parseLogs).toHaveBeenCalledWith(
       expect.objectContaining({
         session_options: expect.objectContaining({ source_mtime: '2024-01-01T00:00:00.000Z' }),
@@ -90,6 +91,7 @@ describe('useFileDetection — native-path files (spec now-08 phase 5)', () => {
     expect(updated.detectionError).toBe('READ_ERROR: cannot read file');
     expect(updated.selectedPattern).toEqual(DEFAULT_PATTERN);
     expect(updated.isCustomPattern).toBe(true);
+    expect(updated.automaticPattern).toBe(true);
   });
 
   it('falls back to the custom pattern when nothing is suggested', async () => {
@@ -108,6 +110,7 @@ describe('useFileDetection — native-path files (spec now-08 phase 5)', () => {
     const updated = useImportStore.getState().files.find((f) => f.id === fileId)!;
     expect(updated.detectionError).toBe(NO_PATTERN_DETECTED);
     expect(updated.previewLines).toEqual(['x']);
+    expect(updated.automaticPattern).toBe(true);
   });
 });
 
@@ -135,7 +138,7 @@ describe('useFileDetection — detection starts on drop, for every pending file'
     // The stack-trace file's suggestion carries a multiline layout; the
     // syslog file's does not.
     suggestPatterns
-      .mockResolvedValueOnce({ ...suggestion, multiline: { enabled: true, mode: 'indent' } })
+      .mockResolvedValueOnce({ ...suggestion, multiline: { enabled: true, mode: 'indent', auto_detected: true } })
       .mockResolvedValueOnce(suggestion);
     parseLogs.mockResolvedValue({ logs: [{ message: 'a b' }], timestamp_inference: null });
 
@@ -152,6 +155,7 @@ describe('useFileDetection — detection starts on drop, for every pending file'
       enabled: true,
       mode: 'indent',
       headerPattern: '',
+      autoDetected: true,
     });
     expect(syslog.sessionOptions.multiline.enabled).toBe(false);
     // The global (legacy) triple is untouched: it is not what the upload
@@ -160,7 +164,7 @@ describe('useFileDetection — detection starts on drop, for every pending file'
     // The stack file's own parse ran under its folding, the syslog file's
     // with none specified (so the server could auto-detect one).
     const parseCalls = parseLogs.mock.calls.map((c) => c[0].session_options?.multiline);
-    expect(parseCalls).toContainEqual({ enabled: true, mode: 'indent', header_pattern: undefined });
+    expect(parseCalls).toContainEqual({ enabled: true, mode: 'indent', header_pattern: undefined, auto_detected: true });
     expect(parseCalls).toContainEqual(undefined);
     // Nothing re-fires detection against the batch.
     await new Promise((r) => setTimeout(r, 500));
@@ -195,6 +199,7 @@ describe('useFileDetection — reparseFile', () => {
     const f = useImportStore.getState().files[0];
     expect(f.parsedLogs).toEqual([{ message: 'a b' }]);
     expect(f.selectedPattern?.name).toBe('Generic');
+    expect(f.automaticPattern).toBe(true);
     expect(parseLogs).toHaveBeenLastCalledWith(
       expect.objectContaining({
         session_options: expect.objectContaining({
@@ -233,6 +238,22 @@ describe('useFileDetection — changePattern', () => {
     expect(f.parsedLogs).toEqual([{ level: 'INFO' }]);
     expect(f.timestampInference).toEqual(inference);
     expect(f.timestampConfirmed).toBe(true);
+    expect(f.automaticPattern).toBe(false);
+  });
+
+  it('treats an explicit choice of the already suggested pattern as manual', async () => {
+    previewFile.mockResolvedValue({ lines: ['a'], approx_lines: 1 });
+    suggestPatterns.mockResolvedValue(suggestion);
+    parseLogs.mockResolvedValue({ logs: [{ message: 'a' }], timestamp_inference: null });
+    useImportStore.getState().addNativePathFiles(['/abs/app.log']);
+    const fileId = useImportStore.getState().files[0].id;
+    const { result } = renderHook(() => useFileDetection());
+    await waitFor(() => expect(useImportStore.getState().files[0].automaticPattern).toBe(true));
+    const selected = useImportStore.getState().files[0].selectedPattern!;
+    await act(async () => {
+      await result.current.changePattern(fileId, selected);
+    });
+    expect(useImportStore.getState().files[0].automaticPattern).toBe(false);
   });
 });
 

@@ -47,6 +47,25 @@ describe('multilinePresets', () => {
     ).toEqual({ enabled: true, mode: 'header', headerPattern: ISO8601_HEADER_PATTERN });
   });
 
+  it('retains an automatically detected layout on the wire until a preset is chosen', () => {
+    const detected = multilineFromConfig({
+      enabled: true,
+      mode: 'header',
+      header_pattern: ISO8601_HEADER_PATTERN,
+      auto_detected: true,
+    });
+    expect(detected?.autoDetected).toBe(true);
+    expect(multilineConfigOf(detected!)).toEqual({
+      enabled: true,
+      mode: 'header',
+      header_pattern: ISO8601_HEADER_PATTERN,
+      auto_detected: true,
+    });
+    expect(stateFromPreset('off', detected!).autoDetected).toBeUndefined();
+    expect(stateFromPreset('iso8601', detected!).autoDetected).toBeUndefined();
+    expect(stateFromPreset('regex', detected!).autoDetected).toBeUndefined();
+  });
+
   it('flags header mode with a blank pattern', () => {
     expect(isHeaderPatternMissing({ enabled: true, mode: 'header', headerPattern: '  ' })).toBe(
       true

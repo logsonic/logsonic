@@ -35,6 +35,12 @@ func buildMultilineConfig(cfg *types.MultilineConfig) (*l2g.MultilineConfig, err
 		}
 		out.Mode = l2g.MultilineHeader
 		out.Header = header
+		if cfg.AutoDetected {
+			out.Mode = l2g.MultilineCustom
+			out.IsContinuation = func(line string) bool {
+				return !header.MatchString(line) && looksLikeJavaContinuation(line)
+			}
+		}
 	case "indent":
 		out.Mode = l2g.MultilineIndent
 	default:
@@ -83,9 +89,31 @@ func discoverScore(lines []string) (coverage float64, library bool) {
 // into the preceding timestamped record. Indent-only folding misses these
 // because exception class names and "Caused by:" are not indented.
 var javaContinuationRE = regexp.MustCompile(`(?i)^(?:[\t ]|at |Caused by:|\.\.\. \d+ more|(?:[a-zA-Z_$][\w$]*\.)+[A-Za-z_$][\w$]*(?:Exception|Error|Throwable)\b)`)
+var pythonContinuationRE = regexp.MustCompile(`^(?:Traceback \(most recent call last\):|[A-Za-z_][\w.]*(?:Exception|Error|Throwable):)`)
 
 func looksLikeJavaContinuation(line string) bool {
-	return javaContinuationRE.MatchString(line)
+	return javaContinuationRE.MatchString(line) || pythonContinuationRE.MatchString(line)
+}
+
+// A header-style auto-detection must account for every physical line it
+// would join. A competing format or an unmatched raw line is an independent
+// record, even if a few genuine headers elsewhere in the sample match.
+func safeHeaderCandidate(lines []string, header *regexp.Regexp) bool {
+	if header == nil || len(lines) == 0 || !header.MatchString(lines[0]) {
+		return false
+	}
+	headers, continuations := 0, 0
+	for _, line := range lines {
+		if header.MatchString(line) {
+			headers++
+			continue
+		}
+		if !looksLikeJavaContinuation(line) {
+			return false
+		}
+		continuations++
+	}
+	return headers >= 2 && continuations > 0
 }
 
 func hasUnindentedJavaContinuation(lines []string) bool {
@@ -131,6 +159,9 @@ func detectMultilineConfig(lines []string) *types.MultilineConfig {
 		if skipIndent && cand.wire.Mode == "indent" {
 			continue
 		}
+		if cand.wire.Mode == "header" && !safeHeaderCandidate(lines, cand.cfg.Header) {
+			continue
+		}
 		folded, err := l2g.JoinMultilineStrings(lines, cand.cfg)
 		if err != nil || len(folded) < 2 || len(folded) >= len(lines) {
 			continue
@@ -143,6 +174,7 @@ func detectMultilineConfig(lines []string) *types.MultilineConfig {
 		if score > bestScore {
 			bestScore = score
 			cfg := cand.wire
+			cfg.AutoDetected = true
 			best = &cfg
 		}
 	}

@@ -42,8 +42,23 @@ func (r *Resolver) Resolution() Resolution {
 // confidence label. It updates the resolver's internal "previous
 // timestamp" so subsequent rollover detection and carry-forward work.
 func (r *Resolver) Resolve(fields map[string]string) (time.Time, string) {
+	return r.resolve(fields, r.res.Rollover)
+}
+
+// ResolveAutomatic handles a stream that can switch timestamp formats. A
+// full-year row must keep its stated year even when it arrives out of order;
+// a yearless row may need to cross Dec 31 after a full-year row caused Sniff
+// to disable its stream-wide rollover setting. An explicitly forced year is
+// authoritative and must not be advanced by rollover.
+func (r *Resolver) ResolveAutomatic(fields map[string]string) (time.Time, string) {
+	parts := extractParts(fields, r.res)
+	forcedYear := r.res.YearStrategy == YearForced && r.res.ForcedYear != nil
+	return r.resolve(fields, parts.haveTime && parts.year == 0 && !forcedYear)
+}
+
+func (r *Resolver) resolve(fields map[string]string, rollover bool) (time.Time, string) {
 	t, conf := r.compose(fields)
-	if r.res.Rollover && r.prevSet && !t.IsZero() {
+	if rollover && r.prevSet && !t.IsZero() {
 		t = r.applyRollover(t)
 	}
 	if !t.IsZero() {

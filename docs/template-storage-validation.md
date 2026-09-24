@@ -4,7 +4,7 @@ Branch: `codex/template-compressed-storage`, based on `6b11a2aaa954a79383fed1a7d
 
 ## Implemented behavior
 
-Opt-in immutable lossless template/Zstandard segments with automatic engine detection on reopen; existing Bleve storage remains the default. The existing query evaluator runs over disposable in-memory Scorch indexes. No production data migration is performed. This is the storage portion of experiment 2: semantic template mining, parser redesign and native compressed-domain query execution are not implemented in this branch.
+Opt-in immutable lossless template/Zstandard segments with automatic engine detection on reopen; existing Bleve storage remains the default. The existing query evaluator runs over disposable in-memory Scorch indexes. No production data migration is performed. These measurements cover the initial storage portion of experiment 2. The subsequent [mixed-log ingestion change](mixed-log-ingestion.md) adds adaptive parser routing; the measurements below were not rerun for that follow-up. Semantic template mining and native compressed-domain query execution remain unimplemented.
 
 A common root lock excludes mixed writers even before the first log arrives. Acknowledged segments use file sync, atomic rename and directory sync on supported platforms; corrupt committed segments are rejected. Interrupted day deletion is completed on reopen. Exact IDs preserve upserts, source deletions and tombstones across restarts. Clear and retention preserve unrelated application metadata.
 

@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -118,6 +119,9 @@ func TestDetectMultilineConfig_Table(t *testing.T) {
 			if got == nil || !got.Enabled {
 				t.Fatalf("expected detection, got %#v", got)
 			}
+			if !got.AutoDetected {
+				t.Fatalf("detected multiline must carry auto marker, got %#v", got)
+			}
 			if got.Mode != tc.wantMode {
 				t.Fatalf("mode=%q, want %q (pattern=%q)", got.Mode, tc.wantMode, got.HeaderPattern)
 			}
@@ -163,6 +167,102 @@ func TestDetectMultilineConfig_SyslogDoesNotChooseISO8601(t *testing.T) {
 	got := detectMultilineConfig(lines)
 	if got == nil || !strings.Contains(got.HeaderPattern, `[A-Z][a-z]{2}`) {
 		t.Fatalf("expected syslog header, got %#v", got)
+	}
+}
+
+func TestDetectMultilineConfig_MixedIndependentLinesStaySeparate(t *testing.T) {
+	lines := make([]string, 0, 23)
+	for i := 1; i <= 20; i++ {
+		lines = append(lines, fmt.Sprintf(`192.168.1.1 - - [24/Sep/2026:12:05:%02d +0000] "GET /path%d HTTP/1.1" 200 %d "-" "ua"`, i, i, i))
+	}
+	lines = append(lines,
+		"Sep 24 12:05:21 host sshd[111]: Accepted password for root from 10.0.0.3 port 22 ssh2",
+		"Sep 24 12:05:22 host sshd[112]: Failed password for invalid user x from 10.0.0.4 port 22 ssh2",
+		"@@@ !? [punctuation]",
+	)
+	if got := detectMultilineConfig(lines); got != nil {
+		t.Fatalf("independent Apache, syslog, and raw lines must not be folded, got %#v", got)
+	}
+
+	h, _ := setupHandler(t)
+	body, _ := json.Marshal(types.ParseRequest{Logs: lines, GrokPattern: "%{GREEDYDATA:message}"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/parse", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	h.HandleParse(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("parse: %d %s", w.Code, w.Body.String())
+	}
+	var resp types.ParseResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Processed != len(lines) {
+		t.Fatalf("processed=%d, want %d physical lines", resp.Processed, len(lines))
+	}
+	for i, line := range lines {
+		if got := resp.Logs[i]["_raw"]; got != line {
+			t.Fatalf("row %d raw=%q, want %q", i, got, line)
+		}
+	}
+}
+
+func TestAutoDetectedHeaderDoesNotSwallowLaterFormats(t *testing.T) {
+	first := []string{
+		"2026-04-01 09:15:01 ERROR failed to store log batch",
+		"java.lang.IllegalStateException: index writer is closed",
+		"\tat com.example.Store.write(Store.java:12)",
+		"2026-04-01 09:15:02 INFO retrying",
+	}
+	detected := detectMultilineConfig(first)
+	if detected == nil || !detected.AutoDetected || detected.Mode != "header" {
+		t.Fatalf("expected auto header detection, got %#v", detected)
+	}
+	cfg, err := buildMultilineConfig(detected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	folder := newMultilineFolder(*cfg)
+	firstOut, err := folder.Feed(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(firstOut) != 1 || !strings.Contains(firstOut[0], "IllegalStateException") {
+		t.Fatalf("stack must stay folded, got %#v", firstOut)
+	}
+	later := []string{
+		`192.168.1.1 - - [24/Sep/2026:12:05:01 +0000] "GET / HTTP/1.1" 200 1`,
+		"Sep 24 12:05:21 host sshd[111]: Accepted password",
+		"@@@ !? [punctuation]",
+	}
+	laterOut, err := folder.Feed(later)
+	if err != nil {
+		t.Fatal(err)
+	}
+	laterOut = append(laterOut, folder.Flush()...)
+	want := append([]string{first[3]}, later...)
+	if len(laterOut) != len(want) {
+		t.Fatalf("later records = %#v, want %#v", laterOut, want)
+	}
+	for i := range want {
+		if laterOut[i] != want[i] {
+			t.Fatalf("later record %d = %q, want %q", i, laterOut[i], want[i])
+		}
+	}
+
+	explicit := *detected
+	explicit.AutoDetected = false
+	explicitCfg, err := buildMultilineConfig(&explicit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	explicitFolder := newMultilineFolder(*explicitCfg)
+	_, _ = explicitFolder.Feed(first)
+	explicitOut, err := explicitFolder.Feed(later)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(explicitOut) != 0 || !strings.Contains(explicitFolder.Flush()[0], later[2]) {
+		t.Fatal("explicit header config no longer preserves catch-all continuation semantics")
 	}
 }
 

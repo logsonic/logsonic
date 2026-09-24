@@ -23,6 +23,8 @@ Template mode refuses a storage root that contains legacy Bleve day indexes. It 
 
 Template storage writes complete row values and IDs into immutable segments under `<storage>/template-v1/<day>/`. Repeated string structure around runs of decimal digits is factored into segment-local templates when that makes the encoded segment smaller. The codec compares the templated representation against its ordinary typed representation and keeps the smaller one. Both paths are Zstandard-compressed; numeric, timestamp, and other non-string values retain their typed representation rather than being converted into lossy text.
 
+A segment can contain many different templates and literal strings together. A rare or unmatched log line does not have to fit the dominant template: its complete row is stored and searched normally. The codec may choose ordinary compressed rows for the entire segment when that is smaller.
+
 The compressed segments are the durable data. At startup, LogSonic replays them into memory-only Scorch indexes, which are discarded on close and rebuilt at the next launch. This reuses the established Bleve query evaluator and preserves LogSonic's query syntax, field handling, ordering, pagination, and facets. The experiment removes persistent Bleve index files from the template store; it does not remove the Bleve dependency or search compressed segments directly.
 
 This design trades disk space for work at startup and memory while running. Reopening a large archive must decompress and reindex its rows, and the in-memory index consumes RAM. Measure both against the same corpus and machine before choosing this engine for a long-running archive.
@@ -35,7 +37,7 @@ The engine writes and syncs each segment file before renaming it into place. On 
 
 ## Scope
 
-This implements the storage experiment. It does not change log2grok format detection, add semantic template mining, or establish a 99% parsing-accuracy result. Native template postings and compressed-domain search remain future work. The codec's string templates are reversible storage encodings, independent of parser inference.
+This implements the storage experiment plus [adaptive mixed-format ingestion](mixed-log-ingestion.md). Automatic imports can discover multiple log2grok parsers and preserve unresolved records as raw rows. The underlying log2grok discovery algorithms are unchanged; semantic template mining and native compressed-domain search remain future work. No 99% parsing-accuracy result is established. The codec's string templates are reversible storage encodings, independent of parser inference.
 
 The complete index is resident in memory. There is no cache eviction or memory cap yet; an archive larger than available RAM is unsuitable. Repeated updates and deletes grow immutable history until day removal; per-row compaction is not implemented. High-entropy input, small imports and many small segments may exceed raw-input size despite compression. No universal compression ratio is promised.
 

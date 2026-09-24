@@ -66,11 +66,12 @@ type FollowObserver interface {
 }
 
 type TailSource struct {
-	id      string
-	path    string
-	opts    types.IngestSessionOptions
-	decoder *l2g.Decoder
-	manager *TailManager
+	id       string
+	path     string
+	opts     types.IngestSessionOptions
+	decoder  *l2g.Decoder
+	adaptive *adaptiveDecoder
+	manager  *TailManager
 	// kind is the catalog origin: "tail" (POST /live/files, tail -f),
 	// "stdin", or "watch" (pkg/watch). startOffset < 0 means end-of-file
 	// (tail semantics); ≥ 0 seeks there, or to 0 if the file is shorter.
@@ -361,16 +362,18 @@ func (m *TailManager) newSource(opts types.IngestSessionOptions) (*TailSource, e
 		return nil, err
 	}
 	opts = defaultLiveOptions(opts)
-	decoder, err := l2g.NewDecoder(l2g.PatternSpec{
-		Name:           opts.Name,
-		Grok:           opts.Pattern,
-		CustomPatterns: opts.CustomPatterns,
-		Priority:       opts.Priority,
-	}, l2g.DecoderOptions{
-		SmartDecode: opts.SmartDecoder,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create decoder: %w", err)
+	var decoder *l2g.Decoder
+	var adaptive *adaptiveDecoder
+	if opts.Pattern == "auto" {
+		adaptive = newAdaptiveDecoder(opts.SmartDecoder)
+	} else {
+		var err error
+		decoder, err = l2g.NewDecoder(l2g.PatternSpec{
+			Name: opts.Name, Grok: opts.Pattern, CustomPatterns: opts.CustomPatterns, Priority: opts.Priority,
+		}, l2g.DecoderOptions{SmartDecode: opts.SmartDecoder})
+		if err != nil {
+			return nil, fmt.Errorf("create decoder: %w", err)
+		}
 	}
 
 	multilineCfg, err := buildMultilineConfig(opts.Multiline)
@@ -387,6 +390,7 @@ func (m *TailManager) newSource(opts types.IngestSessionOptions) (*TailSource, e
 		id:        uuid.New().String(),
 		opts:      opts,
 		decoder:   decoder,
+		adaptive:  adaptive,
 		manager:   m,
 		ctx:       ctx,
 		cancel:    cancel,
@@ -761,15 +765,27 @@ func (s *TailSource) processFoldedLines(lines []string) error {
 		return nil
 	}
 
-	results := s.decoder.Decode(lines)
+	var results []l2g.LineResult
+	if s.adaptive != nil {
+		results = s.adaptive.Decode(lines)
+	} else {
+		results = s.decoder.Decode(lines)
+	}
 
 	s.mu.Lock()
-	if s.resolver == nil {
+	if s.resolver == nil || (s.adaptive != nil && s.syntheticMode) {
 		resolution, inference := buildResolution(results, s.opts)
-		s.resolver = timeresolve.New(resolution)
-		s.syntheticMode, s.anchor = syntheticTimestampSettings(inference, resolution)
+		// Raw lines at startup must not permanently force later real
+		// timestamps into the synthetic initial-time sequence.
+		if s.resolver == nil || inference.Status != timeresolve.StatusMissing {
+			s.resolver = timeresolve.New(resolution)
+			s.syntheticMode, s.anchor = syntheticTimestampSettings(inference, resolution)
+		}
 	}
 	parsed, _, _ := postProcessWithResolver(results, s.opts, s.resolver, s.seq, s.syntheticMode, s.anchor)
+	if s.adaptive != nil {
+		markAutomaticRows(parsed, results)
+	}
 	s.mu.Unlock()
 
 	if len(parsed) == 0 {
