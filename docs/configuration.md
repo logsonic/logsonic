@@ -21,6 +21,8 @@ LogSonic can be configured with command-line flags or environment variables.
 - `PORT`: port to listen on
 - `STORAGE_PATH`: path to storage directory
 - `LOGSONIC_STORAGE_ENGINE`: `auto`, `bleve`, or `template`; `-storage-engine` takes precedence
+- `LOGSONIC_STORAGE_MIGRATION`: `off` stops the background conversion of days stored by older versions to [compact storage](compact-storage.md); they stay fully usable
+- `LOGSONIC_STORAGE_FORMAT`: `legacy` writes new days in the older, larger format and converts nothing (keeps the directory readable by older versions)
 - `LOGSONIC_OPEN_BROWSER`: open the web UI on start (`1`, `true`, `yes`, `on`)
 - `LOGSONIC_BROWSER`: same as `LOGSONIC_OPEN_BROWSER` for the CLI; on **Logsonic.app**, skip the in-app window and open a browser
 - `LOGSONIC_AUTO_PORT`: auto-select a free port if busy (`1`, `true`, `yes`, `on`)

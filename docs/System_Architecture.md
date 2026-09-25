@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-LogSonic is an offline-first, desktop log analytics tool built as a single self-contained Go binary that embeds a React SPA frontend. It ingests logs from local files, parses them with Grok patterns, stores rows in time-sharded indexes, and provides full-text search with visualization. Bleve remains the default storage engine; an opt-in template-compressed experiment stores compressed segments and rebuilds an in-memory Bleve search index. An MCP server extension allows external AI agents (Claude Desktop, Cursor, Windsurf) to query logs programmatically.
+LogSonic is an offline-first, desktop log analytics tool built as a single self-contained Go binary that embeds a React SPA frontend. It ingests logs from local files, parses them with Grok patterns, stores rows in time-sharded indexes, and provides full-text search with visualization. Bleve remains the default storage engine, with rows kept in compressed blocks beside each day's index; an opt-in template-compressed experiment stores compressed segments and rebuilds an in-memory Bleve search index. An MCP server extension allows external AI agents (Claude Desktop, Cursor, Windsurf) to query logs programmatically.
 
 ---
 
@@ -450,7 +450,7 @@ graph TB
 
 ## 10. Storage Engine Deep Dive
 
-Bleve remains the default for new storage directories. The opt-in template engine stores compressed row segments under `template-v1` and rebuilds disposable in-memory Scorch indexes on open; it preserves the current search evaluator and does not migrate Bleve data. See [Template-compressed storage](template-storage.md) for selection, trade-offs, and durability limits.
+Day shards are Bleve indexes. New days use [compact storage](compact-storage.md): the index holds terms and doc values only, and rows live beside it in Zstandard blocks (`logs-<day>.bleve/rows/`); days written by older versions are converted in the background, and search behaves the same on both. The opt-in template engine stores compressed row segments under `template-v1` and rebuilds disposable in-memory Scorch indexes on open; it preserves the current search evaluator and does not migrate Bleve data. See [Template-compressed storage](template-storage.md) for selection, trade-offs, and durability limits.
 
 ### Time-Sharding Strategy
 
