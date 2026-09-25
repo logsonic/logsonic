@@ -35,40 +35,62 @@ func (s *Storage) DeleteBySource(ctx context.Context, source string, dates []str
 		if err := ctx.Err(); err != nil {
 			return rows, daysTouched, err
 		}
-		s.mu.RLock()
-		index, ok := s.indices[date]
-		s.mu.RUnlock()
-		if !ok {
-			continue
-		}
-		legacy := index.Mapping().AnalyzerNameForPath("_src") != "keyword"
-		dayRows := 0
-		for {
-			ids, err := sourceCandidateIDs(index, source, legacy)
-			if err != nil {
-				return rows, daysTouched, fmt.Errorf("delete source %q from %s: %w", source, date, err)
-			}
-			if len(ids) == 0 {
-				break
-			}
-			batch := index.NewBatch()
-			for _, id := range ids {
-				batch.Delete(id)
-			}
-			if err := index.Batch(batch); err != nil {
-				return rows, daysTouched, fmt.Errorf("delete source %q from %s: %w", source, date, err)
-			}
-			dayRows += len(ids)
-			rows += len(ids)
-			if err := ctx.Err(); err != nil {
-				return rows, daysTouched, err
-			}
-		}
+		dayRows, err := s.deleteSourceFromDay(ctx, source, date)
+		rows += dayRows
 		if dayRows > 0 {
 			daysTouched = append(daysTouched, date)
 		}
+		if err != nil {
+			return rows, daysTouched, err
+		}
 	}
 	return rows, daysTouched, nil
+}
+
+// deleteSourceFromDay deletes one day's rows of source under the day lock and
+// then reclaims compact row blocks the deleted rows emptied.
+func (s *Storage) deleteSourceFromDay(ctx context.Context, source, date string) (dayRows int, err error) {
+	lock := s.dayLock(date)
+	lock.Lock()
+	defer lock.Unlock()
+	s.mu.RLock()
+	index, ok := s.indices[date]
+	s.mu.RUnlock()
+	if !ok {
+		return 0, nil
+	}
+	if rs := s.rowStoreFor(date); rs != nil {
+		defer func() {
+			if dayRows == 0 {
+				return
+			}
+			if reclaimErr := s.reclaimRowBlocks(index, rs); reclaimErr != nil && err == nil {
+				err = fmt.Errorf("reclaim rows for %s: %w", date, reclaimErr)
+			}
+		}()
+	}
+	legacy := index.Mapping().AnalyzerNameForPath("_src") != "keyword"
+	for {
+		ids, err := sourceCandidateIDs(index, source, legacy)
+		if err != nil {
+			return dayRows, fmt.Errorf("delete source %q from %s: %w", source, date, err)
+		}
+		if len(ids) == 0 {
+			return dayRows, nil
+		}
+		s.touch(date)
+		batch := index.NewBatch()
+		for _, id := range ids {
+			batch.Delete(id)
+		}
+		if err := index.Batch(batch); err != nil {
+			return dayRows, fmt.Errorf("delete source %q from %s: %w", source, date, err)
+		}
+		dayRows += len(ids)
+		if err := ctx.Err(); err != nil {
+			return dayRows, err
+		}
+	}
 }
 
 // sourceCandidateIDs returns up to deleteSourceBatch document IDs whose _src
@@ -146,8 +168,12 @@ func sourceCandidateIDsPaged(index bleve.Index, source string, first *bleve.Sear
 // same closed-index error those two can cause today — recorded in
 // ISSUES.md, not solved here.
 func (s *Storage) RemoveDay(date string) error {
+	lock := s.dayLock(date)
+	lock.Lock()
+	defer lock.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.discardRows(date)
 	if index, ok := s.indices[date]; ok {
 		if err := index.Close(); err != nil {
 			return fmt.Errorf("close index %s: %w", date, err)

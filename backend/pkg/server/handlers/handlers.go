@@ -45,6 +45,9 @@ type Services struct {
 	storageInfoCache any
 	infoCacheMutex   sync.RWMutex
 	cacheValid       bool
+	// cacheLayout is the storage layout version the cache was computed at;
+	// a background conversion changes sizes without an import or delete.
+	cacheLayout uint64
 
 	// ingestJobsCtx is the parent context for every path-ingest job's
 	// per-job timeout (see StartIngestJobs). It defaults to

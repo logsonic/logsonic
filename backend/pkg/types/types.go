@@ -610,6 +610,8 @@ type StorageDay struct {
 	Date  string `json:"date"`
 	Rows  int64  `json:"rows"`
 	Bytes int64  `json:"bytes"`
+	// Format is "compact" or "legacy" (the older stored-field index).
+	Format string `json:"format,omitempty"`
 }
 
 // StorageResponse is GET /storage and PUT /storage. RetentionDays is the
@@ -630,6 +632,24 @@ type StorageResponse struct {
 	TotalBytes int64  `json:"total_bytes"`
 	Path       string `json:"path"`
 	ConfigPath string `json:"config_path"`
+	// Optimization reports the background conversion of days stored in the
+	// older format; absent when the storage engine has no such formats.
+	Optimization *StorageOptimization `json:"optimization,omitempty"`
+}
+
+// StorageOptimization is the background conversion of legacy day-indices to
+// the compact format. Counts and bytes cover this server run.
+type StorageOptimization struct {
+	// Enabled is false when LOGSONIC_STORAGE_MIGRATION=off or
+	// LOGSONIC_STORAGE_FORMAT=legacy keeps the older format.
+	Enabled       bool   `json:"enabled"`
+	Running       bool   `json:"running"`
+	LegacyDays    int    `json:"legacy_days"`
+	CompactDays   int    `json:"compact_days"`
+	CurrentDay    string `json:"current_day,omitempty"`
+	ConvertedDays int    `json:"converted_days"`
+	BytesSaved    int64  `json:"bytes_saved"`
+	LastError     string `json:"last_error,omitempty"`
 }
 
 // StorageUpdateRequest is the PUT /storage body. A null retention_days

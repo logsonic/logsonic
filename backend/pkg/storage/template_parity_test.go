@@ -16,18 +16,35 @@ type parityStorage interface {
 	Close() error
 }
 
-// This is the compatibility oracle for the opt-in template engine. Keep the
-// corpus deliberately small so it exercises semantics without turning into a
+type openParityStorage func(dir string) (parityStorage, error)
+
+func openLegacyStorage(dir string) (parityStorage, error) { return newStorageWithFormat(dir, true) }
+func openCompactStorage(dir string) (parityStorage, error) {
+	return newStorageWithFormat(dir, false)
+}
+func openTemplateStorage(dir string) (parityStorage, error) { return NewTemplateStorage(dir) }
+
+// This is the compatibility oracle for alternative storage formats: the
+// original stored-field Bleve shards are the baseline. Keep the corpus
+// deliberately small so it exercises semantics without turning into a
 // benchmark or depending on SearchPage's known large-batch cursor seam.
 func TestTemplateStorageParity(t *testing.T) {
+	runStorageParity(t, openLegacyStorage, openTemplateStorage)
+}
+
+func TestCompactStorageParity(t *testing.T) {
+	runStorageParity(t, openLegacyStorage, openCompactStorage)
+}
+
+func runStorageParity(t *testing.T, openBaseline, openCandidate openParityStorage) {
 	base := t.TempDir()
 	var bleveStore parityStorage
 	var templateStore parityStorage
-	bleveStore, err := NewStorage(base + "/bleve")
+	bleveStore, err := openBaseline(base + "/bleve")
 	if err != nil {
 		t.Fatal(err)
 	}
-	templateStore, err = NewTemplateStorage(base + "/template")
+	templateStore, err = openCandidate(base + "/template")
 	if err != nil {
 		_ = bleveStore.Close()
 		t.Fatal(err)
@@ -157,11 +174,11 @@ func TestTemplateStorageParity(t *testing.T) {
 	}
 	_ = bleveStore.Close()
 	_ = templateStore.Close()
-	bleveStore, err = NewStorage(base + "/bleve")
+	bleveStore, err = openBaseline(base + "/bleve")
 	if err != nil {
 		t.Fatal(err)
 	}
-	templateStore, err = NewTemplateStorage(base + "/template")
+	templateStore, err = openCandidate(base + "/template")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,12 +197,20 @@ func TestTemplateStorageParity(t *testing.T) {
 }
 
 func TestTemplateStorageLifecycleParity(t *testing.T) {
+	runLifecycleParity(t, openLegacyStorage, openTemplateStorage)
+}
+
+func TestCompactStorageLifecycleParity(t *testing.T) {
+	runLifecycleParity(t, openLegacyStorage, openCompactStorage)
+}
+
+func runLifecycleParity(t *testing.T, openBaseline, openCandidate openParityStorage) {
 	base := t.TempDir()
-	bleveStore, err := NewStorage(filepath.Join(base, "bleve"))
+	bleveStore, err := openBaseline(filepath.Join(base, "bleve"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	templateStore, err := NewTemplateStorage(filepath.Join(base, "template"))
+	templateStore, err := openCandidate(filepath.Join(base, "template"))
 	if err != nil {
 		_ = bleveStore.Close()
 		t.Fatal(err)

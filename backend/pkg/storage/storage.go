@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"logsonic/pkg/types"
@@ -27,6 +28,52 @@ type Storage struct {
 	mu         sync.RWMutex           // protects indices map
 	indices    map[string]bleve.Index // Map of date -> index
 	writerLock *bolt.DB
+
+	// legacyFormat keeps new day shards in the original stored-field format
+	// (LOGSONIC_STORAGE_FORMAT=legacy). Compact shards stay readable either way.
+	legacyFormat bool
+	rowsMu       sync.RWMutex         // protects rows; taken after mu, never before
+	rows         map[string]*rowStore // compact shards' row blocks by date
+	rowCache     *rowBlockCache
+	dayLocks     sync.Map // date -> *sync.Mutex ordering writes, deletes and migration per day
+	genMu        sync.Mutex
+	gens         map[string]dayGeneration
+	migration    *migrator
+	layout       atomic.Uint64 // bumped when a day is converted or finalized
+}
+
+// LayoutVersion changes whenever background work rewrites a day on disk, so
+// callers caching sizes know to recompute them.
+func (s *Storage) LayoutVersion() uint64 { return s.layout.Load() }
+
+// dayGeneration lets a migration detect that its source day changed.
+type dayGeneration struct {
+	count     uint64
+	lastWrite time.Time
+}
+
+func (s *Storage) dayLock(date string) *sync.Mutex {
+	lock, _ := s.dayLocks.LoadOrStore(date, &sync.Mutex{})
+	return lock.(*sync.Mutex)
+}
+
+// touch records a mutation of date; callers hold the day lock.
+func (s *Storage) touch(date string) {
+	s.genMu.Lock()
+	defer s.genMu.Unlock()
+	if s.gens == nil {
+		s.gens = make(map[string]dayGeneration)
+	}
+	g := s.gens[date]
+	g.count++
+	g.lastWrite = time.Now()
+	s.gens[date] = g
+}
+
+func (s *Storage) generation(date string) dayGeneration {
+	s.genMu.Lock()
+	defer s.genMu.Unlock()
+	return s.gens[date]
 }
 
 // StorageInterface defines the methods implemented by *Storage.
@@ -49,8 +96,22 @@ type StorageInterface interface {
 	PruneOlderThan(maxAge time.Duration) (int, error)
 }
 
-// NewStorage initializes a new Storage instance
-func NewStorage(baseDir string) (_ *Storage, err error) {
+// NewStorage initializes a new Storage instance. New day shards use the
+// compact format unless LOGSONIC_STORAGE_FORMAT=legacy; existing legacy
+// shards stay readable and are migrated in the background.
+func NewStorage(baseDir string) (*Storage, error) {
+	legacy := legacyFormatFromEnv()
+	s, err := newStorageWithFormat(baseDir, legacy)
+	if err != nil {
+		return nil, err
+	}
+	if !legacy && migrationEnabledFromEnv() {
+		s.startMigration()
+	}
+	return s, nil
+}
+
+func newStorageWithFormat(baseDir string, legacyFormat bool) (_ *Storage, err error) {
 	// Canonicalize the path to prevent directory traversal via symlinks or
 	// relative segments before we create or open anything under it.
 	absDir, err := filepath.Abs(baseDir)
@@ -65,9 +126,13 @@ func NewStorage(baseDir string) (_ *Storage, err error) {
 	}
 
 	storage := &Storage{
-		baseDir:    baseDir,
-		indices:    make(map[string]bleve.Index),
-		writerLock: lock,
+		baseDir:      baseDir,
+		indices:      make(map[string]bleve.Index),
+		writerLock:   lock,
+		legacyFormat: legacyFormat,
+		rows:         make(map[string]*rowStore),
+		rowCache:     newRowBlockCache(rowBlockCacheSize),
+		gens:         make(map[string]dayGeneration),
 	}
 	defer func() {
 		if err != nil {
@@ -78,6 +143,12 @@ func NewStorage(baseDir string) (_ *Storage, err error) {
 		return nil, errors.New("storage contains template data; use storage-engine auto/template or a separate directory")
 	} else if !os.IsNotExist(statErr) {
 		return nil, statErr
+	}
+
+	// Finish or roll back a migration that a crash interrupted before any
+	// shard is opened, so each day resolves to exactly one directory.
+	if err := recoverMigrations(baseDir); err != nil {
+		return nil, err
 	}
 
 	// Attempt to load existing indices
@@ -99,6 +170,18 @@ func NewStorage(baseDir string) (_ *Storage, err error) {
 			continue // Skip this index if it can't be opened
 		}
 
+		if isCompactIndex(index) {
+			rs, rowErr := openRowStore(indexPath, date, storage.rowCache)
+			if rowErr == nil {
+				_, rowErr = repairOpenBlock(index, rs)
+			}
+			if rowErr != nil {
+				_ = index.Close()
+				return nil, fmt.Errorf("failed to open rows for %s: %w", date, rowErr)
+			}
+			storage.rows[date] = rs
+		}
+
 		// Add to indices map
 		storage.indices[date] = index
 	}
@@ -109,10 +192,21 @@ func NewStorage(baseDir string) (_ *Storage, err error) {
 // Close cleanly shuts down all open Bleve indices. Should be called on
 // server shutdown or at the end of tests to prevent goroutine leaks.
 func (s *Storage) Close() error {
+	if s.migration != nil {
+		s.migration.stop()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var firstErr error
+	s.rowsMu.Lock()
+	for date, rs := range s.rows {
+		if err := rs.close(); err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("failed to close rows %s: %w", date, err)
+		}
+		delete(s.rows, date)
+	}
+	s.rowsMu.Unlock()
 	for date, index := range s.indices {
 		if err := index.Close(); err != nil && firstErr == nil {
 			firstErr = fmt.Errorf("failed to close index %s: %w", date, err)
@@ -226,17 +320,35 @@ func (s *Storage) getOrCreateIndex(date string) (bleve.Index, error) {
 	if s.memoryOnly {
 		index, err = bleve.NewUsing("", buildIndexMapping(), "scorch", bleve.Config.DefaultMemKVStore, nil)
 	} else if _, statErr := os.Stat(indexPath); os.IsNotExist(statErr) {
-		indexConfig := map[string]interface{}{"store": kvConfig}
-		index, err = bleve.NewUsing(indexPath, buildIndexMapping(), "scorch", goleveldb.Name, indexConfig)
+		indexMapping := buildCompactIndexMapping()
+		if s.legacyFormat {
+			indexMapping = buildIndexMapping()
+		}
+		index, err = newPersistentIndex(indexPath, indexMapping)
 	} else {
 		index, err = bleve.Open(indexPath)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize index for date %s: %w", date, err)
 	}
+	if !s.memoryOnly && isCompactIndex(index) {
+		rs, rowErr := openRowStore(indexPath, date, s.blockCache())
+		if rowErr == nil {
+			_, rowErr = repairOpenBlock(index, rs)
+		}
+		if rowErr != nil {
+			_ = index.Close()
+			return nil, fmt.Errorf("failed to open rows for date %s: %w", date, rowErr)
+		}
+		s.setRowStore(date, rs)
+	}
 
 	s.indices[date] = index
 	return index, nil
+}
+
+func newPersistentIndex(path string, indexMapping mapping.IndexMapping) (bleve.Index, error) {
+	return bleve.NewUsing(path, indexMapping, "scorch", goleveldb.Name, map[string]interface{}{"store": kvConfig})
 }
 
 // BuildDocID returns the Bleve document ID used for a row. It is shared by
@@ -281,12 +393,40 @@ func (s *Storage) StoreWithIDs(logs []map[string]interface{}, source string) ([]
 		logsByDate[date] = append(logsByDate[date], datedLog{index: i, log: log})
 	}
 
-	for date, dateLogs := range logsByDate {
-		index, err := s.getOrCreateIndex(date)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get index for date %s: %w", date, err)
+	dates := make([]string, 0, len(logsByDate))
+	for date := range logsByDate {
+		dates = append(dates, date)
+	}
+	sort.Strings(dates)
+	for _, date := range dates {
+		if err := s.storeDay(date, logsByDate[date], source, docIDs); err != nil {
+			return nil, err
 		}
+	}
 
+	return docIDs, nil
+}
+
+// storeDay writes one day's rows under that day's lock, so a migration or a
+// block reclaim never interleaves with the write.
+func (s *Storage) storeDay(date string, dateLogs []datedLog, source string, docIDs []string) error {
+	lock := s.dayLock(date)
+	lock.Lock()
+	defer lock.Unlock()
+	index, err := s.getOrCreateIndex(date)
+	if err != nil {
+		return fmt.Errorf("failed to get index for date %s: %w", date, err)
+	}
+	if !s.memoryOnly {
+		s.touch(date)
+	}
+	rs := s.rowStoreFor(date)
+	var records []templateRecord
+	if rs != nil {
+		records = make([]templateRecord, 0, len(dateLogs))
+	}
+
+	{
 		batch := index.NewBatch()
 		for _, entry := range dateLogs {
 			log := entry.log
@@ -319,28 +459,38 @@ func (s *Storage) StoreWithIDs(logs []map[string]interface{}, source string) ([]
 			// callers (tests) that don't stamp `_seq`.
 			docID := BuildDocID(log, source, entry.index)
 			docIDs[entry.index] = docID
+			if rs != nil {
+				records = append(records, templateRecord{ID: docID, Fields: logCopy})
+				continue
+			}
 			doc, err := buildOptimizedDocument(index.Mapping(), docID, logCopy)
 			if err != nil {
-				return nil, fmt.Errorf("failed to index log entry: %w", err)
+				return fmt.Errorf("failed to index log entry: %w", err)
 			}
 			if err := batch.IndexAdvanced(doc); err != nil {
-				return nil, fmt.Errorf("failed to add log entry to batch: %w", err)
+				return fmt.Errorf("failed to add log entry to batch: %w", err)
 			}
 		}
+		if rs != nil {
+			if err := s.indexCompactRecords(index, rs, records); err != nil {
+				return fmt.Errorf("failed to commit batch for date %s: %w", date, err)
+			}
+			return nil
+		}
 		if err := index.Batch(batch); err != nil {
-			return nil, fmt.Errorf("failed to commit batch for date %s: %w", date, err)
+			return fmt.Errorf("failed to commit batch for date %s: %w", date, err)
 		}
 	}
-
-	return docIDs, nil
+	return nil
 }
 
 // Clear removes all indices
 func (s *Storage) Clear() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock := s.lockForRemoval(func(string) bool { return true })
+	defer unlock()
 
 	// Close all open indices first
+	s.discardRows()
 	for date, index := range s.indices {
 		if err := index.Close(); err != nil {
 			return fmt.Errorf("failed to close index for date %s: %w", date, err)
@@ -374,10 +524,13 @@ func (s *Storage) PruneOlderThan(maxAge time.Duration) (int, error) {
 		return 0, nil
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	cutoff := time.Now().Add(-maxAge)
+	unlock := s.lockForRemoval(func(date string) bool {
+		t, err := time.Parse("2006-01-02", date)
+		return err == nil && t.Before(cutoff)
+	})
+	defer unlock()
+
 	pattern := filepath.Join(s.baseDir, "logs-*.bleve")
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
@@ -400,6 +553,7 @@ func (s *Storage) PruneOlderThan(maxAge time.Duration) (int, error) {
 		}
 
 		// Close the open handle (if any) before removing the directory.
+		s.discardRows(date)
 		if index, ok := s.indices[date]; ok {
 			if err := index.Close(); err != nil {
 				return removed, fmt.Errorf("failed to close index %s: %w", date, err)
@@ -413,6 +567,84 @@ func (s *Storage) PruneOlderThan(maxAge time.Duration) (int, error) {
 	}
 
 	return removed, nil
+}
+
+// lockForRemoval takes the day lock of every day pick selects, in order, and
+// then s.mu, so no write, delete or migration is in flight on a day that is
+// about to be closed and removed. A selected day that appears between
+// listing and locking restarts the attempt. The returned func unlocks all.
+func (s *Storage) lockForRemoval(pick func(date string) bool) func() {
+	for {
+		selected := s.removalCandidates(pick)
+		locks := make([]*sync.Mutex, 0, len(selected))
+		for _, date := range selected {
+			lock := s.dayLock(date)
+			lock.Lock()
+			locks = append(locks, lock)
+		}
+		unlock := func() {
+			s.mu.Unlock()
+			for i := len(locks) - 1; i >= 0; i-- {
+				locks[i].Unlock()
+			}
+		}
+		s.mu.Lock()
+		covered := make(map[string]bool, len(selected))
+		for _, date := range selected {
+			covered[date] = true
+		}
+		complete := true
+		for date := range s.indices {
+			if pick(date) && !covered[date] {
+				complete = false
+				break
+			}
+		}
+		if complete {
+			return unlock
+		}
+		unlock()
+	}
+}
+
+func (s *Storage) removalCandidates(pick func(date string) bool) []string {
+	seen := map[string]bool{}
+	if dates, err := s.List(); err == nil {
+		for _, date := range dates {
+			seen[date] = true
+		}
+	}
+	s.mu.RLock()
+	for date := range s.indices {
+		seen[date] = true
+	}
+	s.mu.RUnlock()
+	selected := make([]string, 0, len(seen))
+	for date := range seen {
+		if pick(date) {
+			selected = append(selected, date)
+		}
+	}
+	sort.Strings(selected)
+	return selected
+}
+
+// discardRows releases row stores of shards about to be removed; with no
+// dates it releases all of them. Callers hold s.mu.
+func (s *Storage) discardRows(dates ...string) {
+	s.rowsMu.Lock()
+	defer s.rowsMu.Unlock()
+	if len(dates) == 0 {
+		for date := range s.rows {
+			dates = append(dates, date)
+		}
+	}
+	for _, date := range dates {
+		if rs := s.rows[date]; rs != nil {
+			rs.discard()
+			delete(s.rows, date)
+		}
+	}
 }
 
 // List returns all available dates that have indices
@@ -513,6 +745,22 @@ func (s *Storage) DeleteByIds(ids []string) (int, error) {
 
 	// For each date index, check for matching document IDs
 	for _, date := range dates {
+		n, err := s.deleteIDsFromDay(date, idMap)
+		deletedCount += n
+		if err != nil {
+			return deletedCount, err
+		}
+	}
+
+	return deletedCount, nil
+}
+
+func (s *Storage) deleteIDsFromDay(date string, idMap map[string]struct{}) (int, error) {
+	lock := s.dayLock(date)
+	lock.Lock()
+	defer lock.Unlock()
+	deletedCount := 0
+	{
 		index, err := s.getOrCreateIndex(date)
 		if err != nil {
 			return deletedCount, fmt.Errorf("failed to get index for date %s: %w", date, err)
@@ -538,12 +786,17 @@ func (s *Storage) DeleteByIds(ids []string) (int, error) {
 
 		// Only execute the batch if there are operations to perform
 		if batch.Size() > 0 {
+			s.touch(date)
 			if err := index.Batch(batch); err != nil {
 				return deletedCount, fmt.Errorf("error deleting documents from index %s: %w", date, err)
 			}
 			deletedCount += batchDeletes
+			if rs := s.rowStoreFor(date); rs != nil {
+				if err := s.reclaimRowBlocks(index, rs); err != nil {
+					return deletedCount, fmt.Errorf("reclaim rows for %s: %w", date, err)
+				}
+			}
 		}
 	}
-
 	return deletedCount, nil
 }

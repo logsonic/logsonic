@@ -10,6 +10,7 @@ import (
 	"sort"
 	"time"
 
+	storagepkg "logsonic/pkg/storage"
 	"logsonic/pkg/types"
 
 	"github.com/go-chi/chi/v5"
@@ -54,10 +55,34 @@ func (h *Services) storageResponse() (types.StorageResponse, error) {
 		if err != nil {
 			return resp, fmt.Errorf("%s: %w", date, err)
 		}
-		resp.Days = append(resp.Days, types.StorageDay{Date: date, Rows: int64(rows), Bytes: bytes})
+		day := types.StorageDay{Date: date, Rows: int64(rows), Bytes: bytes}
+		if formats, ok := h.storage.(storageFormats); ok {
+			day.Format = formats.ShardFormat(date)
+		}
+		resp.Days = append(resp.Days, day)
 		resp.TotalBytes += bytes
 	}
+	if formats, ok := h.storage.(storageFormats); ok {
+		status := formats.MigrationStatus()
+		resp.Optimization = &types.StorageOptimization{
+			Enabled:       status.Enabled,
+			Running:       status.Running,
+			LegacyDays:    status.LegacyDays,
+			CompactDays:   status.CompactDays,
+			CurrentDay:    status.CurrentDay,
+			ConvertedDays: status.MigratedDays,
+			BytesSaved:    status.BytesBefore - status.BytesAfter,
+			LastError:     status.LastError,
+		}
+	}
 	return resp, nil
+}
+
+// storageFormats is implemented by storage that mixes legacy and compact
+// day-indices (storage.Storage); the template engine does not.
+type storageFormats interface {
+	ShardFormat(date string) string
+	MigrationStatus() storagepkg.MigrationStatus
 }
 
 // @Summary Storage overview and retention setting

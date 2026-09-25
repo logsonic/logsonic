@@ -153,7 +153,7 @@ func (s *Storage) SearchPage(ctx context.Context, options SearchOptions) (Search
 			return result, fmt.Errorf("failed to list fields for date %s: %w", date, fieldErr)
 		}
 		for _, field := range fields {
-			if field != "_seq" && field != "_all" {
+			if field != "_seq" && field != "_all" && field != rowPointerField {
 				columnSet[field] = struct{}{}
 			}
 		}
@@ -169,7 +169,7 @@ func (s *Storage) SearchPage(ctx context.Context, options SearchOptions) (Search
 	}
 	sort.Strings(result.AvailableColumns)
 
-	baseQuery, err := buildPageQuery(options.Query, options.Sources)
+	baseQuery, err := s.pageQuery(options.Query, options.Sources)
 	if err != nil {
 		return result, err
 	}
@@ -214,7 +214,7 @@ func (s *Storage) SearchPage(ctx context.Context, options SearchOptions) (Search
 			request.AddFacet("time", facetRequest)
 		}
 
-		searchResult, searchErr := alias.SearchInContext(ctx, request)
+		searchResult, searchErr := s.searchRows(ctx, alias, request)
 		if searchErr != nil {
 			return SearchPageResult{}, searchErr
 		}
@@ -272,7 +272,7 @@ func (s *Storage) SearchPage(ctx context.Context, options SearchOptions) (Search
 			}
 		} else if len(uniqueSources) > 1 {
 			for _, source := range uniqueSources {
-				sourceQuery, queryErr := buildPageQuery(options.Query, []string{source})
+				sourceQuery, queryErr := s.pageQuery(options.Query, []string{source})
 				if queryErr != nil {
 					return SearchPageResult{}, queryErr
 				}
@@ -284,7 +284,7 @@ func (s *Storage) SearchPage(ctx context.Context, options SearchOptions) (Search
 				request := bleve.NewSearchRequest(sourceQuery)
 				request.Size = 0
 				request.AddFacet("time", sourceFacet)
-				sourceResult, sourceErr := alias.SearchInContext(ctx, request)
+				sourceResult, sourceErr := s.searchRows(ctx, alias, request)
 				if sourceErr != nil {
 					return SearchPageResult{}, sourceErr
 				}
@@ -292,7 +292,7 @@ func (s *Storage) SearchPage(ctx context.Context, options SearchOptions) (Search
 			}
 		}
 	} else if !timestampsIndexed {
-		legacyBuckets, legacyTotal, legacyErr := aggregateLegacyMetadata(
+		legacyBuckets, legacyTotal, legacyErr := s.aggregateLegacyMetadata(
 			ctx, alias, baseQuery, buckets, candidateTotal, options, uniqueSources,
 			rangeCoversSelectedShards(options.StartDate, options.EndDate, selectedDates),
 		)
@@ -327,7 +327,7 @@ func timestampIsIndexed(index bleve.Index) bool {
 	return false
 }
 
-func aggregateLegacyMetadata(
+func (s *Storage) aggregateLegacyMetadata(
 	ctx context.Context,
 	alias bleve.Index,
 	baseQuery query.Query,
@@ -343,14 +343,14 @@ func aggregateLegacyMetadata(
 	if coversSelectedShards {
 		firstDay, _ := time.Parse("2006-01-02", options.StartDate.Format("2006-01-02"))
 		lastDay, _ := time.Parse("2006-01-02", options.EndDate.Format("2006-01-02"))
-		return legacyWholeRangeBucket(ctx, alias, options, sources, candidateTotal, firstDay, lastDay.AddDate(0, 0, 1))
+		return s.legacyWholeRangeBucket(ctx, alias, options, sources, candidateTotal, firstDay, lastDay.AddDate(0, 0, 1))
 	}
 
-	minimum, minOK, err := boundaryTimestamp(ctx, alias, baseQuery, "asc")
+	minimum, minOK, err := s.boundaryTimestamp(ctx, alias, baseQuery, "asc")
 	if err != nil {
 		return nil, 0, err
 	}
-	maximum, maxOK, err := boundaryTimestamp(ctx, alias, baseQuery, "desc")
+	maximum, maxOK, err := s.boundaryTimestamp(ctx, alias, baseQuery, "desc")
 	if err != nil {
 		return nil, 0, err
 	}
@@ -366,18 +366,18 @@ func aggregateLegacyMetadata(
 		if !bucketEnd.After(minimum) {
 			bucketEnd = minimum.Add(time.Second)
 		}
-		return legacyWholeRangeBucket(ctx, alias, options, sources, candidateTotal, minimum, bucketEnd)
+		return s.legacyWholeRangeBucket(ctx, alias, options, sources, candidateTotal, minimum, bucketEnd)
 	}
 
 	for i := range buckets {
 		buckets[i].Count = 0
 		buckets[i].SourceCounts = make(map[string]int)
 	}
-	total, err := scanLegacyMetadata(ctx, alias, baseQuery, buckets, options.StartDate, options.EndDate)
+	total, err := s.scanLegacyMetadata(ctx, alias, baseQuery, buckets, options.StartDate, options.EndDate)
 	return buckets, total, err
 }
 
-func legacyWholeRangeBucket(
+func (s *Storage) legacyWholeRangeBucket(
 	ctx context.Context,
 	alias bleve.Index,
 	options SearchOptions,
@@ -396,13 +396,13 @@ func legacyWholeRangeBucket(
 		bucket.SourceCounts[sources[0]] = total
 	} else {
 		for _, source := range sources {
-			sourceQuery, err := buildPageQuery(options.Query, []string{source})
+			sourceQuery, err := s.pageQuery(options.Query, []string{source})
 			if err != nil {
 				return nil, 0, err
 			}
 			request := bleve.NewSearchRequest(sourceQuery)
 			request.Size = 0
-			result, err := alias.SearchInContext(ctx, request)
+			result, err := s.searchRows(ctx, alias, request)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -430,12 +430,12 @@ func rangeCoversSelectedShards(start, end time.Time, dates []string) bool {
 	return !start.After(firstDay) && !end.Before(lastCoveredInstant)
 }
 
-func boundaryTimestamp(ctx context.Context, alias bleve.Index, searchQuery query.Query, order string) (time.Time, bool, error) {
+func (s *Storage) boundaryTimestamp(ctx context.Context, alias bleve.Index, searchQuery query.Query, order string) (time.Time, bool, error) {
 	request := bleve.NewSearchRequest(searchQuery)
 	request.Size = 1
 	request.Fields = []string{"timestamp"}
 	request.SortByCustom(timestampSort(order))
-	result, err := alias.SearchInContext(ctx, request)
+	result, err := s.searchRows(ctx, alias, request)
 	if err != nil {
 		return time.Time{}, false, err
 	}
@@ -453,7 +453,7 @@ func boundaryTimestamp(ctx context.Context, alias bleve.Index, searchQuery query
 	return parsed, true, nil
 }
 
-func scanLegacyMetadata(
+func (s *Storage) scanLegacyMetadata(
 	ctx context.Context,
 	alias bleve.Index,
 	searchQuery query.Query,
@@ -471,7 +471,7 @@ func scanLegacyMetadata(
 		if len(searchAfter) > 0 {
 			request.SetSearchAfter(searchAfter)
 		}
-		result, err := alias.SearchInContext(ctx, request)
+		result, err := s.searchRows(ctx, alias, request)
 		if err != nil {
 			return 0, err
 		}
@@ -552,6 +552,15 @@ func intersectingDates(existing []string, start, end time.Time) []string {
 }
 
 func buildPageQuery(queryStr string, sources []string) (query.Query, error) {
+	return buildPageQueryWith(queryStr, sources, nil)
+}
+
+// pageQuery builds a page query whose phrase checks can read compact rows.
+func (s *Storage) pageQuery(queryStr string, sources []string) (query.Query, error) {
+	return buildPageQueryWith(queryStr, sources, s)
+}
+
+func buildPageQueryWith(queryStr string, sources []string, rows rowResolver) (query.Query, error) {
 	var searchQuery query.Query
 	if queryStr == "" {
 		searchQuery = bleve.NewMatchAllQuery()
@@ -562,7 +571,7 @@ func buildPageQuery(queryStr string, sources []string) (query.Query, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid query: %w", err)
 		}
-		searchQuery = optimizeQuery(parsed)
+		searchQuery = optimizeQueryWith(parsed, rows)
 	}
 
 	if len(sources) == 0 {

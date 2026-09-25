@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -50,7 +51,7 @@ func (s *Storage) SourceStats(date string) ([]SourceDayStats, error) {
 		return nil, nil
 	}
 	if index.Mapping().AnalyzerNameForPath("_src") == "keyword" {
-		return sourceStatsByFacet(index)
+		return s.sourceStatsByFacet(index)
 	}
 	return sourceStatsByStoredFields(index)
 }
@@ -68,7 +69,7 @@ func (s *Storage) LegacySourceShard(date string) bool {
 	return index.Mapping().AnalyzerNameForPath("_src") != "keyword"
 }
 
-func sourceStatsByFacet(index bleve.Index) ([]SourceDayStats, error) {
+func (s *Storage) sourceStatsByFacet(index bleve.Index) ([]SourceDayStats, error) {
 	req := bleve.NewSearchRequest(bleve.NewMatchAllQuery())
 	req.Size = 0
 	req.AddFacet("src", bleve.NewFacetRequest("_src", sourceFacetLimit))
@@ -86,7 +87,7 @@ func sourceStatsByFacet(index bleve.Index) ([]SourceDayStats, error) {
 	}
 	stats := make([]SourceDayStats, 0, len(terms))
 	for _, term := range terms {
-		first, last, err := sourceBounds(index, term.Term)
+		first, last, err := s.sourceBounds(index, term.Term)
 		if err != nil {
 			return nil, err
 		}
@@ -102,7 +103,7 @@ func sourceStatsByFacet(index bleve.Index) ([]SourceDayStats, error) {
 
 // sourceBounds runs two size-1 queries sorted by timestamp asc / desc,
 // filtered to one exact _src term.
-func sourceBounds(index bleve.Index, source string) (first, last time.Time, err error) {
+func (s *Storage) sourceBounds(index bleve.Index, source string) (first, last time.Time, err error) {
 	for _, order := range []string{"asc", "desc"} {
 		tq := bleve.NewTermQuery(source)
 		tq.SetField("_src")
@@ -113,7 +114,7 @@ func sourceBounds(index bleve.Index, source string) (first, last time.Time, err 
 		if order == "desc" {
 			req.SortBy([]string{"-timestamp"})
 		}
-		res, qerr := index.Search(req)
+		res, qerr := s.searchRows(context.Background(), index, req)
 		if qerr != nil {
 			return first, last, fmt.Errorf("source bounds (%s, %s): %w", source, order, qerr)
 		}

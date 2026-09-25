@@ -2685,8 +2685,7 @@ const docTemplate = `{
                 "day_rows": {
                     "type": "object",
                     "additionalProperties": {
-                        "type": "integer",
-                        "format": "int64"
+                        "type": "integer"
                     }
                 },
                 "days": {
@@ -2830,6 +2829,10 @@ const docTemplate = `{
                 "date": {
                     "type": "string"
                 },
+                "format": {
+                    "description": "Format is \"compact\" or \"legacy\" (the older stored-field index).",
+                    "type": "string"
+                },
                 "rows": {
                     "type": "integer"
                 }
@@ -2849,6 +2852,36 @@ const docTemplate = `{
                 }
             }
         },
+        "types.StorageOptimization": {
+            "type": "object",
+            "properties": {
+                "bytes_saved": {
+                    "type": "integer"
+                },
+                "compact_days": {
+                    "type": "integer"
+                },
+                "converted_days": {
+                    "type": "integer"
+                },
+                "current_day": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "description": "Enabled is false when LOGSONIC_STORAGE_MIGRATION=off or\nLOGSONIC_STORAGE_FORMAT=legacy keeps the older format.",
+                    "type": "boolean"
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "legacy_days": {
+                    "type": "integer"
+                },
+                "running": {
+                    "type": "boolean"
+                }
+            }
+        },
         "types.StorageResponse": {
             "type": "object",
             "properties": {
@@ -2860,6 +2893,14 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/types.StorageDay"
                     }
+                },
+                "optimization": {
+                    "description": "Optimization reports the background conversion of days stored in the\nolder format; absent when the storage engine has no such formats.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.StorageOptimization"
+                        }
+                    ]
                 },
                 "path": {
                     "type": "string"

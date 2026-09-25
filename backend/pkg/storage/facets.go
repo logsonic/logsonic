@@ -218,7 +218,7 @@ func (s *Storage) Facets(ctx context.Context, options SearchOptions) (*types.Fac
 		for _, field := range fields {
 			// Never pull _raw (the whole line) or ordering metadata through the
 			// scan: they are not faceted and would dominate the bytes read.
-			if field == "_raw" || field == "_seq" || field == "_all" || field == "_id" {
+			if field == "_raw" || field == "_seq" || field == "_all" || field == "_id" || field == rowPointerField {
 				continue
 			}
 			fieldSet[field] = struct{}{}
@@ -233,7 +233,7 @@ func (s *Storage) Facets(ctx context.Context, options SearchOptions) (*types.Fac
 	}
 	sort.Strings(requested)
 
-	baseQuery, err := buildPageQuery(options.Query, options.Sources)
+	baseQuery, err := s.pageQuery(options.Query, options.Sources)
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +268,7 @@ func (s *Storage) Facets(ctx context.Context, options SearchOptions) (*types.Fac
 		if len(searchAfter) > 0 {
 			request.SetSearchAfter(searchAfter)
 		}
-		result, searchErr := alias.SearchInContext(ctx, request)
+		result, searchErr := s.searchRows(ctx, alias, request)
 		if searchErr != nil {
 			return nil, searchErr
 		}

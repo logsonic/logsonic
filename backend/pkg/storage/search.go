@@ -121,7 +121,7 @@ func (s *Storage) Search(queryStr string, startDate, endDate *time.Time, sources
 						resultChan <- indexResult{err: fmt.Errorf("invalid query: %w", err)}
 						return
 					}
-					searchQuery = optimizeQuery(parsedQuery)
+					searchQuery = optimizeQueryWith(parsedQuery, s)
 
 				} else {
 					searchQuery = bleve.NewMatchAllQuery()
@@ -149,7 +149,7 @@ func (s *Storage) Search(queryStr string, startDate, endDate *time.Time, sources
 					return
 				}
 
-				searchResult, err := index.Search(searchRequest)
+				searchResult, err := s.searchRows(ctx, index, searchRequest)
 				if err != nil {
 					resultChan <- indexResult{err: fmt.Errorf("search failed for date %s: %w", date, err)}
 					return

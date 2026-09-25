@@ -8,9 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
@@ -97,6 +97,16 @@ type templateWireSegment struct {
 }
 
 func encodeTemplateSegment(segment templateSegment) ([]byte, error) {
+	return encodeSegment(segment, true)
+}
+
+// encodePlainSegment skips the template search. WAL frames use it: they are
+// short-lived and re-encoded with templates when their block is sealed.
+func encodePlainSegment(segment templateSegment) ([]byte, error) {
+	return encodeSegment(segment, false)
+}
+
+func encodeSegment(segment templateSegment, tryTemplates bool) ([]byte, error) {
 	wire := templateWireSegment{RecordsPresent: segment.Records != nil, DeletedPresent: segment.Deleted != nil}
 	for _, record := range segment.Records {
 		fields := make(map[string]templateWireValue, len(record.Fields))
@@ -124,6 +134,9 @@ func encodeTemplateSegment(segment templateSegment) ([]byte, error) {
 	counts := make(map[string]int)
 	templates := make(map[string][]string)
 	visitTemplateStrings(wire, func(s string) {
+		if !tryTemplates {
+			return
+		}
 		parts, variables := splitTemplateString(s)
 		if len(variables) == 0 {
 			return
@@ -173,12 +186,11 @@ func decodeTemplateSegment(data []byte) (templateSegment, error) {
 	if wantLength > templateSegmentMaxPayload {
 		return empty, errors.New("template segment payload exceeds limit")
 	}
-	decoder, err := zstd.NewReader(bytes.NewReader(data[templateSegmentHeader:]), zstd.WithDecoderMaxMemory(templateSegmentMaxPayload), zstd.WithDecoderMaxWindow(templateSegmentMaxPayload), zstd.WithDecoderConcurrency(1))
+	decoder, err := sharedZstdDecoder()
 	if err != nil {
 		return empty, fmt.Errorf("open template segment compression: %w", err)
 	}
-	defer decoder.Close()
-	raw, err := io.ReadAll(io.LimitReader(decoder, templateSegmentMaxPayload+1))
+	raw, err := decoder.DecodeAll(data[templateSegmentHeader:], make([]byte, 0, wantLength))
 	if err != nil {
 		return empty, fmt.Errorf("decompress template segment: %w", err)
 	}
@@ -253,13 +265,38 @@ func encodeTemplateWire(wire templateWireSegment) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func compressTemplatePayload(raw []byte) ([]byte, error) {
-	encoder, err := zstd.NewWriter(nil, zstd.WithEncoderConcurrency(1))
-	if err != nil {
-		return nil, err
+// One encoder and one decoder serve every segment: EncodeAll and DecodeAll
+// are safe for concurrent use, and building them per call cost milliseconds
+// of allocation on every live-tail flush.
+var (
+	zstdOnce    sync.Once
+	zstdEncoder *zstd.Encoder
+	zstdDecoder *zstd.Decoder
+	zstdErr     error
+)
+
+func initZstd() {
+	zstdEncoder, zstdErr = zstd.NewWriter(nil, zstd.WithEncoderConcurrency(1))
+	if zstdErr != nil {
+		return
 	}
-	defer encoder.Close()
-	return encoder.EncodeAll(raw, nil), nil
+	zstdDecoder, zstdErr = zstd.NewReader(nil,
+		zstd.WithDecoderMaxMemory(templateSegmentMaxPayload),
+		zstd.WithDecoderMaxWindow(templateSegmentMaxPayload),
+		zstd.WithDecoderConcurrency(0))
+}
+
+func sharedZstdDecoder() (*zstd.Decoder, error) {
+	zstdOnce.Do(initZstd)
+	return zstdDecoder, zstdErr
+}
+
+func compressTemplatePayload(raw []byte) ([]byte, error) {
+	zstdOnce.Do(initZstd)
+	if zstdErr != nil {
+		return nil, zstdErr
+	}
+	return zstdEncoder.EncodeAll(raw, nil), nil
 }
 
 func makeTemplateWireValue(value interface{}, depth int) (templateWireValue, error) {

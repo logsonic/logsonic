@@ -92,8 +92,9 @@ func (h *Services) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	var storagePath string
 
 	// Try to use cached storage info
+	layout := h.storageLayout()
 	h.infoCacheMutex.RLock()
-	cacheHit := h.cacheValid && h.storageInfoCache != nil
+	cacheHit := h.cacheValid && h.storageInfoCache != nil && h.cacheLayout == layout
 	if cacheHit {
 		// Use cached storage info
 		storageInfo = h.storageInfoCache.(StorageInfoType)
@@ -187,6 +188,7 @@ func (h *Services) HandleInfo(w http.ResponseWriter, r *http.Request) {
 		h.infoCacheMutex.Lock()
 		h.storageInfoCache = storageInfo
 		h.cacheValid = true
+		h.cacheLayout = layout
 		h.infoCacheMutex.Unlock()
 	}
 
@@ -232,6 +234,15 @@ func (h *Services) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(response)
+}
+
+// storageLayout reports the storage's layout version (bumped by background
+// conversion), or 0 for storage without one.
+func (h *Services) storageLayout() uint64 {
+	if versioned, ok := h.storage.(interface{ LayoutVersion() uint64 }); ok {
+		return versioned.LayoutVersion()
+	}
+	return 0
 }
 
 // InvalidateInfoCache marks the system info cache as invalid,

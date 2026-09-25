@@ -19,6 +19,12 @@ import (
 // optimizeQuery rewrites operations whose default Bleve representation needs
 // the redundant index data omitted by buildOptimizedDocument.
 func optimizeQuery(input query.Query) query.Query {
+	return optimizeQueryWith(input, nil)
+}
+
+// optimizeQueryWith is optimizeQuery for storage that may hold compact
+// shards; rows lets phrase verification read their row blocks.
+func optimizeQueryWith(input query.Query, rows rowResolver) query.Query {
 	optimized := input
 	switch typed := input.(type) {
 	case *query.MatchPhraseQuery:
@@ -28,6 +34,7 @@ func optimizeQuery(input query.Query) query.Query {
 			analyzer:  typed.Analyzer,
 			boost:     typed.Boost(),
 			fuzziness: typed.Fuzziness,
+			rows:      rows,
 		}
 	case *query.NumericRangeQuery:
 		// An open bound must still be clamped to the numeric term space.
@@ -50,17 +57,17 @@ func optimizeQuery(input query.Query) query.Query {
 		optimized = numericRange
 	case *query.ConjunctionQuery:
 		for i, child := range typed.Conjuncts {
-			typed.Conjuncts[i] = optimizeQuery(child)
+			typed.Conjuncts[i] = optimizeQueryWith(child, rows)
 		}
 	case *query.DisjunctionQuery:
 		for i, child := range typed.Disjuncts {
-			typed.Disjuncts[i] = optimizeQuery(child)
+			typed.Disjuncts[i] = optimizeQueryWith(child, rows)
 		}
 	case *query.BooleanQuery:
-		typed.Must = optimizeOptionalQuery(typed.Must)
-		typed.Should = optimizeOptionalQuery(typed.Should)
-		typed.MustNot = optimizeOptionalQuery(typed.MustNot)
-		typed.Filter = optimizeOptionalQuery(typed.Filter)
+		typed.Must = optimizeOptionalQuery(typed.Must, rows)
+		typed.Should = optimizeOptionalQuery(typed.Should, rows)
+		typed.MustNot = optimizeOptionalQuery(typed.MustNot, rows)
+		typed.Filter = optimizeOptionalQuery(typed.Filter, rows)
 	}
 
 	if fieldable, ok := optimized.(query.FieldableQuery); ok && fieldable.Field() == "" {
@@ -69,11 +76,11 @@ func optimizeQuery(input query.Query) query.Query {
 	return optimized
 }
 
-func optimizeOptionalQuery(input query.Query) query.Query {
+func optimizeOptionalQuery(input query.Query, rows rowResolver) query.Query {
 	if input == nil {
 		return nil
 	}
-	return optimizeQuery(input)
+	return optimizeQueryWith(input, rows)
 }
 
 // compactNumericLowerBound returns the shift-0 term for an inclusive/exclusive
@@ -113,6 +120,7 @@ type storedPhraseQuery struct {
 	analyzer  string
 	boost     float64
 	fuzziness int
+	rows      rowResolver // nil unless the storage can hold compact shards
 }
 
 func (q *storedPhraseQuery) Searcher(
@@ -190,7 +198,27 @@ func (q *storedPhraseQuery) Searcher(
 		if err != nil {
 			return false
 		}
-		doc, err := reader.Document(id)
+		var doc index.Document
+		switch {
+		case q.rows != nil && field != "_all":
+			var values []string
+			values, doc, err = q.rows.phraseText(reader, id, field)
+			if err != nil {
+				return false
+			}
+			if doc == nil {
+				for _, value := range values {
+					if phraseMatches(phrase, analyzer.Analyze([]byte(value)), q.fuzziness) {
+						return true
+					}
+				}
+				return false
+			}
+		case q.rows != nil:
+			doc, err = q.rows.phraseDocument(reader, id)
+		default:
+			doc, err = reader.Document(id)
+		}
 		if err != nil || doc == nil {
 			return false
 		}
@@ -296,7 +324,7 @@ func searchableFields(reader index.IndexReader) ([]string, error) {
 	searchable := make([]string, 0, len(fields))
 	for _, field := range fields {
 		switch field {
-		case "_all", "_id", "_seq", "timestamp":
+		case "_all", "_id", "_seq", "timestamp", rowPointerField:
 			continue
 		default:
 			searchable = append(searchable, field)

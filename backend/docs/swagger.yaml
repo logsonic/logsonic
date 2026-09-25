@@ -690,7 +690,6 @@ definitions:
         type: string
       day_rows:
         additionalProperties:
-          format: int64
           type: integer
         type: object
       days:
@@ -794,6 +793,9 @@ definitions:
         type: integer
       date:
         type: string
+      format:
+        description: Format is "compact" or "legacy" (the older stored-field index).
+        type: string
       rows:
         type: integer
     type: object
@@ -806,6 +808,28 @@ definitions:
       status:
         type: string
     type: object
+  types.StorageOptimization:
+    properties:
+      bytes_saved:
+        type: integer
+      compact_days:
+        type: integer
+      converted_days:
+        type: integer
+      current_day:
+        type: string
+      enabled:
+        description: |-
+          Enabled is false when LOGSONIC_STORAGE_MIGRATION=off or
+          LOGSONIC_STORAGE_FORMAT=legacy keeps the older format.
+        type: boolean
+      last_error:
+        type: string
+      legacy_days:
+        type: integer
+      running:
+        type: boolean
+    type: object
   types.StorageResponse:
     properties:
       config_path:
@@ -814,6 +838,12 @@ definitions:
         items:
           $ref: '#/definitions/types.StorageDay'
         type: array
+      optimization:
+        allOf:
+        - $ref: '#/definitions/types.StorageOptimization'
+        description: |-
+          Optimization reports the background conversion of days stored in the
+          older format; absent when the storage engine has no such formats.
       path:
         type: string
       retention_days:

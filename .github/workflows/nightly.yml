@@ -75,6 +75,10 @@ jobs:
         run: node ../.github/scripts/compare-bench.mjs bench/baseline.json bench/output/bench.json
       - name: Index-size amplification benchmark
         run: go test ./pkg/storage -run '^$' -bench 'BenchmarkIndexSize' -benchtime=1x -v
+      - name: Compact storage oracle over every sample log
+        run: go test ./pkg/server -run '^TestSampleLogsCompactStorageMatchesLegacy$' -count=1 -v -timeout 30m
+        env:
+          LOGSONIC_SAMPLE_GLOB: "*.log"
 
   e2e-full:
     name: Full E2E set on the embedded build
