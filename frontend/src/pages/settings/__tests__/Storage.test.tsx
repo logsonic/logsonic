@@ -185,4 +185,113 @@ describe('StorageSettings', () => {
     renderPage();
     expect(await screen.findByText(/No logs stored yet/)).toBeTruthy();
   });
+
+  it('says nothing about conversion when every day is already compact', async () => {
+    api.getStorage.mockResolvedValue(
+      storage({
+        optimization: {
+          enabled: true,
+          running: false,
+          legacy_days: 0,
+          compact_days: 2,
+          converted_days: 0,
+          bytes_saved: 0,
+        },
+      })
+    );
+    renderPage();
+    await screen.findByText('2,000 rows');
+    expect(screen.queryByTestId('storage-optimization')).toBeNull();
+  });
+
+  it('shows conversion progress and refreshes it without resetting the retention field', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      api.getStorage.mockResolvedValueOnce(
+        storage({
+          optimization: {
+            enabled: true,
+            running: true,
+            legacy_days: 3,
+            compact_days: 1,
+            current_day: '2026-03-01',
+            converted_days: 1,
+            bytes_saved: 2 * 1024 * 1024,
+          },
+        })
+      );
+      api.getStorage.mockResolvedValue(
+        storage({
+          optimization: {
+            enabled: true,
+            running: false,
+            legacy_days: 0,
+            compact_days: 4,
+            converted_days: 4,
+            bytes_saved: 8 * 1024 * 1024,
+          },
+        })
+      );
+      renderPage();
+      const line = await screen.findByTestId('storage-optimization');
+      expect(line.textContent).toMatch(
+        /Converting 2026-03-01 to compact storage: 1 of 4 days done, 2 MB freed/
+      );
+      expect(line.textContent).toMatch(/Search keeps working/);
+
+      const input = screen.getByLabelText('Retention days') as HTMLInputElement;
+      fireEvent.change(input, { target: { value: '12' } });
+      await vi.advanceTimersByTimeAsync(5000);
+      await waitFor(() =>
+        expect(screen.getByTestId('storage-optimization').textContent).toMatch(
+          /All days use compact storage \(4 days converted, 8 MB freed\)/
+        )
+      );
+      expect(input.value).toBe('12');
+      const calls = api.getStorage.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(15000);
+      expect(api.getStorage.mock.calls.length).toBe(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('explains days left in the older format when conversion is off, and a failed attempt', async () => {
+    api.getStorage.mockResolvedValue(
+      storage({
+        optimization: {
+          enabled: false,
+          running: false,
+          legacy_days: 2,
+          compact_days: 0,
+          converted_days: 0,
+          bytes_saved: 0,
+        },
+      })
+    );
+    renderPage();
+    expect((await screen.findByTestId('storage-optimization')).textContent).toMatch(
+      /2 days use the older, larger storage format. Conversion is turned off/
+    );
+  });
+
+  it('mentions pending days and a failed attempt that will be retried', async () => {
+    api.getStorage.mockResolvedValue(
+      storage({
+        optimization: {
+          enabled: true,
+          running: false,
+          legacy_days: 1,
+          compact_days: 1,
+          converted_days: 0,
+          bytes_saved: 0,
+          last_error: '2026-03-02: disk full',
+        },
+      })
+    );
+    renderPage();
+    const line = await screen.findByTestId('storage-optimization');
+    expect(line.textContent).toMatch(/1 day will move to compact storage in the background/);
+    expect(line.textContent).toMatch(/Last conversion attempt failed \(2026-03-02: disk full\)/);
+  });
 });

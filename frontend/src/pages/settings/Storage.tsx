@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 
 import { SettingsLayout } from './SettingsLayout';
 
-import type { StorageDay, StorageResponse } from '@/lib/api-types';
+import type { StorageDay, StorageOptimization, StorageResponse } from '@/lib/api-types';
 
 import { CopyableValue } from '@/components/settings/CopyableValue';
 import {
@@ -53,6 +53,35 @@ const retentionSourceLine = (s: StorageResponse): string => {
   }
 };
 
+const days = (count: number) => `${n(count)} ${count === 1 ? 'day' : 'days'}`;
+
+/** How often the page refreshes while older days are still being converted. */
+const OPTIMIZATION_POLL_MS = 5000;
+
+/**
+ * One line about the background conversion of days stored in the older,
+ * larger format, or null when there is nothing worth saying.
+ */
+const optimizationLine = (o: StorageOptimization | undefined): string | null => {
+  if (!o) return null;
+  const freed = o.bytes_saved > 0 ? `, ${formatBytes(o.bytes_saved)} freed` : '';
+  if (o.legacy_days === 0) {
+    return o.converted_days > 0
+      ? `All days use compact storage (${days(o.converted_days)} converted${freed}).`
+      : null;
+  }
+  if (!o.enabled) {
+    return `${days(o.legacy_days)} use the older, larger storage format. Conversion is turned off for this server.`;
+  }
+  const total = o.converted_days + o.legacy_days;
+  if (o.running && o.current_day) {
+    return `Converting ${o.current_day} to compact storage: ${n(o.converted_days)} of ${days(total)} done${freed}. Search keeps working meanwhile.`;
+  }
+  const progress =
+    o.converted_days > 0 ? ` ${n(o.converted_days)} of ${days(total)} done${freed}.` : '';
+  return `${days(o.legacy_days)} will move to compact storage in the background once they stop receiving logs.${progress}`;
+};
+
 /**
  * Storage settings: how long logs are kept (saved server-side in
  * config.json, which wins over the CLI flag), what is on disk per day with
@@ -81,6 +110,20 @@ const StorageSettings: FC = () => {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // While older days are being converted, refresh the numbers without
+  // touching the retention field the user may be editing.
+  const pending = !!storage?.optimization?.enabled && (storage.optimization.legacy_days ?? 0) > 0;
+  useEffect(() => {
+    if (!pending) return;
+    const timer = window.setInterval(() => {
+      getStorage()
+        .then(setStorage)
+        .catch(() => {});
+    }, OPTIMIZATION_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [pending]);
+  const optimization = optimizationLine(storage?.optimization);
 
   // Digits only, so "1e3" or "7.0" don't save as 1000 / 7 while the help
   // text says "a whole number".
@@ -241,6 +284,17 @@ const StorageSettings: FC = () => {
               : '…'}
           </span>
         </div>
+        {optimization && (
+          <div style={{ ...rowStyle(false), ...note }} data-testid="storage-optimization">
+            {optimization}
+            {storage?.optimization?.last_error && (
+              <div style={{ marginTop: 4 }}>
+                Last conversion attempt failed ({storage.optimization.last_error}); it will be
+                retried.
+              </div>
+            )}
+          </div>
+        )}
         {storage && storage.days.length === 0 && (
           <div style={{ ...rowStyle(false), ...note }}>
             No logs stored yet.{' '}

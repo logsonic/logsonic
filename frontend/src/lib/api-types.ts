@@ -548,6 +548,21 @@ export interface StorageDay {
   date: string;
   rows: number;
   bytes: number;
+  /** `compact`, or `legacy` for a day still in the older stored-field index. */
+  format?: 'compact' | 'legacy';
+}
+
+/** Background conversion of legacy days to the compact format (this server run). */
+export interface StorageOptimization {
+  /** False when LOGSONIC_STORAGE_MIGRATION=off or LOGSONIC_STORAGE_FORMAT=legacy. */
+  enabled: boolean;
+  running: boolean;
+  legacy_days: number;
+  compact_days: number;
+  current_day?: string;
+  converted_days: number;
+  bytes_saved: number;
+  last_error?: string;
 }
 
 /** GET /storage and PUT /storage. */
@@ -564,6 +579,8 @@ export interface StorageResponse {
   total_bytes: number;
   path: string;
   config_path: string;
+  /** Present when the store can hold both formats. */
+  optimization?: StorageOptimization;
 }
 
 /** PUT /storage body. `null` clears the override; 0 keeps everything. */
