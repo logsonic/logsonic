@@ -2685,8 +2685,7 @@ const docTemplate = `{
                 "day_rows": {
                     "type": "object",
                     "additionalProperties": {
-                        "type": "integer",
-                        "format": "int64"
+                        "type": "integer"
                     }
                 },
                 "days": {

@@ -690,7 +690,6 @@ definitions:
         type: string
       day_rows:
         additionalProperties:
-          format: int64
           type: integer
         type: object
       days:
