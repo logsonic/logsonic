@@ -183,7 +183,9 @@ func (s *TemplateStorage) replayDay(date string) error {
 	}
 	for _, entry := range entries {
 		name := entry.Name()
-		if strings.HasPrefix(name, ".") && strings.HasSuffix(name, ".tmp") {
+		// Match the store root: skip crash leftovers and OS metadata such as
+		// .DS_Store. A real segment is never dot-prefixed.
+		if strings.HasPrefix(name, ".") {
 			continue
 		}
 		if entry.IsDir() || len(name) != 24 || !strings.HasSuffix(name, ".tzs") {

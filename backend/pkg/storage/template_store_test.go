@@ -223,6 +223,53 @@ func TestStorageEngineLockPreventsMixedWritersBeforeFirstRow(t *testing.T) {
 	}
 }
 
+func TestTemplateStoreReopensWithFinderMetadata(t *testing.T) {
+	dir := t.TempDir()
+	s, err := NewTemplateStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := templateTestRows()
+	if _, err = s.StoreWithIDs(rows, "app.log"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	day := filepath.Join(dir, templateDirectory, "2026-09-24")
+	for _, name := range []string{".DS_Store", "._00000000000000000001.tzs"} {
+		if err = os.WriteFile(filepath.Join(day, name), []byte("finder"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s, err = NewTemplateStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count, err := s.GetDocCount("2026-09-24"); err != nil || count != uint64(len(rows)) {
+		t.Fatalf("count %d %v", count, err)
+	}
+	dayStart := time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC)
+	page, err := s.SearchPage(context.Background(), SearchOptions{
+		Query: "message:connection", Limit: 1,
+		StartDate: dayStart, EndDate: dayStart.Add(24 * time.Hour),
+		SortBy: "timestamp", SortOrder: "asc",
+	})
+	if err != nil || page.TotalCount != 1 {
+		t.Fatalf("search total %d %v", page.TotalCount, err)
+	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err = os.WriteFile(filepath.Join(day, "notes.txt"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = NewTemplateStorage(dir); err == nil {
+		t.Fatal("non-segment file in a day directory was accepted")
+	}
+}
+
 func TestTemplateStoreRecoveryFinishesDayDeletion(t *testing.T) {
 	dir := t.TempDir()
 	s, err := NewTemplateStorage(dir)
