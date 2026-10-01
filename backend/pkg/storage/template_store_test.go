@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -361,5 +362,105 @@ func TestTemplateStoreReplayRemovesCrashedTempSegments(t *testing.T) {
 	}
 	if n, _ := s.GetDocCount("2026-09-24"); n != 2 {
 		t.Fatalf("recovered %d rows", n)
+	}
+}
+
+// A commit's fsyncs must not stall readers, and Close must still wait for the
+// in-flight commit instead of tearing the store down underneath it.
+func TestTemplateStoreReadersProceedDuringCommitIO(t *testing.T) {
+	s, err := NewTemplateStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.StoreWithIDs(templateTestRows(), "file"); err != nil {
+		t.Fatal(err)
+	}
+	entered, release := make(chan struct{}), make(chan struct{})
+	templateCommitIOHook = func() { close(entered); <-release }
+	defer func() { templateCommitIOHook = nil }()
+
+	stored := make(chan error, 1)
+	go func() {
+		_, err := s.StoreWithIDs(templateBenchRows(5, 100), "file2")
+		stored <- err
+	}()
+	<-entered
+
+	readDone := make(chan error, 1)
+	go func() {
+		if n, err := s.GetDocCount("2026-09-24"); err != nil || n != 2 {
+			readDone <- fmt.Errorf("count %d %v", n, err)
+			return
+		}
+		_, err := s.List()
+		readDone <- err
+	}()
+	select {
+	case err := <-readDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("reader blocked behind a commit's file I/O")
+	}
+
+	closed := make(chan error, 1)
+	go func() { closed <- s.Close() }()
+	select {
+	case <-closed:
+		t.Fatal("Close did not wait for the in-flight commit")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	if err = <-stored; err != nil {
+		t.Fatalf("in-flight commit failed: %v", err)
+	}
+	if err = <-closed; err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Replay folds segments into shared bleve batches; the end state must equal
+// applying them one at a time, including delete-then-reinsert of one ID.
+func TestTemplateStoreReplayCoalescedBatchesKeepOrder(t *testing.T) {
+	dir := t.TempDir()
+	s, err := NewTemplateStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	day := time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC)
+	row := func(seq int64, msg string) map[string]interface{} {
+		return map[string]interface{}{"timestamp": day, "_src": "a.log", "_seq": seq, "_raw": msg, "message": msg}
+	}
+	ids, err := s.StoreWithIDs([]map[string]interface{}{row(1, "first"), row(2, "second")}, "file")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, err := s.DeleteByIds(ids[:1]); err != nil || n != 1 {
+		t.Fatalf("delete %d %v", n, err)
+	}
+	// Re-insert the same row (same ID) with new content, in a later segment.
+	again, err := s.StoreWithIDs([]map[string]interface{}{row(1, "reborn")}, "file")
+	if err != nil || again[0] != ids[0] {
+		t.Fatalf("reinsert id %v %v, want %s", again, err, ids[0])
+	}
+	if n, err := s.DeleteByIds(ids[1:]); err != nil || n != 1 {
+		t.Fatalf("delete %d %v", n, err)
+	}
+	want, _ := s.GetDocCount("2026-09-24")
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = NewTemplateStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close() }()
+	if got, _ := s.GetDocCount("2026-09-24"); got != want || got != 1 {
+		t.Fatalf("replay doc count %d, live count %d, want 1", got, want)
+	}
+	page, err := s.SearchPage(context.Background(), SearchOptions{Query: "message:reborn", Limit: 10, StartDate: day.Truncate(24 * time.Hour), EndDate: day.Truncate(24 * time.Hour).Add(24 * time.Hour), SortBy: "timestamp", SortOrder: "asc"})
+	if err != nil || len(page.Logs) != 1 {
+		t.Fatalf("reborn record lost after coalesced replay: %v %+v", err, page)
 	}
 }

@@ -69,6 +69,10 @@ func NewStorageWithEngine(dir, engine string) (StorageEngine, error) {
 // projection and facets therefore share the established Storage implementation.
 // This experimental backend trades disk footprint for replay time and index RAM.
 type TemplateStorage struct {
+	// writeMu serializes every mutator (store, delete, prune, clear, close) and is
+	// always taken before mu. A commit releases mu during its file I/O so readers
+	// are not stalled by fsyncs; writeMu is what keeps other mutators out meanwhile.
+	writeMu  sync.Mutex
 	mu       sync.RWMutex // operation lease: readers cannot race close, commit or deletion
 	store    *Storage
 	dir      string
@@ -172,6 +176,9 @@ func (s *TemplateStorage) ready() error {
 	return nil
 }
 
+// templateReplayBatchOps bounds the operations replay holds in one bleve batch.
+const templateReplayBatchOps = 5000
+
 func (s *TemplateStorage) replayDay(date string) error {
 	index, err := s.store.getOrCreateIndex(date)
 	if err != nil {
@@ -179,6 +186,17 @@ func (s *TemplateStorage) replayDay(date string) error {
 	}
 	entries, err := os.ReadDir(filepath.Join(s.dir, date))
 	if err != nil {
+		return err
+	}
+	// Many small live-tail segments are folded into a few bleve batches: one
+	// batch per segment made startup cost grow with write count.
+	batch := index.NewBatch()
+	flush := func() error {
+		if batch.Size() == 0 {
+			return nil
+		}
+		err := index.Batch(batch)
+		batch = index.NewBatch()
 		return err
 	}
 	for _, entry := range entries {
@@ -208,39 +226,50 @@ func (s *TemplateStorage) replayDay(date string) error {
 		if err != nil {
 			return fmt.Errorf("read template segment %s/%s: %w", date, name, err)
 		}
-		batch, err := prepareTemplateBatch(index, segment)
-		if err != nil {
-			return err
-		}
-		if err = index.Batch(batch); err != nil {
+		if err = addTemplateSegment(index, batch, segment); err != nil {
 			return err
 		}
 		s.sequence[date] = n
+		if batch.Size() >= templateReplayBatchOps {
+			if err = flush(); err != nil {
+				return err
+			}
+		}
 	}
-	return nil
+	return flush()
 }
 
 func prepareTemplateBatch(index bleve.Index, segment templateSegment) (*bleve.Batch, error) {
 	batch := index.NewBatch()
+	if err := addTemplateSegment(index, batch, segment); err != nil {
+		return nil, err
+	}
+	return batch, nil
+}
+
+// addTemplateSegment appends a segment's operations to batch. A bleve batch
+// keeps the last operation per ID, so adding segments in order yields the same
+// state as applying them one batch at a time.
+func addTemplateSegment(index bleve.Index, batch *bleve.Batch, segment templateSegment) error {
 	for _, record := range segment.Records {
 		if record.ID == "" {
-			return nil, errors.New("empty template record ID")
+			return errors.New("empty template record ID")
 		}
 		doc, err := buildOptimizedDocument(index.Mapping(), record.ID, record.Fields)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if err = batch.IndexAdvanced(doc); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	for _, id := range segment.Deleted {
 		if id == "" {
-			return nil, errors.New("empty deleted record ID")
+			return errors.New("empty deleted record ID")
 		}
 		batch.Delete(id)
 	}
-	return batch, nil
+	return nil
 }
 
 // commitDay is called under the operation write lease. Every acknowledged
@@ -277,47 +306,73 @@ func (s *TemplateStorage) commitEncoded(date string, segment templateSegment, en
 	if err != nil {
 		return err
 	}
-	dayDir := filepath.Join(s.dir, date)
-	if err = os.MkdirAll(dayDir, 0700); err != nil {
-		return err
-	}
-	if err = syncTemplateDir(s.dir); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(dayDir, ".segment-*.tmp")
-	if err != nil {
-		return err
-	}
-	name := f.Name()
-	defer func() { _ = f.Close(); _ = os.Remove(name) }()
-	if _, err = f.Write(encoded); err != nil {
-		return err
-	}
-	if err = f.Sync(); err != nil {
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
 	next := s.sequence[date] + 1
 	if next == 0 {
 		return errors.New("template sequence exhausted")
 	}
-	final := filepath.Join(dayDir, fmt.Sprintf("%020d.tzs", next))
-	if err = os.Rename(name, final); err != nil {
-		return err
+	// The segment write needs neither the index nor any reader-visible state,
+	// so release readers for its fsyncs; they would otherwise stall behind
+	// every commit. writeMu, which every mutator holds, keeps all other
+	// writers, deletions and Close out until the lock is retaken below.
+	s.mu.Unlock()
+	if templateCommitIOHook != nil {
+		templateCommitIOHook()
 	}
-	s.sequence[date] = next
-	acknowledged = true
-	if err = syncTemplateDir(dayDir); err != nil {
-		s.failed = err
-		return err
+	renamed, ioErr := writeTemplateSegment(s.dir, filepath.Join(s.dir, date), next, encoded)
+	s.mu.Lock()
+	if renamed {
+		s.sequence[date] = next
+		acknowledged = true
+	}
+	if ioErr != nil {
+		if renamed {
+			s.failed = ioErr // durable state is ahead of memory: fail closed
+		}
+		return ioErr
 	}
 	if err = index.Batch(batch); err != nil {
 		s.failed = err
 		return err
 	}
 	return nil
+}
+
+// templateCommitIOHook runs while a commit's file I/O is in flight and the
+// operation lock is released. Tests use it to observe that readers proceed.
+var templateCommitIOHook func()
+
+// writeTemplateSegment durably writes one segment as <dayDir>/<next>.tzs. It
+// reports renamed once the segment is acknowledged on disk; a later error (the
+// directory fsync) then leaves durable state uncertain.
+func writeTemplateSegment(root, dayDir string, next uint64, encoded []byte) (renamed bool, err error) {
+	// Only a new day directory needs its parent entry synced.
+	if _, statErr := os.Stat(dayDir); os.IsNotExist(statErr) {
+		if err = os.MkdirAll(dayDir, 0700); err != nil {
+			return false, err
+		}
+		if err = syncTemplateDir(root); err != nil {
+			return false, err
+		}
+	}
+	f, err := os.CreateTemp(dayDir, ".segment-*.tmp")
+	if err != nil {
+		return false, err
+	}
+	name := f.Name()
+	defer func() { _ = f.Close(); _ = os.Remove(name) }()
+	if _, err = f.Write(encoded); err != nil {
+		return false, err
+	}
+	if err = f.Sync(); err != nil {
+		return false, err
+	}
+	if err = f.Close(); err != nil {
+		return false, err
+	}
+	if err = os.Rename(name, filepath.Join(dayDir, fmt.Sprintf("%020d.tzs", next))); err != nil {
+		return false, err
+	}
+	return true, syncTemplateDir(dayDir)
 }
 
 // dropEmptyDay forgets a day whose first segment never became durable: it
@@ -353,6 +408,8 @@ func (s *TemplateStorage) Store(rows []map[string]interface{}, source string) er
 }
 
 func (s *TemplateStorage) StoreWithIDs(rows []map[string]interface{}, source string) ([]string, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.ready(); err != nil {
@@ -442,6 +499,8 @@ func (s *TemplateStorage) StoreWithIDs(rows []map[string]interface{}, source str
 }
 
 func (s *TemplateStorage) Close() error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -481,6 +540,8 @@ func (s *TemplateStorage) removeDay(date string) error {
 }
 
 func (s *TemplateStorage) RemoveDay(date string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.ready(); err != nil {
@@ -490,6 +551,8 @@ func (s *TemplateStorage) RemoveDay(date string) error {
 }
 
 func (s *TemplateStorage) Clear() error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.ready(); err != nil {
@@ -508,6 +571,8 @@ func (s *TemplateStorage) Clear() error {
 }
 
 func (s *TemplateStorage) PruneOlderThan(age time.Duration) (int, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.ready(); err != nil {
@@ -535,6 +600,8 @@ func (s *TemplateStorage) PruneOlderThan(age time.Duration) (int, error) {
 }
 
 func (s *TemplateStorage) DeleteByIds(ids []string) (int, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.ready(); err != nil {
@@ -579,6 +646,8 @@ func (s *TemplateStorage) DeleteBySource(ctx context.Context, source string, day
 	if err := ctx.Err(); err != nil {
 		return 0, nil, err
 	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.ready(); err != nil {
