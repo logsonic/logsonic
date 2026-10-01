@@ -186,6 +186,11 @@ func (s *TemplateStorage) replayDay(date string) error {
 		// Match the store root: skip crash leftovers and OS metadata such as
 		// .DS_Store. A real segment is never dot-prefixed.
 		if strings.HasPrefix(name, ".") {
+			// A crash between CreateTemp and Rename leaves an unreferenced
+			// temp segment; it was never acknowledged, so it is garbage.
+			if strings.HasPrefix(name, ".segment-") && strings.HasSuffix(name, ".tmp") && !entry.IsDir() {
+				_ = os.Remove(filepath.Join(s.dir, date, name))
+			}
 			continue
 		}
 		if entry.IsDir() || len(name) != 24 || !strings.HasSuffix(name, ".tzs") {
@@ -248,10 +253,26 @@ func (s *TemplateStorage) commitDay(date string, segment templateSegment) error 
 	if err != nil {
 		return err
 	}
+	return s.commitEncoded(date, segment, encoded)
+}
+
+// commitEncoded makes an already-encoded segment durable and indexes it. If it
+// fails before the segment is acknowledged, a day index created for it is
+// dropped again so no phantom empty day outlives the error.
+func (s *TemplateStorage) commitEncoded(date string, segment templateSegment, encoded []byte) (err error) {
+	s.store.mu.RLock()
+	_, existed := s.store.indices[date]
+	s.store.mu.RUnlock()
 	index, err := s.store.getOrCreateIndex(date)
 	if err != nil {
 		return err
 	}
+	acknowledged := false
+	defer func() {
+		if !acknowledged && !existed {
+			s.dropEmptyDay(date)
+		}
+	}()
 	batch, err := prepareTemplateBatch(index, segment)
 	if err != nil {
 		return err
@@ -287,6 +308,7 @@ func (s *TemplateStorage) commitDay(date string, segment templateSegment) error 
 		return err
 	}
 	s.sequence[date] = next
+	acknowledged = true
 	if err = syncTemplateDir(dayDir); err != nil {
 		s.failed = err
 		return err
@@ -296,6 +318,20 @@ func (s *TemplateStorage) commitDay(date string, segment templateSegment) error 
 		return err
 	}
 	return nil
+}
+
+// dropEmptyDay forgets a day whose first segment never became durable: it
+// closes and unregisters the in-memory index and removes the directory if it
+// is still empty. Best effort; the original commit error is what the caller sees.
+func (s *TemplateStorage) dropEmptyDay(date string) {
+	s.store.mu.Lock()
+	index := s.store.indices[date]
+	delete(s.store.indices, date)
+	s.store.mu.Unlock()
+	if index != nil {
+		_ = index.Close()
+	}
+	_ = os.Remove(filepath.Join(s.dir, date))
 }
 
 func syncTemplateDir(path string) error {
@@ -352,19 +388,55 @@ func (s *TemplateStorage) StoreWithIDs(rows []map[string]interface{}, source str
 		days = append(days, day)
 	}
 	sort.Strings(days)
+	// Encode every segment before committing any: validation and size limits
+	// fail here, while nothing is durable yet.
+	type pendingSegment struct {
+		day     string
+		segment templateSegment
+		encoded []byte
+	}
+	var pending []pendingSegment
 	for _, day := range days {
+		if err := validTemplateDate(day); err != nil {
+			return nil, err
+		}
 		// Bound codec working sets independently of the total import size.
 		records := byDay[day]
 		for len(records) > 0 {
-			n := len(records)
-			if n > 1000 {
-				n = 1000
-			}
-			if err := s.commitDay(day, templateSegment{Records: records[:n]}); err != nil {
+			n := min(len(records), 1000)
+			segment := templateSegment{Records: records[:n]}
+			encoded, err := encodeTemplateSegment(segment)
+			if err != nil {
 				return nil, err
 			}
+			pending = append(pending, pendingSegment{day, segment, encoded})
 			records = records[n:]
 		}
+	}
+	for i, p := range pending {
+		err := s.commitEncoded(p.day, p.segment, p.encoded)
+		if err == nil {
+			continue
+		}
+		if s.failed != nil {
+			// Uncertain post-rename state: the engine is already failed closed.
+			return nil, err
+		}
+		// Roll back segments already acknowledged so the caller's error means
+		// "nothing was stored". If a rollback fails the state is uncertain.
+		for _, done := range pending[:i] {
+			deleted := make([]string, len(done.segment.Records))
+			for j, r := range done.segment.Records {
+				deleted[j] = r.ID
+			}
+			if rbErr := s.commitDay(done.day, templateSegment{Deleted: deleted}); rbErr != nil {
+				if s.failed == nil {
+					s.failed = rbErr
+				}
+				return nil, errors.Join(err, fmt.Errorf("rollback of partial write failed: %w", rbErr))
+			}
+		}
+		return nil, err
 	}
 	return ids, nil
 }

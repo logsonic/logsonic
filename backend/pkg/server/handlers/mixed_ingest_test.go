@@ -131,3 +131,17 @@ func TestMixedWatchDetectionKeepsAutomaticRouting(t *testing.T) {
 		t.Fatalf("watch did not preserve mixed rows: %#v", store.logs)
 	}
 }
+
+func TestWatchDetectCountsOnlyNonEmptyLines(t *testing.T) {
+	h, _ := setupHandler(t)
+	path := filepath.Join(t.TempDir(), "blank-first.log")
+	known := `127.0.0.1 - alice [24/Sep/2026:10:20:30 +0000] "GET /health HTTP/1.1" 200 42`
+	// Blank lines must not eat the sample budget (lines=1 still reaches `known`).
+	if err := os.WriteFile(path, []byte("\n\n\n"+known+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	opts, err := watchDeps{h: h}.Detect(path, 1)
+	if err != nil || opts.Pattern != "auto" || opts.Name == "auto" {
+		t.Fatalf("detection did not reach the first non-empty line: %+v %v", opts, err)
+	}
+}

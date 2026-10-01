@@ -296,3 +296,70 @@ func TestTemplateStoreRecoveryFinishesDayDeletion(t *testing.T) {
 		t.Fatalf("interrupted deletion not reclaimed: %v", err)
 	}
 }
+
+func TestTemplateStoreFailedMultiDayWriteLeavesNothingBehind(t *testing.T) {
+	dir := t.TempDir()
+	s, err := NewTemplateStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close() }()
+	// A regular file where the second day's directory must go makes its commit fail
+	// after the first day's segment is already durable.
+	if err = os.WriteFile(filepath.Join(dir, templateDirectory, "2026-09-25"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	rows := templateTestRows()
+	rows = append(rows, map[string]interface{}{"timestamp": time.Date(2026, 9, 25, 1, 0, 0, 0, time.UTC), "_src": "app.log", "_seq": int64(3), "_raw": "next day", "message": "next"})
+	if _, err = s.StoreWithIDs(rows, "file"); err == nil {
+		t.Fatal("expected the blocked day to fail the write")
+	}
+	if n, _ := s.GetDocCount("2026-09-24"); n != 0 {
+		t.Fatalf("partial write left %d rows behind", n)
+	}
+	days, err := s.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, day := range days {
+		if day == "2026-09-25" {
+			t.Fatalf("phantom empty day listed: %v", days)
+		}
+	}
+	// The engine stays usable and a retry is clean.
+	if _, err = s.StoreWithIDs(templateTestRows(), "file"); err != nil {
+		t.Fatalf("store after rolled-back failure: %v", err)
+	}
+	if n, _ := s.GetDocCount("2026-09-24"); n != 2 {
+		t.Fatalf("retry stored %d rows", n)
+	}
+}
+
+func TestTemplateStoreReplayRemovesCrashedTempSegments(t *testing.T) {
+	dir := t.TempDir()
+	s, err := NewTemplateStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.StoreWithIDs(templateTestRows(), "file"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(dir, templateDirectory, "2026-09-24", ".segment-123.tmp")
+	if err = os.WriteFile(stale, []byte("partial"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s, err = NewTemplateStorage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close() }()
+	if _, err = os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("crashed temp segment survived replay: %v", err)
+	}
+	if n, _ := s.GetDocCount("2026-09-24"); n != 2 {
+		t.Fatalf("recovered %d rows", n)
+	}
+}

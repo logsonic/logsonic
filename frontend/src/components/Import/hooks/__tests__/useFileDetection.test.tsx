@@ -138,7 +138,10 @@ describe('useFileDetection — detection starts on drop, for every pending file'
     // The stack-trace file's suggestion carries a multiline layout; the
     // syslog file's does not.
     suggestPatterns
-      .mockResolvedValueOnce({ ...suggestion, multiline: { enabled: true, mode: 'indent', auto_detected: true } })
+      .mockResolvedValueOnce({
+        ...suggestion,
+        multiline: { enabled: true, mode: 'indent', auto_detected: true },
+      })
       .mockResolvedValueOnce(suggestion);
     parseLogs.mockResolvedValue({ logs: [{ message: 'a b' }], timestamp_inference: null });
 
@@ -164,7 +167,12 @@ describe('useFileDetection — detection starts on drop, for every pending file'
     // The stack file's own parse ran under its folding, the syslog file's
     // with none specified (so the server could auto-detect one).
     const parseCalls = parseLogs.mock.calls.map((c) => c[0].session_options?.multiline);
-    expect(parseCalls).toContainEqual({ enabled: true, mode: 'indent', header_pattern: undefined, auto_detected: true });
+    expect(parseCalls).toContainEqual({
+      enabled: true,
+      mode: 'indent',
+      header_pattern: undefined,
+      auto_detected: true,
+    });
     expect(parseCalls).toContainEqual(undefined);
     // Nothing re-fires detection against the batch.
     await new Promise((r) => setTimeout(r, 500));
@@ -254,6 +262,70 @@ describe('useFileDetection — changePattern', () => {
       await result.current.changePattern(fileId, selected);
     });
     expect(useImportStore.getState().files[0].automaticPattern).toBe(false);
+  });
+});
+
+describe('useFileDetection — concurrent parses', () => {
+  it('keeps a manual pick made while a multiline re-parse is in flight', async () => {
+    previewFile.mockResolvedValue({ lines: ['a'], approx_lines: 1 });
+    suggestPatterns.mockResolvedValue(suggestion);
+    parseLogs.mockResolvedValue({ logs: [{ message: 'a' }], timestamp_inference: null });
+    useImportStore.getState().addNativePathFiles(['/abs/app.log']);
+    const fileId = useImportStore.getState().files[0].id;
+    const { result } = renderHook(() => useFileDetection());
+    await waitFor(() => expect(useImportStore.getState().files[0].automaticPattern).toBe(true));
+
+    // The re-parse (automatic pattern) stalls until the user's pick has landed.
+    let releaseReparse: () => void = () => {};
+    parseLogs.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseReparse = () =>
+            resolve({ logs: [{ message: 'stale' }], timestamp_inference: null });
+        })
+    );
+    let reparse: Promise<void> = Promise.resolve();
+    act(() => {
+      reparse = result.current.reparseFile(fileId);
+    });
+
+    parseLogs.mockResolvedValueOnce({ logs: [{ level: 'INFO' }], timestamp_inference: null });
+    await act(async () => {
+      await result.current.changePattern(fileId, {
+        name: 'Other',
+        pattern: '%{LOGLEVEL:level}',
+        description: '',
+        custom_patterns: {},
+      });
+    });
+    await act(async () => {
+      releaseReparse();
+      await reparse;
+    });
+
+    const f = useImportStore.getState().files[0];
+    expect(f.selectedPattern?.name).toBe('Other');
+    expect(f.parsedLogs).toEqual([{ level: 'INFO' }]);
+    expect(f.automaticPattern).toBe(false);
+  });
+
+  it('does not write an undefined automaticPattern over an existing flag', async () => {
+    previewFile.mockResolvedValue({ lines: ['a'], approx_lines: 1 });
+    suggestPatterns.mockResolvedValue(suggestion);
+    parseLogs.mockResolvedValue({ logs: [{ message: 'a' }], timestamp_inference: null });
+    useImportStore.getState().addNativePathFiles(['/abs/app.log']);
+    const fileId = useImportStore.getState().files[0].id;
+    const { result } = renderHook(() => useFileDetection());
+    await waitFor(() => expect(useImportStore.getState().files[0].automaticPattern).toBe(true));
+    // Legacy record: no flag at all. A re-parse must not invent one.
+    useImportStore.getState().updateFile(fileId, { automaticPattern: undefined });
+    await act(async () => {
+      await result.current.reparseFile(fileId);
+    });
+    expect(
+      'automaticPattern' in useImportStore.getState().files[0] &&
+        useImportStore.getState().files[0].automaticPattern !== undefined
+    ).toBe(false);
   });
 });
 

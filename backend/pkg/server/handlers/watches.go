@@ -102,6 +102,9 @@ func (d watchDeps) ImportFile(ctx context.Context, path string, opts types.Inges
 	}, nil
 }
 
+// detectReadFactor bounds how many lines Detect reads per sampled line.
+const detectReadFactor = 10
+
 // Detect keeps auto watches adaptive throughout import, following and rotation.
 // A bounded preview supplies a display label; no match never blocks ingestion.
 func (d watchDeps) Detect(path string, lines int) (types.IngestSessionOptions, error) {
@@ -110,10 +113,12 @@ func (d watchDeps) Detect(path string, lines int) (types.IngestSessionOptions, e
 		return types.IngestSessionOptions{}, err
 	}
 	defer reader.Close()
+	// Only non-empty lines count toward the budget, as before; total reads
+	// stay bounded so a file of blank or oversized lines cannot be scanned whole.
 	lines = max(0, min(lines, adaptiveSampleLines))
 	sample := make([]string, 0, lines)
 	sampleBytes := 0
-	for n := 0; n < lines; n++ {
+	for reads, nonEmpty := 0, 0; nonEmpty < lines && reads < lines*detectReadFactor; reads++ {
 		line, ok, err := reader.Next()
 		if err != nil {
 			return types.IngestSessionOptions{}, err
@@ -121,7 +126,11 @@ func (d watchDeps) Detect(path string, lines int) (types.IngestSessionOptions, e
 		if !ok {
 			break
 		}
-		if line != "" && len(line) <= adaptiveMaxSampleLine && sampleBytes+len(line) <= adaptiveSampleBytes {
+		if line == "" {
+			continue
+		}
+		nonEmpty++
+		if len(line) <= adaptiveMaxSampleLine && sampleBytes+len(line) <= adaptiveSampleBytes {
 			sample = append(sample, line)
 			sampleBytes += len(line)
 		}

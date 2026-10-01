@@ -14,7 +14,8 @@ import { DEFAULT_PATTERN, useImportStore } from '@/stores/useImportStore';
 // two small POSTs per file; three in flight keeps a 20-file drop snappy
 // without hammering the local server.
 const DETECT_CONCURRENCY = 3;
-export const NO_PATTERN_DETECTED = 'No pattern found in the preview. Import will retry later lines and keep unmatched lines as raw logs.';
+export const NO_PATTERN_DETECTED =
+  'No pattern found in the preview. Import will retry later lines and keep unmatched lines as raw logs.';
 
 // The file mtime the resolver anchors year-less timestamps against.
 function sourceMtimeOf(file: ImportFile): string | undefined {
@@ -306,16 +307,27 @@ export function useFileDetection() {
     enqueue(ids);
   }, [enqueue]);
 
+  // Latest parse per file: a result that finished after a newer parse started
+  // (a user pick during a multiline re-parse) is stale and must not land.
+  const parseTokens = useRef(new Map<string, number>());
+
   const parseSelectedPattern = useCallback(
     async (fileId: string, pattern: Pattern, automaticPattern?: boolean) => {
       const store = useImportStore.getState();
       const file = store.files.find((f) => f.id === fileId);
       if (!file) return;
+      const token = (parseTokens.current.get(fileId) ?? 0) + 1;
+      parseTokens.current.set(fileId, token);
       store.updateFile(fileId, { detectionStatus: 'detecting' });
       const { updates, inference } = await parseFileWithPattern(file, pattern);
+      if (parseTokens.current.get(fileId) !== token) return;
       const after = useImportStore.getState();
       if (!after.files.some((f) => f.id === fileId)) return;
-      after.updateFile(fileId, { ...updates, automaticPattern });
+      // Only touch the flag when the caller decided it; never write undefined.
+      after.updateFile(
+        fileId,
+        automaticPattern === undefined ? updates : { ...updates, automaticPattern }
+      );
       if (inference) after.setFileTimestampInference(fileId, inference);
     },
     []
