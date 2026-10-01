@@ -11,7 +11,7 @@ require (
 	github.com/go-chi/cors v1.2.1
 	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.19.2
-	github.com/logsonic/log2grok v1.1.0
+	github.com/logsonic/log2grok v1.2.0
 	github.com/mark3labs/mcp-go v0.54.1
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/swaggo/http-swagger v1.3.4
