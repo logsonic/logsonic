@@ -3,8 +3,10 @@ package handlers
 import (
 	"crypto/sha256"
 	"maps"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	l2g "github.com/logsonic/log2grok/pkg/log2grok"
@@ -20,6 +22,7 @@ const (
 )
 
 type adaptivePattern struct {
+	id      uint64 // monotonic; lets a decode tell which parsers were learned after its snapshot
 	spec    l2g.PatternSpec
 	decoder *l2g.Decoder
 }
@@ -27,10 +30,14 @@ type adaptivePattern struct {
 // adaptiveDecoder owns discovery and a bounded set of compiled parsers for
 // one ingest stream. The mutex protects discovery, cache updates, and reads
 // of the primary spec; no process-wide session lock is held during inference.
+// Cached parsers are goroutine-safe and are applied outside the mutex, so
+// concurrent chunks decode in parallel and only discovery is serialized.
 type adaptiveDecoder struct {
 	mu            sync.Mutex
 	smart         bool
 	patterns      []adaptivePattern
+	published     atomic.Pointer[[]adaptivePattern] // immutable copy of patterns for lock-free readers
+	nextID        uint64
 	primary       l2g.PatternSpec
 	hasPrimary    bool
 	rejected      map[[32]byte]time.Time
@@ -46,15 +53,34 @@ func newAdaptiveDecoder(smart bool) *adaptiveDecoder {
 // Decode returns exactly one result for each input line. Inference failures
 // leave lines as explicit misses, so later batches can discover new formats.
 func (a *adaptiveDecoder) Decode(lines []string) []l2g.LineResult {
-	a.mu.Lock()
-	defer a.mu.Unlock()
 	results := make([]l2g.LineResult, len(lines))
 	pending := make([]int, len(lines))
 	for i, line := range lines {
 		results[i] = l2g.LineResult{Raw: line, Error: "log line did not match any discovered pattern"}
 		pending[i] = i
 	}
+	// Apply the cached parsers from the published snapshot. It is read without
+	// the mutex, which a chunk in discovery may hold for a long time.
+	var snapshot []adaptivePattern
+	if p := a.published.Load(); p != nil {
+		snapshot = *p
+	}
+	var seen uint64
+	for _, pattern := range snapshot {
+		seen = max(seen, pattern.id)
+		pending, _ = adaptiveApply(pattern.decoder, lines, pending, results)
+		if len(pending) == 0 {
+			return results
+		}
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	// A concurrent chunk may have learned parsers since the snapshot; try them
+	// before discovering, or both chunks would infer the same family.
 	for _, pattern := range a.patterns {
+		if pattern.id <= seen {
+			continue
+		}
 		pending, _ = adaptiveApply(pattern.decoder, lines, pending, results)
 		if len(pending) == 0 {
 			return results
@@ -152,7 +178,8 @@ func adaptiveApply(decoder *l2g.Decoder, lines []string, pending []int, results 
 	for i, index := range pending {
 		batch[i] = lines[index]
 	}
-	decoded := decoder.Decode(batch)
+	// Falls back to serial decoding below the library's batch threshold.
+	decoded := decoder.DecodeConcurrent(batch, 0)
 	remaining := make([]int, 0, len(pending))
 	matched := 0
 	for i, result := range decoded {
@@ -229,7 +256,10 @@ func (a *adaptiveDecoder) addDiscovered(found *l2g.DiscoveredPattern, lines []st
 	if len(a.patterns) == adaptiveMaxPatterns {
 		a.patterns = a.patterns[1:]
 	}
-	a.patterns = append(a.patterns, adaptivePattern{spec: spec, decoder: decoder})
+	a.nextID++
+	a.patterns = append(a.patterns, adaptivePattern{id: a.nextID, spec: spec, decoder: decoder})
+	published := slices.Clone(a.patterns)
+	a.published.Store(&published)
 	return remaining
 }
 
