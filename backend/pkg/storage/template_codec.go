@@ -8,9 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
@@ -173,12 +173,13 @@ func decodeTemplateSegment(data []byte) (templateSegment, error) {
 	if wantLength > templateSegmentMaxPayload {
 		return empty, errors.New("template segment payload exceeds limit")
 	}
-	decoder, err := zstd.NewReader(bytes.NewReader(data[templateSegmentHeader:]), zstd.WithDecoderMaxMemory(templateSegmentMaxPayload), zstd.WithDecoderMaxWindow(templateSegmentMaxPayload), zstd.WithDecoderConcurrency(1))
+	decoder, err := templateZstdDecoder()
 	if err != nil {
 		return empty, fmt.Errorf("open template segment compression: %w", err)
 	}
-	defer decoder.Close()
-	raw, err := io.ReadAll(io.LimitReader(decoder, templateSegmentMaxPayload+1))
+	// DecodeAll is bounded by the decoder's max memory, so a hostile payload
+	// cannot expand past templateSegmentMaxPayload.
+	raw, err := decoder.DecodeAll(data[templateSegmentHeader:], make([]byte, 0, wantLength))
 	if err != nil {
 		return empty, fmt.Errorf("decompress template segment: %w", err)
 	}
@@ -253,12 +254,24 @@ func encodeTemplateWire(wire templateWireSegment) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// A zstd encoder or decoder holds large window and table state. Building one
+// per segment made every commit and every replayed segment allocate and free
+// it, so share one of each: EncodeAll and DecodeAll are safe for concurrent
+// use, and concurrency 1 keeps their memory flat.
+var (
+	templateZstdEncoder = sync.OnceValues(func() (*zstd.Encoder, error) {
+		return zstd.NewWriter(nil, zstd.WithEncoderConcurrency(1))
+	})
+	templateZstdDecoder = sync.OnceValues(func() (*zstd.Decoder, error) {
+		return zstd.NewReader(nil, zstd.WithDecoderMaxMemory(templateSegmentMaxPayload), zstd.WithDecoderMaxWindow(templateSegmentMaxPayload), zstd.WithDecoderConcurrency(1))
+	})
+)
+
 func compressTemplatePayload(raw []byte) ([]byte, error) {
-	encoder, err := zstd.NewWriter(nil, zstd.WithEncoderConcurrency(1))
+	encoder, err := templateZstdEncoder()
 	if err != nil {
 		return nil, err
 	}
-	defer encoder.Close()
 	return encoder.EncodeAll(raw, nil), nil
 }
 
