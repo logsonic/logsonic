@@ -2445,6 +2445,10 @@ const docTemplate = `{
         "types.MultilineConfig": {
             "type": "object",
             "properties": {
+                "auto_detected": {
+                    "description": "AutoDetected limits header folding to recognizable continuation lines.\nExplicit header configurations keep their original catch-all behavior.",
+                    "type": "boolean"
+                },
                 "enabled": {
                     "type": "boolean"
                 },

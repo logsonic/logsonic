@@ -14,7 +14,8 @@ import { DEFAULT_PATTERN, useImportStore } from '@/stores/useImportStore';
 // two small POSTs per file; three in flight keeps a 20-file drop snappy
 // without hammering the local server.
 const DETECT_CONCURRENCY = 3;
-export const NO_PATTERN_DETECTED = 'No pattern auto-detected. Please select a pattern manually.';
+export const NO_PATTERN_DETECTED =
+  'No pattern found in the preview. Import will retry later lines and keep unmatched lines as raw logs.';
 
 // The file mtime the resolver anchors year-less timestamps against.
 function sourceMtimeOf(file: ImportFile): string | undefined {
@@ -79,6 +80,7 @@ export async function detectPatternForFile(
           detectionError:
             'This file has neither browser content nor a native path to read a preview from',
           selectedPattern: DEFAULT_PATTERN,
+          automaticPattern: true,
           isCustomPattern: true,
         },
         inference: null,
@@ -142,6 +144,7 @@ export async function detectPatternForFile(
             approxLines,
             detectedPattern,
             selectedPattern: detectedPattern,
+            automaticPattern: true,
             isCustomPattern: false,
             parsedLogs: parseResponse.logs,
             detectionStatus: 'detected',
@@ -159,6 +162,7 @@ export async function detectPatternForFile(
         previewLines,
         approxLines,
         selectedPattern: DEFAULT_PATTERN,
+        automaticPattern: true,
         isCustomPattern: true,
         detectionStatus: 'failed',
         detectionError: NO_PATTERN_DETECTED,
@@ -172,6 +176,7 @@ export async function detectPatternForFile(
         detectionStatus: 'failed',
         detectionError: err instanceof Error ? err.message : 'Detection failed',
         selectedPattern: DEFAULT_PATTERN,
+        automaticPattern: true,
         isCustomPattern: true,
       },
       inference: null,
@@ -302,18 +307,37 @@ export function useFileDetection() {
     enqueue(ids);
   }, [enqueue]);
 
-  // User picked (or edited) a pattern for one file: re-parse its preview.
-  const changePattern = useCallback(async (fileId: string, pattern: Pattern) => {
-    const store = useImportStore.getState();
-    const file = store.files.find((f) => f.id === fileId);
-    if (!file) return;
-    store.updateFile(fileId, { detectionStatus: 'detecting' });
-    const { updates, inference } = await parseFileWithPattern(file, pattern);
-    const after = useImportStore.getState();
-    if (!after.files.some((f) => f.id === fileId)) return;
-    after.updateFile(fileId, updates);
-    if (inference) after.setFileTimestampInference(fileId, inference);
-  }, []);
+  // Latest parse per file: a result that finished after a newer parse started
+  // (a user pick during a multiline re-parse) is stale and must not land.
+  const parseTokens = useRef(new Map<string, number>());
+
+  const parseSelectedPattern = useCallback(
+    async (fileId: string, pattern: Pattern, automaticPattern?: boolean) => {
+      const store = useImportStore.getState();
+      const file = store.files.find((f) => f.id === fileId);
+      if (!file) return;
+      const token = (parseTokens.current.get(fileId) ?? 0) + 1;
+      parseTokens.current.set(fileId, token);
+      store.updateFile(fileId, { detectionStatus: 'detecting' });
+      const { updates, inference } = await parseFileWithPattern(file, pattern);
+      if (parseTokens.current.get(fileId) !== token) return;
+      const after = useImportStore.getState();
+      if (!after.files.some((f) => f.id === fileId)) return;
+      // Only touch the flag when the caller decided it; never write undefined.
+      after.updateFile(
+        fileId,
+        automaticPattern === undefined ? updates : { ...updates, automaticPattern }
+      );
+      if (inference) after.setFileTimestampInference(fileId, inference);
+    },
+    []
+  );
+
+  // A user choice is manual even when it is identical to the suggestion.
+  const changePattern = useCallback(
+    async (fileId: string, pattern: Pattern) => parseSelectedPattern(fileId, pattern, false),
+    [parseSelectedPattern]
+  );
 
   // The file's multiline folding changed: re-parse its preview with the
   // pattern it already has (so the verdict, match rate and preview reflect
@@ -327,12 +351,12 @@ export function useFileDetection() {
       if (file.selectedPattern && file.previewLines.length > 0) {
         // The alternatives' match rates were scored under the old folding.
         useImportStore.getState().updateFile(fileId, { patternMatches: undefined });
-        await changePattern(fileId, file.selectedPattern);
+        await parseSelectedPattern(fileId, file.selectedPattern, file.automaticPattern);
       } else {
         enqueue([fileId]);
       }
     },
-    [changePattern, enqueue]
+    [parseSelectedPattern, enqueue]
   );
 
   // "Apply <pattern> to all N files": set, then re-parse each so match

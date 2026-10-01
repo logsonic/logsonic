@@ -60,7 +60,7 @@ func TestO7_ImportSampleOnEmptyStorage(t *testing.T) {
 	entries, _ := os.ReadDir(srv.config.StoragePath)
 	for _, e := range entries {
 		n := e.Name()
-		if strings.HasPrefix(n, "logs-") || n == "log2grok" || strings.HasSuffix(n, ".json") || strings.HasSuffix(n, ".dirty") || strings.HasSuffix(n, ".tmp") {
+		if strings.HasPrefix(n, "logs-") || n == "log2grok" || n == ".storage.lock" || strings.HasSuffix(n, ".json") || strings.HasSuffix(n, ".dirty") || strings.HasSuffix(n, ".tmp") {
 			continue
 		}
 		t.Fatalf("unexpected file in storage after a sample import: %s", filepath.Join(srv.config.StoragePath, n))

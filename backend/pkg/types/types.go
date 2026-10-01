@@ -44,11 +44,15 @@ type IngestSessionOptions struct {
 // MultilineConfig describes how physical lines should be folded into
 // logical log records. Mirrors (a JSON-serializable subset of)
 // log2grok's MultilineConfig: Mode "header" treats any line NOT matching
-// HeaderPattern as a continuation of the previous record; Mode "indent"
-// treats any line starting with a space or tab as a continuation.
+// HeaderPattern as a continuation of the previous record unless it was
+// auto-detected, in which case only known continuation shapes are folded.
+// Mode "indent" treats any line starting with a space or tab as a continuation.
 type MultilineConfig struct {
 	Enabled bool   `json:"enabled"`
 	Mode    string `json:"mode"` // "header" | "indent"
+	// AutoDetected limits header folding to recognizable continuation lines.
+	// Explicit header configurations keep their original catch-all behavior.
+	AutoDetected bool `json:"auto_detected,omitempty"`
 	// HeaderPattern is a regular expression; required when Mode=="header".
 	// A line matching it starts a new record, everything else is folded
 	// into the preceding record. Continuation lines are joined with

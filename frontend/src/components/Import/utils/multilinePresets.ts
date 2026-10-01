@@ -31,8 +31,11 @@ export function presetFromState(state: FileMultiline): MultilinePreset {
 // lose the user's regex) unless that pattern is one of the presets.
 export function stateFromPreset(preset: MultilinePreset, current: FileMultiline): FileMultiline {
   switch (preset) {
-    case 'off':
-      return { ...current, enabled: false };
+    case 'off': {
+      const manual = { ...current };
+      delete manual.autoDetected;
+      return { ...manual, enabled: false };
+    }
     case 'indent':
       return { enabled: true, mode: 'indent', headerPattern: '' };
     case 'iso8601':
@@ -56,7 +59,12 @@ export function stateFromPreset(preset: MultilinePreset, current: FileMultiline)
 // must show what /ingest/start (which never auto-detects) will produce.
 export function multilineConfigOf(m: FileMultiline): MultilineConfig {
   if (!m.enabled) return { enabled: false, mode: m.mode };
-  return { enabled: true, mode: m.mode, header_pattern: m.headerPattern || undefined };
+  return {
+    enabled: true,
+    mode: m.mode,
+    header_pattern: m.headerPattern || undefined,
+    ...(m.autoDetected === true ? { auto_detected: true } : {}),
+  };
 }
 
 // Header mode with a blank pattern would fold every line into one record.
@@ -72,6 +80,7 @@ export function multilineFromConfig(c: MultilineConfig | null | undefined): File
     enabled: true,
     mode: c.mode === 'indent' ? 'indent' : 'header',
     headerPattern: c.header_pattern || '',
+    ...(c.auto_detected === true ? { autoDetected: true } : {}),
   };
 }
 

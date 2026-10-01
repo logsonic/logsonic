@@ -102,16 +102,23 @@ func (d watchDeps) ImportFile(ctx context.Context, path string, opts types.Inges
 	}, nil
 }
 
-// Detect reads the file's first lines and asks log2grok for a pattern —
-// the same discovery the import wizard shows as "Pattern found".
+// detectReadFactor bounds how many lines Detect reads per sampled line.
+const detectReadFactor = 10
+
+// Detect keeps auto watches adaptive throughout import, following and rotation.
+// A bounded preview supplies a display label; no match never blocks ingestion.
 func (d watchDeps) Detect(path string, lines int) (types.IngestSessionOptions, error) {
 	reader, err := ingestfile.Open(context.Background(), path)
 	if err != nil {
 		return types.IngestSessionOptions{}, err
 	}
 	defer reader.Close()
+	// Only non-empty lines count toward the budget, as before; total reads
+	// stay bounded so a file of blank or oversized lines cannot be scanned whole.
+	lines = max(0, min(lines, adaptiveSampleLines))
 	sample := make([]string, 0, lines)
-	for len(sample) < lines {
+	sampleBytes := 0
+	for reads, nonEmpty := 0, 0; nonEmpty < lines && reads < lines*detectReadFactor; reads++ {
 		line, ok, err := reader.Next()
 		if err != nil {
 			return types.IngestSessionOptions{}, err
@@ -119,23 +126,26 @@ func (d watchDeps) Detect(path string, lines int) (types.IngestSessionOptions, e
 		if !ok {
 			break
 		}
-		if line != "" {
+		if line == "" {
+			continue
+		}
+		nonEmpty++
+		if len(line) <= adaptiveMaxSampleLine && sampleBytes+len(line) <= adaptiveSampleBytes {
 			sample = append(sample, line)
+			sampleBytes += len(line)
 		}
 	}
-	results, err := d.h.autosuggestPatterns(sample)
-	if err != nil {
-		return types.IngestSessionOptions{}, err
+	indexes := make([]int, len(sample))
+	for i := range indexes {
+		indexes[i] = i
 	}
-	if len(results) == 0 {
-		return types.IngestSessionOptions{}, errors.New("no pattern detected for the first lines; set a pattern on the watch")
+	preview := adaptiveSample(sample, indexes)
+	opts := types.IngestSessionOptions{Name: "auto", Pattern: "auto"}
+	results, err := d.h.autosuggestPatterns(preview)
+	if err == nil && len(results) > 0 {
+		opts.Name = results[0].PatternName
 	}
-	r := results[0]
-	return types.IngestSessionOptions{
-		Name:           r.PatternName,
-		Pattern:        r.Pattern,
-		CustomPatterns: r.CustomPatterns,
-	}, nil
+	return opts, nil
 }
 
 // patternOptions resolves a saved pattern name to its Grok body (the

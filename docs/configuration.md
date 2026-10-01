@@ -7,6 +7,7 @@ LogSonic can be configured with command-line flags or environment variables.
 - `-host`: host address to bind to, default `localhost`
 - `-port`: port to listen on, default `8080`
 - `-storage`: path to storage directory for indices
+- `-storage-engine`: `auto` (default), `bleve`, or `template`; see [Template-compressed storage](template-storage.md)
 - `-open`: open the web UI in your browser once the server starts
 - `-browser`: same as `-open` for the CLI; does not launch Logsonic.app
 - `-auto-port`: if the port is busy, bind the next free port instead of failing; enabled by default, pass `-auto-port=false` to fail instead
@@ -19,6 +20,7 @@ LogSonic can be configured with command-line flags or environment variables.
 - `HOST`: host address to bind to
 - `PORT`: port to listen on
 - `STORAGE_PATH`: path to storage directory
+- `LOGSONIC_STORAGE_ENGINE`: `auto`, `bleve`, or `template`; `-storage-engine` takes precedence
 - `LOGSONIC_OPEN_BROWSER`: open the web UI on start (`1`, `true`, `yes`, `on`)
 - `LOGSONIC_BROWSER`: same as `LOGSONIC_OPEN_BROWSER` for the CLI; on **Logsonic.app**, skip the in-app window and open a browser
 - `LOGSONIC_AUTO_PORT`: auto-select a free port if busy (`1`, `true`, `yes`, `on`)

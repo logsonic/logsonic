@@ -85,6 +85,26 @@ function makeImportFile(overrides: Partial<ImportFile>): ImportFile {
   };
 }
 
+const previewTimestampInference: NonNullable<ImportFile['timestampInference']> = {
+  status: 'exact',
+  layout: {
+    has_timestamp_field: true,
+    components_present: ['year', 'month', 'day'],
+    year_width: 4,
+    inferred_format_label: 'ISO',
+  },
+  resolution: {
+    anchor: { kind: 'file_mtime', value: '2026-09-24T00:00:00Z' },
+    year_strategy: 'parsed',
+    timezone: { kind: 'as_parsed' },
+    rollover: false,
+    force_mode: 'fill_missing',
+    source_field: 'timestamp',
+    source_format: '2006-01-02T15:04:05Z07:00',
+  },
+  preview: [],
+};
+
 function job(overrides: Partial<IngestJob>): IngestJob {
   return {
     job_id: 'job-1',
@@ -346,6 +366,139 @@ describe('useUpload — native-path files (spec now-08, SSE progress)', () => {
 });
 
 describe('useUpload — browser File files (unchanged)', () => {
+  it('sends auto for a detected selection without stale parser customizations', async () => {
+    ingestLogs.mockResolvedValue({ status: 'success' });
+    const fileService = {
+      name: 'test',
+      handleFileImport: vi.fn(
+        async (
+          _file: File,
+          _chunkSize: number,
+          callback: (chunk: {
+            lines: string[];
+            bytesRead: number;
+            totalBytes: number;
+          }) => Promise<void>
+        ) => {
+          await callback({ lines: ['a'], bytesRead: 1, totalBytes: 1 });
+        }
+      ),
+      handleFilePreview: vi.fn(),
+    };
+    const importFile = makeImportFile({
+      file: new File(['a\n'], 'auto.log'),
+      automaticPattern: true,
+      timestampInference: previewTimestampInference,
+      selectedPattern: {
+        name: 'Preview suggestion',
+        pattern: '%{GREEDYDATA:message}',
+        description: '',
+        custom_patterns: { STALE: 'old' },
+        priority: 5,
+      },
+    });
+    const { result } = renderHook(() => useUpload());
+    await act(async () => {
+      await result.current.handleMultiFileUpload([importFile], fileService);
+    });
+    expect(ingestStart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pattern: 'auto',
+        custom_patterns: {},
+        priority: 0,
+        timestamp_config: undefined,
+      }),
+      expect.any(AbortSignal)
+    );
+  });
+
+  it('sends only user timestamp overrides for an automatic pattern', async () => {
+    ingestLogs.mockResolvedValue({ status: 'success' });
+    const fileService = {
+      name: 'test',
+      handleFileImport: vi.fn(
+        async (
+          _file: File,
+          _chunkSize: number,
+          callback: (chunk: {
+            lines: string[];
+            bytesRead: number;
+            totalBytes: number;
+          }) => Promise<void>
+        ) => {
+          await callback({ lines: ['a'], bytesRead: 1, totalBytes: 1 });
+        }
+      ),
+      handleFilePreview: vi.fn(),
+    };
+    const importFile = makeImportFile({
+      file: new File(['a\n'], 'auto.log'),
+      automaticPattern: true,
+      timestampInference: previewTimestampInference,
+      timestampOverrides: { timezone: { kind: 'forced', value: 'Europe/Zurich' } },
+    });
+    const { result } = renderHook(() => useUpload());
+    await act(async () => {
+      await result.current.handleMultiFileUpload([importFile], fileService);
+    });
+    expect(ingestStart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pattern: 'auto',
+        timestamp_config: { timezone: { kind: 'forced', value: 'Europe/Zurich' } },
+      }),
+      expect.any(AbortSignal)
+    );
+  });
+
+  it('sends a user-chosen pattern literally even when it matches the preview suggestion', async () => {
+    ingestLogs.mockResolvedValue({ status: 'success' });
+    const fileService = {
+      name: 'test',
+      handleFileImport: vi.fn(
+        async (
+          _file: File,
+          _chunkSize: number,
+          callback: (chunk: {
+            lines: string[];
+            bytesRead: number;
+            totalBytes: number;
+          }) => Promise<void>
+        ) => {
+          await callback({ lines: ['a'], bytesRead: 1, totalBytes: 1 });
+        }
+      ),
+      handleFilePreview: vi.fn(),
+    };
+    const chosen = {
+      name: 'Preview suggestion',
+      pattern: '%{GREEDYDATA:message}',
+      description: '',
+      custom_patterns: { CUSTOM: 'literal' },
+      priority: 5,
+    };
+    const importFile = makeImportFile({
+      file: new File(['a\n'], 'manual.log'),
+      automaticPattern: false,
+      selectedPattern: chosen,
+      timestampInference: previewTimestampInference,
+      timestampOverrides: { forced_year: 2025 },
+    });
+    const { result } = renderHook(() => useUpload());
+    await act(async () => {
+      await result.current.handleMultiFileUpload([importFile], fileService);
+    });
+    expect(ingestStart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pattern: chosen.pattern,
+        name: chosen.name,
+        custom_patterns: chosen.custom_patterns,
+        priority: 5,
+        timestamp_config: { ...previewTimestampInference.resolution, forced_year: 2025 },
+      }),
+      expect.any(AbortSignal)
+    );
+  });
+
   it('still streams chunks through the file service and never calls the path-ingest APIs', async () => {
     const fileService = {
       name: 'test',
@@ -376,6 +529,10 @@ describe('useUpload — browser File files (unchanged)', () => {
     expect(ingestFile).not.toHaveBeenCalled();
     expect(uploadResult.files[0].uploadStatus).toBe('success');
     expect(uploadResult.files[0].totalLinesProcessed).toBe(2);
+    expect(ingestStart).toHaveBeenCalledWith(
+      expect.objectContaining({ pattern: '%{GREEDYDATA:message}' }),
+      expect.any(AbortSignal)
+    );
   });
 
   it("a cancelled fetch flattens to the generic message, not the browser's raw AbortError text", async () => {

@@ -56,7 +56,6 @@ func (h *Services) ingestBatch(sessionID string, lines []string) (processed, fai
 		sessionMap[sessionID] = session
 	}
 	sessionOptions := session.Options
-	sessionDecoder := session.Decoder
 	sessionSeq := session.Seq
 	sessionMultiline := session.Multiline
 	sessionOrigin := session.Origin
@@ -81,22 +80,28 @@ func (h *Services) ingestBatch(sessionID string, lines []string) (processed, fai
 		return 0, 0, nil
 	}
 
-	if sessionDecoder == nil {
-		// pattern "auto": the first batch picks the pattern.
-		dec, opts, err := h.ensureSessionDecoder(sessionID, logs)
-		if err != nil {
-			return 0, 0, err
+	results, sessionOptions := decodeSessionRecords(session, logs)
+	if session.AutoDetect {
+		// Record the primary label for display, but retain pattern=auto so
+		// reimport keeps adapting instead of freezing a detected pattern.
+		sessionMapMutex.Lock()
+		if current, ok := sessionMap[sessionID]; ok {
+			current.Options.Name = sessionOptions.Name
+			sessionMap[sessionID] = current
 		}
-		sessionDecoder, sessionOptions = dec, opts
+		sessionMapMutex.Unlock()
 	}
 
-	// DecodeConcurrent fans the regex work across NumCPU goroutines for
-	// large batches and transparently falls back to serial Decode below
-	// its internal threshold (~512 lines). The Decoder is goroutine-safe
-	// and output order is preserved, so this is a drop-in replacement
-	// for Decode that scales ingest throughput on multi-core boxes.
-	results := sessionDecoder.DecodeConcurrent(logs, 0)
-	jsonOutput, successCount, failedCount, _ := postProcess(results, sessionOptions, sessionSeq)
+	var jsonOutput []map[string]interface{}
+	var successCount, failedCount int
+	if session.AutoDetect && session.TimeState != nil {
+		jsonOutput, successCount, failedCount = session.TimeState.process(results, sessionOptions, sessionSeq)
+	} else {
+		jsonOutput, successCount, failedCount, _ = postProcess(results, sessionOptions, sessionSeq)
+	}
+	if session.AutoDetect {
+		markAutomaticRows(jsonOutput, results)
+	}
 
 	if err := h.storeRecorded(jsonOutput, storedBatch{
 		Opts: sessionOptions, Origin: sessionOrigin,
@@ -109,8 +114,8 @@ func (h *Services) ingestBatch(sessionID string, lines []string) (processed, fai
 }
 
 // IngestSession ties one /ingest/start invocation to its compiled
-// log2grok Decoder so subsequent /ingest/logs calls don't recompile the
-// pattern per request. Decoders are immutable + goroutine-safe so we
+// log2grok decoder or adaptive router so later chunks reuse compiled
+// patterns. Decoders and the adaptive router are concurrency-safe, so we
 // can hand the same pointer to many concurrent callers.
 type IngestSession struct {
 	Options      types.IngestSessionOptions
@@ -133,12 +138,11 @@ type IngestSession struct {
 	// when it starts.
 	Origin types.SourceOrigin
 	JobID  string
-	// AutoDetect: the session was started with pattern "auto" (spec
-	// now-12); Decoder stays nil until the first batch, which picks the
-	// pattern from its lines. DetectErr makes a failed detection sticky so
-	// every later batch fails fast with the same message.
+	// Auto sessions share a bounded, concurrency-safe parser cache across
+	// batches. Explicit patterns continue to use Decoder alone.
 	AutoDetect bool
-	DetectErr  string
+	Adaptive   *adaptiveDecoder
+	TimeState  *automaticTimestampState
 }
 
 var sessionMap = make(map[string]IngestSession)
@@ -337,10 +341,13 @@ func newIngestSession(req types.IngestSessionOptions) (string, *sessionStartErro
 		return "", &sessionStartError{code: "PATTERN_NOT_FOUND", message: "Unknown pattern name", details: err.Error()}
 	}
 
-	// "auto": detect on the first batch (see ingestBatch); no decoder yet.
+	// "auto": defer bounded discovery until records arrive; adapt on misses.
 	autoDetect := req.Pattern == "auto"
 	var dec *l2g.Decoder
-	if !autoDetect {
+	var adaptive *adaptiveDecoder
+	if autoDetect {
+		adaptive = newAdaptiveDecoder(req.SmartDecoder)
+	} else {
 		var err error
 		dec, err = l2g.NewDecoder(l2g.PatternSpec{
 			Name:           req.Name,
@@ -396,60 +403,30 @@ func newIngestSession(req types.IngestSessionOptions) (string, *sessionStartErro
 		// path import overwrites this when its job starts.
 		Origin:     types.SourceOrigin{Kind: "file"},
 		AutoDetect: autoDetect,
+		Adaptive:   adaptive,
+		TimeState:  newAutomaticTimestampState(),
 	}
 	sessionMapMutex.Unlock()
 	return sessionID, nil
 }
 
-// autoDetectLines is how many lines of the first batch feed detection.
-const autoDetectLines = 200
-
-// ensureSessionDecoder compiles an "auto" session's decoder from the first
-// batch's lines, once. Double-checked under the session lock so two
-// concurrent batches for the same session don't both detect; a failed
-// detection is recorded on the session and returned again for every later
-// batch rather than retried.
-func (h *Services) ensureSessionDecoder(sessionID string, lines []string) (*l2g.Decoder, types.IngestSessionOptions, error) {
-	sessionMapMutex.Lock()
-	defer sessionMapMutex.Unlock()
-	session, ok := sessionMap[sessionID]
-	if !ok {
-		return nil, types.IngestSessionOptions{}, errInvalidSession
+// decodeSessionRecords is shared by normal batches and the final multiline
+// flush. Unrecognised auto input is a raw result, never a session-wide error.
+func decodeSessionRecords(session IngestSession, lines []string) ([]l2g.LineResult, types.IngestSessionOptions) {
+	opts := session.Options
+	if session.AutoDetect {
+		router := session.Adaptive
+		if router == nil {
+			router = newAdaptiveDecoder(opts.SmartDecoder)
+		}
+		results := router.Decode(lines)
+		if primary, ok := router.PrimaryPattern(); ok {
+			opts.Name = primary.Name
+		}
+		opts.Pattern = "auto"
+		return results, opts
 	}
-	if session.Decoder != nil {
-		return session.Decoder, session.Options, nil
-	}
-	if session.DetectErr != "" {
-		return nil, session.Options, errors.New(session.DetectErr)
-	}
-	sample := lines
-	if len(sample) > autoDetectLines {
-		sample = sample[:autoDetectLines]
-	}
-	results, err := h.autosuggestPatterns(sample)
-	if err == nil && len(results) == 0 {
-		err = errors.New("auto-detect found no pattern in the first lines; start the session with a pattern")
-	}
-	if err != nil {
-		session.DetectErr = "auto-detect: " + err.Error()
-		sessionMap[sessionID] = session
-		return nil, session.Options, errors.New(session.DetectErr)
-	}
-	r := results[0]
-	dec, err := l2g.NewDecoder(l2g.PatternSpec{
-		Name: r.PatternName, Grok: r.Pattern, CustomPatterns: r.CustomPatterns,
-	}, l2g.DecoderOptions{SmartDecode: session.Options.SmartDecoder})
-	if err != nil {
-		session.DetectErr = "auto-detect: compile " + r.PatternName + ": " + err.Error()
-		sessionMap[sessionID] = session
-		return nil, session.Options, errors.New(session.DetectErr)
-	}
-	session.Decoder = dec
-	session.Options.Name = r.PatternName
-	session.Options.Pattern = r.Pattern
-	session.Options.CustomPatterns = r.CustomPatterns
-	sessionMap[sessionID] = session
-	return dec, session.Options, nil
+	return session.Decoder.DecodeConcurrent(lines, 0), opts
 }
 
 // endIngestSession is /ingest/end's teardown: drop the session and flush
@@ -521,16 +498,24 @@ func (h *Services) flushSessionMultiline(session IngestSession, sessionID string
 		return
 	}
 	final := session.Multiline.Flush()
-	if len(final) == 0 || session.Decoder == nil {
+	if len(final) == 0 || (!session.AutoDetect && session.Decoder == nil) {
 		return
 	}
-	results := session.Decoder.DecodeConcurrent(final, 0)
-	jsonOutput, _, _, _ := postProcess(results, session.Options, session.Seq)
+	results, opts := decodeSessionRecords(session, final)
+	var jsonOutput []map[string]interface{}
+	if session.AutoDetect && session.TimeState != nil {
+		jsonOutput, _, _ = session.TimeState.process(results, opts, session.Seq)
+	} else {
+		jsonOutput, _, _, _ = postProcess(results, opts, session.Seq)
+	}
+	if session.AutoDetect {
+		markAutomaticRows(jsonOutput, results)
+	}
 	if len(jsonOutput) == 0 {
 		return
 	}
 	if err := h.storeRecorded(jsonOutput, storedBatch{
-		Opts: session.Options, Origin: session.Origin,
+		Opts: opts, Origin: session.Origin,
 		ImportID: sessionID, ImportJobID: session.JobID,
 		Lines: final, Rows: jsonOutput,
 	}); err != nil {

@@ -236,6 +236,7 @@ describe("multi-file management", () => {
   it("updateFilePattern updates pattern for specific file", () => {
     useImportStore.getState().addFiles([makeFile("a.log")]);
     const fileId = useImportStore.getState().files[0].id;
+    useImportStore.getState().updateFile(fileId, { automaticPattern: true });
     const pattern = {
       name: "syslog",
       pattern: "%{SYSLOGTIMESTAMP:ts} %{GREEDYDATA:msg}",
@@ -248,6 +249,7 @@ describe("multi-file management", () => {
     const file = useImportStore.getState().files[0];
     expect(file.selectedPattern).toEqual(pattern);
     expect(file.isCustomPattern).toBe(false);
+    expect(file.automaticPattern).toBe(false);
   });
 
   it("updateFilePattern marks custom pattern correctly", () => {
@@ -273,6 +275,9 @@ describe("multi-file management", () => {
     useImportStore
       .getState()
       .addFiles([makeFile("a.log"), makeFile("b.log")]);
+    for (const file of useImportStore.getState().files) {
+      useImportStore.getState().updateFile(file.id, { automaticPattern: true });
+    }
     const pattern = {
       name: "apache",
       pattern: "%{COMBINEDAPACHELOG}",
@@ -287,6 +292,7 @@ describe("multi-file management", () => {
     expect(files[1].selectedPattern).toEqual(pattern);
     expect(files[0].isCustomPattern).toBe(false);
     expect(files[1].isCustomPattern).toBe(false);
+    expect(files.every((file) => file.automaticPattern === false)).toBe(true);
   });
 });
 
