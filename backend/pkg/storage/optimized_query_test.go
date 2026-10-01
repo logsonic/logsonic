@@ -1,10 +1,12 @@
 package storage
 
 import (
+	"math"
 	"testing"
 	"time"
 
 	"github.com/blevesearch/bleve/v2"
+	"github.com/blevesearch/bleve/v2/search/query"
 )
 
 // An index alias searches its shards concurrently with one query instance.
@@ -43,5 +45,53 @@ func TestAllFieldsQueryConcurrentShardSearchDoesNotMutateOriginal(t *testing.T) 
 		if result.Total != 2 || shared.child.Field() != "" {
 			t.Fatalf("iteration %d: total=%d original field=%q", i, result.Total, shared.child.Field())
 		}
+	}
+}
+
+func TestCloneFieldableQueryIsIndependentAndKeepsBounds(t *testing.T) {
+	inf := math.Inf(1)
+	min := 2.0
+	original := query.NewNumericRangeQuery(&min, &inf)
+	original.SetField("orig")
+
+	clone, err := cloneFieldableQuery(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clone.SetField("other")
+	if original.Field() != "orig" {
+		t.Fatalf("clone mutated the original: %q", original.Field())
+	}
+	got := clone.(*query.NumericRangeQuery)
+	if got.Field() != "other" || got.Min == nil || *got.Min != 2 || got.Max == nil || !math.IsInf(*got.Max, 1) {
+		t.Fatalf("clone lost bounds: field=%q min=%v max=%v", got.Field(), got.Min, got.Max)
+	}
+
+	for _, q := range []query.FieldableQuery{
+		query.NewMatchQuery("x"), query.NewTermQuery("x"), query.NewPrefixQuery("x"),
+		query.NewWildcardQuery("x*"), query.NewRegexpQuery("x.*"), query.NewFuzzyQuery("x"),
+		query.NewMatchPhraseQuery("x y"), query.NewBoolFieldQuery(true),
+		query.NewTermRangeInclusiveQuery("a", "b", nil, nil),
+	} {
+		c, err := cloneFieldableQuery(q)
+		if err != nil {
+			t.Fatalf("%T: %v", q, err)
+		}
+		c.SetField("f")
+		if q.Field() == "f" {
+			t.Fatalf("%T clone aliased the original", q)
+		}
+	}
+}
+
+func BenchmarkCloneFieldableQuery(b *testing.B) {
+	q := query.NewMatchQuery("connection timeout")
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		c, err := cloneFieldableQuery(q)
+		if err != nil {
+			b.Fatal(err)
+		}
+		c.SetField("f")
 	}
 }

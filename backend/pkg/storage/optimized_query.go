@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"reflect"
@@ -253,38 +252,18 @@ func (q *allFieldsQuery) Searcher(
 
 // A multi-index search invokes Searcher concurrently for each shard. Clone the
 // child before assigning a field so neither another shard nor the caller sees
-// a temporary field. Term ranges need a value copy: their compact numeric
-// bounds can contain non-UTF-8 bytes that JSON would replace.
+// a temporary field. SetField only assigns the field name, so a shallow struct
+// copy is enough: pointer-valued bounds are shared but never written during a
+// search. This runs once per field per shard per query, so it must stay cheap,
+// and a value copy is also exact for bounds JSON cannot carry (+Inf, raw bytes).
 func cloneFieldableQuery(original query.FieldableQuery) (query.FieldableQuery, error) {
-	if termRange, ok := original.(*query.TermRangeQuery); ok {
-		clone := *termRange
-		if termRange.InclusiveMin != nil {
-			value := *termRange.InclusiveMin
-			clone.InclusiveMin = &value
-		}
-		if termRange.InclusiveMax != nil {
-			value := *termRange.InclusiveMax
-			clone.InclusiveMax = &value
-		}
-		if termRange.BoostVal != nil {
-			value := *termRange.BoostVal
-			clone.BoostVal = &value
-		}
-		return &clone, nil
-	}
-	kind := reflect.TypeOf(original)
-	if kind.Kind() != reflect.Pointer || kind.Elem().Kind() != reflect.Struct {
+	value := reflect.ValueOf(original)
+	if value.Kind() != reflect.Pointer || value.IsNil() || value.Elem().Kind() != reflect.Struct {
 		return nil, fmt.Errorf("cannot clone field query %T", original)
 	}
-	encoded, err := json.Marshal(original)
-	if err != nil {
-		return nil, fmt.Errorf("encode field query %T: %w", original, err)
-	}
-	clone := reflect.New(kind.Elem()).Interface()
-	if err := json.Unmarshal(encoded, clone); err != nil {
-		return nil, fmt.Errorf("decode field query %T: %w", original, err)
-	}
-	return clone.(query.FieldableQuery), nil
+	clone := reflect.New(value.Elem().Type())
+	clone.Elem().Set(value.Elem())
+	return clone.Interface().(query.FieldableQuery), nil
 }
 
 func searchableFields(reader index.IndexReader) ([]string, error) {
