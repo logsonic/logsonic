@@ -4,19 +4,65 @@ A Model Context Protocol (MCP) server that lets AI clients — Claude Desktop, C
 
 ## Tools exposed
 
-| Tool                  | Purpose                                                                 |
-|-----------------------|-------------------------------------------------------------------------|
-| `ping`                | Health-check the LogSonic server. Always call first in a fresh session. |
-| `log_info`            | List available sources, dates with data, and storage totals.            |
-| `query_logs`          | Search logs with Bleve syntax, time range, source filter, pagination.   |
-| `list_grok_patterns`  | Inspect the parser library so the agent knows which fields exist.       |
-| `test_grok_pattern`   | Dry-run a Grok pattern against sample lines (or autosuggest).           |
-| `logsonic_url`        | Build a deep-link into the LogSonic web UI with query + time pre-filled.|
-| `log_distribution`    | Time-bucketed log counts without the row payload — fast trend overview. |
-| `list_workspaces`     | List saved investigation workspaces.                                    |
-| `open_workspace`      | Fetch one saved workspace and a UI URL for it.                          |
-| `create_workspace`    | Save a query/time/source view as a local workspace.                     |
-| `workspace_url`       | Build a UI URL for a saved workspace id.                                |
+LogSonic is agent-first: everything the UI does is a tool, so an agent can ingest, analyze and display logs end to end. The server also sends a short playbook in its MCP `instructions`.
+
+**Ingest**
+
+| Tool | Purpose |
+|---|---|
+| `ingest_file` | Import a file from the server's disk (auto-detected format, rotated siblings, .gz/.zst/.bz2); waits for the job. |
+| `ingest_status` | Wait for / read one import job. |
+| `list_ingest_jobs` / `cancel_ingest_job` | Running and recent import jobs. |
+| `ingest_lines` | Ingest log lines the agent already has. |
+| `preview_file` | First lines of a file, to check the format before importing. |
+| `list_samples` / `import_sample` | Bundled sample logs. |
+| `tail_file` / `stop_tail` | Follow a growing file live. |
+| `create_watch` / `list_watches` / `pause_watch` / `resume_watch` / `delete_watch` | Follow every matching file in a folder. |
+
+**Analyze**
+
+| Tool | Purpose |
+|---|---|
+| `ping` | Health-check the server. Call first. |
+| `log_info` | Sources, dates with data, storage totals. |
+| `query_logs` | Search with Bleve syntax, time range, source filter, sort, pagination. |
+| `log_distribution` | Time-bucketed counts, no rows. |
+| `log_facets` | Top values per field for a query (what dominates a spike). |
+| `list_grok_patterns` / `test_grok_pattern` | Parser library; dry-run or autosuggest a pattern. |
+| `save_grok_pattern` / `delete_grok_pattern` | Manage the parser library. |
+
+**Display — drive the web UI** (each returns the UI state after the change)
+
+| Tool | Purpose |
+|---|---|
+| `ui_get_state` | What the user sees: query, filters, sources, time, columns, sort, page, result count, first rows. |
+| `ui_show_view` | Set query, time, sources, filters, columns and sort in one call, run one search. |
+| `ui_add_filter` / `ui_remove_filter` / `ui_clear_filters` | Field filters, as in the Fields panel. |
+| `ui_set_columns` | Set, show or hide table columns. |
+| `ui_set_column_widths` | Column widths in pixels. |
+| `ui_set_query` / `ui_set_time` / `ui_set_sources` | Search bar, time range, source selection. |
+| `ui_set_sort` / `ui_set_page` | Table order, page and page size. |
+| `ui_fields_panel` | Open or close the Fields panel. |
+| `ui_navigate` | Switch page (logs, import, settings). |
+| `ui_open_workspace` | Load a saved workspace into the UI. |
+| `ui_run_search` | Run the current search (after `run=false` changes). |
+| `ui_focus` | Raise the macOS app window. |
+| `logsonic_url` / `workspace_url` | Deep links for when no UI is open. |
+
+The `ui_*` tools need an open LogSonic UI (the macOS app or a browser tab). With none open they return `no_ui_connected` right away.
+
+**Manage**
+
+| Tool | Purpose |
+|---|---|
+| `list_sources` / `get_source` / `rename_source` | Ingested sources and their origin. |
+| `reimport_source` | Re-read a source's origin file (e.g. after fixing its pattern). |
+| `delete_source` | Delete one source's rows (`confirm=true`). |
+| `list_workspaces` / `open_workspace` / `create_workspace` / `update_workspace` / `duplicate_workspace` / `delete_workspace` | Saved investigations. |
+| `storage_info` / `set_retention` / `delete_storage_day` | Storage and retention. |
+| `clear_all_logs` | Delete everything (`confirm=true`). |
+
+Destructive tools carry the MCP `destructiveHint` annotation; read-only ones carry `readOnlyHint`.
 
 The agent-facing playbook — query syntax, workflow, common recipes, pitfalls — lives in **[SKILLS.md](SKILLS.md)**. Point your MCP client at it so the model knows how to use the tools effectively.
 
