@@ -39,7 +39,6 @@ var UICommandTypes = map[string]bool{
 	"set_fields_panel":  true,
 	"open_workspace":    true,
 	"run_search":        true,
-	"expand_row":        true,
 	"set_column_widths": true,
 }
 
