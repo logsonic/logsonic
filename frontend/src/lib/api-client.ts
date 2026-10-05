@@ -30,6 +30,7 @@ import {
   Watch,
   WatchesResponse,
   WatchRequest,
+  UIAckRequest,
   Workspace,
   WorkspaceListResponse,
   WorkspaceResponse,
@@ -209,6 +210,11 @@ export async function listWorkspaces(): Promise<WorkspaceListResponse> {
 
 export async function createWorkspace(workspace: Workspace): Promise<WorkspaceResponse> {
   return apiRequest<WorkspaceResponse>('/workspaces', 'POST', workspace);
+}
+
+/** POST /ui/ack: report the result of an agent ui_command back to the server. */
+export async function ackUICommand(ack: UIAckRequest): Promise<void> {
+  await apiRequest<unknown>('/ui/ack', 'POST', ack);
 }
 
 export async function getWorkspace(id: string): Promise<WorkspaceResponse> {

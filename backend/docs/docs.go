@@ -1286,6 +1286,101 @@ const docTemplate = `{
                 }
             }
         },
+        "/ui/ack": {
+            "post": {
+                "description": "Called by the web UI's agent bridge after it applied (or rejected) a ui_command.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ui"
+                ],
+                "summary": "Acknowledge a UI command",
+                "parameters": [
+                    {
+                        "description": "Command id, result and state snapshot",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.UIAckRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ui/command": {
+            "post": {
+                "description": "Broadcasts a \"ui_command\" event on /live/events to the web UI's agent bridge and waits for its acknowledgement, which carries the UI state after the command. Lets an agent drive what the user sees: columns, filters, query, time range, sort, page, route. Returns 409 no_ui_connected when no UI is open, 504 timeout when no UI answered in time, 422 error when the UI rejected the command.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ui"
+                ],
+                "summary": "Send a command to the connected web UI",
+                "parameters": [
+                    {
+                        "description": "Command type and arguments",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.UICommandRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.UICommandResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.UICommandResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/types.UICommandResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/types.UICommandResponse"
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "$ref": "#/definitions/types.UICommandResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/ui/focus": {
             "post": {
                 "description": "Broadcasts a \"ui_focus\" event on /live/events; the macOS shell raises its window and, when a route is given, navigates to it. In browser mode nothing listens — the CLI prints the URL instead.",
@@ -3010,6 +3105,70 @@ const docTemplate = `{
                         "os_type": {
                             "type": "string"
                         }
+                    }
+                }
+            }
+        },
+        "types.UIAckRequest": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "ok": {
+                    "type": "boolean"
+                },
+                "state": {
+                    "type": "object"
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "types.UICommandRequest": {
+            "type": "object",
+            "properties": {
+                "args": {
+                    "type": "object"
+                },
+                "timeout_ms": {
+                    "description": "TimeoutMS bounds the wait for the UI's acknowledgement\n(default 5000, max 15000).",
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.UICommandResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "object"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
                     }
                 }
             }

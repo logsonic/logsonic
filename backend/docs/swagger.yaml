@@ -931,6 +931,50 @@ definitions:
             type: string
         type: object
     type: object
+  types.UIAckRequest:
+    properties:
+      error:
+        type: string
+      id:
+        type: string
+      ok:
+        type: boolean
+      state:
+        type: object
+      warnings:
+        items:
+          type: string
+        type: array
+    type: object
+  types.UICommandRequest:
+    properties:
+      args:
+        type: object
+      timeout_ms:
+        description: |-
+          TimeoutMS bounds the wait for the UI's acknowledgement
+          (default 5000, max 15000).
+        type: integer
+      type:
+        type: string
+    type: object
+  types.UICommandResponse:
+    properties:
+      error:
+        type: string
+      id:
+        type: string
+      state:
+        type: object
+      status:
+        type: string
+      type:
+        type: string
+      warnings:
+        items:
+          type: string
+        type: array
+    type: object
   types.UIFocusRequest:
     properties:
       route:
@@ -2011,6 +2055,74 @@ paths:
       summary: Preview timestamp resolution
       tags:
       - parsing
+  /ui/ack:
+    post:
+      consumes:
+      - application/json
+      description: Called by the web UI's agent bridge after it applied (or rejected)
+        a ui_command.
+      parameters:
+      - description: Command id, result and state snapshot
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.UIAckRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+      summary: Acknowledge a UI command
+      tags:
+      - ui
+  /ui/command:
+    post:
+      consumes:
+      - application/json
+      description: 'Broadcasts a "ui_command" event on /live/events to the web UI''s
+        agent bridge and waits for its acknowledgement, which carries the UI state
+        after the command. Lets an agent drive what the user sees: columns, filters,
+        query, time range, sort, page, route. Returns 409 no_ui_connected when no
+        UI is open, 504 timeout when no UI answered in time, 422 error when the UI
+        rejected the command.'
+      parameters:
+      - description: Command type and arguments
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.UICommandRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.UICommandResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.UICommandResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/types.UICommandResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/types.UICommandResponse'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/types.UICommandResponse'
+      summary: Send a command to the connected web UI
+      tags:
+      - ui
   /ui/focus:
     post:
       consumes:

@@ -60,6 +60,11 @@ type Services struct {
 	// write side. Without it a reconcile that lands in that gap counts
 	// the batch twice (once from the index, once from Record).
 	catalogSync sync.RWMutex
+
+	// uiBridgeState pairs /ui/command calls with the web UI's /ui/ack; see
+	// ui_bridge.go. Built lazily so a zero-value Services in tests works.
+	uiBridgeOnce  sync.Once
+	uiBridgeState *uiBridge
 }
 
 // NewHandler wires up the HTTP service surface. Pattern + decode logic

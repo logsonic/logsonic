@@ -648,6 +648,25 @@ export interface UIFocusEvent {
   route?: string;
 }
 
+/** /live/events source_id the agent bridge subscribes with (broadcasts only). */
+export const UI_BRIDGE_SOURCE_FILTER = '__ui_bridge__';
+
+/** The `ui_command` SSE event: one agent command for the web UI (via MCP / POST /ui/command). */
+export interface UICommandEvent {
+  id: string;
+  type: string;
+  args?: Record<string, unknown>;
+}
+
+/** POST /ui/ack body: the UI's result for one ui_command. */
+export interface UIAckRequest {
+  id: string;
+  ok: boolean;
+  error?: string;
+  warnings?: string[];
+  state?: unknown;
+}
+
 // Query Parameters
 export interface LogQueryParams {
   limit?: number;

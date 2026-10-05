@@ -2,6 +2,7 @@
 package types
 
 import (
+	"encoding/json"
 	"time"
 
 	"logsonic/pkg/timeresolve"
@@ -713,4 +714,48 @@ type UIFocusRequest struct {
 // UIFocusEvent is the "ui_focus" SSE broadcast on /live/events.
 type UIFocusEvent struct {
 	Route string `json:"route,omitempty"`
+}
+
+// UIBridgeSourceFilter is the /live/events source_id the web UI's agent
+// bridge subscribes with. It matches no tail source, so the bridge only
+// receives broadcasts, and the server counts these subscribers to tell
+// whether any UI is connected before it sends a command.
+const UIBridgeSourceFilter = "__ui_bridge__"
+
+// UICommandRequest is POST /ui/command: one agent command for the connected
+// web UI (set columns, add a filter, navigate, ...). Args depend on Type.
+type UICommandRequest struct {
+	Type string          `json:"type"`
+	Args json.RawMessage `json:"args,omitempty" swaggertype:"object"`
+	// TimeoutMS bounds the wait for the UI's acknowledgement
+	// (default 5000, max 15000).
+	TimeoutMS int `json:"timeout_ms,omitempty"`
+}
+
+// UICommandEvent is the "ui_command" SSE broadcast on /live/events.
+type UICommandEvent struct {
+	ID   string          `json:"id"`
+	Type string          `json:"type"`
+	Args json.RawMessage `json:"args,omitempty" swaggertype:"object"`
+}
+
+// UIAckRequest is POST /ui/ack: the UI's result for one ui_command. State is
+// the UI state snapshot after the command was applied.
+type UIAckRequest struct {
+	ID       string          `json:"id"`
+	OK       bool            `json:"ok"`
+	Error    string          `json:"error,omitempty"`
+	Warnings []string        `json:"warnings,omitempty"`
+	State    json.RawMessage `json:"state,omitempty" swaggertype:"object"`
+}
+
+// UICommandResponse is the result of POST /ui/command. Status is one of
+// applied | error | timeout | no_ui_connected.
+type UICommandResponse struct {
+	Status   string          `json:"status"`
+	ID       string          `json:"id,omitempty"`
+	Type     string          `json:"type,omitempty"`
+	Error    string          `json:"error,omitempty"`
+	Warnings []string        `json:"warnings,omitempty"`
+	State    json.RawMessage `json:"state,omitempty" swaggertype:"object"`
 }

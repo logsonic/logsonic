@@ -385,6 +385,8 @@ func NewServer(cfg Config) (*Server, error) {
 			r.Get("/samples", h.HandleListSamples)
 			r.Post("/samples/{name}/import", h.HandleImportSample)
 			r.Post("/ui/focus", h.HandleUIFocus)
+			r.Post("/ui/command", h.HandleUICommand)
+			r.Post("/ui/ack", h.HandleUIAck)
 			r.Route("/watches", func(r chi.Router) {
 				r.Get("/", h.HandleListWatches)
 				r.Post("/", h.HandleCreateWatch)
