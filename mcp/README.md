@@ -4,7 +4,7 @@ A Model Context Protocol (MCP) server that lets AI clients — Claude Desktop, C
 
 ## Tools exposed
 
-LogSonic is agent-first: everything the UI does is a tool, so an agent can ingest, analyze and display logs end to end. The server also sends a short playbook in its MCP `instructions`.
+LogSonic is agent-first: everything the UI does is a tool (a backend test fails when a REST route has no matching tool), so an agent can ingest, analyze and display logs end to end. The server also sends a short playbook in its MCP `instructions`.
 
 **Ingest**
 
@@ -29,6 +29,7 @@ LogSonic is agent-first: everything the UI does is a tool, so an agent can inges
 | `log_distribution` | Time-bucketed counts, no rows. |
 | `log_facets` | Top values per field for a query (what dominates a spike). |
 | `list_grok_patterns` / `test_grok_pattern` | Parser library; dry-run or autosuggest a pattern. |
+| `preview_timestamps` | How timestamps of sample lines resolve (timezone, year-less dates) before import. |
 | `save_grok_pattern` / `delete_grok_pattern` | Manage the parser library. |
 
 **Display — drive the web UI** (each returns the UI state after the change)
@@ -42,7 +43,7 @@ LogSonic is agent-first: everything the UI does is a tool, so an agent can inges
 | `ui_set_column_widths` | Column widths in pixels. |
 | `ui_set_query` / `ui_set_time` / `ui_set_sources` | Search bar, time range, source selection. |
 | `ui_set_sort` / `ui_set_page` | Table order, page and page size. |
-| `ui_fields_panel` | Open or close the Fields panel. |
+| `ui_fields_panel` / `ui_sidebar` | Open or close the Fields panel, or any sidebar panel (filter, fields, sources, styling). |
 | `ui_navigate` | Switch page (logs, import, settings). |
 | `ui_open_workspace` | Load a saved workspace into the UI. |
 | `ui_run_search` | Run the current search (after `run=false` changes). |
@@ -57,9 +58,11 @@ The `ui_*` tools need an open LogSonic UI (the macOS app or a browser tab). With
 |---|---|
 | `list_sources` / `get_source` / `rename_source` | Ingested sources and their origin. |
 | `reimport_source` | Re-read a source's origin file (e.g. after fixing its pattern). |
+| `rebuild_sources` | Recompute source counts and time bounds from the indices. |
 | `delete_source` | Delete one source's rows (`confirm=true`). |
 | `list_workspaces` / `open_workspace` / `create_workspace` / `update_workspace` / `duplicate_workspace` / `delete_workspace` | Saved investigations. |
 | `storage_info` / `set_retention` / `delete_storage_day` | Storage and retention. |
+| `delete_logs` | Delete specific rows by `_id` (`confirm=true`). |
 | `clear_all_logs` | Delete everything (`confirm=true`). |
 
 Destructive tools carry the MCP `destructiveHint` annotation; read-only ones carry `readOnlyHint`.

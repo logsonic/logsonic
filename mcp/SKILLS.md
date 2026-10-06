@@ -185,6 +185,7 @@ ingest_file(path="/var/log/app.log", source="app") # format auto-detected unless
 - Lines you already have (from `kubectl logs`, an API, a paste): `ingest_lines(source="pod-x", lines=[...])`.
 - A parse that needs a custom pattern: test it with `test_grok_pattern`, keep it with `save_grok_pattern`, then import with `pattern_name=`.
 - Wrong pattern after the fact: fix it, then `reimport_source(name=...)` re-reads the origin file.
+- Year-less or zone-less timestamps (syslog `Oct  6 10:00:00`): check them with `preview_timestamps(logs=[...], grok_pattern=...)` before importing; pass `timezone=` to `ingest_file`.
 - Live files: `tail_file` (one file, stop with `stop_tail`) or `create_watch(dir=..., glob="*.log")`.
 
 ## Driving the UI
@@ -199,14 +200,14 @@ Every `ui_*` tool waits for the UI to apply the change and returns `{"status":"a
 | `columns.selected` / `columns.available` | visible columns, and every column in the results |
 | `sort`, `page`, `page_size` | table order and paging |
 | `result_count`, `preview_rows` | matching rows, and the first 5 as displayed |
-| `fields_panel_open`, `active_workspace_id` | sidebar and workspace |
+| `fields_panel_open`, `sidebar`, `active_workspace_id` | Fields panel, visible sidebar panel, workspace |
 
 Tools:
 
 - `ui_show_view` — set several things at once and run one search. Use this for "show me X".
 - `ui_add_filter(field, value, exclude?)` / `ui_remove_filter(field, value?)` / `ui_clear_filters(keep_text?)` — same as clicking values in the Fields panel. Numeric values (`status=404`) are written unquoted so numeric fields match.
 - `ui_set_columns(columns, mode=set|show|hide)` — `timestamp` always stays first. Unknown names come back in `warnings`.
-- `ui_set_query`, `ui_set_time`, `ui_set_sources`, `ui_set_sort`, `ui_set_page`, `ui_set_column_widths`, `ui_fields_panel`, `ui_navigate`, `ui_open_workspace`, `ui_run_search`, `ui_get_state`.
+- `ui_set_query`, `ui_set_time`, `ui_set_sources`, `ui_set_sort`, `ui_set_page`, `ui_set_column_widths`, `ui_fields_panel`, `ui_sidebar`, `ui_navigate`, `ui_open_workspace`, `ui_run_search`, `ui_get_state`.
 - Search-changing tools take `run=false` to batch changes; finish with `ui_run_search`.
 
 If a `ui_*` tool returns `no_ui_connected`, call `ui_focus` (raises the macOS app) or ask the user to open the `ui_url` it returns, then retry. A `timeout` means the UI was open but did not answer in 10s — retry once.
@@ -236,7 +237,7 @@ create_workspace(name="app errors", query="+level:\"ERROR\"", source="app", rela
 
 ## Destructive tools
 
-`delete_source`, `delete_storage_day` and `clear_all_logs` need `confirm=true` and cannot be undone. Use them only when the user asked for that deletion. `reimport_source` and `set_retention` also remove rows; say so before calling them.
+`delete_source`, `delete_logs`, `delete_storage_day` and `clear_all_logs` need `confirm=true` and cannot be undone. Use them only when the user asked for that deletion. `reimport_source` and `set_retention` also remove rows; say so before calling them.
 
 ## Error handling
 
