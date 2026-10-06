@@ -619,8 +619,8 @@ const docTemplate = `{
                 }
             }
         },
-        "/logs/delete": {
-            "post": {
+        "/logs/ids": {
+            "delete": {
                 "description": "Delete specific logs from the system identified by their document IDs",
                 "consumes": [
                     "application/json"
@@ -1316,6 +1316,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
                         "schema": {
                             "$ref": "#/definitions/types.ErrorResponse"
                         }

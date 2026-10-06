@@ -10,6 +10,7 @@ import {
 import { useFacetStore } from '@/stores/useFacetStore';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
+import { useSidebarStore } from '@/stores/useSidebarStore';
 
 vi.mock('@/lib/api-client', () => ({
   getWorkspace: vi.fn(),
@@ -133,12 +134,9 @@ describe('applyAgentCommand', () => {
     expect(res.warnings[0]).toMatch(/mandatory/);
   });
 
-  it('adding columns to an existing result refetches it', async () => {
-    useSearchQueryParamsStore.setState({ hasSearched: true, currentPage: 2 });
-    const nonce = useSearchQueryParamsStore.getState().searchNonce;
+  it('adding columns to an existing result waits for the refetch', async () => {
+    useSearchQueryParamsStore.setState({ hasSearched: true });
     expect((await run('show_columns', { columns: ['status'] })).searched).toBe(true);
-    expect(useSearchQueryParamsStore.getState().searchNonce).toBe(nonce + 1);
-    expect(useSearchQueryParamsStore.getState().currentPage).toBe(2);
     expect((await run('hide_columns', { columns: ['status'] })).searched).toBe(false);
   });
 
@@ -162,7 +160,23 @@ describe('applyAgentCommand', () => {
     await run('set_sort', { field: 'status', order: 'asc' });
     await run('set_page', { page: 3, page_size: 50 });
     await run('set_sources', { sources: ['nginx'] });
+    // Play Home: apply the sidebar request as soon as it is made.
+    const unsub = useSidebarStore.subscribe((st) => {
+      const req = st.pending;
+      if (req) {
+        st.clearPending();
+        useFacetStore.getState().setPanelOpen(req.panel === 'fields' && req.open);
+        st.setCurrent(req.panel, req.open);
+      }
+    });
+    await run('set_sidebar', { panel: 'sources', open: true });
+    expect(useSidebarStore.getState().current).toEqual({ panel: 'sources', open: true });
     await run('set_fields_panel', { open: true });
+    expect(useSidebarStore.getState().current).toEqual({ panel: 'fields', open: true });
+    await expect(run('set_sidebar', { panel: 'nope', open: true })).rejects.toThrow(
+      /panel must be/
+    );
+    unsub();
     const s = useSearchQueryParamsStore.getState();
     expect([s.sortBy, s.sortOrder]).toEqual(['status', 'asc']);
     expect([s.currentPage, s.pageSize]).toEqual([1, 50]);

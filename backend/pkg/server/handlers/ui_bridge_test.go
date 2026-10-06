@@ -63,6 +63,7 @@ func TestUICommandAckRoundTrip(t *testing.T) {
 		}
 		ack, _ := json.Marshal(types.UIAckRequest{ID: cmd.ID, OK: true, Warnings: []string{"w"}, State: json.RawMessage(`{"route":"/"}`)})
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/ui/ack", bytes.NewReader(ack))
+		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 		h.HandleUIAck(rec, req)
 		if rec.Code != http.StatusNoContent {
@@ -105,9 +106,21 @@ func TestUICommandTimeout(t *testing.T) {
 	// The late ack finds nothing pending.
 	ack := `{"id":"` + resp.ID + `","ok":true}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/ui/ack", bytes.NewBufferString(ack))
+	req.Header.Set("Content-Type", "application/json")
 	ackRec := httptest.NewRecorder()
 	h.HandleUIAck(ackRec, req)
 	if ackRec.Code != http.StatusNotFound {
 		t.Fatalf("late ack status %d, want 404", ackRec.Code)
+	}
+}
+
+func TestUIAckRejectsNonJSON(t *testing.T) {
+	h, _ := setupHandler(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/ui/ack", bytes.NewBufferString(`id=x&ok=true`))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	h.HandleUIAck(rec, req)
+	if rec.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("form-encoded ack status %d, want 415", rec.Code)
 	}
 }

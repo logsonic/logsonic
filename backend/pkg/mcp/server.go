@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -122,7 +123,7 @@ Workflow:
 4. Display: ui_show_view sets query, time, sources, filters, columns and sort in one call. Fine-tune with ui_add_filter / ui_remove_filter / ui_set_columns / ui_set_time / ui_set_sort / ui_set_page / ui_fields_panel. Every ui_* tool returns the UI state afterwards (result_count, columns, preview_rows); ui_get_state reads it. If a ui_* tool returns no_ui_connected, call ui_focus or ask the user to open the LogSonic URL, then retry.
 5. Keep the view: create_workspace / update_workspace, reopen with ui_open_workspace.
 
-Destructive tools (delete_source, delete_storage_day, clear_all_logs) need confirm=true; only use them when the user asked.`
+Destructive tools (delete_source, delete_logs, delete_storage_day, clear_all_logs) need confirm=true; only use them when the user asked.`
 
 // build constructs and returns a configured MCPServer with all tools registered.
 // baseURL is the LogSonic server root (e.g. "http://localhost:8080").
@@ -446,6 +447,18 @@ RESPONSE: JSON with logs[], count, total_count, available_columns, log_distribut
 	registerUITools(s, c)
 
 	return s
+}
+
+// ToolNames lists every registered MCP tool, sorted. The server package's
+// route-coverage test uses it to check each REST route has a tool.
+func ToolNames() []string {
+	tools := build("http://localhost").ListTools()
+	names := make([]string, 0, len(tools))
+	for name := range tools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func compactWorkspaces(data json.RawMessage) string {

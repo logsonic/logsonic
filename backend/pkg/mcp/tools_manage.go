@@ -122,6 +122,12 @@ func registerManageTools(s *server.MCPServer, c *client) {
 		return c.do("POST", "/sources/"+url.PathEscape(name)+"/reimport", nil, nil)
 	})
 
+	simpleTool(s, mcp.NewTool("rebuild_sources",
+		mcp.WithDescription("Recompute every source's row counts, days and time bounds from the stored indices. Use when list_sources looks wrong (e.g. after a crash). Keeps origin, pattern and import history; idempotent."),
+	), func(_ mcp.CallToolRequest) (json.RawMessage, error) {
+		return c.post("/sources/rebuild", map[string]any{})
+	})
+
 	// ================================================================= watches
 
 	simpleTool(s, mcp.NewTool("list_watches",
@@ -302,6 +308,42 @@ func registerManageTools(s *server.MCPServer, c *client) {
 		return json.RawMessage(withWorkspaceURL(out, c.serverBaseURL())), nil
 	})
 
+	// ================================================================== parsing
+
+	simpleTool(s, mcp.NewTool("preview_timestamps",
+		mcp.WithDescription("Show how LogSonic resolves the timestamps of sample lines under a resolution config (timezone, year strategy for "+
+			"year-less timestamps like syslog's 'Oct  6 10:00:00', anchor, force mode) without ingesting. Returns the inference and per-line preview. "+
+			"Call with only logs (and grok_pattern) first: the response's inference shows the detected defaults to adjust."),
+		mcp.WithArray("logs", mcp.Required(), mcp.WithStringItems(), mcp.Description("Sample log lines")),
+		mcp.WithString("grok_pattern", mcp.Description("Pattern that extracts the timestamp field")),
+		mcp.WithObject("custom_patterns", mcp.Description("Named sub-patterns the pattern uses")),
+		mcp.WithObject("resolution", mcp.Description("Resolution config, same shape as inference.resolution in a previous response")),
+		mcp.WithReadOnlyHintAnnotation(true),
+	), func(req mcp.CallToolRequest) (json.RawMessage, error) {
+		logs, err := stringList(req, "logs")
+		if err != nil {
+			return nil, err
+		}
+		if len(logs) == 0 {
+			return nil, fmt.Errorf("logs is required")
+		}
+		body := map[string]any{"logs": logs}
+		if v := strings.TrimSpace(req.GetString("grok_pattern", "")); v != "" {
+			body["grok_pattern"] = v
+		}
+		custom, err := stringMap(req, "custom_patterns")
+		if err != nil {
+			return nil, err
+		}
+		if len(custom) > 0 {
+			body["custom_patterns"] = custom
+		}
+		if res, ok := req.GetArguments()["resolution"].(map[string]any); ok {
+			body["resolution"] = res
+		}
+		return c.post("/timestamp/preview", body)
+	})
+
 	// ================================================================= storage
 
 	simpleTool(s, mcp.NewTool("storage_info",
@@ -340,6 +382,25 @@ func registerManageTools(s *server.MCPServer, c *client) {
 			return nil, fmt.Errorf("delete_storage_day removes all rows of %s permanently; call again with confirm=true if the user agreed", date)
 		}
 		return c.do("DELETE", "/storage/days/"+url.PathEscape(date), nil, nil)
+	})
+
+	simpleTool(s, mcp.NewTool("delete_logs",
+		mcp.WithDescription("Permanently delete specific log rows by their _id (from query_logs). Requires confirm=true."),
+		mcp.WithArray("ids", mcp.Required(), mcp.WithStringItems(), mcp.Description("Row _id values")),
+		mcp.WithBoolean("confirm", mcp.Required(), mcp.Description("Must be true")),
+		mcp.WithDestructiveHintAnnotation(true),
+	), func(req mcp.CallToolRequest) (json.RawMessage, error) {
+		ids, err := stringList(req, "ids")
+		if err != nil {
+			return nil, err
+		}
+		if len(ids) == 0 {
+			return nil, fmt.Errorf("ids is required")
+		}
+		if !req.GetBool("confirm", false) {
+			return nil, fmt.Errorf("delete_logs removes %d rows permanently; call again with confirm=true if the user agreed", len(ids))
+		}
+		return c.do("DELETE", "/logs/ids", nil, map[string]any{"ids": ids})
 	})
 
 	simpleTool(s, mcp.NewTool("clear_all_logs",

@@ -10,6 +10,7 @@ import { isNativeShell } from '@/lib/native';
 import { useFacetStore } from '@/stores/useFacetStore';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import useSearchQueryParamsStore from '@/stores/useSearchQueryParams';
+import { useSidebarStore } from '@/stores/useSidebarStore';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 
 const SIDEBAR_WIDTH_STORAGE_KEY = 'logsonic-sidebar-width';
@@ -112,7 +113,22 @@ const Home = () => {
   // the panel is visible; keep the store informed of that.
   useEffect(() => {
     setFacetPanelOpen(!isCollapsed && activeTabId === 'fields');
+    useSidebarStore.getState().setCurrent(activeTabId, !isCollapsed);
   }, [isCollapsed, activeTabId, setFacetPanelOpen]);
+
+  // Apply an open/close request from outside Home (the agent bridge).
+  const pendingSidebar = useSidebarStore((s) => s.pending);
+  useEffect(() => {
+    if (!pendingSidebar) return;
+    const { panel, open } = pendingSidebar;
+    useSidebarStore.getState().clearPending();
+    if (open) {
+      setActiveTabId(panel);
+      if (isCollapsed) togglePanelCollapse();
+    } else if (!isCollapsed && activeTabId === panel) {
+      togglePanelCollapse();
+    }
+  }, [pendingSidebar, isCollapsed, activeTabId, togglePanelCollapse]);
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const saved = localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);

@@ -259,6 +259,18 @@ func registerUITools(s *server.MCPServer, c *client) {
 		return map[string]any{"open": req.GetBool("open", true)}, nil
 	})
 
+	// ------------------------------------------------------------- ui_sidebar
+	uiTool(s, c, mcp.NewTool("ui_sidebar",
+		mcp.WithDescription("Open or close a log-view sidebar panel: filter (source checkboxes), fields (top values per field), "+
+			"sources (source list and import history), styling (color rules). Opening one replaces the open one. "+
+			"state.sidebar reports what is shown."),
+		mcp.WithString("panel", mcp.Required(), mcp.Enum("filter", "fields", "sources", "styling"), mcp.Description("Panel")),
+		mcp.WithBoolean("open", mcp.Required(), mcp.Description("true to open, false to close")),
+	), "set_sidebar", func(req mcp.CallToolRequest) (map[string]any, error) {
+		panel, err := requiredString(req, "panel")
+		return map[string]any{"panel": panel, "open": req.GetBool("open", true)}, err
+	})
+
 	// -------------------------------------------------------- ui_open_workspace
 	uiTool(s, c, mcp.NewTool("ui_open_workspace",
 		mcp.WithDescription("Load a saved workspace into the UI (query, time, sources, columns, color rules) and run it."),

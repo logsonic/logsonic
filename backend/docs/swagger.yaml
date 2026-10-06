@@ -1569,8 +1569,8 @@ paths:
       summary: Read all logs
       tags:
       - logs
-  /logs/delete:
-    post:
+  /logs/ids:
+    delete:
       consumes:
       - application/json
       description: Delete specific logs from the system identified by their document
@@ -2075,6 +2075,10 @@ paths:
           description: No Content
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrorResponse'
+        "415":
+          description: Unsupported Media Type
           schema:
             $ref: '#/definitions/types.ErrorResponse'
       summary: Acknowledge a UI command

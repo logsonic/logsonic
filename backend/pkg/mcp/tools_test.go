@@ -73,21 +73,22 @@ func TestAllToolsRegistered(t *testing.T) {
 		"ping", "log_info", "query_logs", "log_distribution", "log_facets",
 		"ingest_file", "ingest_status", "list_ingest_jobs", "cancel_ingest_job", "ingest_lines", "preview_file",
 		"list_samples", "import_sample", "tail_file", "stop_tail",
-		"list_sources", "get_source", "rename_source", "delete_source", "reimport_source",
+		"list_sources", "get_source", "rename_source", "delete_source", "reimport_source", "rebuild_sources",
+		"preview_timestamps", "delete_logs",
 		"list_watches", "create_watch", "delete_watch", "pause_watch", "resume_watch",
 		"list_grok_patterns", "test_grok_pattern", "save_grok_pattern", "delete_grok_pattern",
 		"list_workspaces", "open_workspace", "create_workspace", "update_workspace", "delete_workspace", "duplicate_workspace", "workspace_url",
 		"storage_info", "set_retention", "delete_storage_day", "clear_all_logs",
 		"ui_focus", "ui_get_state", "ui_navigate", "ui_show_view", "ui_set_query", "ui_set_time", "ui_set_sources",
 		"ui_set_columns", "ui_set_column_widths", "ui_add_filter", "ui_remove_filter", "ui_clear_filters",
-		"ui_set_sort", "ui_set_page", "ui_fields_panel", "ui_open_workspace", "ui_run_search",
+		"ui_set_sort", "ui_set_page", "ui_fields_panel", "ui_sidebar", "ui_open_workspace", "ui_run_search",
 	}
 	for _, name := range want {
 		if s.GetTool(name) == nil {
 			t.Errorf("tool %s not registered", name)
 		}
 	}
-	for _, name := range []string{"delete_source", "clear_all_logs", "delete_storage_day"} {
+	for _, name := range []string{"delete_source", "delete_logs", "clear_all_logs", "delete_storage_day"} {
 		ann := s.GetTool(name).Tool.Annotations
 		if ann.DestructiveHint == nil || !*ann.DestructiveHint {
 			t.Errorf("%s should be marked destructive", name)
@@ -222,6 +223,10 @@ func TestDestructiveToolsNeedConfirm(t *testing.T) {
 	res, _ := callTool(t, srv.URL, "clear_all_logs", map[string]any{})
 	if !res.IsError || len(calls()) != 0 {
 		t.Fatalf("clear_all_logs without confirm must not call the API")
+	}
+	res, _ = callTool(t, srv.URL, "delete_logs", map[string]any{"ids": []any{"a"}})
+	if !res.IsError || len(calls()) != 0 {
+		t.Fatalf("delete_logs without confirm must not call the API")
 	}
 	res, _ = callTool(t, srv.URL, "delete_source", map[string]any{"name": "x", "confirm": true})
 	if res.IsError || calls()[0].method != "DELETE" || calls()[0].path != "/sources/x" {

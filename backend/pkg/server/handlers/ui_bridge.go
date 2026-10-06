@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"mime"
 	"net/http"
 	"sync"
 	"time"
@@ -37,6 +38,7 @@ var UICommandTypes = map[string]bool{
 	"set_sort":          true,
 	"set_page":          true,
 	"set_fields_panel":  true,
+	"set_sidebar":       true,
 	"open_workspace":    true,
 	"run_search":        true,
 	"set_column_widths": true,
@@ -175,8 +177,18 @@ func (h *Services) HandleUICommand(w http.ResponseWriter, r *http.Request) {
 // @Param request body types.UIAckRequest true "Command id, result and state snapshot"
 // @Success 204
 // @Failure 404 {object} types.ErrorResponse
+// @Failure 415 {object} types.ErrorResponse
 // @Router /ui/ack [post]
 func (h *Services) HandleUIAck(w http.ResponseWriter, r *http.Request) {
+	// This route sits outside the API group's requireJSONBody (see
+	// server.go), so reject non-JSON here: a form POST is the cross-site
+	// request a browser sends without a CORS preflight.
+	if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mt != "application/json" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnsupportedMediaType)
+		json.NewEncoder(w).Encode(types.ErrorResponse{Status: "error", Error: "Content-Type must be application/json"})
+		return
+	}
 	var ack types.UIAckRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, uiAckMaxBytes)).Decode(&ack); err != nil || ack.ID == "" {
 		w.Header().Set("Content-Type", "application/json")

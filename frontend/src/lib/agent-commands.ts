@@ -9,12 +9,15 @@
  *
  * Kept free of React so it can be unit-tested against the stores directly.
  */
+import type { SidebarTabId } from '@/components/Home/SidebarPanel';
+
 import { RELATIVE_DATE_PRESETS } from '@/lib/date-utils';
 import { bleveFieldClause, isQueryableFieldName, tokenizeQuery } from '@/lib/query-clauses';
 import { applyWorkspaceTimeToSearchState } from '@/lib/workspace-utils';
 import { useFacetStore } from '@/stores/useFacetStore';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
+import { SIDEBAR_PANELS, useSidebarStore } from '@/stores/useSidebarStore';
 import { useWorkspaceStore } from '@/stores/useWorkspaceStore';
 
 export interface AgentCommand {
@@ -51,19 +54,6 @@ export const AGENT_ROUTES = [
   '/settings/about',
 ];
 
-const NUMERIC_VALUE = /^\d+(\.\d+)?$/;
-
-/**
- * The clause for one filter. Numeric values stay unquoted: Bleve indexes
- * numeric fields (status, bytes) as numbers, and a quoted phrase never
- * matches a number, while an unquoted `+status:404` matches both a numeric
- * and a text field.
- */
-export const agentFilterClause = (field: string, value: string, exclude: boolean): string =>
-  NUMERIC_VALUE.test(value)
-    ? `${exclude ? '-' : '+'}${field}:${value}`
-    : bleveFieldClause(field, value, exclude ? '-' : '+');
-
 /** Parse `+field:"value"` / `-field:"value"` / `+field:123`; null for anything else. */
 export const parseFilterClause = (token: string): AgentFilter | null => {
   const quoted = /^([+-])([A-Za-z0-9_.]+):"((?:[^"\\]|\\.)*)"$/.exec(token);
@@ -98,7 +88,7 @@ export const addFilterClause = (
   value: string,
   exclude: boolean
 ): string => {
-  const target = agentFilterClause(field, value, exclude);
+  const target = bleveFieldClause(field, value, exclude ? '-' : '+');
   // Drop any existing clause on this field/value -- the opposite polarity,
   // or the quoted form a Fields-panel click wrote for the same value.
   const tokens = tokenizeQuery(query).filter((t) => {
@@ -170,16 +160,12 @@ const unknownColumns = (columns: string[]): string[] => {
 };
 
 /**
- * Searches project rows to the selected columns, so a newly shown column is
- * blank until the next fetch. Refetch the same page (no pagination reset, no
- * history entry) when columns were added to an existing result.
+ * LogViewer refetches when columns are added (searches project rows to the
+ * visible columns), so the ack should wait for that search.
  */
-const refetchForNewColumns = (before: string[]): boolean => {
+const columnsAdded = (before: string[]): boolean => {
   const s = useSearchQueryParamsStore.getState();
-  const added = s.selectedColumns.some((c) => !before.includes(c));
-  if (!added || !s.hasSearched) return false;
-  useSearchQueryParamsStore.setState({ searchNonce: s.searchNonce + 1 });
-  return true;
+  return s.hasSearched && s.selectedColumns.some((c) => !before.includes(c));
 };
 
 const goHome = (ctx: AgentCommandContext) => {
@@ -316,7 +302,7 @@ export const applyAgentCommand = async (
       const before = store.selectedColumns;
       goHome(ctx);
       store.setSelectedColumns(columns);
-      return { warnings, searched: refetchForNewColumns(before) };
+      return { warnings, searched: columnsAdded(before) };
     }
 
     case 'show_columns': {
@@ -326,7 +312,7 @@ export const applyAgentCommand = async (
       const current = store.selectedColumns;
       goHome(ctx);
       store.setSelectedColumns([...current, ...columns.filter((c) => !current.includes(c))]);
-      return { warnings, searched: refetchForNewColumns(current) };
+      return { warnings, searched: columnsAdded(current) };
     }
 
     case 'hide_columns': {
@@ -390,10 +376,21 @@ export const applyAgentCommand = async (
       return { warnings, searched: true };
     }
 
-    case 'set_fields_panel': {
+    case 'set_fields_panel':
+    case 'set_sidebar': {
       if (typeof args.open !== 'boolean') throw new Error('open must be true or false');
+      const panel = (
+        cmd.type === 'set_fields_panel' ? 'fields' : asString(args.panel)
+      ) as SidebarTabId;
+      if (!SIDEBAR_PANELS.includes(panel)) {
+        throw new Error(`panel must be one of ${SIDEBAR_PANELS.join(', ')}`);
+      }
       goHome(ctx);
-      useFacetStore.getState().setPanelOpen(args.open);
+      // Home owns the sidebar; it applies the request (on mount too, after
+      // goHome) and clears it. Wait for that so the ack reports the result.
+      useSidebarStore.getState().request(panel, args.open);
+      if (!(await waitForSidebar(panel, args.open)))
+        warnings.push('the log view did not apply the sidebar change yet');
       return { warnings, searched: false };
     }
 
@@ -454,9 +451,46 @@ export const snapshotUIState = (route: string) => {
     preview_rows: previewRows,
     has_searched: s.hasSearched,
     fields_panel_open: facets.panelOpen,
+    // Only meaningful on the log view, where the sidebar lives.
+    sidebar: route === '/' ? useSidebarStore.getState().current : null,
     active_workspace_id: useWorkspaceStore.getState().activeWorkspaceId,
   };
 };
+
+/**
+ * Resolve true once Home shows the requested sidebar state, false after
+ * timeoutMs. Closing is satisfied by any closed state (closing a panel
+ * that isn't shown is a no-op).
+ */
+export const waitForSidebar = (
+  panel: SidebarTabId,
+  open: boolean,
+  timeoutMs = 3000
+): Promise<boolean> =>
+  new Promise((resolve) => {
+    const applied = () => {
+      const { pending, current } = useSidebarStore.getState();
+      if (pending !== null) return false;
+      return open
+        ? current.open && current.panel === panel
+        : !(current.open && current.panel === panel);
+    };
+    if (applied()) {
+      resolve(true);
+      return;
+    }
+    const timer = setTimeout(() => {
+      unsubscribe();
+      resolve(false);
+    }, timeoutMs);
+    const unsubscribe = useSidebarStore.subscribe(() => {
+      if (applied()) {
+        clearTimeout(timer);
+        unsubscribe();
+        resolve(true);
+      }
+    });
+  });
 
 /**
  * Resolve once a search started by a command has finished, so the ack's

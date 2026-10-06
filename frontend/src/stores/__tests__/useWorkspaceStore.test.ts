@@ -127,6 +127,24 @@ describe('workspace state mapping', () => {
     expect(search.hasSearched).toBe(true);
   });
 
+  it('puts the mandatory timestamp column first when the workspace omits it', () => {
+    applyWorkspaceToCurrentState({
+      name: 'no timestamp',
+      query: '',
+      sources: [],
+      time: { mode: 'relative', relative: 'last-24-hours' },
+      sort_by: 'timestamp',
+      sort_order: 'desc',
+      columns: ['status', 'path', 'timestamp'],
+      visualization: { type: 'logs', bucket: 'auto' },
+    } as Workspace);
+    expect(useSearchQueryParamsStore.getState().selectedColumns).toEqual([
+      'timestamp',
+      'status',
+      'path',
+    ]);
+  });
+
   // F7
   it('loads saved queries into the draft without auto-running any of them', () => {
     const triggerSearchSpy = vi.spyOn(useSearchQueryParamsStore.getState(), 'triggerSearch');
