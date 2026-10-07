@@ -81,8 +81,12 @@ async function main() {
     });
 
     await check('import redirects back to the home view', async () => {
-      await page.waitForURL(/#\/$/, { timeout: 10000 });
-      if (!await page.locator('input[placeholder*="Search logs" i]').count()) throw new Error('home search missing after redirect');
+      // The hash is "#/" only for an instant before the home view adds its
+      // time-range query and renders, so wait for the search box itself.
+      await page.waitForURL(/#\/?($|\?)/, { timeout: 10000 });
+      await page.locator('input[placeholder*="Search logs" i]').first()
+        .waitFor({ state: 'visible', timeout: 10000 })
+        .catch(() => { throw new Error('home search missing after redirect'); });
     });
 
     await check('history recall (↑↑) then star + save + reload restores a saved query', async () => {
