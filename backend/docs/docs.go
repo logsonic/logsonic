@@ -2650,7 +2650,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "lines": {
-                    "description": "Lines caps how many lines to read; default 100, capped server-side.",
+                    "description": "Lines caps how many lines to read; default 1000, capped server-side.",
                     "type": "integer"
                 },
                 "path": {

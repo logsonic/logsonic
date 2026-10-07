@@ -2,6 +2,9 @@ import { useImportStore } from "@/stores/useImportStore";
 import type { FileImportChunk, LogSourceProviderService } from "../types";
 
 export const PREVIEW_BYTES = 1 * 1024 * 1024;
+// Lines handed to pattern detection, matching the server's preview-file
+// default. Long lines may yield fewer: the read stops at PREVIEW_BYTES.
+export const PREVIEW_LINES = 1000;
 export const READ_RANGE_BYTES = 4 * 1024 * 1024;
 export const MAX_CHUNK_BYTES = 8 * 1024 * 1024;
 export const MAX_PHYSICAL_LINE_BYTES = 2 * 1024 * 1024;
@@ -73,7 +76,7 @@ export async function readFilePreview(file: File): Promise<{ lines: string[]; ap
     ? [...split.lines, split.remainder]
     : split.lines;
   return {
-    lines: lines.filter((line) => line.length > 0).slice(0, 100),
+    lines: lines.filter((line) => line.length > 0).slice(0, PREVIEW_LINES),
     approxLines: previewLineCount(split.lines, split.remainder, bytesRead, file.size),
   };
 }

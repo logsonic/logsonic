@@ -331,7 +331,10 @@ func registerIngestTools(s *server.MCPServer, c *client) {
 		if err != nil {
 			return resultErr(err), nil
 		}
-		payload := map[string]any{"path": path}
+		// Agents get 100 lines unless they ask for more; the endpoint's own
+		// default (1000, sized for pattern detection) would flood the
+		// agent's context.
+		payload := map[string]any{"path": path, "lines": 100}
 		if n := req.GetInt("lines", 0); n > 0 {
 			payload["lines"] = n
 		}

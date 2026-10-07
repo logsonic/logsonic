@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_CHUNK_BYTES,
   MAX_PHYSICAL_LINE_BYTES,
+  PREVIEW_LINES,
   READ_RANGE_BYTES,
   readFilePreview,
   streamFileChunks,
@@ -83,15 +84,16 @@ describe("streamFileChunks", () => {
 });
 
 describe("readFilePreview", () => {
-  it("returns at most the first 100 non-empty lines", async () => {
-    const file = new File([Array.from({ length: 150 }, (_, i) => `line-${i}`).join("\n")], "logs.txt");
+  it("returns at most the first PREVIEW_LINES non-empty lines", async () => {
+    const total = PREVIEW_LINES + 50;
+    const file = new File([Array.from({ length: total }, (_, i) => `line-${i}`).join("\n")], "logs.txt");
 
     const preview = await readFilePreview(file);
 
-    expect(preview.lines).toHaveLength(100);
+    expect(preview.lines).toHaveLength(PREVIEW_LINES);
     expect(preview.lines[0]).toBe("line-0");
-    expect(preview.lines[99]).toBe("line-99");
-    expect(preview.approxLines).toBe(150);
+    expect(preview.lines[PREVIEW_LINES - 1]).toBe(`line-${PREVIEW_LINES - 1}`);
+    expect(preview.approxLines).toBe(total);
   });
 
   it("includes a short file without a trailing newline", async () => {

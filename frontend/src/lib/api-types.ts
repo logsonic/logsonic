@@ -86,7 +86,7 @@ export interface IngestJobActionResponse {
  * browser File read, since a native drop only ever has a path. */
 export interface PreviewFileRequest {
   path: string;
-  /** Caps how many lines to read; default 100, capped server-side. */
+  /** Caps how many lines to read; default 1000, capped server-side. */
   lines?: number;
 }
 

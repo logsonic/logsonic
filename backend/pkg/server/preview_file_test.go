@@ -48,7 +48,7 @@ func TestPreviewFilePlainDefaultAndCappedLines(t *testing.T) {
 	dir := t.TempDir()
 
 	var b strings.Builder
-	for i := 0; i < 500; i++ {
+	for i := 0; i < 5000; i++ {
 		b.WriteString("INFO api request line #" + strconv.Itoa(i) + "\n")
 	}
 	path := filepath.Join(dir, "plain.log")
@@ -56,13 +56,13 @@ func TestPreviewFilePlainDefaultAndCappedLines(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Default (no "lines" given) is 100.
+	// Default (no "lines" given) is 1000.
 	status, out := previewFile(t, ts, path, 0)
 	if status != http.StatusOK {
 		t.Fatalf("status = %d", status)
 	}
-	if len(out.Lines) != 100 {
-		t.Fatalf("len(lines) = %d, want 100 (default)", len(out.Lines))
+	if len(out.Lines) != 1000 {
+		t.Fatalf("len(lines) = %d, want 1000 (default)", len(out.Lines))
 	}
 	if out.Compressed != "" {
 		t.Fatalf("compressed = %q, want empty for a plain file", out.Compressed)
@@ -70,10 +70,10 @@ func TestPreviewFilePlainDefaultAndCappedLines(t *testing.T) {
 	if out.SizeBytes != int64(b.Len()) {
 		t.Fatalf("size_bytes = %d, want %d", out.SizeBytes, b.Len())
 	}
-	// 500 uniform-length lines, sampled the first 100: the estimate should
-	// land close to 500, not be wildly off.
-	if out.ApproxLines < 450 || out.ApproxLines > 550 {
-		t.Fatalf("approx_lines = %d, want ~500", out.ApproxLines)
+	// 5000 uniform-length lines, sampled the first 1000: the estimate should
+	// land close to 5000, not be wildly off.
+	if out.ApproxLines < 4500 || out.ApproxLines > 5500 {
+		t.Fatalf("approx_lines = %d, want ~5000", out.ApproxLines)
 	}
 	if out.Lines[0] != "INFO api request line #0" {
 		t.Fatalf("first line = %q", out.Lines[0])
@@ -82,8 +82,8 @@ func TestPreviewFilePlainDefaultAndCappedLines(t *testing.T) {
 	// A file shorter than the requested line count reads to EOF and
 	// reports the exact count.
 	status, out = previewFile(t, ts, path, 10_000)
-	if status != http.StatusOK || len(out.Lines) != 500 || out.ApproxLines != 500 {
-		t.Fatalf("full read: status %d, %d lines, approx %d, want 200 / 500 lines / approx 500", status, len(out.Lines), out.ApproxLines)
+	if status != http.StatusOK || len(out.Lines) != 5000 || out.ApproxLines != 5000 {
+		t.Fatalf("full read: status %d, %d lines, approx %d, want 200 / 5000 lines / approx 5000", status, len(out.Lines), out.ApproxLines)
 	}
 }
 

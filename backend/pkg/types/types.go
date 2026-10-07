@@ -150,7 +150,7 @@ type IngestJobsListResponse struct {
 // browser File read, since a native drop only ever gets a path.
 type PreviewFileRequest struct {
 	Path string `json:"path"`
-	// Lines caps how many lines to read; default 100, capped server-side.
+	// Lines caps how many lines to read; default 1000, capped server-side.
 	Lines int `json:"lines,omitempty"`
 }
 

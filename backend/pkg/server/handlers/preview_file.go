@@ -11,14 +11,16 @@ import (
 )
 
 const (
-	// defaultPreviewLines matches the spec's API contract default.
-	defaultPreviewLines = 100
+	// defaultPreviewLines is how many lines pattern detection sees for a
+	// native-path file. log2grok scans inputs of 100+ lines in parallel, so
+	// 1000 lines costs a few milliseconds and gives detection more evidence.
+	defaultPreviewLines = 1000
 	// maxPreviewLines bounds a caller-supplied "lines" so this endpoint
 	// stays a quick peek, not an alternate way to read a whole file.
 	maxPreviewLines = MaxIngestLines
 	// maxPreviewBytes bounds the decoded (uncompressed) size of the
-	// returned lines, independent of maxPreviewLines: 100 lines is the
-	// spec's default, but a handful of multi-MB JSON-per-line records
+	// returned lines, independent of maxPreviewLines: 1000 lines is the
+	// default, but a handful of multi-MB JSON-per-line records
 	// would otherwise turn "preview" into shipping most of a huge file to
 	// the browser. Matches the order of magnitude of the browser upload
 	// wizard's own preview read (FileSelectionService.readFilePreview,
