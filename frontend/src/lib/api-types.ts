@@ -651,6 +651,14 @@ export interface UIFocusEvent {
 /** /live/events source_id the agent bridge subscribes with (broadcasts only). */
 export const UI_BRIDGE_SOURCE_FILTER = '__ui_bridge__';
 
+/** POST /ui/command body: one agent command for the connected web UI. */
+export interface UICommandRequest {
+  type: string;
+  args?: Record<string, unknown>;
+  /** Wait for the UI's acknowledgement, in ms (default 5000, max 15000). */
+  timeout_ms?: number;
+}
+
 /** The `ui_command` SSE event: one agent command for the web UI (via MCP / POST /ui/command). */
 export interface UICommandEvent {
   id: string;
