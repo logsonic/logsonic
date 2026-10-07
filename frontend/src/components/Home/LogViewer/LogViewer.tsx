@@ -54,6 +54,9 @@ export const LogViewer = () => {
     sources: store.sources,
     searchNonce: store.searchNonce
   });
+  // Searches project rows to the selected columns (useSearchLogs' `fields`),
+  // so a newly shown column is blank until the rows are fetched again.
+  const prevColumnsRef = useRef<string[]>(store.selectedColumns);
 
   // Fetch logs when search parameters change (excluding date changes)
   useEffect(() => {
@@ -92,8 +95,14 @@ export const LogViewer = () => {
       return false;
     }) || firstTimeLoadSearchRef.current;
 
+    // Refetch when a column was added. Skip the first selection (empty
+    // before): it is made from a response that was not projected.
+    const prevColumns = prevColumnsRef.current;
+    prevColumnsRef.current = store.selectedColumns;
+    const columnsAdded =
+      prevColumns.length > 0 && store.selectedColumns.some((col) => !prevColumns.includes(col));
 
-    if (shouldSearch) {
+    if (shouldSearch || columnsAdded) {
       // Update the previous parameters
       prevSearchParamsRef.current = currentParams;
       firstTimeLoadSearchRef.current = false;
@@ -113,6 +122,7 @@ export const LogViewer = () => {
     store.sortOrder,
     store.sources,
     store.searchNonce,
+    store.selectedColumns,
     liveAvailable,
     searchLogs,
 	   

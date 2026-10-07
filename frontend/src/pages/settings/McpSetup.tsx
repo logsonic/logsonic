@@ -114,13 +114,17 @@ LogSonic is a local log analytics engine — logs are indexed in time-sharded
 Bleve indices. Every log line has _timestamp (RFC3339), _src (source name),
 _raw (original line), and any fields the Grok parser extracted.
 
-Standard workflow for each new question:
-1. ping       — confirm server is reachable
-2. log_info   — discover available sources and date range
-3. query_logs — run the search (constrain by source + time window)
+Every LogSonic operation is a tool: you can ingest, analyze and display logs.
 
-Available tools: ping, log_info, query_logs, list_grok_patterns,
-test_grok_pattern, logsonic_url, log_distribution.
+Standard workflow for each new question:
+1. ping         — confirm server is reachable
+2. log_info     — discover available sources and date range
+3. ingest_file  — import the logs if they aren't there yet
+4. log_facets / query_logs — analyze (constrain by source + time window)
+5. ui_show_view — show the result in the LogSonic UI (query, filters,
+   columns, time range); ui_add_filter / ui_set_columns fine-tune it
+
+Every ui_* tool returns what the user now sees (ui_get_state reads it).
 
 Full playbook (query syntax, recipes, pitfalls): ${GITHUB_MCP_URL}/blob/main/SKILLS.md`;
 

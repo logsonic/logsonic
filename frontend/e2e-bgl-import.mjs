@@ -1,7 +1,9 @@
 /**
- * BGL Supercomputer log import E2E test.
- * Run: node e2e-bgl-import.mjs [--headed]
- * Requires: backend on :8080, frontend on :8081
+ * BGL Supercomputer log import E2E test, against the single-surface Import
+ * page (file list + preview pane + "Import 1 file" in the footer).
+ *
+ * Run against an isolated backend (the test clears all logs):
+ *   BASE_URL=http://127.0.0.1:8080 API_URL=http://127.0.0.1:8080/api/v1 node e2e-bgl-import.mjs [--headed]
  */
 import { chromium } from 'playwright';
 import path from 'path';
@@ -11,10 +13,15 @@ import fs from 'fs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SAMPLE_LOGS_DIR = path.resolve(__dirname, '../sample-logs');
 const BGL_LOG = path.join(SAMPLE_LOGS_DIR, 'bgl-supercomputer.log');
+const BGL_LINES = fs.readFileSync(BGL_LOG, 'utf8').split('\n').filter((l) => l.length > 0).length;
+// Pattern detection sees at most this many leading lines (PREVIEW_LINES in
+// FileSelectionService.ts).
+const PREVIEW_LINES = 1000;
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8081';
 const API_URL  = process.env.API_URL  || 'http://localhost:8080/api/v1';
 const headless = !process.argv.includes('--headed');
+const ALL_TIME = 'start_date=2000-01-01T00:00:00Z&end_date=2100-01-01T00:00:00Z';
 
 let passed = 0, failed = 0;
 
@@ -30,7 +37,7 @@ async function clearLogs() {
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 const browser = await chromium.launch({ headless, slowMo: headless ? 0 : 100 });
-const context = await browser.newContext();
+const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 const page    = await context.newPage();
 
 // Capture browser console + network for debugging
@@ -43,10 +50,19 @@ page.on('response', r => {
   }
 });
 
+// Lines sent to pattern detection: the /parse call without a grok_pattern.
+let detectionLines = null;
+page.on('request', r => {
+  if (r.method() === 'POST' && r.url().endsWith('/api/v1/parse')) {
+    const body = JSON.parse(r.postData() || '{}');
+    if (!body.grok_pattern && detectionLines === null) detectionLines = (body.logs || []).length;
+  }
+});
+
 // Capture full network log for ingest endpoints
 const ingestLog = [];
 page.on('response', async r => {
-  if (r.url().includes('/ingest')) {
+  if (r.url().includes('/api/v1/ingest')) {
     try {
       const body = await r.json().catch(() => null);
       ingestLog.push({ url: r.url(), status: r.status(), body });
@@ -56,107 +72,63 @@ page.on('response', async r => {
 
 try {
   await clearLogs();
-
   console.log('\n\x1b[1m[BGL Import E2E]\x1b[0m');
 
-  // ── Step 1: Navigate to Import ──────────────────────────────────────────
-  await page.goto(BASE_URL, { waitUntil: 'networkidle' });
-  const importBtn = page.getByRole('link', { name: /import/i })
-    .or(page.getByText(/import logs?/i))
-    .or(page.locator('a[href*="import"]'))
-    .first();
-  await importBtn.click();
-  await page.waitForURL('**/import**', { timeout: 5000 }).catch(() => {});
-  ok('Navigated to Import page');
+  // ── Step 1: Open the Import page ─────────────────────────────────────────
+  // domcontentloaded, not networkidle: the UI keeps an EventSource open.
+  await page.goto(`${BASE_URL}/#/import`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+  await page.waitForSelector('input[type="file"]', { state: 'attached', timeout: 10000 });
+  ok('Opened Import page');
 
-  // ── Step 2: Click "Upload Log File" source button ────────────────────────
-  await page.getByText('Upload Log File').click();
-  await page.waitForTimeout(500);
-  ok('Selected "Upload Log File" source');
-
-  // ── Step 3: Upload BGL log file (hidden input — set directly) ─────────────
+  // ── Step 2: Add the BGL file (hidden input — set directly) ───────────────
   await page.locator('input[type="file"]').setInputFiles(BGL_LOG);
-  await page.waitForTimeout(500);
-  ok('BGL log file selected');
+  await page.locator('.ls-imp-filerow').first().waitFor({ state: 'visible', timeout: 20000 });
+  ok('BGL log file added to the file list');
 
   // ── Step 3: Wait for pattern detection ──────────────────────────────────
   await page.waitForFunction(
-    () => {
-      const text = document.body.innerText;
-      return !text.includes('Detecting...') && !text.includes('Queued') && !text.includes('detecting');
-    },
+    () => !/Detecting|detecting|Reading the first lines/.test(document.body.innerText),
     { timeout: 30000 }
   );
-  await page.waitForTimeout(1000);
   ok('Pattern detection complete');
 
-  // ── Step 4: Verify BGL pattern was detected ──────────────────────────────
-  const bodyText = await page.evaluate(() => document.body.innerText);
-  const bglDetected = bodyText.includes('IBM BGL') || bodyText.includes('BGL Supercomputer');
-  await assert(bglDetected, 'IBM BGL Supercomputer pattern detected');
+  // ── Step 4: Verify detection input and result ───────────────────────────
+  await assert(detectionLines === Math.min(PREVIEW_LINES, BGL_LINES),
+    `Detection ran on the first ${Math.min(PREVIEW_LINES, BGL_LINES)} lines (got ${detectionLines})`);
 
-  if (!bglDetected) {
-    console.log('  Body text snippet:', bodyText.slice(0, 500));
-  }
+  const fileRow = await page.locator('.ls-imp-filerow').first().innerText();
+  const previewHead = await page.locator('.ls-imp-pane-head').filter({ hasText: 'Preview' }).first().innerText();
+  await assert(/BGL Supercomputer/.test(fileRow) && /BGL Supercomputer/.test(previewHead),
+    'BGL Supercomputer pattern detected');
+  await assert(/100% match/.test(previewHead), 'Detected pattern matches 100% of preview lines');
+  if (!/BGL Supercomputer/.test(previewHead)) console.log('  Preview header:', previewHead.replace(/\s+/g, ' '));
 
-  // ── Step 5: Verify "Pattern found" badge (not "Unknown Format") ──────────
-  const notUnknown = !bodyText.includes('Unknown Format 1');
-  await assert(notUnknown, 'No "Unknown Format" fallback shown');
+  // ── Step 5: Verify the preview pane ──────────────────────────────────────
+  const rows = await page.locator('.ls-imp-prow').count();
+  await assert(rows === Math.min(PREVIEW_LINES, BGL_LINES), `Preview shows ${rows} rows`);
+  const failedRows = await page.locator('.ls-imp-gutter--err').count();
+  await assert(failedRows === 0, `No preview row failed to parse (got ${failedRows})`);
 
-  // ── Step 6: Click Next → Define Log Pattern step ─────────────────────────
-  const nextBtn = page.getByRole('button', { name: /next/i }).first();
-  await nextBtn.click();
+  // ── Step 6: Import ───────────────────────────────────────────────────────
+  await page.getByRole('button', { name: /^Import 1 file$/ }).click();
+  ok('Clicked "Import 1 file"');
+
+  await page.getByText('Import complete', { exact: true }).waitFor({ state: 'visible', timeout: 60000 });
+  const summary = await page.getByText(/1 file · [\d,]+ lines/).first().innerText();
+  await assert(summary.includes(`${BGL_LINES.toLocaleString('en-US')} lines`), `Import summary: "${summary}"`);
+
+  // ── Step 7: Verify data in backend ──────────────────────────────────────
   await page.waitForTimeout(1000);
-  ok('Advanced to step 2 (Define Log Pattern)');
+  const all = await fetch(`${API_URL}/logs?limit=1&${ALL_TIME}`).then(r => r.json()).catch(() => null);
+  const storedCount = all?.total_count ?? 0;
+  await assert(storedCount === BGL_LINES, `All ${BGL_LINES} BGL lines stored (got ${storedCount})`);
 
-  // ── Step 7: Click Next → Confirm Import step ─────────────────────────────
-  const nextBtn2 = page.getByRole('button', { name: /next/i }).first();
-  await nextBtn2.click();
-  await page.waitForTimeout(1000);
-  ok('Advanced to step 3 (Confirm Import)');
+  const ras = await fetch(`${API_URL}/logs?limit=5&query=RAS&${ALL_TIME}`).then(r => r.json()).catch(() => null);
+  await assert((ras?.total_count ?? 0) > 0, `Search for RAS finds BGL logs (got ${ras?.total_count ?? 0})`);
 
-  // ── Step 8: Click Import ─────────────────────────────────────────────────
-  const importSubmitBtn = page.getByRole('button', { name: /^import$/i })
-    .or(page.getByRole('button', { name: /start import/i }))
-    .or(page.getByRole('button', { name: /confirm/i }))
-    .first();
-  await importSubmitBtn.click();
-  ok('Clicked Import button');
-
-  // ── Step 9: Wait for import to complete ─────────────────────────────────
-  await page.waitForFunction(
-    () => {
-      const text = document.body.innerText;
-      return text.includes('success') || text.includes('Success') ||
-             text.includes('failed') || text.includes('Failed') ||
-             text.includes('imported') || text.includes('complete') ||
-             text.includes('error') || text.includes('Error');
-    },
-    { timeout: 60000 }
-  ).catch(e => console.log('  [timeout waiting for result]', e.message));
-
-  await page.waitForTimeout(2000);
-  ok('Import completed (or timed out)');
-
-  // ── Step 10: Check result ─────────────────────────────────────────────────
-  const resultText = await page.evaluate(() => document.body.innerText);
-  const importFailed = resultText.includes('failed') || resultText.includes('Failed') ||
-                       resultText.includes('error') && !resultText.includes('0 error');
-  const importSuccess = resultText.includes('success') || resultText.includes('Success') ||
-                        resultText.includes('imported') || resultText.includes('complete');
-
-  await assert(importSuccess && !importFailed, 'Import completed successfully');
-
-  if (!importSuccess || importFailed) {
-    console.log('\n  Result text snippet:');
-    console.log('  ', resultText.slice(0, 800));
-  }
-
-  // ── Step 11: Verify data in backend ──────────────────────────────────────
-  await page.waitForTimeout(1000);
-  const logsResp = await fetch(`${API_URL}/logs?limit=5&query=RAS`).then(r => r.json()).catch(() => null);
-  const storedCount = logsResp?.total_count ?? 0;
-  await assert(storedCount > 0, `BGL logs stored in backend (got ${storedCount})`);
+  const consoleErrors = consoleMsgs.filter(m =>
+    m.startsWith('[error]') && !m.includes('favicon') && !m.includes('ollama') && !m.includes('404'));
+  await assert(consoleErrors.length === 0, 'No browser console errors');
 
 } catch (err) {
   fail('Unexpected error', err);
@@ -167,10 +139,8 @@ try {
     for (const entry of ingestLog) {
       const status = entry.status === 200 ? '\x1b[32m200\x1b[0m' : `\x1b[31m${entry.status}\x1b[0m`;
       console.log(`  ${status} ${entry.url.split('/api/v1')[1]}`);
-      if (entry.body && entry.body.status !== 'success') {
+      if (entry.body && entry.body.status && entry.body.status !== 'success') {
         console.log('       body:', JSON.stringify(entry.body));
-      } else if (entry.body) {
-        console.log(`       processed=${entry.body.processed ?? '?'} failed=${entry.body.failed ?? '?'}`);
       }
     }
   }

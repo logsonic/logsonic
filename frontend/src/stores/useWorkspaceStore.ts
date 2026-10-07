@@ -75,9 +75,14 @@ export const applyWorkspaceToCurrentState = (workspace: Workspace) => {
     sources: workspace.sources ?? [],
     sortBy: workspace.sort_by || 'timestamp',
     sortOrder: workspace.sort_order === 'asc' ? 'asc' : 'desc',
+    // Mandatory columns (timestamp) lead, as setSelectedColumns enforces;
+    // a workspace saved by an agent or an older build may omit them.
     selectedColumns:
       workspace.columns && workspace.columns.length > 0
-        ? workspace.columns
+        ? [
+            ...search.mandatoryColumns,
+            ...workspace.columns.filter((col) => !search.mandatoryColumns.includes(col)),
+          ]
         : search.selectedColumns,
     columnWidths: normalizeWorkspaceColumnWidths(workspace.column_widths),
     currentPage: 1,

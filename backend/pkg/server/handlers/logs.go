@@ -615,7 +615,7 @@ type DeleteLogsByIdsRequest struct {
 // @Success 200 {object} map[string]interface{} "Success message with deletion statistics"
 // @Failure 400 {object} types.ErrorResponse "Bad request due to invalid parameters"
 // @Failure 500 {object} types.ErrorResponse "Internal server error"
-// @Router /logs/delete [post]
+// @Router /logs/ids [delete]
 func (h *Services) HandleDeleteByIds(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 

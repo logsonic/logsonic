@@ -281,3 +281,80 @@ func TestAdaptiveDecoderRejectedCacheExpiresAndStaysBounded(t *testing.T) {
 		t.Fatal("expired miss was never retried")
 	}
 }
+
+// Cached parsers are applied outside the decoder mutex: a chunk the stream
+// already understands must not queue behind another chunk's discovery.
+func TestAdaptiveDecoderCachedChunkDoesNotWaitForDiscovery(t *testing.T) {
+	decoder := newAdaptiveDecoder(false)
+	lines := adaptiveApacheLines()
+	for _, r := range decoder.Decode(lines) {
+		if !r.Matched {
+			t.Fatal("setup: apache family not learned")
+		}
+	}
+	entered, release := make(chan struct{}), make(chan struct{})
+	decoder.discover = func([]string, l2g.Options) (*l2g.DiscoveredPattern, error) {
+		close(entered)
+		<-release
+		return nil, nil
+	}
+	decoder.discoverMulti = nil
+	slow := make(chan struct{})
+	go func() {
+		decoder.Decode([]string{"@@@ unseen format forces discovery"})
+		close(slow)
+	}()
+	<-entered
+	done := make(chan []l2g.LineResult, 1)
+	go func() { done <- decoder.Decode(lines) }()
+	select {
+	case got := <-done:
+		for i, r := range got {
+			if !r.Matched || r.Raw != lines[i] {
+				t.Errorf("cached chunk row %d wrong: %#v", i, r)
+			}
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("cached chunk blocked behind an in-progress discovery")
+	}
+	close(release)
+	<-slow
+}
+
+// Two chunks of a new family must not both infer it: the one that loses the
+// discovery race has to try the freshly learned parser first.
+func TestAdaptiveDecoderConcurrentChunksLearnFamilyOnce(t *testing.T) {
+	decoder := newAdaptiveDecoder(false)
+	var mu sync.Mutex
+	calls := 0
+	decoder.discover = func([]string, l2g.Options) (*l2g.DiscoveredPattern, error) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		time.Sleep(20 * time.Millisecond)
+		return &l2g.DiscoveredPattern{Source: "evt", Grok: `ev %{WORD:kind} %{INT:n}`}, nil
+	}
+	decoder.discoverMulti = nil
+	batch := make([]string, 600) // above DecodeConcurrent's serial threshold
+	for i := range batch {
+		batch[i] = fmt.Sprintf("ev k%d %d", i%7, i)
+	}
+	var wg sync.WaitGroup
+	for g := 0; g < 8; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			got := decoder.Decode(batch)
+			for i, r := range got {
+				if !r.Matched || r.Raw != batch[i] || r.Fields["n"] != fmt.Sprint(i) {
+					t.Errorf("row %d wrong: %#v", i, r)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	if calls != 1 {
+		t.Fatalf("family inferred %d times, want 1", calls)
+	}
+}

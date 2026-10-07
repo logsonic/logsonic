@@ -1,14 +1,22 @@
 # Working with LogSonic via MCP
 
-This is the agent-facing playbook for the LogSonic MCP server. If you (the agent) have access to the `ping`, `query_logs`, `log_info`, `list_grok_patterns`, `test_grok_pattern`, `logsonic_url`, and workspace tools, read this first — it will save the user a lot of back-and-forth.
+This is the agent-facing playbook for the LogSonic MCP server. If you (the agent) have access to the `ping`, `query_logs`, `ingest_file`, `ui_show_view` and related tools, read this first — it will save the user a lot of back-and-forth.
+
+LogSonic is agent-first: every operation the UI offers is also a tool. You can ingest logs, analyze them, and drive the web UI the user is looking at (query, filters, columns, time range, sort, page) without the user clicking anything.
 
 ## What LogSonic is
 
 LogSonic is a local log analytics engine. The user has ingested some log files (one or more "sources") and indexed them in time-sharded Bleve indices. You query those indices over HTTP — you do **not** see raw files. Every log line has a `_timestamp` field (RFC3339), a `_src` field (the source name), a `_raw` field (the original line), and any fields the Grok parser extracted (e.g. `level`, `service`, `response_time`, `status`, `host`).
 
+You can:
+- Ingest: `ingest_file` (a path on the machine running LogSonic), `ingest_lines` (lines you already hold), `import_sample`, `tail_file` (follow a growing file), `create_watch` (follow a whole folder).
+- Analyze: `log_distribution`, `log_facets`, `query_logs`.
+- Display: the `ui_*` tools change what the user sees in the LogSonic web UI and return the UI state afterwards.
+- Manage: sources (`list_sources`, `rename_source`, `reimport_source`, `delete_source`), Grok patterns, workspaces, storage and retention.
+
 You cannot:
-- Modify, delete, or ingest logs (read-only tools by design).
-- Tail logs in real time — every query is a snapshot.
+- Read files the LogSonic server can't read — paths are on the server's machine, not yours.
+- Drive the UI when no UI is open: `ui_*` tools then fail with `no_ui_connected`.
 - Query data outside the range LogSonic has indexed.
 
 You can create and reopen saved investigation workspaces. Workspaces store local query state, time range, sources, columns, coloring, visualization mode, and any saved queries under the user's LogSonic storage directory.
@@ -20,6 +28,9 @@ For any new question, follow this sequence:
 1. **`ping`** — confirm the server is up. If this fails, stop and tell the user the LogSonic server isn't running (default `http://localhost:8080`).
 2. **`log_info`** — read `source_names` and `available_dates`. Without this, you don't know what sources exist or what time range has data. Skipping this is the most common mistake.
 3. **`query_logs`** — run the actual search. Constrain by `source` and time range when you can; it makes queries faster and answers more accurate.
+4. **`ui_show_view`** — when the user should *see* the result, put it on screen: query, time range, sources, filters, columns and sort in one call.
+
+If the data isn't in LogSonic yet, ingest it first (see "Ingest" below), then continue at step 3.
 
 For recurring investigations, call `list_workspaces` after `log_info`. If an existing workspace matches the user's intent, use `open_workspace` or `workspace_url` instead of rebuilding the query from scratch.
 
@@ -57,7 +68,7 @@ If the user says "last hour" / "yesterday" / "last 7 days", compute the absolute
 
 ## Facets (field summary of a window)
 
-`GET /api/v1/logs?include_facets=true` (not yet exposed as an MCP tool — that is spec `next-05`) adds a `facets` object: for every parsed field, the distinct-value count and up to 8 top values with counts, computed over the newest rows of the current window (`computed_over`; `sampled: true` when the window exceeded the 20,000-row scan cap). High-cardinality fields (IDs) report only their distinct count. The one exception is `_src`: its values come from the sources catalog and list every source with its total row count, regardless of the window or query. Use it to learn which fields and values exist before writing a `field:value` query instead of paging raw rows.
+`log_facets` (the same data as `GET /api/v1/logs?include_facets=true`) returns a `facets` object: for every parsed field, the distinct-value count and up to 8 top values with counts, computed over the newest rows of the current window (`computed_over`; `sampled: true` when the window exceeded the 20,000-row scan cap). High-cardinality fields (IDs) report only their distinct count. The one exception is `_src`: its values come from the sources catalog and list every source with its total row count, regardless of the window or query. Use it to learn which fields and values exist before writing a `field:value` query instead of paging raw rows.
 
 ## Pagination
 
@@ -130,6 +141,8 @@ query_logs(
 
 ### "Give me a link the user can open to see these in the UI"
 
+If the UI is already open, `ui_show_view` puts the result on screen directly. Otherwise build a link:
+
 ```
 logsonic_url(
   query="+level:error +service:api",
@@ -156,6 +169,75 @@ list_grok_patterns
 ```
 
 Returns the full library — name, regex-like grok expression, description, priority. Useful to set expectations before suggesting a custom pattern.
+
+## Ingest
+
+```
+preview_file(path="/var/log/app.log")              # look at the format first
+test_grok_pattern(logs=[...first lines...])        # omit grok_pattern to autosuggest
+ingest_file(path="/var/log/app.log", source="app") # format auto-detected unless pattern/pattern_name given
+# -> {"finished": true, "job": {"state": "done", "rows_stored": 12034, ...}}
+# finished=false: call ingest_status(job_id=...) until it is.
+```
+
+- `include_rotated=true` also imports `app.log.1`, `app-2025-01-01.log`, ... oldest first.
+- `.gz`, `.zst` and `.bz2` files are read directly.
+- Lines you already have (from `kubectl logs`, an API, a paste): `ingest_lines(source="pod-x", lines=[...])`.
+- A parse that needs a custom pattern: test it with `test_grok_pattern`, keep it with `save_grok_pattern`, then import with `pattern_name=`.
+- Wrong pattern after the fact: fix it, then `reimport_source(name=...)` re-reads the origin file.
+- Year-less or zone-less timestamps (syslog `Oct  6 10:00:00`): check them with `preview_timestamps(logs=[...], grok_pattern=...)` before importing; pass `timezone=` to `ingest_file`.
+- Live files: `tail_file` (one file, stop with `stop_tail`) or `create_watch(dir=..., glob="*.log")`.
+
+## Driving the UI
+
+Every `ui_*` tool waits for the UI to apply the change and returns `{"status":"applied","warnings":[...],"state":{...}}`. `state` is what the user now sees:
+
+| field | meaning |
+|---|---|
+| `route` | page (`/` is the log viewer) |
+| `query`, `filters`, `free_text` | the search bar, split into field filters and the rest |
+| `sources`, `time` | source selection and time range |
+| `columns.selected` / `columns.available` | visible columns, and every column in the results |
+| `sort`, `page`, `page_size` | table order and paging |
+| `result_count`, `preview_rows` | matching rows, and the first 5 as displayed |
+| `fields_panel_open`, `sidebar`, `active_workspace_id` | Fields panel, visible sidebar panel, workspace |
+
+Tools:
+
+- `ui_show_view` — set several things at once and run one search. Use this for "show me X".
+- `ui_add_filter(field, value, exclude?)` / `ui_remove_filter(field, value?)` / `ui_clear_filters(keep_text?)` — same as clicking values in the Fields panel. Numeric values (`status=404`) are written unquoted so numeric fields match.
+- `ui_set_columns(columns, mode=set|show|hide)` — `timestamp` always stays first. Unknown names come back in `warnings`.
+- `ui_set_query`, `ui_set_time`, `ui_set_sources`, `ui_set_sort`, `ui_set_page`, `ui_set_column_widths`, `ui_fields_panel`, `ui_sidebar`, `ui_navigate`, `ui_open_workspace`, `ui_run_search`, `ui_get_state`.
+- Search-changing tools take `run=false` to batch changes; finish with `ui_run_search`.
+
+If a `ui_*` tool returns `no_ui_connected`, call `ui_focus` (raises the macOS app) or ask the user to open the `ui_url` it returns, then retry. A `timeout` means the UI was open but did not answer in 10s — retry once.
+
+### "Show me the 404s from nginx with the request path"
+
+```
+ui_show_view(
+  sources=["nginx"],
+  relative_time="last-24-hours",
+  filters=[{"field": "status", "value": "404"}],
+  columns=["status", "method", "path", "client_ip"],
+)
+# Check state.result_count and state.preview_rows, then tell the user what they're looking at.
+```
+
+### "Import this file and show me the errors"
+
+```
+ingest_file(path="/var/log/app.log", source="app")
+log_facets(source="app")                       # which level values exist?
+ui_show_view(sources=["app"], relative_time="all-time",
+             filters=[{"field": "level", "value": "ERROR"}],
+             columns=["level", "message"])
+create_workspace(name="app errors", query="+level:\"ERROR\"", source="app", relative_time="all-time")
+```
+
+## Destructive tools
+
+`delete_source`, `delete_logs`, `delete_storage_day` and `clear_all_logs` need `confirm=true` and cannot be undone. Use them only when the user asked for that deletion. `reimport_source` and `set_retention` also remove rows; say so before calling them.
 
 ## Error handling
 

@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import { initializeApplication } from './lib/initialize';
 
+import { AgentBridge } from '@/components/AgentBridge';
 import { Toaster } from '@/components/ui/toaster';
 import { useThemeStore } from '@/stores/useThemeStore';
 
@@ -44,6 +45,7 @@ const App = () => {
   return (
     <>
       <HashRouter>
+        <AgentBridge />
         <Suspense fallback={<LoadingScreen />}>
           <Routes>
             <Route path="/" element={<Home />} />

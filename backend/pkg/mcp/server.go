@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -54,45 +55,52 @@ func (c *client) serverBaseURL() string {
 }
 
 func (c *client) get(path string, params url.Values) (json.RawMessage, error) {
+	return c.do(http.MethodGet, path, params, nil)
+}
+
+func (c *client) post(path string, payload any) (json.RawMessage, error) {
+	return c.do(http.MethodPost, path, nil, payload)
+}
+
+// do calls the LogSonic REST API. A nil payload sends no body; a 4xx/5xx
+// becomes an error carrying the server's JSON so the agent sees why.
+func (c *client) do(method, path string, params url.Values, payload any) (json.RawMessage, error) {
 	baseURL := c.serverBaseURL()
 	u := baseURL + "/api/v1" + path
 	if len(params) > 0 {
 		u += "?" + params.Encode()
 	}
-	resp, err := c.http.Get(u)
+	var body io.Reader
+	if payload != nil {
+		b, err := json.Marshal(payload)
+		if err != nil {
+			return nil, err
+		}
+		body = bytes.NewReader(b)
+	}
+	req, err := http.NewRequest(method, u, body)
+	if err != nil {
+		return nil, err
+	}
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("cannot reach LogSonic at %s: %w", baseURL, err)
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("LogSonic API %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("LogSonic API %d: %s", resp.StatusCode, string(data))
 	}
-	return json.RawMessage(body), nil
-}
-
-func (c *client) post(path string, payload any) (json.RawMessage, error) {
-	b, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
+	if len(bytes.TrimSpace(data)) == 0 {
+		data = []byte(`{"status":"success"}`)
 	}
-	baseURL := c.serverBaseURL()
-	resp, err := c.http.Post(baseURL+"/api/v1"+path, "application/json", bytes.NewReader(b))
-	if err != nil {
-		return nil, fmt.Errorf("cannot reach LogSonic at %s: %w", baseURL, err)
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("LogSonic API %d: %s", resp.StatusCode, string(body))
-	}
-	return json.RawMessage(body), nil
+	return json.RawMessage(data), nil
 }
 
 func resultText(v json.RawMessage) *mcp.CallToolResult {
@@ -103,6 +111,20 @@ func resultErr(err error) *mcp.CallToolResult {
 	return mcp.NewToolResultError(err.Error())
 }
 
+// serverInstructions is sent to the client at initialize: the short
+// playbook an agent needs to drive LogSonic end to end. mcp/SKILLS.md has
+// the long form.
+const serverInstructions = `LogSonic is a local log analytics app. Every operation is available as a tool, so you can ingest, analyze and display logs without the user touching the UI.
+
+Workflow:
+1. ping, then log_info / list_sources to see what is stored.
+2. Ingest: ingest_file (path on the server's disk; format auto-detected), ingest_lines (lines you already have), import_sample, tail_file / create_watch for live files. Long imports: poll ingest_status. Check a format first with preview_file + test_grok_pattern; save reusable patterns with save_grok_pattern.
+3. Analyze: log_distribution (when), log_facets (which values dominate), query_logs (the rows). Queries use Bleve syntax: +field:"value" -field:"value" text* /regex/.
+4. Display: ui_show_view sets query, time, sources, filters, columns and sort in one call. Fine-tune with ui_add_filter / ui_remove_filter / ui_set_columns / ui_set_time / ui_set_sort / ui_set_page / ui_fields_panel. Every ui_* tool returns the UI state afterwards (result_count, columns, preview_rows); ui_get_state reads it. If a ui_* tool returns no_ui_connected, call ui_focus or ask the user to open the LogSonic URL, then retry.
+5. Keep the view: create_workspace / update_workspace, reopen with ui_open_workspace.
+
+Destructive tools (delete_source, delete_logs, delete_storage_day, clear_all_logs) need confirm=true; only use them when the user asked.`
+
 // build constructs and returns a configured MCPServer with all tools registered.
 // baseURL is the LogSonic server root (e.g. "http://localhost:8080").
 func build(baseURL string) *server.MCPServer {
@@ -111,7 +133,7 @@ func build(baseURL string) *server.MCPServer {
 
 func buildWithBaseURLProvider(provider baseURLProvider) *server.MCPServer {
 	c := newClientWithBaseURLProvider(provider)
-	s := server.NewMCPServer("Logsonic MCP", "1.2.0")
+	s := server.NewMCPServer("Logsonic MCP", "1.3.0", server.WithInstructions(serverInstructions))
 
 	// ------------------------------------------------------------------ ping
 	s.AddTool(mcp.NewTool("ping",
@@ -420,7 +442,23 @@ RESPONSE: JSON with logs[], count, total_count, available_columns, log_distribut
 		return mcp.NewToolResultText(buildWorkspaceURL(c.serverBaseURL(), workspace)), nil
 	})
 
+	registerIngestTools(s, c)
+	registerManageTools(s, c)
+	registerUITools(s, c)
+
 	return s
+}
+
+// ToolNames lists every registered MCP tool, sorted. The server package's
+// route-coverage test uses it to check each REST route has a tool.
+func ToolNames() []string {
+	tools := build("http://localhost").ListTools()
+	names := make([]string, 0, len(tools))
+	for name := range tools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func compactWorkspaces(data json.RawMessage) string {
@@ -567,6 +605,8 @@ func Handler(baseURL string) http.Handler {
 
 func HandlerWithBaseURLProvider(provider func() string) http.Handler {
 	return server.NewStreamableHTTPServer(buildWithBaseURLProvider(provider),
-		server.WithStateLess(true), // no session state needed for read-only tools
+		// Every tool is a plain REST call (UI commands wait on the server's
+		// /ui/command ack), so no MCP session state is needed.
+		server.WithStateLess(true),
 	)
 }

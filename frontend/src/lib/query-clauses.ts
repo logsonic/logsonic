@@ -17,9 +17,37 @@ export const escapeQueryValue = (value: string): string =>
 
 export type ClausePolarity = '+' | '-';
 
-/** `+field:"value"` or `-field:"value"`, always quoted so spaces and `:` survive. */
-export const bleveFieldClause = (field: string, value: string, polarity: ClausePolarity = '+'): string =>
+/** A plain non-negative integer or decimal, e.g. `404` or `1.1`. */
+const NUMERIC_VALUE = /^\d+(\.\d+)?$/;
+
+const quotedFieldClause = (field: string, value: string, polarity: ClausePolarity): string =>
   `${polarity}${field}:"${escapeQueryValue(value)}"`;
+
+/**
+ * `+field:"value"` or `-field:"value"`, quoted so spaces and `:` survive.
+ * Numeric values stay unquoted (`+status:404`): Bleve indexes numeric fields
+ * as numbers and a quoted phrase never matches a number, while an unquoted
+ * number matches both a numeric field and the same token in a text field.
+ */
+export const bleveFieldClause = (
+  field: string,
+  value: string,
+  polarity: ClausePolarity = '+'
+): string =>
+  NUMERIC_VALUE.test(value)
+    ? `${polarity}${field}:${value}`
+    : quotedFieldClause(field, value, polarity);
+
+/**
+ * Every spelling of one clause: the canonical form plus, for a numeric value,
+ * the quoted form older versions wrote, so a query saved before the change
+ * still shows as active and is replaced rather than duplicated.
+ */
+const clauseSpellings = (field: string, value: string, polarity: ClausePolarity): string[] => {
+  const canonical = bleveFieldClause(field, value, polarity);
+  const quoted = quotedFieldClause(field, value, polarity);
+  return canonical === quoted ? [canonical] : [canonical, quoted];
+};
 
 /**
  * Split a query into whitespace-separated tokens while keeping quoted
@@ -65,7 +93,8 @@ export const toggleQueryClause = (query: string, clause: string): string => {
   return next.join(' ');
 };
 
-const siblingPolarity = (polarity: ClausePolarity): ClausePolarity => (polarity === '+' ? '-' : '+');
+const siblingPolarity = (polarity: ClausePolarity): ClausePolarity =>
+  polarity === '+' ? '-' : '+';
 
 /**
  * The facet-click contract: compute the target clause, drop its `+`/`-`
@@ -76,19 +105,29 @@ export const setClausePolarity = (
   query: string,
   field: string,
   value: string,
-  polarity: ClausePolarity,
+  polarity: ClausePolarity
 ): { query: string; active: boolean } => {
   const target = bleveFieldClause(field, value, polarity);
-  const twin = bleveFieldClause(field, value, siblingPolarity(polarity));
-  const withoutTwin = tokenizeQuery(query).filter((t) => t !== twin).join(' ');
-  const next = toggleQueryClause(withoutTwin, target);
+  const twins = clauseSpellings(field, value, siblingPolarity(polarity));
+  const legacy = clauseSpellings(field, value, polarity).filter((t) => t !== target);
+  const tokens = tokenizeQuery(query).filter((t) => !twins.includes(t));
+  // A legacy spelling of the target counts as "on": clicking turns it off.
+  if (legacy.some((t) => tokens.includes(t))) {
+    const next = tokens.filter((t) => !legacy.includes(t)).join(' ');
+    return { query: next, active: false };
+  }
+  const next = toggleQueryClause(tokens.join(' '), target);
   return { query: next, active: queryHasClause(next, target) };
 };
 
 /** Which polarity, if any, the query currently applies to this field/value. */
-export const clauseStateFor = (query: string, field: string, value: string): ClausePolarity | null => {
+export const clauseStateFor = (
+  query: string,
+  field: string,
+  value: string
+): ClausePolarity | null => {
   const tokens = tokenizeQuery(query);
-  if (tokens.includes(bleveFieldClause(field, value, '+'))) return '+';
-  if (tokens.includes(bleveFieldClause(field, value, '-'))) return '-';
+  if (clauseSpellings(field, value, '+').some((t) => tokens.includes(t))) return '+';
+  if (clauseSpellings(field, value, '-').some((t) => tokens.includes(t))) return '-';
   return null;
 };

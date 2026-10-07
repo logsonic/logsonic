@@ -54,7 +54,9 @@ describe('toggleQueryClause', () => {
   });
   it('leaves an unrelated quoted phrase untouched', () => {
     const q = '"connection timeout" +service:"api"';
-    expect(toggleQueryClause(q, '+level:"ERROR"')).toBe('"connection timeout" +service:"api" +level:"ERROR"');
+    expect(toggleQueryClause(q, '+level:"ERROR"')).toBe(
+      '"connection timeout" +service:"api" +level:"ERROR"'
+    );
     expect(toggleQueryClause(q, '+service:"api"')).toBe('"connection timeout"');
   });
   it('lets a + clause and its - twin coexist when toggled independently', () => {
@@ -71,6 +73,33 @@ describe('setClausePolarity', () => {
     expect(b).toEqual({ query: '-level:"ERROR"', active: true });
     const c = setClausePolarity(b.query, 'level', 'ERROR', '-');
     expect(c).toEqual({ query: '', active: false });
+  });
+  it('writes numeric values unquoted so numeric fields match', () => {
+    expect(bleveFieldClause('status', '404')).toBe('+status:404');
+    expect(bleveFieldClause('http_version', '1.1', '-')).toBe('-http_version:1.1');
+    // Not plain numbers: stay quoted.
+    expect(bleveFieldClause('client_ip', '10.0.0.5')).toBe('+client_ip:"10.0.0.5"');
+    expect(bleveFieldClause('delta', '-5')).toBe('+delta:"-5"');
+    const a = setClausePolarity('', 'status', '404', '+');
+    expect(a).toEqual({ query: '+status:404', active: true });
+    expect(setClausePolarity(a.query, 'status', '404', '-')).toEqual({
+      query: '-status:404',
+      active: true,
+    });
+  });
+  it('treats the legacy quoted numeric spelling as the same clause', () => {
+    expect(clauseStateFor('+status:"404"', 'status', '404')).toBe('+');
+    expect(clauseStateFor('-status:"404"', 'status', '404')).toBe('-');
+    // Clicking an active legacy clause turns it off.
+    expect(setClausePolarity('x +status:"404"', 'status', '404', '+')).toEqual({
+      query: 'x',
+      active: false,
+    });
+    // Switching polarity drops the legacy twin.
+    expect(setClausePolarity('+status:"404"', 'status', '404', '-')).toEqual({
+      query: '-status:404',
+      active: true,
+    });
   });
   it('reports the current polarity', () => {
     expect(clauseStateFor('x +level:"ERROR"', 'level', 'ERROR')).toBe('+');

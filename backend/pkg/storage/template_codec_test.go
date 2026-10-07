@@ -11,6 +11,7 @@ import (
 	"math"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -345,5 +346,62 @@ func BenchmarkTemplateCodecZstdConcurrency(b *testing.B) {
 				decoder.Close()
 			}
 		})
+	}
+}
+
+func BenchmarkTemplateSegmentCommitReplay(b *testing.B) {
+	segment := templateCodecBenchmarkFixture()
+	encoded, err := encodeTemplateSegment(segment)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Run("encode", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			if _, err := encodeTemplateSegment(segment); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("decode", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			if _, err := decodeTemplateSegment(encoded); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+func TestTemplateSegmentSharedZstdIsConcurrencySafe(t *testing.T) {
+	segment := templateCodecBenchmarkFixture()
+	var wg sync.WaitGroup
+	errs := make(chan error, 16)
+	for g := 0; g < 8; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 5; i++ {
+				encoded, err := encodeTemplateSegment(segment)
+				if err != nil {
+					errs <- err
+					return
+				}
+				got, err := decodeTemplateSegment(encoded)
+				if err != nil {
+					errs <- err
+					return
+				}
+				if len(got.Records) != len(segment.Records) {
+					errs <- fmt.Errorf("round trip changed record count: %d != %d", len(got.Records), len(segment.Records))
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
 	}
 }

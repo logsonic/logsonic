@@ -311,6 +311,11 @@ func NewServer(cfg Config) (*Server, error) {
 	// security headers, and CORS from the root router.
 	r.Get("/api/v1/live/events", h.HandleLiveEvents)
 	r.Post("/api/v1/live/stdin", h.HandleLiveStdin)
+	// The UI's ack for a /ui/command must not queue behind the throttle: a
+	// waiting /ui/command holds a throttle slot until the ack arrives, so
+	// enough concurrent commands would otherwise starve their own acks.
+	// HandleUIAck enforces the JSON content type itself.
+	r.Post("/api/v1/ui/ack", h.HandleUIAck)
 	// Per-source delete (spec now-10) is synchronous by contract — it
 	// returns the rows removed — and a multi-million-row source takes longer
 	// than the API timeout; a timeout mid-way would leave a half-deleted
@@ -385,6 +390,7 @@ func NewServer(cfg Config) (*Server, error) {
 			r.Get("/samples", h.HandleListSamples)
 			r.Post("/samples/{name}/import", h.HandleImportSample)
 			r.Post("/ui/focus", h.HandleUIFocus)
+			r.Post("/ui/command", h.HandleUICommand)
 			r.Route("/watches", func(r chi.Router) {
 				r.Get("/", h.HandleListWatches)
 				r.Post("/", h.HandleCreateWatch)
