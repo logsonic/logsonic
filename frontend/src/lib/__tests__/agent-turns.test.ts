@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { AgentStep, AgentTurn } from '@/stores/useAgentStore';
 
 import { splitSSE } from '@/lib/agent-stream';
-import { buildMessages, reduceTurn } from '@/lib/agent-turns';
+import { buildMessages, reduceTurn, stepSummary, toolLabel } from '@/lib/agent-turns';
 import { stepView } from '@/lib/agent-view';
 
 const turn = (over: Partial<AgentTurn> = {}): AgentTurn => ({
@@ -124,5 +124,58 @@ describe('stepView', () => {
     ).toEqual({ query: '', sources: ['a.jsonl', 'b.jsonl'] });
     expect(stepView(step({ status: 'running' }))).toBeNull();
     expect(stepView(step({ tool: 'ui_show_view' }))).toBeNull();
+  });
+
+  it('shows the window a saved view or pattern scan covered', () => {
+    const input = {
+      query: 'psp_code:invalid_amount',
+      source: 'payments.jsonl',
+      start_time: '2026-10-27T11:32:00Z',
+      end_time: '2026-10-27T18:00:00Z',
+    };
+    const expected = {
+      query: 'psp_code:invalid_amount',
+      sources: ['payments.jsonl'],
+      start: '2026-10-27T11:32:00Z',
+      end: '2026-10-27T18:00:00Z',
+    };
+    expect(stepView(step({ tool: 'save_view', input }))).toEqual(expected);
+    expect(stepView(step({ tool: 'log_patterns', input }))).toEqual(expected);
+  });
+});
+
+describe('stepSummary for full-scan tools', () => {
+  it('summarizes pattern scans and saved views', () => {
+    const done = (tool: string, output: unknown): AgentStep => ({
+      id: 'x',
+      tool,
+      input: {},
+      output,
+      status: 'done',
+    });
+    expect(
+      stepSummary(
+        done('log_patterns', { scanned: 188864, distinct_patterns: 51, total_count: 188864 })
+      )
+    ).toBe('51 patterns in 188,864 events');
+    expect(
+      stepSummary(done('save_view', { id: 'w1', name: 'JPY declines', matching_rows: 324 }))
+    ).toBe('Saved “JPY declines” (324 events)');
+  });
+});
+
+describe('external MCP tools', () => {
+  it('labels them by server and tool and summarizes their text', () => {
+    expect(toolLabel('mcp__tickets__search_issues')).toBe('tickets · search_issues');
+    expect(toolLabel('mcp__my-fs__read_file')).toBe('my-fs · read_file');
+    expect(toolLabel('query_logs')).toBe('Search logs');
+    const step: AgentStep = {
+      id: 'x',
+      tool: 'mcp__tickets__search_issues',
+      input: {},
+      output: { server: 'tickets', tool: 'search_issues', text: '\nINC-42: checkout outage\nmore' },
+      status: 'done',
+    };
+    expect(stepSummary(step)).toBe('INC-42: checkout outage');
   });
 });

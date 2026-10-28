@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"logsonic/docs"
+	"logsonic/pkg/agentmcp"
 	lsmcp "logsonic/pkg/mcp"
 	"logsonic/pkg/server/handlers"
 	"logsonic/pkg/types"
@@ -215,6 +216,9 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 	mcpFallbackBaseURL := fmt.Sprintf("http://%s%s", cfg.Host, cfg.Port)
 	srv.mcpBaseURL.Store(mcpFallbackBaseURL)
+	// External MCP servers for the agent come from <storage>/mcp.json (or
+	// LOGSONIC_AGENT_MCP_CONFIG); they start on the first agent request.
+	h.AgentMCP = agentmcp.NewManager(agentmcp.DefaultPath(h.StoragePath))
 	h.AgentUITools = lsmcp.NewUIAdapter(func() string {
 		base, _ := srv.mcpBaseURL.Load().(string)
 		return base
@@ -329,6 +333,7 @@ func NewServer(cfg Config) (*Server, error) {
 	// use their own three-minute deadline instead of the normal API timeout.
 	r.With(agentLoopbackOnly, requireJSONBody, middleware.ThrottleBacklog(2, 4, 5*time.Second)).Post("/api/v1/agent/chat", h.HandleAgentChat)
 	r.With(agentLoopbackOnly).Get("/api/v1/agent/status", h.HandleAgentStatus)
+	r.With(agentLoopbackOnly).Get("/api/v1/agent/mcp", h.HandleAgentMCP)
 
 	// Set up API routes
 	r.Group(func(r chi.Router) {

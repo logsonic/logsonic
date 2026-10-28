@@ -74,7 +74,10 @@ describe('Agent', () => {
           ['done', { answer: 'Found 3 errors.', steps: [] }],
         ])
       )
-      .mockResolvedValueOnce(sse([['done', { answer: 'Two are from auth.', steps: [] }]]));
+      // The dock reloads its status after each turn.
+      .mockResolvedValueOnce(json({ available: true, model: 'local-model' }))
+      .mockResolvedValueOnce(sse([['done', { answer: 'Two are from auth.', steps: [] }]]))
+      .mockResolvedValueOnce(json({ available: true, model: 'local-model' }));
     renderPage();
     await screen.findByText('local-model');
     ask('Find errors');
@@ -86,7 +89,7 @@ describe('Agent', () => {
 
     ask('Which service?');
     await screen.findByText('Two are from auth.');
-    const body = JSON.parse(String(fetchMock.mock.calls[2][1]?.body));
+    const body = JSON.parse(String(fetchMock.mock.calls[3][1]?.body));
     expect(body.stream).toBe(true);
     expect(body.messages).toHaveLength(3);
     expect(body.messages[1].role).toBe('assistant');
@@ -187,7 +190,9 @@ describe('Agent', () => {
           );
         })
     );
+    fetchMock.mockResolvedValueOnce(json({ available: true }));
     fetchMock.mockResolvedValueOnce(sse([['done', { answer: 'Completed on retry.', steps: [] }]]));
+    fetchMock.mockResolvedValueOnce(json({ available: true }));
     renderPage();
     await screen.findByText('Ready');
     ask('Inspect logs');
@@ -195,7 +200,8 @@ describe('Agent', () => {
     await screen.findByText('Stopped.');
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await screen.findByText('Completed on retry.');
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    // Status, stopped request, status, retry, status.
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5));
   });
 
   it('keeps past investigations and reopens them from history', async () => {

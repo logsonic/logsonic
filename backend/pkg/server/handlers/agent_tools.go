@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"logsonic/pkg/agentmcp"
 	"logsonic/pkg/storage"
 	"logsonic/pkg/types"
 )
@@ -59,9 +60,16 @@ func (h *Services) runAgentTool(ctx context.Context, name string, in map[string]
 		return h.agentContext(ctx, in)
 	case "compare_windows":
 		return h.agentCompareWindows(ctx, in)
+	case "log_patterns":
+		return h.agentPatterns(ctx, in)
+	case "save_view":
+		return h.agentSaveView(ctx, in)
 	default:
 		if h.AgentUITools != nil && strings.HasPrefix(name, "ui_") {
 			return h.AgentUITools.Call(ctx, name, in)
+		}
+		if h.AgentMCP != nil && strings.HasPrefix(name, agentmcp.ToolPrefix) {
+			return h.AgentMCP.Call(ctx, name, in)
 		}
 		return nil, fmt.Errorf("unknown tool %q", name)
 	}

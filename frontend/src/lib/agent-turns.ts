@@ -13,6 +13,8 @@ const toolNames: Record<string, string> = {
   log_histogram: 'Chart events over time',
   log_context: 'Read surrounding events',
   compare_windows: 'Compare time windows',
+  log_patterns: 'Scan for rare patterns',
+  save_view: 'Save view',
   ui_get_state: 'Read the current view',
   ui_navigate: 'Change page',
   ui_show_view: 'Update the log view',
@@ -32,7 +34,15 @@ const toolNames: Record<string, string> = {
   ui_run_search: 'Refresh results',
 };
 
+/** Splits mcp__<server>__<tool> into its parts, or null for LogSonic tools. */
+export function externalTool(tool: string): { server: string; name: string } | null {
+  const match = /^mcp__([A-Za-z0-9_-]+?)__(.+)$/.exec(tool);
+  return match ? { server: match[1], name: match[2] } : null;
+}
+
 export function toolLabel(tool: string): string {
+  const external = externalTool(tool);
+  if (external) return `${external.server} · ${external.name}`;
   return toolNames[tool] || tool.replace(/_/g, ' ').replace(/^./, (first) => first.toUpperCase());
 }
 
@@ -76,6 +86,19 @@ export function stepSummary(step: AgentStep): string {
     if (Array.isArray(value.fields)) return `${plural(value.fields.length, 'field')} broken down`;
     if (step.tool === 'log_context' && Array.isArray(value.logs)) {
       return plural(value.logs.length, 'nearby event');
+    }
+    if (externalTool(step.tool) && typeof value.text === 'string') {
+      const first = value.text.split('\n').find((line) => line.trim()) || 'Done';
+      return first.length > 120 ? `${first.slice(0, 119)}…` : first;
+    }
+    if (step.tool === 'log_patterns' && typeof value.scanned === 'number') {
+      const patterns = typeof value.distinct_patterns === 'number' ? value.distinct_patterns : 0;
+      return `${plural(patterns, 'pattern')} in ${plural(value.scanned, 'event')}`;
+    }
+    if (step.tool === 'save_view' && typeof value.name === 'string') {
+      const rows =
+        typeof value.matching_rows === 'number' ? ` (${plural(value.matching_rows, 'event')})` : '';
+      return `Saved “${value.name}”${rows}`;
     }
     const baseline = value.baseline as Record<string, unknown> | undefined;
     const incident = value.incident as Record<string, unknown> | undefined;

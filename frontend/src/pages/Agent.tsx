@@ -347,7 +347,10 @@ export default function Agent({
   const turns = session?.turns ?? [];
   const pending = turns.some((turn) => turn.pending);
 
+  // Load the status on open and again after each turn: the first turn is
+  // what connects external MCP servers, so their tool count appears then.
   useEffect(() => {
+    if (pending) return;
     const controller = new AbortController();
     fetchAgentStatus(controller.signal)
       .then(setStatus)
@@ -357,7 +360,7 @@ export default function Agent({
         }
       });
     return () => controller.abort();
-  }, []);
+  }, [pending]);
 
   // Abort only when the panel unmounts, not on every re-render.
   useEffect(() => () => request.current?.abort(), []);
@@ -474,6 +477,11 @@ export default function Agent({
       : unavailable
         ? 'Unavailable'
         : status.model || 'Ready';
+  const mcp = status?.mcp;
+  const mcpText = mcp && mcp.tools > 0 ? ` · ${plural(mcp.tools, 'external tool')}` : '';
+  const statusTitle = mcp
+    ? `External MCP servers: ${mcp.connected} of ${mcp.servers} connected, from ${mcp.config}`
+    : undefined;
 
   return (
     <section className="ls-agent" aria-label="Agent">
@@ -483,8 +491,10 @@ export default function Agent({
           <span
             className={`ls-agent-status${unavailable || statusError ? ' is-down' : status ? ' is-up' : ''}`}
             role="status"
+            title={statusTitle}
           >
             {statusText}
+            {mcpText}
           </span>
         </div>
         <div className="ls-agent-head-actions">

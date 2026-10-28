@@ -26,6 +26,8 @@ type Services struct {
 	StoragePath  string
 	Build        BuildInfo
 	AgentUITools AgentUIToolProvider
+	// AgentMCP serves tools from external MCP servers (nil: none).
+	AgentMCP AgentMCPProvider
 
 	// PatternTimestamps persists per-pattern Resolution alongside the
 	// log2grok library. Saved patterns thus restore their last-used
@@ -133,7 +135,13 @@ func (s *Services) CloseStorage() error {
 	type closer interface {
 		Close() error
 	}
-	// Watches first: they own followers and a state file, and their
+	// External MCP servers first: stdio servers are child processes.
+	if c, ok := s.AgentMCP.(closer); ok {
+		if err := c.Close(); err != nil {
+			log.Printf("agent mcp: close: %v", err)
+		}
+	}
+	// Watches next: they own followers and a state file, and their
 	// Finished callbacks must land before the catalog's final flush.
 	if s.Watches != nil {
 		if err := s.Watches.Close(); err != nil {

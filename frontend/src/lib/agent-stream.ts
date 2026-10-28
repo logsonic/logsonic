@@ -24,7 +24,16 @@ export type AgentStreamEvent =
 
 export type AgentMessage = { role: 'user' | 'assistant'; content: string };
 
-export type AgentStatus = { available: boolean; model?: string; reason?: string; error?: string };
+/** External MCP servers the agent can use; counts are 0 until the first chat connects them. */
+export type AgentMCPSummary = { config: string; servers: number; connected: number; tools: number };
+
+export type AgentStatus = {
+  available: boolean;
+  model?: string;
+  reason?: string;
+  error?: string;
+  mcp?: AgentMCPSummary;
+};
 
 const asObject = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' ? (value as Record<string, unknown>) : {};

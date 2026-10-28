@@ -29,6 +29,8 @@ const SEARCH_TOOLS = new Set([
   'log_histogram',
   'log_context',
   'compare_windows',
+  'log_patterns',
+  'save_view',
 ]);
 
 /** Imported source names from an ingest step's output. */
