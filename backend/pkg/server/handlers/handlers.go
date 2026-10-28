@@ -23,8 +23,9 @@ type Services struct {
 	storage storage.StorageInterface
 	Live    *TailManager
 
-	StoragePath string
-	Build       BuildInfo
+	StoragePath  string
+	Build        BuildInfo
+	AgentUITools AgentUIToolProvider
 
 	// PatternTimestamps persists per-pattern Resolution alongside the
 	// log2grok library. Saved patterns thus restore their last-used

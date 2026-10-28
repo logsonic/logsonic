@@ -66,6 +66,8 @@ var restRouteTools = map[string]string{
 }
 
 var restRouteExempt = map[string]string{
+	"POST /api/v1/agent/chat":                          "the embedded agent loop; MCP clients already have direct LogSonic tools",
+	"GET /api/v1/agent/status":                        "local embedded agent proxy status, not an MCP operation",
 	"GET /api/v1/swagger/*":                               "API docs for humans",
 	"GET /api/v1/live/events":                             "SSE stream the browser UI subscribes to; agents read state via ui_get_state",
 	"POST /api/v1/live/stdin":                             "streaming request body for `cmd | logsonic tail`; agents send lines with ingest_lines",

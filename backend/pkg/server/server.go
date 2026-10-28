@@ -215,6 +215,10 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 	mcpFallbackBaseURL := fmt.Sprintf("http://%s%s", cfg.Host, cfg.Port)
 	srv.mcpBaseURL.Store(mcpFallbackBaseURL)
+	h.AgentUITools = lsmcp.NewUIAdapter(func() string {
+		base, _ := srv.mcpBaseURL.Load().(string)
+		return base
+	})
 
 	// Serve static files from embedded filesystem
 	embeddedFS := static.GetFileSystem()
@@ -321,6 +325,10 @@ func NewServer(cfg Config) (*Server, error) {
 	// than the API timeout; a timeout mid-way would leave a half-deleted
 	// source. No body, so the JSON-body rule the group enforces is moot.
 	r.Delete("/api/v1/sources/{name}", h.HandleDeleteSource)
+	// Agent calls can include a bounded import and several model turns, so they
+	// use their own three-minute deadline instead of the normal API timeout.
+	r.With(agentLoopbackOnly, requireJSONBody, middleware.ThrottleBacklog(2, 4, 5*time.Second)).Post("/api/v1/agent/chat", h.HandleAgentChat)
+	r.With(agentLoopbackOnly).Get("/api/v1/agent/status", h.HandleAgentStatus)
 
 	// Set up API routes
 	r.Group(func(r chi.Router) {

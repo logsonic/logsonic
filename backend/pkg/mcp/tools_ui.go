@@ -17,11 +17,11 @@ const uiCommandTimeoutMS = 10000
 
 // uiCommand sends one command to the connected web UI via POST /ui/command
 // and returns the UI's response (status, warnings, state after the command).
-func (c *client) uiCommand(cmdType string, args map[string]any) (json.RawMessage, error) {
+func (c *client) uiCommand(ctx context.Context, cmdType string, args map[string]any) (json.RawMessage, error) {
 	if args == nil {
 		args = map[string]any{}
 	}
-	return c.post("/ui/command", map[string]any{
+	return c.postContext(ctx, "/ui/command", map[string]any{
 		"type":       cmdType,
 		"args":       args,
 		"timeout_ms": uiCommandTimeoutMS,
@@ -31,7 +31,7 @@ func (c *client) uiCommand(cmdType string, args map[string]any) (json.RawMessage
 // uiTool registers a tool that sends one UI command; shape builds the
 // command's args from the call (nil sends none).
 func uiTool(s *server.MCPServer, c *client, tool mcp.Tool, cmdType string, shape func(mcp.CallToolRequest) (map[string]any, error)) {
-	s.AddTool(tool, func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args := map[string]any{}
 		if shape != nil {
 			var err error
@@ -39,7 +39,7 @@ func uiTool(s *server.MCPServer, c *client, tool mcp.Tool, cmdType string, shape
 				return resultErr(err), nil
 			}
 		}
-		data, err := c.uiCommand(cmdType, args)
+		data, err := c.uiCommand(ctx, cmdType, args)
 		if err != nil {
 			return resultErr(err), nil
 		}
@@ -82,8 +82,8 @@ func registerUITools(s *server.MCPServer, c *client) {
 	// ----------------------------------------------------------- ui_navigate
 	uiTool(s, c, mcp.NewTool("ui_navigate",
 		mcp.WithDescription("Switch the UI to a page."),
-		mcp.WithString("route", mcp.Required(), mcp.Enum("/", "/import", "/settings/patterns", "/settings/storage", "/settings/watches", "/settings/mcp", "/settings/about"),
-			mcp.Description("/ is the log viewer")),
+		mcp.WithString("route", mcp.Required(), mcp.Enum("/", "/agent", "/import", "/settings/patterns", "/settings/storage", "/settings/watches", "/settings/mcp", "/settings/about"),
+			mcp.Description("/ is the log viewer; /agent shows logs and chat")),
 	), "navigate", func(req mcp.CallToolRequest) (map[string]any, error) {
 		route, err := requiredString(req, "route")
 		return map[string]any{"route": route}, err
@@ -105,7 +105,7 @@ func registerUITools(s *server.MCPServer, c *client) {
 		mcp.WithArray("columns", mcp.WithStringItems(), mcp.Description("Columns to show, in order (timestamp is always first)")),
 		mcp.WithString("sort_by", mcp.Description("Sort field")),
 		mcp.WithString("sort_order", mcp.Enum("asc", "desc"), mcp.Description("Sort order")),
-	), func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		steps, err := showViewSteps(req)
 		if err != nil {
 			return resultErr(err), nil
@@ -113,7 +113,7 @@ func registerUITools(s *server.MCPServer, c *client) {
 		var last json.RawMessage
 		var warnings []string
 		for _, step := range steps {
-			data, err := c.uiCommand(step.cmd, step.args)
+			data, err := c.uiCommand(ctx, step.cmd, step.args)
 			if err != nil {
 				return resultErr(fmt.Errorf("%s: %w", step.cmd, err)), nil
 			}
@@ -177,7 +177,7 @@ func registerUITools(s *server.MCPServer, c *client) {
 			"Unknown names come back as warnings; state.columns.available lists the valid ones."),
 		mcp.WithArray("columns", mcp.Required(), mcp.WithStringItems(), mcp.Description("Column names")),
 		mcp.WithString("mode", mcp.Enum("set", "show", "hide"), mcp.Description("Default set")),
-	), func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		columns, err := stringList(req, "columns")
 		if err != nil {
 			return resultErr(err), nil
@@ -186,7 +186,7 @@ func registerUITools(s *server.MCPServer, c *client) {
 		if cmd == "" {
 			return resultErr(fmt.Errorf("mode must be set, show or hide")), nil
 		}
-		data, err := c.uiCommand(cmd, map[string]any{"columns": columns})
+		data, err := c.uiCommand(ctx, cmd, map[string]any{"columns": columns})
 		if err != nil {
 			return resultErr(err), nil
 		}

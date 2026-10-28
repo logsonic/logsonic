@@ -143,6 +143,20 @@ func TestUIToolSurfacesNoUI(t *testing.T) {
 	}
 }
 
+func TestUINavigateSchemaIncludesAgent(t *testing.T) {
+	tool := build("http://localhost:8080").GetTool("ui_navigate")
+	if tool == nil {
+		t.Fatal("ui_navigate missing")
+	}
+	schema, err := json.Marshal(tool.Tool.InputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(schema), `"/agent"`) {
+		t.Fatalf("/agent route missing from schema: %s", schema)
+	}
+}
+
 func TestShowViewBatchesThenRunsOnce(t *testing.T) {
 	srv, calls := fakeLogSonic(t, func(_ *http.Request, body map[string]any) (int, any) {
 		resp := map[string]any{"status": "applied", "type": body["type"]}
