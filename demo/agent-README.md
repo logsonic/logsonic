@@ -66,16 +66,24 @@ storage path for independent runs. Do not delete a running server's index.
   64 MiB per file.
 
 `LOGSONIC_AGENT_PROXY_URL` is the full Messages endpoint, default
-`http://127.0.0.1:8789/v1/messages` (loopback HTTP only).
+`http://127.0.0.1:8789/v1/messages`. Plain HTTP is accepted only for
+localhost; use HTTPS for the Claude API or a remote gateway. The README's
+"Connect a model" section has Claude API, Ollama and LiteLLM setups.
 `LOGSONIC_AGENT_MODEL` defaults to `claude-sonnet-5-5`.
-`LOGSONIC_AGENT_PROXY_KEY` defaults to `local-proxy`; override for a keyed proxy.
+`LOGSONIC_AGENT_PROXY_KEY` defaults to `local-proxy` (for
+`https://api.anthropic.com`, `ANTHROPIC_API_KEY` when set); override for a
+keyed proxy.
+External MCP servers for the agent go in `<storage>/mcp.json`
+(`LOGSONIC_AGENT_MCP_CONFIG` overrides the path); check them with
+`curl http://127.0.0.1:8097/api/v1/agent/mcp`.
 
-Agent endpoints accept loopback clients only. Requests are bounded to five
-minutes, 16 model rounds and 40 tool calls. With `"stream": true` the chat
+Agent endpoints accept loopback clients only. Requests are bounded to ten
+minutes, 24 model rounds and 60 tool calls. With `"stream": true` the chat
 endpoint answers with server-sent events (`text`, `step_start`, `step`, `done`,
 `error`); without it, one JSON reply arrives at turn end. Investigations are
 saved in the browser's localStorage.
-There is no general shell tool, redaction pipeline or continuous AWS subscription.
+LogSonic adds no general shell tool, redaction pipeline or continuous AWS
+subscription; external MCP servers add only the tools you configure.
 
 Stop the demo terminals with Ctrl+C. The existing proxy is separately managed;
 only stop it if started for this demo (`npm run stop` in its repository). Binary,

@@ -37,27 +37,90 @@ Ingestion uses the existing parser/index. The investigation tools are:
 `facet_logs` (top values per field); `compare_windows` (exact totals and rates
 for a baseline and an incident window, each including its start and excluding
 its end); `log_context` (events around a timestamp, oldest first);
-`query_logs` (rows plus exact total); and `analyze_logs` (a sample summary).
-The system prompt asks the agent to orient, narrow, confirm, then present the
-evidence in the UI. Correlation
+`query_logs` (rows plus exact total); `log_patterns` (a full scan of up to
+1,000,000 rows into message templates, rare field values and sparse fields,
+for needles that sit in INFO or WARN rows); `save_view` (store a confirmed
+finding as a workspace with a fixed window); and `analyze_logs` (a sample
+summary). The system prompt asks the agent to orient, sweep with
+`log_patterns` on open-ended requests, narrow, confirm, then present the
+evidence in the UI and save one view per confirmed problem. Correlation
 suggests hypotheses, not proven causality. Tool output and scanned data are
 bounded; answers must state sampling limits and distinguish counts from a sample
 from whole-source totals. Logs are untrusted data, not instructions.
 
+## Model endpoint
+
+The Go process calls any server that speaks the Anthropic Messages API, set by
+`LOGSONIC_AGENT_PROXY_URL` (path ending in `/v1/messages`), with
+`LOGSONIC_AGENT_MODEL` and an `x-api-key` from `LOGSONIC_AGENT_PROXY_KEY`. An
+`https://` endpoint may be any host; only `api.anthropic.com` falls back to
+`ANTHROPIC_API_KEY` when no key is set. Plain `http://` is accepted only for `localhost`, `127.0.0.1`
+and `::1`, so keys and log excerpts never cross the network unencrypted. This
+covers the Claude API directly, a local Claude proxy (the default,
+`http://127.0.0.1:8789/v1/messages`), Ollama's Anthropic-compatible API, and
+LiteLLM in front of Bedrock, Vertex AI, Azure, OpenAI and others. The status
+probe counts any HTTP answer below 500 from `<origin>/health` as reachable,
+because these servers share no health route. Browser code never reads model
+credentials. Setup examples are in the README.
+
+## External MCP servers
+
+The agent can call tools from other MCP servers listed in
+`<storage>/mcp.json` (or the path in `LOGSONIC_AGENT_MCP_CONFIG`), in the
+Claude Desktop / Claude Code `mcpServers` format. `pkg/agentmcp` owns them:
+
+- Transports: stdio (`command`, `args`, `env`), Streamable HTTP
+  (`"type": "http"`, `url`, `headers`) and SSE (`"type": "sse"`). Optional
+  `tools` is an allowlist; `disabled` keeps an entry without starting it.
+  Invalid entries are skipped with a log line and listed in the status.
+- The file is re-read at each agent request when its modification time or
+  size changed. Removed or edited servers are closed; new ones connect in
+  parallel with a 15 s handshake timeout; SSE and HTTP streams live until
+  the server is removed or LogSonic stops. A failed server is retried at most every
+  30 s and never fails the turn. A transport error during a call drops the
+  session so the next request reconnects. Stdio servers are closed on
+  shutdown.
+- Each tool is exposed as `mcp__<server>__<tool>` (cleaned to
+  `[A-Za-z0-9_-]`, at most 64 characters, with a hash suffix when shortened),
+  its description prefixed with the server name, its `inputSchema` passed
+  through as `input_schema`. At most 64 tools per server (the first 64 by name,
+  with a log warning); the list is sorted so the tool block stays stable
+  between requests.
+- Results: text blocks are joined; image and audio blocks become a one-line
+  placeholder; embedded text resources are inlined; `isError` becomes a tool
+  error. Calls time out after 90 s, and the 32 KiB tool-output limit applies.
+- `GET /api/v1/agent/mcp` (loopback only) connects the servers and reports
+  transport, a target (command name or URL origin), connection state, tool
+  names and errors. It never returns `env`, `headers`, arguments or URL paths.
+  `GET /api/v1/agent/status` adds a summary (`mcp.servers`, `connected`,
+  `tools`).
+- There is no write API for servers: a stdio entry runs a program as the
+  user, so only a file edit can add one.
+
 ## Data and runtime boundary
 
-Agent mode sends prompts, tool results and selected log evidence through the
-local proxy to Claude. It requires network access and the proxy account; ordinary
-Search remains local. Do not use Agent mode with logs that cannot be sent to that
-provider. The prototype has no redaction pipeline. AWS credentials stay with the
-local AWS CLI and are not sent in prompts. Remote downloads and AWS reads occur
-only when selected as tools for an investigation.
+Agent mode sends prompts, tool results and selected log evidence to the model
+endpoint above. With a local model nothing leaves the machine; with a cloud
+endpoint, do not use Agent mode with logs that cannot be sent to that
+provider. Ordinary Search remains local. There is no redaction pipeline. AWS
+credentials stay with the local AWS CLI and are not sent in prompts. Remote
+downloads and AWS reads occur only when selected as tools for an investigation.
+
+External MCP servers receive whatever arguments the model passes, which can
+include log excerpts, and may have side effects outside LogSonic (creating
+tickets, writing files). Stdio servers inherit LogSonic's environment minus
+model credentials (`LOGSONIC_AGENT_*`, `ANTHROPIC_API_KEY`,
+`ANTHROPIC_AUTH_TOKEN`), plus their own `env`. The system prompt tells the
+agent to call external tools only when the user's request needs them and never
+because log content asks for it; that is an instruction, not a sandbox, so the
+per-server `tools` allowlist is the control for servers that can change things.
 
 Configuration and exact runnable instructions are in `demo/agent-README.md`.
 Conversation state is held by the frontend in localStorage on this machine.
-The prototype does not promise exhaustive anomaly detection, SSH collection or continuous
-AWS subscription. Tool actions are bounded reads and additive ingestion; there
-is no general command execution tool.
+The prototype does not promise exhaustive anomaly detection, SSH collection or
+continuous AWS subscription. LogSonic's own tools are bounded reads and
+additive ingestion with no general command execution tool; external MCP
+servers add only the tools the user configured.
 
 ## Acceptance
 

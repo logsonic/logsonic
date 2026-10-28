@@ -101,3 +101,155 @@ Bugs found and fixed while checking:
 Checks: frontend 36 files / 402 tests, TypeScript and production build pass;
 `go vet` and `go test ./pkg/server/... ./pkg/mcp/...` pass. Light, dark and
 390px layouts reviewed (no horizontal overflow at 390px).
+
+## Hidden-incident detection eval — 2026-10-28 (evening)
+
+Goal: check that the agent can find small problems hidden in a realistic
+volume of logs, pin each one down and save a view of it. Harness and data are
+in `demo/agent-eval/` (see its README).
+
+Data: one synthetic day, 188,864 JSON lines from five services. Three problems
+are hidden mostly in INFO/WARN rows: password guessing and a takeover of
+`svc-backup` from 185.220.101.47 followed by `pg_dump` and admin exports; JPY
+charges declined with `psp_code=invalid_amount` after a config reload at
+11:32; a Safari-only `PaymentForm` TypeError in web release 5.8.0. Decoys
+include SSH scanners, Redis timeout ERRORs and a reindex ERROR burst. The
+answer key stays outside the import directory.
+
+Results with the real proxy (claude-sonnet-5-5), driven through the dock:
+
+| Run | Intrusion | Payment | UI bug | Views | Time, tool calls |
+|---|---|---|---|---|---|
+| Before this change, blind | missed | missed | missed | 0 | 70 s, 39 calls, then "agent turn limit reached" |
+| After (first build), blind | pinpointed | pinpointed | pinpointed | 3 + 1 for the reindex burst | 56 s, 28 calls |
+| After (first build), hinted | pinpointed | pinpointed | pinpointed | 3 | 39 s, 27 calls |
+| After (final build), blind | pinpointed | pinpointed | pinpointed | 3 + 1 for the reindex burst | 62 s, 34 calls |
+| After (final build), hinted | pinpointed | pinpointed | pinpointed | 3 | 29 s, 19 calls |
+
+The final build adds the span-based slicing and the slice-edge fix described
+below; the first build scanned the same rows in one slice.
+
+"Pinpointed" means the answer names the required identifiers (for example
+`svc-backup` and `185.220.101.47`; `JPY` and `invalid_amount`; `Safari` and
+`5.8.0`), gives a time inside the problem window, and a tool result contains
+the identifier. Both blind answers also found the three admin exports; both
+hinted answers reported the `pg_dump` but not the exports. Counts in every
+answer match the ground truth (42 failed logins, 324 JPY declines, 386 TypeErrors). Every
+saved view was opened in the UI through `open_workspace` and screenshotted.
+
+What the "before" run showed, and what changed:
+
+- **JSON lines were mis-parsed.** When key sets vary between lines (session
+  lines without `src_ip`), auto-detection chose an inferred text pattern over
+  the JSON skeleton. `auth.jsonl` and most of `web-client.jsonl` were stored as
+  `text_1…text_14`, and `message` held a fragment of the object. The baseline
+  agent spent its rounds working around those fields. Auto import now decodes
+  any JSON-object line that the discovered pattern did not parse as JSON, with
+  the producer's own key names (`json_lines.go`).
+- **No tool covered the tail.** `facet_logs` shows top values over at most
+  20,000 rows and `analyze_logs` samples 200, so a 42-row brute force or a
+  3-row export never surfaced. New `log_patterns` scans every row (default
+  300,000, up to 1,000,000) into masked message templates, rare categorical
+  values and sparse fields, sorted rare-first, by count or by onset.
+- **Findings could not be kept.** New `save_view` stores a finding as a
+  workspace with a fixed window and reports how many rows it matches.
+- **Scans were slow.** Every search-after batch re-reads the sort keys of
+  all rows after the cursor. Storage `ScanRows` (now shared with facets)
+  uses batches of 10,001 rows instead of 1,000 (189k rows: 24 s to 5.4 s)
+  and walks time slices of about 5,000 rows across the span the matching
+  rows actually cover, newest first (5.4 s to 3.5 s). Slicing at first
+  dropped 66 rows near slice edges, because stored timestamps keep whole
+  seconds while the index keeps milliseconds; rows are no longer re-checked
+  against the stored value when the query already applied the range, and a
+  test with mid-second slice edges covers it.
+- Limits rose to 24 rounds, 60 tool calls and 10 minutes, and the system
+  prompt adds a sweep step for open-ended requests.
+
+Checks: `go vet ./...` and `go test ./...` pass (new tests for slicing, the
+JSON-line fallback, which fails without the fix, `log_patterns` and
+`save_view`); frontend 404 tests and `tsc --noEmit` pass.
+
+Limits: one seed of synthetic data with deliberately planted hints; this shows
+the tools and method work, not real-world accuracy. Each run is a single
+sample of a non-deterministic model. Scoring is substring-based. Search
+highlighting splits hyphenated terms (`svc` in `svc-backup`), a cosmetic issue
+seen in the view screenshots. The JSON-line fallback keeps the producer's key
+names, while lines that fit log2grok's JSON skeleton get its canonical names
+(`src_ip` becomes `client_ip`, `msg` becomes `message`), so a file with a few
+outlier lines can carry both spellings of a field.
+
+## External MCP servers and model endpoints — 2026-10-28 (night)
+
+The agent now calls tools from MCP servers listed in `<storage>/mcp.json`
+(`pkg/agentmcp`), and the model endpoint may be any HTTPS host (plain HTTP
+stays localhost-only).
+
+Live check against the eval index (claude-sonnet-5-5 through the local proxy),
+with `mcp.json` listing the official filesystem server
+(`npx -y @modelcontextprotocol/server-filesystem`, restricted by `tools` to
+`read_text_file`, `list_directory` and `search_files`) on a folder of on-call
+notes, plus a server whose command does not exist:
+
+- `GET /api/v1/agent/mcp` connected the filesystem server with exactly the
+  three allowed tools (`mcp__notes__…`) and reported the broken server's
+  `fork/exec … no such file or directory` without affecting the other.
+  `/agent/status` showed `{"servers":2,"connected":1,"tools":3}`.
+- Asked which open ticket matches the JPY declines, the agent called
+  `mcp__notes__list_directory` and `mcp__notes__read_text_file`, then
+  `facet_logs`, `query_logs` and `log_histogram`, and answered INC-2207 with
+  324 `invalid_amount` declines from 11:35:01Z. 18 s, 9 tool calls, no tool
+  errors. It also said the logs do not mention fx_table or the build, which is
+  wrong (the config-reload row does); it never queried that row.
+- Stopping the server with SIGINT ended the `mcp-server-filesystem` child.
+
+Tests: `pkg/agentmcp` uses in-process MCP servers (no child processes) for
+namespacing and the 64-character name rule, allowlists, `isError` mapping,
+image placeholders, isolation of a failing server, reload after a file edit,
+secrets absent from the status, the child environment without
+`LOGSONIC_AGENT_*` or `ANTHROPIC_*` credentials, and SSE and Streamable HTTP
+sessions that keep working after the handshake context ends (that test failed
+before the fix: the SSE event stream was bound to the 15 s connect timeout). A server test routes a model's `mcp__…` call through the
+chat endpoint; handler tests cover the endpoint URL rules and the
+`ANTHROPIC_API_KEY` fallback, which only `api.anthropic.com` receives. Frontend tests cover the `server · tool` label,
+the step summary and the status refresh after each turn.
+
+Not run here: the Claude API over HTTPS (no API key on this host), Ollama and
+LiteLLM (not installed). Their README instructions follow the vendors'
+documentation; the request LogSonic sends is the same one the local proxy
+accepts.
+
+## False-positive control on clean data — 2026-10-28 (night)
+
+Same harness and model (claude-sonnet-5-5 through the local proxy) on
+`generate_incidents.py --clean`: 187,807 rows with every decoy but none of the
+three problems. Two benign change events were left in as bait: the 11:32
+payments config reload (`fx_table=v2 minor_units=static`) and the web 5.8.0
+rollout. After each answer the harness asked, with tools disallowed, for the
+confirmed problems as `PROBLEM: <severity> | <title>`; medium or higher counts
+as a false positive.
+
+| Run | False positives (medium+) | Low/info | Views saved | Time, tool calls |
+|---|---|---|---|---|
+| Blind | none | low: reindex lock contention, self-resolved | 1 (reindex burst, 181 rows) | 68 s, 32 calls |
+| Hinted | none | low: reindex burst; info: SSH spraying, routine declines, 502s and Redis retries, browser console noise | 0 | 49 s, 25 calls |
+
+- Blind: reported one confirmed problem, the reindex burst, labelled minor and
+  already resolved. It flagged the config reload as "worth a look, not
+  confirmed", checked JPY amounts and the decline rate before and after (3.2%
+  and 3.1%), and did not save a view for it.
+- Hinted: answered "nothing found" for intrusion, payments and UI. It checked
+  that every successful login is a public key from an internal address, that
+  the decline rate did not change at the reload, and that the checkout funnel
+  is intact across browsers and versions (2,325 page views, clicks and
+  submissions).
+- Counts checked against the raw files: 870 failed logins from 870 IPs, 540
+  public-key logins, 784 declines by code, 124 Redis retries, 1,554
+  ResizeObserver and 1,338 gtm.js warnings, 308/363/1,268 gateway
+  502/499/404s, all exact. One slip: "784 of 25,418 charges" divides by
+  every row in `payments.jsonl`; there are 24,990 charges (still about 3%).
+- The blind run saved a view for a self-resolved, low-severity event. That is
+  not a false alarm, but a stricter prompt could reserve views for problems
+  that need action.
+
+Limits: one sample per prompt, one seed. A single clean pass shows the agent
+did not invent incidents here; it does not bound the false-positive rate.

@@ -26,6 +26,12 @@ LogSonic can be configured with command-line flags or environment variables.
 - `LOGSONIC_AUTO_PORT`: auto-select a free port if busy (`1`, `true`, `yes`, `on`)
 - `RETENTION_DAYS`: delete indexed logs older than N days
 - `LOGSONIC_ALLOWED_HOSTS`: same as `-allowed-hosts`
+- `LOGSONIC_AGENT_PROXY_URL`: the agent's model endpoint, a URL whose path ends in `/v1/messages` (Anthropic Messages API). `http://` only for localhost; any host over `https://`. Default `http://127.0.0.1:8789/v1/messages`
+- `LOGSONIC_AGENT_MODEL`: model name sent to that endpoint (default `claude-sonnet-5-5`)
+- `LOGSONIC_AGENT_PROXY_KEY`: sent as `x-api-key`; for `https://api.anthropic.com` with no key set, `ANTHROPIC_API_KEY` is used (default `local-proxy`)
+- `LOGSONIC_AGENT_MCP_CONFIG`: path of the agent's external MCP server list (default `<storage>/mcp.json`)
+
+See [Agent mode in the README](../README.md#agent-mode) for local and cloud model setups and the `mcp.json` format.
 
 The **Logsonic.app** bundle shows the UI in an in-app window by default. Pass `--browser` (or `LOGSONIC_BROWSER=1`) to open the system browser instead. The CLI also auto-selects the first free port starting at `8080`, and does not open a browser unless you pass `-open` or `-browser`.
 
