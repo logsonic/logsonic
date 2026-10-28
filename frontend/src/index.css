@@ -5,25 +5,25 @@
 /* ---------- LogSonic redesign tokens ---------- */
 :root {
   --ls-bg: #ffffff;
-  --ls-bg-1: #fafaf9;
-  --ls-bg-2: #f5f5f4;
-  --ls-bg-3: #ececeb;
+  --ls-bg-1: #f8f9fc;
+  --ls-bg-2: #f0f2f6;
+  --ls-bg-3: #e8ebf1;
   --ls-panel: #ffffff;
-  --ls-border: #e8e8e6;
-  --ls-border-strong: #d8d8d5;
-  --ls-border-subtle: #f0f0ee;
+  --ls-border: #e5e8ef;
+  --ls-border-strong: #d1d6e0;
+  --ls-border-subtle: #f0f2f7;
 
-  --ls-text: #18181b;
-  --ls-text-2: #52525b;
-  --ls-text-3: #8a8a92;
-  --ls-text-4: #b4b4bb;
+  --ls-text: #202531;
+  --ls-text-2: #596171;
+  --ls-text-3: #727c8d;
+  --ls-text-4: #959ead;
 
-  --ls-accent: #6b4df2;
-  --ls-accent-hover: #5a3be0;
-  --ls-accent-soft: #eee9ff;
-  --ls-accent-softer: #f6f3ff;
-  --ls-accent-border: #d8cdff;
-  --ls-accent-text: #4c2fb8;
+  --ls-accent: #6956d9;
+  --ls-accent-hover: #5944c6;
+  --ls-accent-soft: #eeebfc;
+  --ls-accent-softer: #f5f3fe;
+  --ls-accent-border: #dcd5f8;
+  --ls-accent-text: #5a43bd;
 
   --ls-ok: #15803d;
   --ls-ok-soft: #dcfce7;
@@ -58,19 +58,19 @@
 }
 
 [data-theme="dark"] {
-  --ls-bg: #0a0a0b;
-  --ls-bg-1: #101012;
-  --ls-bg-2: #16161a;
-  --ls-bg-3: #1f1f24;
-  --ls-panel: #121215;
-  --ls-border: #26262c;
-  --ls-border-strong: #34343c;
-  --ls-border-subtle: #1b1b20;
+  --ls-bg: #111318;
+  --ls-bg-1: #15181e;
+  --ls-bg-2: #1c2028;
+  --ls-bg-3: #252a34;
+  --ls-panel: #191c23;
+  --ls-border: #2d323e;
+  --ls-border-strong: #3b4250;
+  --ls-border-subtle: #222630;
 
   --ls-text: #f4f4f5;
   --ls-text-2: #a1a1aa;
-  --ls-text-3: #71717a;
-  --ls-text-4: #52525b;
+  --ls-text-3: #9098a8;
+  --ls-text-4: #596171;
 
   --ls-accent: #9b82ff;
   --ls-accent-hover: #ad96ff;

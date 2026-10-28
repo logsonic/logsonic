@@ -48,7 +48,10 @@ const App = () => {
         <AgentBridge />
         <Suspense fallback={<LoadingScreen />}>
           <Routes>
-            <Route path="/" element={<Home />} />
+            <Route path="/" element={<Home />}>
+              <Route index element={null} />
+              <Route path="agent" element={null} />
+            </Route>
             <Route path="/import" element={<Import />} />
             <Route path="/settings" element={<Navigate to="/settings/patterns" replace />} />
             <Route path="/settings/patterns" element={<CustomPatterns />} />

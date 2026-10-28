@@ -1,3 +1,14 @@
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+
 import { Header } from '@/components/Home/Header';
 import { LogSearch } from '@/components/Home/LogSearch';
 import { LogViewer } from '@/components/Home/LogViewer/LogViewer';
@@ -7,11 +18,15 @@ import { LeftRail } from '@/components/Shell/LeftRail';
 import { StatusBar } from '@/components/Shell/StatusBar';
 import { useCollapsiblePanel } from '@/hooks/useCollapsiblePanel';
 import { isNativeShell } from '@/lib/native';
+import Agent from '@/pages/Agent';
+import { AGENT_PANEL_MIN, useAgentStore } from '@/stores/useAgentStore';
 import { useFacetStore } from '@/stores/useFacetStore';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import useSearchQueryParamsStore from '@/stores/useSearchQueryParams';
 import { useSidebarStore } from '@/stores/useSidebarStore';
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
+
+import './Home.css';
 
 const SIDEBAR_WIDTH_STORAGE_KEY = 'logsonic-sidebar-width';
 const RAIL_W = 56;
@@ -43,7 +58,7 @@ const ChartLoadingShell = () => (
     }}
   >
     <div
-      className="flex items-center px-3 font-semibold uppercase tracking-wider"
+      className="flex items-center px-3 font-medium"
       style={{ height: 28, fontSize: 11, color: 'var(--ls-text-2)' }}
     >
       Event distribution
@@ -52,7 +67,7 @@ const ChartLoadingShell = () => (
 );
 
 const DeferredLogDistributionChart = () => {
-  const hasFirstPage = useLogResultStore(state => state.logData !== null);
+  const hasFirstPage = useLogResultStore((state) => state.logData !== null);
   const [loadChart, setLoadChart] = useState(false);
 
   useEffect(() => {
@@ -100,6 +115,27 @@ const BrandMark = () => (
  * top row, and the nav rail / main content sit below, always at 56px.
  */
 const Home = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const agentOpen = useAgentStore((s) => s.panelOpen);
+  const agentWidth = useAgentStore((s) => s.panelWidth);
+  const setAgentOpen = useAgentStore((s) => s.setPanelOpen);
+  const toggleAgent = useAgentStore((s) => s.togglePanel);
+  const setAgentWidth = useAgentStore((s) => s.setPanelWidth);
+  const [resizingAgent, setResizingAgent] = useState(false);
+  // Below this width the dock covers the workspace (see Agent.css) instead of
+  // squeezing the log table.
+  const [narrow, setNarrow] = useState(
+    () => window.matchMedia?.('(max-width: 820px)').matches ?? false
+  );
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const query = window.matchMedia('(max-width: 820px)');
+    const onChange = () => setNarrow(query.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+  const agentDrag = useRef<{ x: number; width: number } | null>(null);
   const { isCollapsed, toggleCollapse: togglePanelCollapse } = useCollapsiblePanel(true);
   const { tabs } = SidebarPanel();
   const { firstLoad, setFirstLoad, triggerSearch } = useSearchQueryParamsStore();
@@ -147,8 +183,63 @@ const Home = () => {
     }
   }, [firstLoad, setFirstLoad, triggerSearch]);
 
+  // #/agent is kept as a link that opens the agent dock over the log view.
+  useEffect(() => {
+    if (location.pathname === '/agent') {
+      setAgentOpen(true);
+      navigate('/', { replace: true });
+    }
+  }, [location.pathname, navigate, setAgentOpen]);
+
+  // Cmd/Ctrl+J toggles the agent dock from anywhere on the log view.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'j') {
+        event.preventDefault();
+        toggleAgent();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toggleAgent]);
+
+  // Focus moves into the composer when the dock opens from the keyboard or rail.
+  useEffect(() => {
+    if (agentOpen) {
+      window.requestAnimationFrame(() => document.getElementById('ls-agent-input')?.focus());
+    }
+  }, [agentOpen]);
+
+  const startAgentResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    agentDrag.current = { x: event.clientX, width: agentWidth };
+    setResizingAgent(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const moveAgentResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!agentDrag.current) return;
+    const maxForWindow = window.innerWidth - RAIL_W - 420;
+    const next = agentDrag.current.width + (agentDrag.current.x - event.clientX);
+    setAgentWidth(Math.min(next, Math.max(AGENT_PANEL_MIN, maxForWindow)));
+  };
+  const endAgentResize = () => {
+    agentDrag.current = null;
+    setResizingAgent(false);
+  };
+
+  // An agent import adds sources: reload the catalog so the source filter
+  // includes them, then rerun the search.
+  const refreshAfterImport = useCallback(() => {
+    void useSystemInfoStore
+      .getState()
+      .refreshSystemInfo(true)
+      .catch(() => undefined)
+      .then(() => triggerSearch());
+  }, [triggerSearch]);
+
   const sidebarTotalWidth = isCollapsed ? 0 : sidebarWidth;
   const marginLeft = RAIL_W + sidebarTotalWidth;
+  const marginRight = agentOpen && !narrow ? agentWidth : 0;
 
   const toggleFilter = useCallback(() => {
     if (activeTabId === 'filter' && !isCollapsed) {
@@ -188,7 +279,7 @@ const Home = () => {
 
   return (
     <div
-      className="h-screen overflow-hidden"
+      className="ls-workspace h-screen overflow-hidden"
       style={{ background: 'var(--ls-bg-1)', color: 'var(--ls-text)' }}
     >
       {/* Brand cell — top-left 56×44 (78×44 native, clearing the inset
@@ -236,7 +327,11 @@ const Home = () => {
           zIndex: 60,
         }}
       >
-        <Header activeSection={isCollapsed ? null : activeTabId} />
+        <Header
+          activeSection={isCollapsed ? null : activeTabId}
+          agentOpen={agentOpen}
+          onToggleAgent={toggleAgent}
+        />
       </div>
 
       {/* Nav rail — below the brand */}
@@ -281,20 +376,23 @@ const Home = () => {
         className="flex flex-col"
         style={{
           marginLeft: `${marginLeft}px`,
+          marginRight: `${marginRight}px`,
           marginTop: `${TOPBAR_H}px`,
           height: `calc(100vh - ${TOPBAR_H}px)`,
-          transition: isCollapsed ? 'margin-left 0.3s' : undefined,
+          transition: resizingAgent ? undefined : 'margin-left 0.3s, margin-right 0.2s',
         }}
       >
         <div className="flex-1 overflow-hidden flex flex-col">
           <div
-            className="px-3 py-2"
+            className="ls-workspace-controls"
             style={{
               background: 'var(--ls-panel)',
               borderBottom: '1px solid var(--ls-border)',
             }}
           >
-            <LogSearch />
+            <div className="ls-search-surface">
+              <LogSearch />
+            </div>
           </div>
 
           <DeferredLogDistributionChart />
@@ -312,6 +410,33 @@ const Home = () => {
 
         <StatusBar />
       </div>
+
+      {agentOpen && (
+        <aside
+          className="ls-agent-dock"
+          style={{ top: TOPBAR_H, width: agentWidth }}
+          aria-label="Agent panel"
+        >
+          <div
+            className={`ls-agent-dock-resize${resizingAgent ? ' is-dragging' : ''}`}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize agent panel"
+            aria-valuemin={AGENT_PANEL_MIN}
+            aria-valuenow={agentWidth}
+            tabIndex={0}
+            onPointerDown={startAgentResize}
+            onPointerMove={moveAgentResize}
+            onPointerUp={endAgentResize}
+            onPointerCancel={endAgentResize}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowLeft') setAgentWidth(agentWidth + 24);
+              if (event.key === 'ArrowRight') setAgentWidth(agentWidth - 24);
+            }}
+          />
+          <Agent onClose={() => setAgentOpen(false)} onDataChanged={refreshAfterImport} />
+        </aside>
+      )}
     </div>
   );
 };

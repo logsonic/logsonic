@@ -38,11 +38,11 @@ export const PaginationControls = ({
 
   return (
     <div
-      className="flex items-center justify-between px-3"
-      style={{ gap: 8, fontSize: 11.5, color: 'var(--ls-text-3)', minHeight: 28 }}
+      className="flex flex-col gap-1 px-3 sm:flex-row sm:items-center sm:justify-between"
+      style={{ fontSize: 11.5, color: 'var(--ls-text-3)', minHeight: 28 }}
     >
-      <div className="flex items-center" style={{ gap: 8 }}>
-        <span>
+      <div className="flex min-w-0 items-center justify-between gap-2 sm:justify-start">
+        <span className="whitespace-nowrap">
           Rows{' '}
           <b
             style={{
@@ -67,7 +67,7 @@ export const PaginationControls = ({
           </b>
         </span>
         <span aria-hidden style={{ width: 1, height: 14, background: 'var(--ls-border)' }} />
-        <div className="flex items-center" style={{ gap: 4 }}>
+        <div className="flex shrink-0 items-center gap-1">
           <span>Show</span>
           <Select
             value={store.pageSize.toString()}
@@ -95,11 +95,11 @@ export const PaginationControls = ({
               ))}
             </SelectContent>
           </Select>
-          <span>per page</span>
+          <span className="hidden sm:inline">per page</span>
         </div>
       </div>
 
-      <div className="flex items-center" style={{ gap: 2 }}>
+      <div className="flex items-center justify-between gap-0.5 sm:justify-end">
         <Button
           variant="ghost"
           size="icon"
@@ -107,6 +107,7 @@ export const PaginationControls = ({
           style={navBtn(store.currentPage === 1)}
           onClick={() => onPageChange(1)}
           disabled={store.currentPage === 1}
+          aria-label="First page"
         >
           <ChevronsLeft className="h-3.5 w-3.5" />
         </Button>
@@ -117,6 +118,7 @@ export const PaginationControls = ({
           style={navBtn(store.currentPage === 1)}
           onClick={() => onPageChange(store.currentPage - 1)}
           disabled={store.currentPage === 1}
+          aria-label="Previous page"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
         </Button>
@@ -142,6 +144,7 @@ export const PaginationControls = ({
           style={navBtn(store.currentPage >= totalPages)}
           onClick={() => onPageChange(store.currentPage + 1)}
           disabled={store.currentPage >= totalPages}
+          aria-label="Next page"
         >
           <ChevronRight className="h-3.5 w-3.5" />
         </Button>
@@ -152,6 +155,7 @@ export const PaginationControls = ({
           style={navBtn(store.currentPage >= totalPages)}
           onClick={() => onPageChange(totalPages)}
           disabled={store.currentPage >= totalPages}
+          aria-label="Last page"
         >
           <ChevronsRight className="h-3.5 w-3.5" />
         </Button>
@@ -160,4 +164,4 @@ export const PaginationControls = ({
   );
 };
 
-export default PaginationControls; 
+export default PaginationControls;

@@ -1,0 +1,115 @@
+.ls-workspace {
+  --workspace-gutter: 20px;
+}
+.ls-app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  padding: 0 16px;
+  gap: 12px;
+}
+.ls-header-identity,
+.ls-header-actions,
+.ls-workspace-location {
+  display: flex;
+  align-items: center;
+}
+.ls-header-identity {
+  gap: 14px;
+  min-width: 0;
+}
+.ls-header-brand {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  color: var(--ls-text);
+}
+.ls-header-divider {
+  height: 14px;
+  width: 1px;
+  background: var(--ls-border-strong);
+}
+.ls-header-location {
+  font-size: 12px;
+  color: var(--ls-text-2);
+}
+.ls-header-actions {
+  gap: 5px;
+}
+.ls-header-icon {
+  height: 29px;
+  width: 29px;
+  color: var(--ls-text-2);
+  border-radius: 7px;
+}
+.ls-workspace-location {
+  gap: 6px;
+  margin-right: 12px;
+  font-size: 11px;
+  color: var(--ls-text-3);
+}
+.ls-workspace-controls {
+  flex: none;
+  min-width: 0;
+}
+.ls-header-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 29px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ls-text-2);
+  background: var(--ls-panel);
+  border: 1px solid var(--ls-border-strong);
+  border-radius: 7px;
+  cursor: pointer;
+}
+.ls-header-button:hover {
+  background: var(--ls-bg-2);
+  color: var(--ls-text);
+}
+.ls-header-agent svg {
+  color: var(--ls-accent);
+}
+.ls-header-agent kbd {
+  margin-left: 2px;
+  font-family: var(--ls-font-sans);
+  font-size: 10.5px;
+  color: var(--ls-text-4);
+}
+.ls-header-agent[aria-pressed='true'] {
+  background: var(--ls-accent-soft);
+  border-color: var(--ls-accent-border);
+  color: var(--ls-accent-text);
+}
+.ls-header-agent[aria-pressed='true'] kbd {
+  color: var(--ls-accent-text);
+  opacity: 0.7;
+}
+.ls-search-surface {
+  padding: 12px var(--workspace-gutter) 12px;
+}
+.ls-workspace button:focus-visible {
+  outline: 2px solid var(--ls-accent);
+  outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .ls-workspace {
+    --workspace-gutter: 12px;
+  }
+  .ls-app-header {
+    padding: 0 12px;
+  }
+  .ls-workspace-location,
+  .ls-header-divider,
+  .ls-header-location {
+    display: none;
+  }
+  .ls-header-agent kbd {
+    display: none;
+  }
+}
+.ls-workspace-rail button:focus-visible .rail-tooltip { opacity:1 !important; }

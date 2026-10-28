@@ -23,18 +23,10 @@ import {
 // Max sources to show inline in the legend before collapsing into a "+N more" pill
 const MAX_VISIBLE_LEGEND_SOURCES = 8;
 
-// Source color palette — purple-leaning, designed for the new tokens
+// Distinct source colors, held at a quieter value so the buckets read as data.
 const SOURCE_COLORS = [
-  ['#9b82ff', '#6b4df2'], // accent purple
-  ['#5eead4', '#0d9488'], // teal
-  ['#fb923c', '#ea580c'], // orange
-  ['#60a5fa', '#1d4ed8'], // blue
-  ['#f472b6', '#be185d'], // pink
-  ['#34d399', '#15803d'], // green
-  ['#facc15', '#ca8a04'], // amber
-  ['#f87171', '#b91c1c'], // red
-  ['#a78bfa', '#7c3aed'], // violet
-  ['#22d3ee', '#0891b2'], // cyan
+  '#8271b2', '#558d87', '#b08355', '#6686a8', '#aa788c',
+  '#748d71', '#a3905b', '#a77972', '#8c80ac', '#668e9d',
 ];
 
 // Custom tooltip component for the chart
@@ -146,7 +138,7 @@ function CompactSourceLegend({
 
   const renderItem = (source: string) => {
     const colorIndex = sourceColorMap.get(source) ?? 0;
-    const color = SOURCE_COLORS[colorIndex][0];
+    const color = SOURCE_COLORS[colorIndex];
     return (
       <div
         key={source}
@@ -216,8 +208,6 @@ function CompactSourceLegend({
                 fontSize: 10,
                 color: 'var(--ls-text-3)',
                 marginBottom: 6,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
               }}
             >
               All sources ({sortedSources.length})
@@ -593,7 +583,7 @@ export default function LogDistributionChart() {
         borderBottom: '1px solid var(--ls-border)',
       }}
     >
-      <div className="flex justify-between items-center px-3" style={{ height: 28 }}>
+      <div className="flex justify-between items-center px-3" style={{ height: 32 }}>
         <div className="flex items-center" style={{ gap: 4 }}>
           <Button
             variant="ghost"
@@ -601,12 +591,13 @@ export default function LogDistributionChart() {
             onClick={() => setIsCollapsed(!isCollapsed)}
             className="h-5 w-5 p-0"
             style={{ color: 'var(--ls-text-3)' }}
+            aria-label={isCollapsed ? 'Expand event distribution' : 'Collapse event distribution'}
           >
             {isCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
           </Button>
           <h3
-            className="font-semibold uppercase tracking-wider"
-            style={{ fontSize: 11, color: 'var(--ls-text-2)', margin: 0 }}
+            className="font-medium"
+            style={{ fontSize: 12, color: 'var(--ls-text-2)', margin: 0 }}
           >
             Event distribution
           </h3>
@@ -627,6 +618,7 @@ export default function LogDistributionChart() {
             className="h-5 w-5 p-0"
             style={{ color: 'var(--ls-text-3)' }}
             title="Refresh chart"
+            aria-label="Refresh chart"
           >
             <RefreshCw size={11} />
           </Button>
@@ -637,6 +629,7 @@ export default function LogDistributionChart() {
             className="h-5 w-5 p-0"
             style={{ color: 'var(--ls-text-3)' }}
             title="Hide chart"
+            aria-label="Hide chart"
           >
             <X size={11} />
           </Button>
@@ -681,7 +674,7 @@ export default function LogDistributionChart() {
             <div
               className="pb-2 pt-1"
               style={{
-                height: '108px',
+                height: '100px',
                 userSelect: 'none',
                 WebkitUserSelect: 'none',
                 MozUserSelect: 'none',
@@ -707,7 +700,7 @@ export default function LogDistributionChart() {
                     scale="auto"
                   />
                   <YAxis 
-                    tick={{ fontSize: 10 }} 
+                    tick={{ fontSize: 10, fill: 'var(--ls-text-3)' }}
                     tickLine={false}
                     axisLine={false}
                     width={25}
@@ -736,8 +729,8 @@ export default function LogDistributionChart() {
                         dataKey={source}
                         name={source}
                         stackId="a"
-                        fill={`url(#color-${source})`}
-                        fillOpacity={0.8}
+                        fill={SOURCE_COLORS[colorIndex]}
+                        fillOpacity={0.82}
                       />
                     );
                   })}
@@ -754,35 +747,6 @@ export default function LogDistributionChart() {
                     />
                   )}
                   
-                  {/* Gradients for each source */}
-                  <defs>
-                    {sources.map((source) => {
-                      // Get consistent color index for this source
-                      const colorIndex = sourceColorMap.get(source) || 0;
-                      const colors = SOURCE_COLORS[colorIndex];
-                      
-                      // Use source as part of the ID to ensure unique gradients
-                      return (
-                        <linearGradient 
-                          key={`color-${source}`}
-                          id={`color-${source}`}
-                          x1="0" y1="0" 
-                          x2="0" y2="1"
-                        >
-                          <stop 
-                            offset="5%" 
-                            stopColor={colors[0]} 
-                            stopOpacity={0.9}
-                          />
-                          <stop 
-                            offset="95%" 
-                            stopColor={colors[1]} 
-                            stopOpacity={0.7}
-                          />
-                        </linearGradient>
-                      );
-                    })}
-                  </defs>
                 </BarChart>
               </ResponsiveContainer>
             </div>

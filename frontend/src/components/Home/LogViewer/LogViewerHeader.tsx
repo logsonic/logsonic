@@ -157,50 +157,35 @@ export const LogViewerHeader = (
 
   return (
     <div
-      className="flex items-center justify-between px-3 py-1.5"
+      className="flex flex-col items-stretch gap-1 px-3 py-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
       style={{
         background: 'var(--ls-panel)',
         borderBottom: '1px solid var(--ls-border)',
       }}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-1 sm:flex-nowrap sm:gap-2">
         <div
-          className="ls-toolbar-group flex items-center overflow-hidden rounded-md"
+          className="ls-toolbar-group flex items-center gap-0.5"
           style={{
-            background: 'var(--ls-bg-1)',
-            border: '1px solid var(--ls-border)',
+            background: 'transparent',
           }}
         >
-          <div
-            className="px-2.5 py-1"
-            style={{
-              background: 'var(--ls-bg-2)',
-              borderRight: '1px solid var(--ls-border)',
-            }}
-          >
-            <span
-              className="text-[10px] font-semibold uppercase tracking-wide"
-              style={{ color: 'var(--ls-text-3)' }}
-            >
-              Columns
-            </span>
-          </div>
-
           <Popover open={isColumnPopoverOpen} onOpenChange={setIsColumnPopoverOpen}>
             <PopoverTrigger asChild>
               <Button
                 variant="ghost"
                 disabled={store.isColumnLocked}
-                className="ls-toolbar-btn h-7 rounded-none px-2.5 flex items-center gap-1"
+                className="ls-toolbar-btn h-7 rounded px-2 flex items-center gap-1.5"
+                aria-label="Choose columns"
               >
                 <Columns className="h-3.5 w-3.5" />
-                <span className="text-xs">Select</span>
+                <span className="text-xs">Columns</span>
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-96 p-4" side="right" align="center">
+            <PopoverContent className="w-[min(24rem,calc(100vw-2rem))] p-4" side="right" align="center">
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <h4 className="font-medium text-base">Select Columns</h4>
+                  <h4 className="font-medium text-base">Choose columns</h4>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -298,36 +283,34 @@ export const LogViewerHeader = (
             </PopoverContent>
           </Popover>
 
-          <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: 'var(--ls-border)' }} />
-
 	          <Button
 	            variant="ghost"
-	            className="ls-toolbar-btn h-7 rounded-none px-2.5 flex items-center gap-1"
+	            className="ls-toolbar-btn h-7 rounded px-2 flex items-center gap-1.5"
 	            onClick={autofitColumns}
 	            disabled={store.isColumnLocked || liveAvailable}
-	            title="Auto-adjust column widths"
+	            title="Fit column widths"
+	            aria-label="Fit column widths"
 	          >
             <Maximize2 className="h-3.5 w-3.5" />
-            <span className="text-xs">Fit</span>
+            <span className="hidden text-xs sm:inline">Fit widths</span>
           </Button>
-
-          <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: 'var(--ls-border)' }} />
 
           <Button
             variant="ghost"
-            className="ls-toolbar-btn h-7 rounded-none px-2.5 flex items-center gap-1"
+            className="ls-toolbar-btn h-7 rounded px-2 flex items-center gap-1.5"
             onClick={toggleLock}
             title={store.isColumnLocked ? "Unlock layout" : "Lock layout"}
+            aria-label={store.isColumnLocked ? "Unlock layout" : "Lock layout"}
           >
             {store.isColumnLocked ? (
               <>
                 <Unlock className="h-3.5 w-3.5" />
-                <span className="text-xs">Unlock</span>
+                <span className="hidden text-xs sm:inline">Unlock layout</span>
               </>
             ) : (
               <>
                 <Lock className="h-3.5 w-3.5" />
-                <span className="text-xs">Lock</span>
+                <span className="hidden text-xs sm:inline">Lock layout</span>
               </>
             )}
 	          </Button>
@@ -335,7 +318,7 @@ export const LogViewerHeader = (
 
 	        {showLiveControls && (
 	          <div
-	            className="ls-toolbar-group flex items-center overflow-hidden rounded-md"
+	            className="ls-toolbar-group flex items-center overflow-hidden rounded-md max-w-full"
 	            style={{
 	              background: 'var(--ls-bg-1)',
 	              border: '1px solid var(--ls-border)',
@@ -364,6 +347,7 @@ export const LogViewerHeader = (
 	              onClick={togglePause}
 	              disabled={liveSourceCount === 0 || !liveSubscriberId}
 	              title={livePaused ? 'Resume live rows' : 'Pause live rows'}
+	              aria-label={livePaused ? 'Resume live rows' : 'Pause live rows'}
 	            >
 	              {livePaused ? (
 	                <>
@@ -384,9 +368,9 @@ export const LogViewerHeader = (
       {/* Stats — "matches" is the count after the search query + time range
           filter; "indexed" is the total in storage. Showing both with explicit
           labels avoids the old ambiguous "500 / 2,500 logs". */}
-      <div className="flex items-center gap-2">
-        <LogExportButton />
-	        <div className="text-xs" style={{ color: 'var(--ls-text-3)' }}>
+      <div className="flex min-w-0 flex-row-reverse items-center justify-between gap-2 sm:flex-row sm:justify-end">
+        <div className="shrink-0"><LogExportButton /></div>
+	        <div className="min-w-0 truncate text-xs" style={{ color: 'var(--ls-text-3)' }}>
 	          {liveAvailable ? (
 	            <span className="flex items-center gap-1.5">
 	              <span className="font-semibold" style={{ color: liveConnected ? 'var(--ls-ok)' : 'var(--ls-warn)' }}>

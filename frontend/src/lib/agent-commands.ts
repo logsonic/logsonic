@@ -14,10 +14,12 @@ import type { SidebarTabId } from '@/components/Home/SidebarPanel';
 import { RELATIVE_DATE_PRESETS } from '@/lib/date-utils';
 import { bleveFieldClause, isQueryableFieldName, tokenizeQuery } from '@/lib/query-clauses';
 import { applyWorkspaceTimeToSearchState } from '@/lib/workspace-utils';
+import { useAgentStore } from '@/stores/useAgentStore';
 import { useFacetStore } from '@/stores/useFacetStore';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { SIDEBAR_PANELS, useSidebarStore } from '@/stores/useSidebarStore';
+import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import { useWorkspaceStore } from '@/stores/useWorkspaceStore';
 
 export interface AgentCommand {
@@ -46,6 +48,7 @@ export interface AgentFilter {
 
 export const AGENT_ROUTES = [
   '/',
+  '/agent',
   '/import',
   '/settings/patterns',
   '/settings/storage',
@@ -169,7 +172,7 @@ const columnsAdded = (before: string[]): boolean => {
 };
 
 const goHome = (ctx: AgentCommandContext) => {
-  if (ctx.route !== '/') ctx.navigate('/');
+  if (ctx.route !== '/' && ctx.route !== '/agent') ctx.navigate('/');
 };
 
 /** Apply one agent command. Throws with a user-readable message on bad args. */
@@ -193,7 +196,13 @@ export const applyAgentCommand = async (
       if (!AGENT_ROUTES.includes(route)) {
         throw new Error(`unknown route ${route}; one of ${AGENT_ROUTES.join(', ')}`);
       }
-      ctx.navigate(route);
+      if (route === '/agent') {
+        // The agent is a dock beside the log view, not a page of its own.
+        useAgentStore.getState().setPanelOpen(true);
+        ctx.navigate('/');
+      } else {
+        ctx.navigate(route);
+      }
       return { warnings, searched: false };
     }
 
@@ -289,8 +298,11 @@ export const applyAgentCommand = async (
     case 'set_sources': {
       const sources = asStringList(args.sources ?? [], 'sources');
       goHome(ctx);
-      store.setSources(sources);
-      store.setSourcesInitialized(true);
+      // An empty list means "all sources", as ui_set_sources documents. An
+      // initialized empty selection would instead query no source at all.
+      const known = useSystemInfoStore.getState().systemInfo?.storage_info?.source_names ?? [];
+      store.setSources(sources.length > 0 ? sources : [...known]);
+      store.setSourcesInitialized(sources.length > 0 || known.length > 0);
       if (run) runSearch();
       return { warnings, searched: run };
     }

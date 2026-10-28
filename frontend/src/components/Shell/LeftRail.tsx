@@ -1,7 +1,19 @@
-import { cn } from '@/lib/utils';
-import { Database, Eye, Filter, List, ListFilter, Settings, Upload, Zap } from 'lucide-react';
+import {
+  Database,
+  Eye,
+  Filter,
+  List,
+  ListFilter,
+  Settings,
+  Sparkles,
+  Upload,
+  Zap,
+} from 'lucide-react';
 import { ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+
+import { cn } from '@/lib/utils';
+import { useAgentStore } from '@/stores/useAgentStore';
 
 type RailEntry = {
   id: string;
@@ -41,6 +53,8 @@ export const LeftRail = ({
   const path = location.pathname || '/';
   const isHome = path === '/' || path.startsWith('/?') || path.startsWith('/#');
   const isImport = path.startsWith('/import');
+  const agentOpen = useAgentStore((state) => state.panelOpen);
+  const toggleAgent = useAgentStore((state) => state.togglePanel);
   const isSettings = path.startsWith('/settings');
 
   const primary: RailEntry[] = [
@@ -89,6 +103,21 @@ export const LeftRail = ({
       active: !!coloringOpen,
     },
     {
+      id: 'agent',
+      icon: <Sparkles size={18} strokeWidth={1.7} />,
+      label: 'Agent',
+      onClick: () => {
+        // The agent lives beside the log table; from other pages, go there first.
+        if (!isHome) {
+          useAgentStore.getState().setPanelOpen(true);
+          navigate('/');
+        } else {
+          toggleAgent();
+        }
+      },
+      active: agentOpen && isHome,
+    },
+    {
       id: 'import',
       icon: <Upload size={18} strokeWidth={1.7} />,
       label: 'Import',
@@ -106,7 +135,8 @@ export const LeftRail = ({
 
   return (
     <nav
-      className="flex flex-col items-center h-full"
+      className="ls-workspace-rail flex flex-col items-center h-full"
+      aria-label="Workspace navigation"
       style={{
         width: 'var(--ls-rail-w)',
         background: 'var(--ls-panel)',
@@ -116,10 +146,21 @@ export const LeftRail = ({
         flexShrink: 0,
       }}
     >
-      {primary.map((entry) => (
-        <RailButton key={entry.id} entry={entry} />
+      {['logs', 'agent'].map((id) => (
+        <RailButton key={id} entry={primary.find((entry) => entry.id === id)!} />
       ))}
+      <div style={{ width: 24, margin: '9px 0', borderTop: '1px solid var(--ls-border)' }} />
+      {primary
+        .filter((entry) => ['filter', 'fields', 'sources', 'coloring'].includes(entry.id))
+        .map((entry) => (
+          <RailButton key={entry.id} entry={entry} />
+        ))}
       <div style={{ flex: 1 }} />
+      {primary
+        .filter((entry) => ['import', 'settings'].includes(entry.id))
+        .map((entry) => (
+          <RailButton key={entry.id} entry={entry} />
+        ))}
       {onToggleTweaks && (
         <RailButton
           entry={{
@@ -143,6 +184,7 @@ const RailButton = ({ entry }: { entry: RailEntry }) => (
       entry.active ? 'rail-btn-active' : 'rail-btn'
     )}
     aria-label={entry.label}
+    aria-pressed={!!entry.active}
     /* Drop `title` — we already have a custom hover tooltip below, and the
        browser's native title popup duplicates it (and sticks around on top
        of the opened panel even after the icon is clicked). */

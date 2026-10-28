@@ -7,10 +7,12 @@ import {
   snapshotUIState,
   splitQuery,
 } from '@/lib/agent-commands';
+import { useAgentStore } from '@/stores/useAgentStore';
 import { useFacetStore } from '@/stores/useFacetStore';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useSidebarStore } from '@/stores/useSidebarStore';
+import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 
 vi.mock('@/lib/api-client', () => ({
   getWorkspace: vi.fn(),
@@ -80,6 +82,37 @@ describe('applyAgentCommand', () => {
     expect(s.searchNonce).toBe(nonce + 1);
     expect(res.searched).toBe(true);
     expect(c.navigate).toHaveBeenCalledWith('/');
+  });
+
+  it('keeps Agent mode open while changing the log query and filters', async () => {
+    const c = ctx('/agent');
+    const nonce = useSearchQueryParamsStore.getState().searchNonce;
+    await run('set_query', { query: 'timeout', run: false }, c);
+    await run('add_filter', { field: 'level', value: 'error' }, c);
+    expect(c.navigate).not.toHaveBeenCalled();
+    expect(c.route).toBe('/agent');
+    expect(useSearchQueryParamsStore.getState().searchQuery).toBe('timeout +level:"error"');
+    expect(useSearchQueryParamsStore.getState().searchNonce).toBe(nonce + 1);
+    expect(snapshotUIState(c.route).route).toBe('/agent');
+  });
+
+  it('preserves the actual Agent hash through time, source, and filter URL writes', async () => {
+    const previousUrl = window.location.href;
+    try {
+      window.history.replaceState(null, '', '#/agent');
+      const c = ctx('/agent');
+      await run('set_time', { relative: 'last-7-days' }, c);
+      expect(window.location.hash).toBe('#/agent');
+      await run('set_sources', { sources: ['payments'] }, c);
+      expect(window.location.hash).toBe('#/agent');
+      await run('add_filter', { field: 'level', value: 'error' }, c);
+      expect(window.location.hash).toBe('#/agent');
+      expect(useSearchQueryParamsStore.getState().sources).toEqual(['payments']);
+      expect(useSearchQueryParamsStore.getState().searchQuery).toBe('+level:"error"');
+      expect(c.navigate).not.toHaveBeenCalled();
+    } finally {
+      window.history.replaceState(null, '', previousUrl);
+    }
   });
 
   it('add_filter warns about a field absent from the results', async () => {
@@ -156,6 +189,19 @@ describe('applyAgentCommand', () => {
     await expect(run('set_time', { start: 'x', end: 'y' })).rejects.toThrow(/valid/);
   });
 
+  it('set_sources with an empty list returns to all sources, not none', async () => {
+    await run('set_sources', { sources: ['nginx'] });
+    expect(useSearchQueryParamsStore.getState().sourcesInitialized).toBe(true);
+    useSystemInfoStore.setState({
+      systemInfo: { storage_info: { source_names: ['nginx', 'app'] } },
+    });
+    await run('set_sources', { sources: [] });
+    const state = useSearchQueryParamsStore.getState();
+    expect(state.sources).toEqual(['nginx', 'app']);
+    expect(state.sourcesInitialized).toBe(true);
+    useSystemInfoStore.setState({ systemInfo: null });
+  });
+
   it('set_sort, set_page, set_sources, set_fields_panel', async () => {
     await run('set_sort', { field: 'status', order: 'asc' });
     await run('set_page', { page: 3, page_size: 50 });
@@ -189,6 +235,11 @@ describe('applyAgentCommand', () => {
     const c = ctx();
     await run('navigate', { route: '/import' }, c);
     expect(c.navigate).toHaveBeenCalledWith('/import');
+    // The agent is a dock on the log view: /agent opens it there.
+    useAgentStore.setState({ panelOpen: false });
+    await run('navigate', { route: '/agent' }, c);
+    expect(c.navigate).toHaveBeenLastCalledWith('/');
+    expect(useAgentStore.getState().panelOpen).toBe(true);
     await expect(run('navigate', { route: '/nope' })).rejects.toThrow(/unknown route/);
   });
 
