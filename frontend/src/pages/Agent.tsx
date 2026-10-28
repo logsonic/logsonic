@@ -1,6 +1,7 @@
 import {
   ArrowUp,
   BarChart3,
+  Bookmark,
   ChevronRight,
   Copy,
   Database,
@@ -9,6 +10,7 @@ import {
   LayoutPanelTop,
   Loader2,
   MonitorSmartphone,
+  Plug,
   Plus,
   RotateCcw,
   ScanSearch,
@@ -25,6 +27,7 @@ import remarkGfm from 'remark-gfm';
 import { fetchAgentStatus, streamAgentChat, type AgentStatus } from '@/lib/agent-stream';
 import {
   buildMessages,
+  externalTool,
   plural,
   reduceTurn,
   stepError,
@@ -40,17 +43,41 @@ import {
   type AgentTurn,
 } from '@/stores/useAgentStore';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
+import { useWorkspaceStore } from '@/stores/useWorkspaceStore';
 import './Agent.css';
 
 function ToolIcon({ tool }: { tool: string }) {
   const size = 13;
+  if (externalTool(tool)) return <Plug size={size} />;
   if (tool.startsWith('ingest_')) return <Download size={size} />;
   if (tool.startsWith('ui_')) return <MonitorSmartphone size={size} />;
+  if (tool === 'save_view') return <Bookmark size={size} />;
   if (tool === 'list_sources') return <Database size={size} />;
   if (tool === 'log_histogram' || tool === 'compare_windows') return <BarChart3 size={size} />;
   if (tool === 'facet_logs' || tool === 'analyze_logs') return <LayoutPanelTop size={size} />;
-  if (tool === 'log_context') return <ScanSearch size={size} />;
+  if (tool === 'log_context' || tool === 'log_patterns') return <ScanSearch size={size} />;
   return <Search size={size} />;
+}
+
+function proxyEndpointNote(proxyUrl?: string): string {
+  if (proxyUrl) {
+    try {
+      const parsed = new URL(proxyUrl);
+      const host = parsed.hostname.toLowerCase();
+      if (
+        host &&
+        host !== 'localhost' &&
+        host !== '127.0.0.1' &&
+        host !== '::1' &&
+        host !== '[::1]'
+      ) {
+        return `Log excerpts the agent reads are sent to the configured model endpoint (${parsed.host}).`;
+      }
+    } catch {
+      // Keep default copy when proxyUrl is not a valid URL.
+    }
+  }
+  return 'Log excerpts the agent reads are sent to Claude through your local proxy.';
 }
 
 const TABLE_TOOLS = new Set([
@@ -399,6 +426,12 @@ export default function Agent({
           ) {
             imported = true;
           }
+          if (event.type === 'step' && event.step.tool === 'save_view' && !event.step.is_error) {
+            void useWorkspaceStore
+              .getState()
+              .refreshWorkspaces()
+              .catch(() => undefined);
+          }
           // A UI tool that changed the table becomes the step "in table".
           if (
             event.type === 'step' &&
@@ -636,9 +669,7 @@ export default function Agent({
             </button>
           )}
         </form>
-        <p className="ls-agent-note">
-          Log excerpts the agent reads are sent to Claude through your local proxy.
-        </p>
+        <p className="ls-agent-note">{proxyEndpointNote(status?.proxy_url)}</p>
       </div>
     </section>
   );

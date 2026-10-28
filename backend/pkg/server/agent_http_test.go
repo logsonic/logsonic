@@ -490,3 +490,93 @@ func TestAgentStreamReportsProxyFailureAsErrorEvent(t *testing.T) {
 		t.Fatalf("events: %+v", events)
 	}
 }
+
+func TestAgentStatusRequiresKeyForAnthropicEndpoint(t *testing.T) {
+	t.Setenv("LOGSONIC_AGENT_PROXY_URL", "https://api.anthropic.com/v1/messages")
+	t.Setenv("LOGSONIC_AGENT_PROXY_KEY", "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	srv, err := NewServer(Config{Host: "localhost", Port: ":0", StoragePath: t.TempDir(), Timeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.services.CloseStorage()
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	resp, err := http.Get(ts.URL + "/api/v1/agent/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var status struct {
+		Available bool   `json:"available"`
+		Reason    string `json:"reason"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status.Available || !strings.Contains(status.Reason, "ANTHROPIC_API_KEY") {
+		t.Fatalf("expected unavailable status requiring ANTHROPIC_API_KEY, got %+v", status)
+	}
+}
+
+func TestAgentStreamPreservesContentBlockStartToolInput(t *testing.T) {
+	calls := 0
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			writeAnthropicStream(w,
+				`{"type":"message_start","message":{"id":"m1","type":"message","role":"assistant","content":[]}}`,
+				`{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool-pre","name":"query_logs","input":{"query":"prepopulated","limit":3}}}`,
+				`{"type":"content_block_stop","index":0}`,
+				`{"type":"message_delta","delta":{"stop_reason":"tool_use"}}`,
+				`{"type":"message_stop"}`,
+			)
+			return
+		}
+		var body struct {
+			Messages []struct {
+				Role    string          `json:"role"`
+				Content json.RawMessage `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode: %v", err)
+		} else if !strings.Contains(string(body.Messages[1].Content), `"query":"prepopulated"`) {
+			t.Errorf("expected prepopulated tool input in replay, got %s", body.Messages[1].Content)
+		}
+		writeAnthropicStream(w,
+			`{"type":"message_start","message":{"id":"m2","type":"message","role":"assistant","content":[]}}`,
+			`{"type":"content_block_start","index":0,"content_block":{"type":"text","text":"Done."}}`,
+			`{"type":"content_block_stop","index":0}`,
+			`{"type":"message_delta","delta":{"stop_reason":"end_turn"}}`,
+			`{"type":"message_stop"}`,
+		)
+	}))
+	defer proxy.Close()
+	t.Setenv("LOGSONIC_AGENT_PROXY_URL", proxy.URL+"/v1/messages")
+	srv, err := NewServer(Config{Host: "localhost", Port: ":0", StoragePath: t.TempDir(), Timeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.services.CloseStorage()
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	resp, err := http.Post(ts.URL+"/api/v1/agent/chat", "application/json", bytes.NewBufferString(`{"stream":true,"messages":[{"role":"user","content":"Check prepopulated"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	events := readAgentSSE(t, resp)
+	foundStepStart := false
+	for _, ev := range events {
+		if ev.Name == "step_start" {
+			foundStepStart = true
+			if in, _ := ev.Data["input"].(map[string]any); in["query"] != "prepopulated" {
+				t.Fatalf("expected prepopulated query in step_start, got %v", ev.Data)
+			}
+		}
+	}
+	if !foundStepStart {
+		t.Fatalf("missing step_start event in %+v", events)
+	}
+}

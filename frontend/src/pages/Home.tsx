@@ -429,6 +429,7 @@ const Home = () => {
             onPointerMove={moveAgentResize}
             onPointerUp={endAgentResize}
             onPointerCancel={endAgentResize}
+            onLostPointerCapture={endAgentResize}
             onKeyDown={(event) => {
               if (event.key === 'ArrowLeft') setAgentWidth(agentWidth + 24);
               if (event.key === 'ArrowRight') setAgentWidth(agentWidth - 24);

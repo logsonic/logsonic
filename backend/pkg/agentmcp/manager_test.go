@@ -202,12 +202,17 @@ func TestChildEnvDropsAgentCredentials(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-secret")
 	t.Setenv("ANTHROPIC_AUTH_TOKEN", "oauth-secret")
 	t.Setenv("PATH_FOR_TEST", "kept")
-	env := strings.Join(childEnv(map[string]string{"GITHUB_TOKEN": "gh"}), "\n")
+	t.Setenv("OVERRIDDEN_VAR", "ambient")
+	entries := childEnv(map[string]string{"GITHUB_TOKEN": "gh", "OVERRIDDEN_VAR": "custom"})
+	env := strings.Join(entries, "\n")
 	if strings.Contains(env, "proxy-secret") || strings.Contains(env, "sk-ant-secret") || strings.Contains(env, "oauth-secret") {
 		t.Fatal("agent credentials must not reach MCP child processes")
 	}
-	if !strings.Contains(env, "PATH_FOR_TEST=kept") || !strings.Contains(env, "GITHUB_TOKEN=gh") {
+	if !strings.Contains(env, "PATH_FOR_TEST=kept") || !strings.Contains(env, "GITHUB_TOKEN=gh") || !strings.Contains(env, "OVERRIDDEN_VAR=custom") {
 		t.Fatalf("env = %s", env)
+	}
+	if strings.Contains(env, "OVERRIDDEN_VAR=ambient") {
+		t.Fatalf("expected OVERRIDDEN_VAR=ambient to be replaced, got:\n%s", env)
 	}
 }
 

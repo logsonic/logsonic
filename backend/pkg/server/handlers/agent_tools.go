@@ -75,17 +75,89 @@ func (h *Services) runAgentTool(ctx context.Context, name string, in map[string]
 	}
 }
 
-func (h *Services) agentIngestLocal(ctx context.Context, path string) (any, error) {
-	if !filepath.IsAbs(path) {
-		return nil, errors.New("absolute path required")
+// Folders and files that hold credentials rather than logs. Other dot
+// folders stay importable: ~/.ollama/logs, ~/.pm2/logs and ~/.npm/_logs are
+// common log locations.
+var (
+	agentSecretDirs = map[string]bool{
+		".ssh": true, ".gnupg": true, ".aws": true, ".azure": true, ".kube": true,
+		".password-store": true, "Keychains": true,
 	}
-	info, err := os.Stat(path)
+	agentSecretConfigDirs = map[string]bool{"gcloud": true, "gh": true}
+	agentSecretFiles      = map[string]bool{
+		".netrc": true, ".git-credentials": true, ".npmrc": true, ".pypirc": true,
+		".pgpass": true, ".my.cnf": true, ".bash_history": true, ".zsh_history": true,
+		".python_history": true, ".psql_history": true, ".mysql_history": true,
+	}
+	agentSystemSecretFiles = map[string]bool{
+		"/etc/passwd": true, "/etc/shadow": true, "/etc/master.passwd": true, "/etc/sudoers": true,
+		"/private/etc/passwd": true, "/private/etc/shadow": true, "/private/etc/master.passwd": true, "/private/etc/sudoers": true,
+	}
+)
+
+// agentSecretPath reports whether path names a credential location.
+func agentSecretPath(path string) bool {
+	if agentSystemSecretFiles[path] {
+		return true
+	}
+	parts := strings.Split(path, string(filepath.Separator))
+	for i, part := range parts {
+		if agentSecretDirs[part] {
+			return true
+		}
+		if i+1 < len(parts) {
+			next := parts[i+1]
+			if part == ".config" && agentSecretConfigDirs[next] || part == ".docker" && next == "config.json" {
+				return true
+			}
+		}
+	}
+	base := filepath.Base(path)
+	return agentSecretFiles[base] || base == ".env" || strings.HasPrefix(base, ".env.")
+}
+
+// validateAgentLocalPath resolves symlinks and refuses credential locations
+// (checked on both the given and the resolved path) and, when
+// LOGSONIC_AGENT_INGEST_ROOT is set, anything outside that folder.
+func validateAgentLocalPath(path string) (string, error) {
+	if !filepath.IsAbs(path) {
+		return "", errors.New("absolute path required")
+	}
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", err
+	}
+	for _, candidate := range []string{filepath.Clean(path), resolved} {
+		if agentSecretPath(candidate) {
+			return "", errors.New("refusing to import a credential file or folder")
+		}
+	}
+	if root := strings.TrimSpace(os.Getenv("LOGSONIC_AGENT_INGEST_ROOT")); root != "" {
+		cleanRoot := filepath.Clean(root)
+		if evalRoot, err := filepath.EvalSymlinks(cleanRoot); err == nil {
+			cleanRoot = evalRoot
+		}
+		rel, relErr := filepath.Rel(cleanRoot, resolved)
+		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("path must be inside LOGSONIC_AGENT_INGEST_ROOT (%s)", cleanRoot)
+		}
+	}
+	return resolved, nil
+}
+
+func (h *Services) agentIngestLocal(ctx context.Context, path string) (any, error) {
+	resolved, err := validateAgentLocalPath(path)
 	if err != nil {
 		return nil, err
 	}
-	paths := []string{path}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return nil, err
+	}
+	paths := []string{resolved}
+	var skipped []map[string]string
 	if info.IsDir() {
-		dir, err := os.Open(path)
+		dir, err := os.Open(resolved)
 		if err != nil {
 			return nil, err
 		}
@@ -98,17 +170,32 @@ func (h *Services) agentIngestLocal(ctx context.Context, path string) (any, erro
 			return nil, errors.New("directory has more than 128 entries")
 		}
 		paths = nil
+		// Hidden files (.DS_Store, editor swap files) are skipped quietly;
+		// entries refused by validation or that are not regular files (a
+		// symlink to a folder, a socket) are skipped and reported.
 		for _, entry := range entries {
-			if entry.IsDir() {
+			if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+			child, err := validateAgentLocalPath(filepath.Join(resolved, entry.Name()))
+			if err == nil {
+				if fi, statErr := os.Stat(child); statErr != nil {
+					err = statErr
+				} else if !fi.Mode().IsRegular() {
+					err = errors.New("not a regular file")
+				}
+			}
+			if err != nil {
+				skipped = append(skipped, map[string]string{"name": entry.Name(), "reason": err.Error()})
 				continue
 			}
 			if len(paths) >= 16 {
 				return nil, errors.New("directory has more than 16 files")
 			}
-			paths = append(paths, filepath.Join(path, entry.Name()))
+			paths = append(paths, child)
 		}
 		if len(paths) == 0 {
-			return nil, errors.New("directory has no files")
+			return nil, errors.New("directory has no importable files")
 		}
 	}
 	results := make([]any, 0, len(paths))
@@ -122,7 +209,11 @@ func (h *Services) agentIngestLocal(ctx context.Context, path string) (any, erro
 		}
 		results = append(results, result)
 	}
-	return map[string]any{"imports": results}, nil
+	out := map[string]any{"imports": results}
+	if len(skipped) > 0 {
+		out["skipped"] = skipped
+	}
+	return out, nil
 }
 
 func (h *Services) agentImportPath(ctx context.Context, file, source string, origin *types.SourceOrigin) (any, error) {
@@ -136,6 +227,13 @@ func (h *Services) agentImportPath(ctx context.Context, file, source string, ori
 	canonical, members, compression, openErr := openFileForImport(ctx, file, false)
 	if openErr != nil {
 		return nil, openErr
+	}
+	// Check the opened path again, so a symlink swapped in after validation
+	// cannot redirect a local import to a refused file.
+	if origin == nil {
+		if _, err := validateAgentLocalPath(canonical); err != nil {
+			return nil, err
+		}
 	}
 	id, startErr := newIngestSession(types.IngestSessionOptions{Name: "AUTO", Pattern: "auto", Source: source, Meta: map[string]interface{}{"_src": source}})
 	if startErr != nil {
@@ -197,7 +295,16 @@ func (h *Services) agentIngestRemote(ctx context.Context, raw string) (any, erro
 		if len(ips) == 0 {
 			return nil, errors.New("remote host has no address")
 		}
-		return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
+		dialer := &net.Dialer{Timeout: 10 * time.Second}
+		var lastErr error
+		for _, ip := range ips {
+			conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip.IP.String(), port))
+			if err == nil {
+				return conn, nil
+			}
+			lastErr = err
+		}
+		return nil, lastErr
 	}}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, Timeout: 45 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -243,7 +350,26 @@ func (h *Services) agentIngestRemote(ctx context.Context, raw string) (any, erro
 }
 
 var blockedDownloadNets = func() []*net.IPNet {
-	ranges := []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "192.0.2.0/24", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4", "2001:db8::/32"}
+	ranges := []string{
+		"0.0.0.0/8",
+		"100.64.0.0/10",
+		"192.0.0.0/24",
+		"192.0.2.0/24",
+		"192.88.99.0/24",
+		"198.18.0.0/15",
+		"198.51.100.0/24",
+		"203.0.113.0/24",
+		"224.0.0.0/4",
+		"240.0.0.0/4",
+		"::/96",
+		"64:ff9b::/96",
+		"64:ff9b:1::/48",
+		"100::/64",
+		"2001::/32",
+		"2001:db8::/32",
+		"2002::/16",
+		"fec0::/10",
+	}
 	out := make([]*net.IPNet, 0, len(ranges))
 	for _, r := range ranges {
 		_, network, _ := net.ParseCIDR(r)
@@ -253,7 +379,13 @@ var blockedDownloadNets = func() []*net.IPNet {
 }()
 
 func publicDownloadIP(ip net.IP) bool {
-	if ip == nil || !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+	if ip == nil {
+		return false
+	}
+	if v4 := ip.To4(); v4 != nil {
+		ip = v4
+	}
+	if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
 		return false
 	}
 	for _, network := range blockedDownloadNets {

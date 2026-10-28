@@ -106,6 +106,16 @@ provider. Ordinary Search remains local. There is no redaction pipeline. AWS
 credentials stay with the local AWS CLI and are not sent in prompts. Remote
 downloads and AWS reads occur only when selected as tools for an investigation.
 
+Local imports resolve symlinks, then refuse credential locations (`~/.ssh`,
+`~/.aws`, `~/.gnupg`, `~/.kube`, `~/.config/gcloud`, `~/.docker/config.json`,
+`.env` files, shell histories and similar); other dot folders such as
+`~/.ollama/logs` stay importable. The opened path is checked again before
+import. `LOGSONIC_AGENT_INGEST_ROOT` limits imports to one folder. A directory
+import skips hidden files and lists any refused or non-regular entry it skipped.
+Remote downloads connect only to public addresses: private, loopback,
+link-local, CGNAT, documentation, multicast, NAT64, 6to4, Teredo and
+IPv4-compatible IPv6 ranges are refused at connect time and on every redirect.
+
 External MCP servers receive whatever arguments the model passes, which can
 include log excerpts, and may have side effects outside LogSonic (creating
 tickets, writing files). Stdio servers inherit LogSonic's environment minus

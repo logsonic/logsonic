@@ -30,6 +30,7 @@ LogSonic can be configured with command-line flags or environment variables.
 - `LOGSONIC_AGENT_MODEL`: model name sent to that endpoint (default `claude-sonnet-5-5`)
 - `LOGSONIC_AGENT_PROXY_KEY`: sent as `x-api-key`; for `https://api.anthropic.com` with no key set, `ANTHROPIC_API_KEY` is used (default `local-proxy`)
 - `LOGSONIC_AGENT_MCP_CONFIG`: path of the agent's external MCP server list (default `<storage>/mcp.json`)
+- `LOGSONIC_AGENT_INGEST_ROOT`: when set, the agent's `ingest_local` tool only imports files inside this folder (symlinks are resolved first). Credential locations (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `.env` files and similar) are refused whether or not it is set (default: unset, any absolute path)
 
 See [Agent mode in the README](../README.md#agent-mode) for local and cloud model setups and the `mcp.json` format.
 

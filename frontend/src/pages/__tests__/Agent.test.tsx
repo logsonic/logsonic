@@ -220,4 +220,53 @@ describe('Agent', () => {
     const persisted = JSON.parse(localStorage.getItem('logsonic-agent') || '{}');
     expect(persisted.state.sessions[0].turns[0].answer).toBe('First answer.');
   });
+
+  it('refreshes workspaces when save_view succeeds and shows remote endpoint note', async () => {
+    const refreshSpy = vi.fn().mockResolvedValue(undefined);
+    const { useWorkspaceStore } = await import('@/stores/useWorkspaceStore');
+    useWorkspaceStore.setState({ refreshWorkspaces: refreshSpy });
+
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        json({
+          available: true,
+          model: 'claude-sonnet-5-5',
+          proxy_url: 'https://api.anthropic.com/v1/messages',
+        })
+      )
+      .mockResolvedValueOnce(
+        sse([
+          [
+            'step',
+            {
+              id: 'sv1',
+              tool: 'save_view',
+              input: { name: 'Checkout Spike' },
+              output: { id: 'ws-1', name: 'Checkout Spike', matching_rows: 12 },
+              is_error: false,
+            },
+          ],
+          ['done', { answer: 'Saved view.', steps: [] }],
+        ])
+      )
+      .mockResolvedValueOnce(
+        json({
+          available: true,
+          model: 'claude-sonnet-5-5',
+          proxy_url: 'https://api.anthropic.com/v1/messages',
+        })
+      );
+
+    renderPage();
+    await screen.findByText('claude-sonnet-5-5');
+    expect(
+      screen.getByText(
+        'Log excerpts the agent reads are sent to the configured model endpoint (api.anthropic.com).'
+      )
+    ).toBeTruthy();
+
+    ask('Save this view');
+    await screen.findByText('Saved view.');
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+  });
 });

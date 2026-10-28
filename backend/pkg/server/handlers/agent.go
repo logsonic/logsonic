@@ -157,19 +157,23 @@ func (h *Services) HandleAgentStatus(w http.ResponseWriter, r *http.Request) {
 	available := false
 	reason := ""
 	if err == nil {
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-		defer cancel()
-		// Reachability only: Ollama, LiteLLM and the Claude API have no
-		// common health route, so any answer below 500 counts.
-		health := url.URL{Scheme: u.Scheme, Host: u.Host, Path: "/health"}
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, health.String(), nil)
-		resp, reqErr := (&http.Client{Timeout: 2 * time.Second}).Do(req)
-		if reqErr == nil {
-			available = resp.StatusCode < 500
-			resp.Body.Close()
-		}
-		if !available {
-			reason = "Cannot reach the model endpoint at " + u.Scheme + "://" + u.Host + "; start it or fix LOGSONIC_AGENT_PROXY_URL"
+		if strings.EqualFold(u.Hostname(), "api.anthropic.com") && agentProxyKey() == "local-proxy" {
+			reason = "Set ANTHROPIC_API_KEY (or LOGSONIC_AGENT_PROXY_KEY) to use api.anthropic.com"
+		} else {
+			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+			defer cancel()
+			// Reachability only: Ollama, LiteLLM and the Claude API have no
+			// common health route, so any answer below 500 counts.
+			health := url.URL{Scheme: u.Scheme, Host: u.Host, Path: "/health"}
+			req, _ := http.NewRequestWithContext(ctx, http.MethodGet, health.String(), nil)
+			resp, reqErr := (&http.Client{Timeout: 2 * time.Second}).Do(req)
+			if reqErr == nil {
+				available = resp.StatusCode < 500
+				resp.Body.Close()
+			}
+			if !available {
+				reason = "Cannot reach the model endpoint at " + u.Scheme + "://" + u.Host + "; start it or fix LOGSONIC_AGENT_PROXY_URL"
+			}
 		}
 	} else {
 		reason = err.Error()
@@ -639,13 +643,15 @@ func callAgentProxyStream(ctx context.Context, messages []agentMessage, tools []
 			block.fields["thinking"] = block.thinking.String()
 			block.fields["signature"] = block.signature
 		case "tool_use":
-			input := map[string]any{}
 			if raw := strings.TrimSpace(block.partial.String()); raw != "" {
+				input := map[string]any{}
 				if err := json.Unmarshal([]byte(raw), &input); err != nil {
 					return out, errors.New("proxy returned malformed tool input")
 				}
+				block.fields["input"] = input
+			} else if _, ok := block.fields["input"].(map[string]any); !ok {
+				block.fields["input"] = map[string]any{}
 			}
-			block.fields["input"] = input
 		}
 		encoded, err := json.Marshal(block.fields)
 		if err != nil {

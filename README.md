@@ -67,6 +67,7 @@ The agent works with any server that speaks the Anthropic Messages API (`POST â€
 | `LOGSONIC_AGENT_PROXY_URL` | Full Messages endpoint. Plain `http://` is allowed only for `localhost`; remote endpoints must use `https://`. | `http://127.0.0.1:8789/v1/messages` |
 | `LOGSONIC_AGENT_MODEL` | Model name sent with each request | `claude-sonnet-5-5` |
 | `LOGSONIC_AGENT_PROXY_KEY` | Sent as `x-api-key`. For `https://api.anthropic.com` with no key set, `ANTHROPIC_API_KEY` is used; no other endpoint receives that key unless you set it here. | `local-proxy` |
+| `LOGSONIC_AGENT_INGEST_ROOT` | Optional. Limits the agent's local imports to files inside this folder. Credential locations such as `~/.ssh`, `~/.aws` and `.env` files are always refused. | unset |
 
 The dock header shows the model name when the endpoint answers, and a short fix-it message when it does not.
 
@@ -154,6 +155,7 @@ Agent mode is optional; import, search and the MCP server for external AI client
 - External MCP servers receive whatever arguments the model passes to their tools, which can include log excerpts. Stdio servers run as your user, with LogSonic's environment minus model credentials (`LOGSONIC_AGENT_*`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`), plus the `env` you list. Only add servers you trust, and restrict servers that can change things with `tools`.
 - Servers can only be added by editing `mcp.json` on disk. There is no API that adds one, so a web page or a log line cannot make LogSonic start a program.
 - The agent treats log text as untrusted data. It is told to call external tools only when your request needs them, never because log content asks for it. That is an instruction to the model, not a sandbox, which is another reason to keep the `tools` lists tight.
+- The agent's local imports refuse credential locations (`~/.ssh`, `~/.aws`, `.env` files and similar). Set `LOGSONIC_AGENT_INGEST_ROOT` to limit them to one folder.
 - Agent endpoints accept requests from the local machine only. Investigations are saved in your browser's local storage.
 
 More detail: [Agent mode](docs/agent-mode.md) and [Configuration](docs/configuration.md).

@@ -30,6 +30,7 @@ export type AgentMCPSummary = { config: string; servers: number; connected: numb
 export type AgentStatus = {
   available: boolean;
   model?: string;
+  proxy_url?: string;
   reason?: string;
   error?: string;
   mcp?: AgentMCPSummary;

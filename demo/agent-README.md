@@ -63,7 +63,11 @@ storage path for independent runs. Do not delete a running server's index.
   most 1,000 events; truncation is reported. CLI fixture tests do not prove live
   AWS access. Credentials stay in the CLI environment.
 - Local: absolute regular file or non-recursive directory; up to 16 files and
-  64 MiB per file.
+  64 MiB per file. Hidden files in a directory are skipped; entries that are
+  refused or not regular files are skipped and listed in the result.
+  Credential locations (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `.env`
+  files and similar) are refused. Set `LOGSONIC_AGENT_INGEST_ROOT` to limit
+  imports to one folder.
 
 `LOGSONIC_AGENT_PROXY_URL` is the full Messages endpoint, default
 `http://127.0.0.1:8789/v1/messages`. Plain HTTP is accepted only for

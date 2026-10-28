@@ -30,7 +30,7 @@ var (
 )
 
 var agentToolSchemas = []map[string]any{
-	{"name": "ingest_local", "description": "Import a local absolute log file or a directory of log files. At most 16 files, 64 MiB per file. Results are searchable immediately.", "input_schema": agentSchema(map[string]any{"path": agentStringProp}, "path")},
+	{"name": "ingest_local", "description": "Import a local absolute log file or a directory of log files (not recursive; hidden files are skipped). At most 16 files, 64 MiB per file. Credential locations such as ~/.ssh, ~/.aws or .env files are refused, and when LOGSONIC_AGENT_INGEST_ROOT is set the path must be inside it. Results are searchable immediately; skipped directory entries are listed with a reason.", "input_schema": agentSchema(map[string]any{"path": agentStringProp}, "path")},
 	{"name": "ingest_remote", "description": "Download and import a public HTTPS log file (up to 16 MiB).", "input_schema": agentSchema(map[string]any{"url": agentStringProp}, "url")},
 	{"name": "ingest_cloudwatch", "description": "Import up to 1000 CloudWatch log events using an explicitly named AWS CLI profile and region.", "input_schema": agentSchema(map[string]any{"profile": agentStringProp, "region": agentStringProp, "log_group": agentStringProp, "start_time_ms": agentIntProp, "end_time_ms": agentIntProp}, "profile", "region", "log_group")},
 	{"name": "list_sources", "description": "List indexed log sources with their time spans and row counts. Start here to orient.", "input_schema": agentSchema(map[string]any{})},
@@ -54,7 +54,7 @@ func agentTimeRange(in map[string]any, startKey, endKey string) (time.Time, time
 		dest *time.Time
 	}{{startKey, &start}, {endKey, &end}} {
 		if s := toolString(in, pair.key); s != "" {
-			parsed, err := time.Parse(time.RFC3339, s)
+			parsed, err := time.Parse(time.RFC3339Nano, s)
 			if err != nil {
 				return start, end, fmt.Errorf("%s must be RFC3339", pair.key)
 			}
@@ -269,7 +269,7 @@ func (h *Services) agentContext(ctx context.Context, in map[string]any) (any, er
 		return nil, err
 	}
 	raw := toolString(in, "timestamp")
-	at, err := time.Parse(time.RFC3339, raw)
+	at, err := time.Parse(time.RFC3339Nano, raw)
 	if err != nil {
 		return nil, errors.New("timestamp must be RFC3339")
 	}
@@ -281,7 +281,7 @@ func (h *Services) agentContext(ctx context.Context, in map[string]any) (any, er
 	if err != nil {
 		return nil, err
 	}
-	out := map[string]any{"window": map[string]string{"start": start.UTC().Format(time.RFC3339), "end": end.UTC().Format(time.RFC3339)}, "total_count": page.TotalCount, "returned": len(page.Logs), "logs": trimAgentRows(page.Logs)}
+	out := map[string]any{"window": map[string]string{"start": start.UTC().Format(time.RFC3339Nano), "end": end.UTC().Format(time.RFC3339Nano)}, "total_count": page.TotalCount, "returned": len(page.Logs), "logs": trimAgentRows(page.Logs)}
 	if page.TotalCount > len(page.Logs) {
 		out["note"] = "Only the oldest rows of the window are returned; shrink before_seconds or add a query to see rows nearer the event."
 	}

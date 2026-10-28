@@ -513,6 +513,9 @@ func childEnv(extra map[string]string) []string {
 		if strings.HasPrefix(key, "LOGSONIC_AGENT_") || key == "ANTHROPIC_API_KEY" || key == "ANTHROPIC_AUTH_TOKEN" {
 			continue
 		}
+		if _, overridden := extra[key]; overridden {
+			continue
+		}
 		env = append(env, kv)
 	}
 	keys := make([]string, 0, len(extra))
