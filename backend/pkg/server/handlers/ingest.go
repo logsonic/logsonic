@@ -439,6 +439,21 @@ func decodeSessionRecords(session IngestSession, lines []string) ([]l2g.LineResu
 				}
 			}
 		}
+		// Discovery can prefer an inferred text pattern over the JSON
+		// skeleton when JSON lines differ in their keys (session lines
+		// without src_ip, say). That pattern splits the object at arbitrary
+		// punctuation and loses its fields, so decode such lines as JSON.
+		for i := range results {
+			if strings.HasPrefix(results[i].Pattern, "structured:JSON") {
+				continue
+			}
+			if fields, ok := jsonLineFields(results[i].Raw); ok {
+				results[i].Matched = true
+				results[i].Pattern = "structured:JSON Lines"
+				results[i].Fields = fields
+				results[i].Error = ""
+			}
+		}
 		if primary, ok := router.PrimaryPattern(); ok {
 			opts.Name = primary.Name
 		}
