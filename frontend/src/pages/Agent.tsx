@@ -13,6 +13,7 @@ import {
   Plug,
   Plus,
   RotateCcw,
+  Settings,
   ScanSearch,
   Search,
   Square,
@@ -361,6 +362,7 @@ export default function Agent({
   const startTurn = useAgentStore((state) => state.startTurn);
   const updateLastTurn = useAgentStore((state) => state.updateLastTurn);
   const newSession = useAgentStore((state) => state.newSession);
+  const navigate = useNavigate();
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [statusError, setStatusError] = useState('');
   const [draft, setDraft] = useState('');
@@ -552,6 +554,14 @@ export default function Agent({
           >
             <Plus size={16} />
           </button>
+          <button
+            type="button"
+            aria-label="Agent settings"
+            title="Model and MCP servers"
+            onClick={() => navigate('/settings/agent')}
+          >
+            <Settings size={15} />
+          </button>
           {onClose && (
             <button type="button" aria-label="Close agent" title="Close (⌘J)" onClick={onClose}>
               <X size={16} />
@@ -630,7 +640,16 @@ export default function Agent({
           <div className="ls-agent-unavailable" role="alert">
             {statusError
               ? `Cannot reach the agent: ${statusError}`
-              : status?.reason || status?.error || 'The agent is not configured on this server.'}
+              : status?.reason ||
+                status?.error ||
+                'The agent is not configured on this server.'}{' '}
+            <button
+              type="button"
+              className="ls-agent-settings-link"
+              onClick={() => navigate('/settings/agent')}
+            >
+              Open agent settings
+            </button>
           </div>
         )}
         <form className="ls-agent-compose" onSubmit={submit}>

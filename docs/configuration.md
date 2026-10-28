@@ -26,6 +26,7 @@ LogSonic can be configured with command-line flags or environment variables.
 - `LOGSONIC_AUTO_PORT`: auto-select a free port if busy (`1`, `true`, `yes`, `on`)
 - `RETENTION_DAYS`: delete indexed logs older than N days
 - `LOGSONIC_ALLOWED_HOSTS`: same as `-allowed-hosts`
+- Agent model settings can also be saved from **Settings > Agent** into `<storage>/agent.json` (mode 0600). The three `LOGSONIC_AGENT_PROXY_*`/`MODEL` variables below win over saved values. A saved API key is used only while the endpoint has the host it was saved for, ahead of the `ANTHROPIC_API_KEY` fallback
 - `LOGSONIC_AGENT_PROXY_URL`: the agent's model endpoint, a URL whose path ends in `/v1/messages` (Anthropic Messages API). `http://` only for localhost; any host over `https://`. Default `http://127.0.0.1:8789/v1/messages`
 - `LOGSONIC_AGENT_MODEL`: model name sent to that endpoint (default `claude-sonnet-5-5`)
 - `LOGSONIC_AGENT_PROXY_KEY`: sent as `x-api-key`; for `https://api.anthropic.com` with no key set, `ANTHROPIC_API_KEY` is used (default `local-proxy`)

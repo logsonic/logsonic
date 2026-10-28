@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import Agent from '../Agent';
@@ -107,6 +107,24 @@ describe('Agent', () => {
     expect(screen.getByText('Configure a model.')).toBeTruthy();
     expect((screen.getByLabelText('Message the agent') as HTMLTextAreaElement).disabled).toBe(true);
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('links to agent settings from the unavailable notice and the header', async () => {
+    vi.mocked(fetch).mockResolvedValue(json({ available: false, reason: 'Configure a model.' }));
+    const routes = (
+      <Routes>
+        <Route path="/" element={<Agent />} />
+        <Route path="/settings/agent" element={<p>Agent settings page</p>} />
+      </Routes>
+    );
+    const { unmount } = render(<MemoryRouter>{routes}</MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open agent settings' }));
+    expect(screen.getByText('Agent settings page')).toBeTruthy();
+    unmount();
+
+    render(<MemoryRouter>{routes}</MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', { name: 'Agent settings' }));
+    expect(screen.getByText('Agent settings page')).toBeTruthy();
   });
 
   it('keeps completed steps when the stream ends in an error', async () => {

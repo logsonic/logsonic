@@ -606,6 +606,16 @@
   font-size: 12px;
   line-height: 1.45;
 }
+.ls-agent-settings-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
 .ls-agent-compose {
   display: flex;
   align-items: flex-end;

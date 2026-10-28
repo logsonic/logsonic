@@ -334,6 +334,11 @@ func NewServer(cfg Config) (*Server, error) {
 	r.With(agentLoopbackOnly, requireJSONBody, middleware.ThrottleBacklog(2, 4, 5*time.Second)).Post("/api/v1/agent/chat", h.HandleAgentChat)
 	r.With(agentLoopbackOnly).Get("/api/v1/agent/status", h.HandleAgentStatus)
 	r.With(agentLoopbackOnly).Get("/api/v1/agent/mcp", h.HandleAgentMCP)
+	// Model endpoint, model and key saved from Settings > Agent. MCP servers
+	// have no write route: they are added by editing mcp.json on disk.
+	r.With(agentLoopbackOnly).Get("/api/v1/agent/settings", h.HandleAgentSettings)
+	r.With(agentLoopbackOnly, requireJSONBody).Put("/api/v1/agent/settings", h.HandleUpdateAgentSettings)
+	r.With(agentLoopbackOnly, requireJSONBody, middleware.ThrottleBacklog(2, 4, 5*time.Second)).Post("/api/v1/agent/models", h.HandleAgentModels)
 
 	// Set up API routes
 	r.Group(func(r chi.Router) {

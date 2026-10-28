@@ -54,7 +54,17 @@ The Go process calls any server that speaks the Anthropic Messages API, set by
 `LOGSONIC_AGENT_PROXY_URL` (path ending in `/v1/messages`), with
 `LOGSONIC_AGENT_MODEL` and an `x-api-key` from `LOGSONIC_AGENT_PROXY_KEY`. An
 `https://` endpoint may be any host; only `api.anthropic.com` falls back to
-`ANTHROPIC_API_KEY` when no key is set. Plain `http://` is accepted only for `localhost`, `127.0.0.1`
+`ANTHROPIC_API_KEY` when no key is set. Settings > Agent saves the endpoint,
+model and key to `<storage>/agent.json` (0600) through `GET`/`PUT
+/api/v1/agent/settings` (loopback only, JSON body). Environment variables win
+over saved values. The saved key is bound to the endpoint host it was saved
+for and is never returned; the page sees only its last four characters.
+`POST /api/v1/agent/models` (loopback only) lists the models at the
+`/v1/models` route beside an endpoint, reading both the Anthropic shape
+(`data[].id`, `display_name`, `has_more`/`last_id` paging) and the OpenAI
+shape (`data[].id`), with Ollama's `/api/tags` as a fallback on localhost. It
+sends `x-api-key` and `Authorization: Bearer` with a key the page typed, or
+else only a stored key that belongs to that host, and refuses redirects. Plain `http://` is accepted only for `localhost`, `127.0.0.1`
 and `::1`, so keys and log excerpts never cross the network unencrypted. This
 covers the Claude API directly, a local Claude proxy (the default,
 `http://127.0.0.1:8789/v1/messages`), Ollama's Anthropic-compatible API, and
@@ -95,7 +105,9 @@ Claude Desktop / Claude Code `mcpServers` format. `pkg/agentmcp` owns them:
   `GET /api/v1/agent/status` adds a summary (`mcp.servers`, `connected`,
   `tools`).
 - There is no write API for servers: a stdio entry runs a program as the
-  user, so only a file edit can add one.
+  user, so only a file edit can add one. Settings > Agent shows the file
+  path, an editor command, an example and the status above, but cannot
+  change the file.
 
 ## Data and runtime boundary
 

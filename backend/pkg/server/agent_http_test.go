@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -578,5 +579,92 @@ func TestAgentStreamPreservesContentBlockStartToolInput(t *testing.T) {
 	}
 	if !foundStepStart {
 		t.Fatalf("missing step_start event in %+v", events)
+	}
+}
+
+func TestAgentSettingsRouteDrivesStatusAndChat(t *testing.T) {
+	for _, k := range []string{"LOGSONIC_AGENT_PROXY_URL", "LOGSONIC_AGENT_MODEL", "LOGSONIC_AGENT_PROXY_KEY", "ANTHROPIC_API_KEY"} {
+		t.Setenv(k, "")
+	}
+	var gotKey, gotModel string
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/messages" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		gotKey = r.Header.Get("x-api-key")
+		var body struct {
+			Model string `json:"model"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		gotModel = body.Model
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn"}`))
+	}))
+	defer proxy.Close()
+	srv, err := NewServer(Config{Host: "localhost", Port: ":0", StoragePath: t.TempDir(), Timeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.services.CloseStorage()
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	put := func(body, contentType, origin string) int {
+		req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/agent/settings", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", contentType)
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	settings := `{"proxy_url":"` + proxy.URL + `/v1/messages","model":"saved-model","api_key":"sk-saved-5678"}`
+	if code := put(settings, "text/plain", ""); code != http.StatusUnsupportedMediaType {
+		t.Errorf("text/plain PUT: %d", code)
+	}
+	if code := put(settings, "application/json", "https://evil.example.com"); code != http.StatusForbidden {
+		t.Errorf("foreign-origin PUT: %d", code)
+	}
+	if code := put(settings, "application/json", ""); code != http.StatusOK {
+		t.Fatalf("PUT: %d", code)
+	}
+
+	resp, err := http.Get(ts.URL + "/api/v1/agent/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var status struct {
+		Available bool   `json:"available"`
+		Model     string `json:"model"`
+		ProxyURL  string `json:"proxy_url"`
+	}
+	json.NewDecoder(resp.Body).Decode(&status)
+	resp.Body.Close()
+	if !status.Available || status.Model != "saved-model" || status.ProxyURL != proxy.URL+"/v1/messages" {
+		t.Fatalf("status %+v", status)
+	}
+
+	resp, err = http.Post(ts.URL+"/api/v1/agent/chat", "application/json", bytes.NewBufferString(`{"messages":[{"role":"user","content":"hi"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || gotKey != "sk-saved-5678" || gotModel != "saved-model" {
+		t.Fatalf("chat status %d, key %q, model %q", resp.StatusCode, gotKey, gotModel)
+	}
+
+	resp, err = http.Get(ts.URL + "/api/v1/agent/settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if strings.Contains(string(raw), "sk-saved") || !strings.Contains(string(raw), "5678") {
+		t.Fatalf("settings GET: %s", raw)
 	}
 }

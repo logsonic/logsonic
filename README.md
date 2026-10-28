@@ -60,7 +60,9 @@ We test this with a synthetic day of 188,864 log lines that hides an intrusion, 
 
 ### Connect a model
 
-The agent works with any server that speaks the Anthropic Messages API (`POST …/v1/messages`). Set three environment variables before starting LogSonic:
+The agent works with any server that speaks the Anthropic Messages API (`POST …/v1/messages`). The simplest way to connect one is **Settings > Agent** (the gear in the agent dock): pick Claude API, Ollama, LiteLLM or the local proxy, paste an API key if the endpoint needs one, choose the model, then **Test**. Once the endpoint URL is valid, the page lists the models it offers (Anthropic or OpenAI-style `/v1/models`, or Ollama's `/api/tags`); the download button next to **Model** opens that list and fills an empty field. LogSonic makes that request, sending a stored key only to the host it belongs to and never following redirects. These settings are saved in `agent.json` in the LogSonic storage folder, readable only by your user. A saved key is sent only to the endpoint host it was saved for, and the page never shows it again.
+
+You can also use environment variables. They win over saved settings, and the settings page shows those fields as locked:
 
 | Variable | Meaning | Default |
 |---|---|---|
@@ -113,7 +115,7 @@ The agent was developed and evaluated with Claude models. Smaller local models c
 
 ### Use other MCP servers from the agent
 
-The agent can also call tools from other MCP servers: your ticket tracker, a filesystem with runbooks or on-call notes, a metrics or deploy history server. List them in `mcp.json` in the LogSonic storage folder (`~/.logsonic/mcp.json` by default; set `LOGSONIC_AGENT_MCP_CONFIG` to use another path). The format is the one Claude Desktop and Claude Code use, so you can paste existing entries:
+The agent can also call tools from other MCP servers: your ticket tracker, a filesystem with runbooks or on-call notes, a metrics or deploy history server. List them in `mcp.json` in the LogSonic storage folder (`~/Library/Application Support/Logsonic/mcp.json` on macOS, `%APPDATA%\Logsonic\mcp.json` on Windows, `~/.local/share/logsonic/mcp.json` on Linux, or under `-storage` if you set it; set `LOGSONIC_AGENT_MCP_CONFIG` to use another path). **Settings > Agent** shows the exact path, a command that opens it in your editor, an example, and each server's connection state, tools and errors after you click **Recheck**. The format is the one Claude Desktop and Claude Code use, so you can paste existing entries:
 
 ```json
 {

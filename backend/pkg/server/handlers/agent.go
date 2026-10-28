@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -99,66 +98,15 @@ type proxyReply struct {
 	Error      any               `json:"error,omitempty"`
 }
 
-func agentProxyURL() string {
-	if v := os.Getenv("LOGSONIC_AGENT_PROXY_URL"); v != "" {
-		return v
-	}
-	return "http://127.0.0.1:8789/v1/messages"
-}
-
-func agentModel() string {
-	if v := os.Getenv("LOGSONIC_AGENT_MODEL"); v != "" {
-		return v
-	}
-	return "claude-sonnet-5-5"
-}
-
-// agentProxyKey is sent as x-api-key. LOGSONIC_AGENT_PROXY_KEY wins. The
-// Claude API endpoint falls back to ANTHROPIC_API_KEY; no other host gets
-// that key implicitly. Local proxies get a placeholder they ignore.
-func agentProxyKey() string {
-	if v := os.Getenv("LOGSONIC_AGENT_PROXY_KEY"); v != "" {
-		return v
-	}
-	if u, err := url.Parse(agentProxyURL()); err == nil && u.Scheme == "https" && strings.EqualFold(u.Hostname(), "api.anthropic.com") {
-		if v := os.Getenv("ANTHROPIC_API_KEY"); v != "" {
-			return v
-		}
-	}
-	return "local-proxy"
-}
-
-// agentProxyEndpoint validates the model endpoint: any server that speaks
-// the Anthropic Messages API at a path ending in /v1/messages. Plain HTTP
-// is allowed only on loopback (a local proxy, Ollama, LiteLLM), so an API
-// key and log excerpts never cross the network unencrypted; remote
-// endpoints must use HTTPS.
-func agentProxyEndpoint() (*url.URL, error) {
-	u, err := url.Parse(agentProxyURL())
-	if err != nil || u.Hostname() == "" || !strings.HasSuffix(u.Path, "/v1/messages") || u.User != nil {
-		return nil, errors.New("LOGSONIC_AGENT_PROXY_URL must be an http(s) URL whose path ends in /v1/messages")
-	}
-	switch u.Scheme {
-	case "https":
-		return u, nil
-	case "http":
-		switch strings.ToLower(u.Hostname()) {
-		case "localhost", "127.0.0.1", "::1":
-			return u, nil
-		}
-		return nil, errors.New("plain HTTP model endpoints must be on localhost; use HTTPS for a remote endpoint")
-	}
-	return nil, errors.New("LOGSONIC_AGENT_PROXY_URL must use http (localhost only) or https")
-}
-
 func (h *Services) HandleAgentStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	u, err := agentProxyEndpoint()
+	cfg := h.currentAgentConfig()
+	u, err := validateAgentEndpoint(cfg.URL)
 	available := false
 	reason := ""
 	if err == nil {
-		if strings.EqualFold(u.Hostname(), "api.anthropic.com") && agentProxyKey() == "local-proxy" {
-			reason = "Set ANTHROPIC_API_KEY (or LOGSONIC_AGENT_PROXY_KEY) to use api.anthropic.com"
+		if strings.EqualFold(u.Hostname(), "api.anthropic.com") && cfg.KeySource == "none" {
+			reason = "Add an API key in Settings > Agent (or set ANTHROPIC_API_KEY) to use api.anthropic.com"
 		} else {
 			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 			defer cancel()
@@ -172,13 +120,13 @@ func (h *Services) HandleAgentStatus(w http.ResponseWriter, r *http.Request) {
 				resp.Body.Close()
 			}
 			if !available {
-				reason = "Cannot reach the model endpoint at " + u.Scheme + "://" + u.Host + "; start it or fix LOGSONIC_AGENT_PROXY_URL"
+				reason = "Cannot reach the model endpoint at " + u.Scheme + "://" + u.Host + "; start it or change the endpoint in Settings > Agent"
 			}
 		}
 	} else {
 		reason = err.Error()
 	}
-	out := map[string]any{"available": available, "model": agentModel(), "proxy_url": agentProxyURL(), "reason": reason}
+	out := map[string]any{"available": available, "model": cfg.Model, "proxy_url": cfg.URL, "reason": reason}
 	if h.AgentMCP != nil {
 		st := h.AgentMCP.Status()
 		out["mcp"] = map[string]any{"config": st.Config, "servers": len(st.Servers), "connected": st.Connected, "tools": st.ToolCount}
@@ -253,7 +201,8 @@ func (h *Services) HandleAgentChat(w http.ResponseWriter, r *http.Request) {
 		}
 		messages = append(messages, agentMessage{Role: m.Role, Content: m.Content})
 	}
-	if _, err := agentProxyEndpoint(); err != nil {
+	cfg := h.currentAgentConfig()
+	if _, err := validateAgentEndpoint(cfg.URL); err != nil {
 		writeAgentError(w, http.StatusServiceUnavailable, err.Error(), nil)
 		return
 	}
@@ -261,7 +210,7 @@ func (h *Services) HandleAgentChat(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if !input.Stream {
-		answer, steps, err := h.runAgentLoop(ctx, messages, false, discardAgentEvents{})
+		answer, steps, err := h.runAgentLoop(ctx, cfg, messages, false, discardAgentEvents{})
 		if err != nil {
 			status := http.StatusBadGateway
 			var failure *agentFailure
@@ -281,7 +230,7 @@ func (h *Services) HandleAgentChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	stopHeartbeat := sse.heartbeat(agentHeartbeat)
-	answer, steps, err := h.runAgentLoop(ctx, messages, true, sse)
+	answer, steps, err := h.runAgentLoop(ctx, cfg, messages, true, sse)
 	stopHeartbeat()
 	if steps == nil {
 		steps = []agentStep{}
@@ -295,7 +244,7 @@ func (h *Services) HandleAgentChat(w http.ResponseWriter, r *http.Request) {
 
 // runAgentLoop alternates model rounds and tool calls until the model answers
 // without requesting tools, or a bound is reached.
-func (h *Services) runAgentLoop(ctx context.Context, messages []agentMessage, stream bool, events agentEvents) (string, []agentStep, error) {
+func (h *Services) runAgentLoop(ctx context.Context, cfg agentConfig, messages []agentMessage, stream bool, events agentEvents) (string, []agentStep, error) {
 	steps := make([]agentStep, 0, 8)
 	tools := append([]map[string]any(nil), agentToolSchemas...)
 	if h.AgentUITools != nil {
@@ -309,9 +258,9 @@ func (h *Services) runAgentLoop(ctx context.Context, messages []agentMessage, st
 		var proxy proxyReply
 		var err error
 		if stream {
-			proxy, err = callAgentProxyStream(ctx, messages, tools, func(delta string) { events.Text(round, delta) })
+			proxy, err = callAgentProxyStream(ctx, cfg, messages, tools, func(delta string) { events.Text(round, delta) })
 		} else {
-			proxy, err = callAgentProxy(ctx, messages, tools)
+			proxy, err = callAgentProxy(ctx, cfg, messages, tools)
 		}
 		if err != nil {
 			return "", steps, &agentFailure{http.StatusBadGateway, err.Error()}
@@ -457,8 +406,8 @@ func (s *agentSSE) Step(step agentStep) {
 	s.send("step", map[string]any{"id": step.ID, "tool": step.Tool, "input": step.Input, "output": step.Output, "is_error": step.IsError})
 }
 
-func agentProxyRequest(ctx context.Context, messages []agentMessage, tools []map[string]any, stream bool) (*http.Request, error) {
-	payload := map[string]any{"model": agentModel(), "max_tokens": agentMaxTokens, "system": agentSystemPrompt, "messages": messages, "tools": tools}
+func agentProxyRequest(ctx context.Context, cfg agentConfig, messages []agentMessage, tools []map[string]any, stream bool) (*http.Request, error) {
+	payload := map[string]any{"model": cfg.Model, "max_tokens": agentMaxTokens, "system": agentSystemPrompt, "messages": messages, "tools": tools}
 	if stream {
 		payload["stream"] = true
 	}
@@ -466,13 +415,13 @@ func agentProxyRequest(ctx context.Context, messages []agentMessage, tools []map
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, agentProxyURL(), bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.URL, bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("anthropic-version", "2023-06-01")
-	req.Header.Set("x-api-key", agentProxyKey())
+	req.Header.Set("x-api-key", cfg.Key)
 	if stream {
 		req.Header.Set("Accept", "text/event-stream")
 	}
@@ -484,9 +433,9 @@ func proxyHTTPError(resp *http.Response) error {
 	return fmt.Errorf("proxy returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
 }
 
-func callAgentProxy(ctx context.Context, messages []agentMessage, tools []map[string]any) (proxyReply, error) {
+func callAgentProxy(ctx context.Context, cfg agentConfig, messages []agentMessage, tools []map[string]any) (proxyReply, error) {
 	var out proxyReply
-	req, err := agentProxyRequest(ctx, messages, tools, false)
+	req, err := agentProxyRequest(ctx, cfg, messages, tools, false)
 	if err != nil {
 		return out, err
 	}
@@ -524,9 +473,9 @@ type streamBlock struct {
 // to onText and reassembles the complete content blocks, so the assistant
 // message replayed to the model matches the non-streaming response. Thinking
 // blocks keep their signature unchanged; the API rejects altered ones.
-func callAgentProxyStream(ctx context.Context, messages []agentMessage, tools []map[string]any, onText func(string)) (proxyReply, error) {
+func callAgentProxyStream(ctx context.Context, cfg agentConfig, messages []agentMessage, tools []map[string]any, onText func(string)) (proxyReply, error) {
 	var out proxyReply
-	req, err := agentProxyRequest(ctx, messages, tools, true)
+	req, err := agentProxyRequest(ctx, cfg, messages, tools, true)
 	if err != nil {
 		return out, err
 	}

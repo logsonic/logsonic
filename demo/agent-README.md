@@ -69,6 +69,8 @@ storage path for independent runs. Do not delete a running server's index.
   files and similar) are refused. Set `LOGSONIC_AGENT_INGEST_ROOT` to limit
   imports to one folder.
 
+Settings > Agent saves the endpoint, model and API key to
+`<storage>/agent.json` (0600); the variables below win over it.
 `LOGSONIC_AGENT_PROXY_URL` is the full Messages endpoint, default
 `http://127.0.0.1:8789/v1/messages`. Plain HTTP is accepted only for
 localhost; use HTTPS for the Claude API or a remote gateway. The README's

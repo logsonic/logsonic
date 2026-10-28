@@ -13,6 +13,7 @@ const Import = lazy(() => import('./pages/Import.tsx'));
 const CustomPatterns = lazy(() => import('./pages/settings/CustomPatterns.tsx'));
 const SettingsAbout = lazy(() => import('./pages/settings/About.tsx'));
 const McpSetup = lazy(() => import('./pages/settings/McpSetup.tsx'));
+const AgentSettings = lazy(() => import('./pages/settings/AgentSettings.tsx'));
 const StorageSettings = lazy(() => import('./pages/settings/Storage.tsx'));
 const WatchesSettings = lazy(() => import('./pages/settings/Watches.tsx'));
 const NotFound = lazy(() => import('./pages/NotFound.tsx'));
@@ -57,6 +58,7 @@ const App = () => {
             <Route path="/settings/patterns" element={<CustomPatterns />} />
             <Route path="/settings/about" element={<SettingsAbout />} />
             <Route path="/settings/mcp" element={<McpSetup />} />
+            <Route path="/settings/agent" element={<AgentSettings />} />
             <Route path="/settings/storage" element={<StorageSettings />} />
             <Route path="/settings/watches" element={<WatchesSettings />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
