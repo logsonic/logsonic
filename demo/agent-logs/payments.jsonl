@@ -1,0 +1,24 @@
+{"timestamp": "2026-10-28T10:00:00Z", "level": "INFO", "service": "payments", "trace_id": "order-000", "message": "Request completed", "status": 200, "duration_ms": 40}
+{"timestamp": "2026-10-28T10:01:00Z", "level": "INFO", "service": "payments", "trace_id": "order-001", "message": "Request completed", "status": 200, "duration_ms": 41}
+{"timestamp": "2026-10-28T10:02:00Z", "level": "INFO", "service": "payments", "trace_id": "order-002", "message": "Request completed", "status": 200, "duration_ms": 42}
+{"timestamp": "2026-10-28T10:03:00Z", "level": "INFO", "service": "payments", "trace_id": "order-003", "message": "Request completed", "status": 200, "duration_ms": 43}
+{"timestamp": "2026-10-28T10:04:00Z", "level": "INFO", "service": "payments", "trace_id": "order-004", "message": "Request completed", "status": 200, "duration_ms": 44}
+{"timestamp": "2026-10-28T10:05:00Z", "level": "INFO", "service": "payments", "trace_id": "order-005", "message": "Request completed", "status": 200, "duration_ms": 45}
+{"timestamp": "2026-10-28T10:06:00Z", "level": "INFO", "service": "payments", "trace_id": "order-006", "message": "Request completed", "status": 200, "duration_ms": 46}
+{"timestamp": "2026-10-28T10:07:00Z", "level": "INFO", "service": "payments", "trace_id": "order-007", "message": "Request completed", "status": 200, "duration_ms": 47}
+{"timestamp": "2026-10-28T10:08:00Z", "level": "INFO", "service": "payments", "trace_id": "order-008", "message": "Request completed", "status": 200, "duration_ms": 48}
+{"timestamp": "2026-10-28T10:09:00Z", "level": "INFO", "service": "payments", "trace_id": "order-009", "message": "Request completed", "status": 200, "duration_ms": 49}
+{"timestamp": "2026-10-28T10:10:00Z", "level": "INFO", "service": "payments", "trace_id": "order-010", "message": "Request completed", "status": 200, "duration_ms": 50}
+{"timestamp": "2026-10-28T10:11:00Z", "level": "INFO", "service": "payments", "trace_id": "order-011", "message": "Request completed", "status": 200, "duration_ms": 51}
+{"timestamp": "2026-10-28T10:12:00Z", "level": "INFO", "service": "payments", "trace_id": "order-012", "message": "Request completed", "status": 200, "duration_ms": 52}
+{"timestamp": "2026-10-28T10:13:00Z", "level": "INFO", "service": "payments", "trace_id": "order-013", "message": "Request completed", "status": 200, "duration_ms": 53}
+{"timestamp": "2026-10-28T10:14:00Z", "level": "INFO", "service": "payments", "trace_id": "order-014", "message": "Request completed", "status": 200, "duration_ms": 54}
+{"timestamp": "2026-10-28T10:15:00Z", "level": "INFO", "service": "payments", "trace_id": "order-015", "message": "Request completed", "status": 200, "duration_ms": 55}
+{"timestamp": "2026-10-28T10:16:00Z", "level": "INFO", "service": "payments", "trace_id": "order-016", "message": "Request completed", "status": 200, "duration_ms": 56}
+{"timestamp": "2026-10-28T10:17:00Z", "level": "WARN", "service": "payments", "trace_id": "order-017", "message": "Database connection pool nearing capacity: active=49 max=50", "status": 200, "duration_ms": 900}
+{"timestamp": "2026-10-28T10:18:00Z", "level": "ERROR", "service": "payments", "trace_id": "order-018", "message": "Database connection pool exhausted: active=50 max=50 waiting=128", "status": 503, "duration_ms": 5000}
+{"timestamp": "2026-10-28T10:19:00Z", "level": "ERROR", "service": "payments", "trace_id": "order-019", "message": "Database connection pool exhausted: active=50 max=50 waiting=128", "status": 503, "duration_ms": 5000}
+{"timestamp": "2026-10-28T10:20:00Z", "level": "ERROR", "service": "payments", "trace_id": "order-020", "message": "Database connection pool exhausted: active=50 max=50 waiting=128", "status": 503, "duration_ms": 5000}
+{"timestamp": "2026-10-28T10:21:00Z", "level": "ERROR", "service": "payments", "trace_id": "order-021", "message": "Database connection pool exhausted: active=50 max=50 waiting=128", "status": 503, "duration_ms": 5000}
+{"timestamp": "2026-10-28T10:22:00Z", "level": "ERROR", "service": "payments", "trace_id": "order-022", "message": "Database connection pool exhausted: active=50 max=50 waiting=128", "status": 503, "duration_ms": 5000}
+{"timestamp": "2026-10-28T10:23:00Z", "level": "ERROR", "service": "payments", "trace_id": "order-023", "message": "Database connection pool exhausted: active=50 max=50 waiting=128", "status": 503, "duration_ms": 5000}
