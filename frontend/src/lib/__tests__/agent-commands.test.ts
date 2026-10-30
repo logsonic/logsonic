@@ -202,6 +202,31 @@ describe('applyAgentCommand', () => {
     useSystemInfoStore.setState({ systemInfo: null });
   });
 
+  it('set_sources refreshes the source list for a just-imported source', async () => {
+    useSystemInfoStore.setState({
+      systemInfo: { storage_info: { source_names: ['nginx'] } },
+    });
+    const refresh = vi.fn(async () => {
+      useSystemInfoStore.setState({
+        systemInfo: { storage_info: { source_names: ['nginx', 'Apache_2k.log'] } },
+      });
+    });
+    const original = useSystemInfoStore.getState().refreshSystemInfo;
+    useSystemInfoStore.setState({ refreshSystemInfo: refresh });
+    try {
+      const res = await run('set_sources', { sources: ['Apache_2k.log', 'missing'] });
+      expect(refresh).toHaveBeenCalledWith(true);
+      expect(useSearchQueryParamsStore.getState().sources).toEqual(['Apache_2k.log', 'missing']);
+      expect(res.warnings).toEqual(['unknown sources: missing']);
+
+      refresh.mockClear();
+      await run('set_sources', { sources: ['nginx'] });
+      expect(refresh).not.toHaveBeenCalled();
+    } finally {
+      useSystemInfoStore.setState({ systemInfo: null, refreshSystemInfo: original });
+    }
+  });
+
   it('set_sort, set_page, set_sources, set_fields_panel', async () => {
     await run('set_sort', { field: 'status', order: 'asc' });
     await run('set_page', { page: 3, page_size: 50 });

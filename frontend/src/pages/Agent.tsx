@@ -427,6 +427,12 @@ export default function Agent({
             !event.step.is_error
           ) {
             imported = true;
+            // Load the new source names now, before the agent selects the
+            // imported source in the view.
+            void useSystemInfoStore
+              .getState()
+              .refreshSystemInfo(true)
+              .catch(() => undefined);
           }
           if (event.type === 'step' && event.step.tool === 'save_view' && !event.step.is_error) {
             void useWorkspaceStore

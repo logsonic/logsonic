@@ -189,3 +189,21 @@ show a result view, apply queries/filters/time/source selections, adjust columns
 sort/page results, open sidebars and navigate. Tool evidence includes the UI's
 acknowledged state; no connected UI or a rejected command is reported as an error.
 The dock stays open while log-view commands update the table beside it.
+
+When a turn reads data and a LogSonic window is connected, the turn ends with
+the evidence on screen whether or not the model called `ui_show_view`. The
+server derives the sources (imported sources and the `source` arguments of the
+data tools), the time window (the union of the windows those tools searched)
+and the last `query_logs` query that found rows, and applies only what the model did not set
+itself. A time range the model chose is replaced only when it left the table
+empty. This step appears in the trace as a `ui_show_view` step marked
+"In table". With no window open (an API caller), nothing is applied.
+
+Data tools (`query_logs`, `analyze_logs`, `facet_logs`, `log_histogram`,
+`log_patterns`) called without `start_time` and `end_time` search the span of
+the requested sources (all sources when none is named), not the last year, so
+old imported logs are found. The step shows the window that was searched; the
+model's own arguments are replayed to it unchanged.
+
+Selecting a source the agent has just imported refreshes the UI's source list
+first, so the new source stays selected in the filter panel.

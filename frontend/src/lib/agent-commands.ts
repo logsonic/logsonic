@@ -298,9 +298,21 @@ export const applyAgentCommand = async (
     case 'set_sources': {
       const sources = asStringList(args.sources ?? [], 'sources');
       goHome(ctx);
+      // A source the agent just imported is not in the cached source list
+      // yet, and the sidebar drops selected names it does not know. Refresh
+      // the list first so the new source stays selected.
+      const info = useSystemInfoStore.getState();
+      const cached = info.systemInfo?.storage_info?.source_names;
+      if (cached && sources.some((s) => !cached.includes(s))) {
+        await info.refreshSystemInfo(true).catch(() => undefined);
+      }
       // An empty list means "all sources", as ui_set_sources documents. An
       // initialized empty selection would instead query no source at all.
       const known = useSystemInfoStore.getState().systemInfo?.storage_info?.source_names ?? [];
+      if (cached) {
+        const unknown = sources.filter((s) => !known.includes(s));
+        if (unknown.length > 0) warnings.push(`unknown sources: ${unknown.join(', ')}`);
+      }
       store.setSources(sources.length > 0 ? sources : [...known]);
       store.setSourcesInitialized(sources.length > 0 || known.length > 0);
       if (run) runSearch();

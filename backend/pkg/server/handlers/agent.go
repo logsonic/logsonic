@@ -34,7 +34,7 @@ Investigation loop:
 2. Sweep: for open-ended requests ("find problems", "analyze everything", "anything unusual?"), run log_patterns over the whole window before narrowing. Its rare templates, rare field values and sparse fields cover every row, while facets and queries only see slices. Subtle problems often sit in INFO or WARN rows: a rare template, an unusual field value, a success that should have been a failure, or one source behaving differently from the rest. Check each source separately (source=...) when one source dominates the volume. Rerun log_patterns with a narrower query (for example a single source or level:WARN) when the first pass is dominated by noise.
 3. Narrow: facet_logs to find which fields and values (level, service, host, status, version, browser) dominate a suspicious slice; compare_windows to contrast an incident window with a baseline.
 4. Confirm: query_logs for matching rows and log_context for what happened around a specific event. Pin each finding down to its identifiers (account, IP, order or trace IDs, version, code) and its first and last timestamps. Separate real problems from routine noise that is present all day.
-5. Present: when a UI is connected, use ui_show_view to put the key evidence on screen (query, sources, time range, columns). Read ui_get_state for the current UI context. If no UI is connected, say so and continue in chat. When the user asks for views or a full analysis, call save_view once per confirmed problem with a query and window that return its evidence rows.
+5. Present: when a UI is connected, end with ui_show_view to put the key evidence on screen: the query, the sources, and an absolute start_date/end_date covering the evidence rows (indexed logs can be years old, so a relative range such as last-24-hours may show nothing), plus useful columns. Read ui_get_state for the current UI context. If no UI is connected, say so and continue in chat. When the user asks for views or a full analysis, call save_view once per confirmed problem with a query and window that return its evidence rows.
 
 When the user asks to import files, URLs or AWS logs, call the relevant ingest tool first, then investigate the imported data. Do not reimport data that list_sources already shows unless asked.
 
@@ -298,6 +298,7 @@ func (h *Services) runAgentLoop(ctx context.Context, cfg agentConfig, messages [
 			if proxy.StopReason == "max_tokens" {
 				answer += "\n\n[Response incomplete: the model reached its output limit. Ask a narrower question or continue.]"
 			}
+			steps = h.applyAgentFinalView(ctx, steps, events)
 			return answer, steps, nil
 		}
 		if proxy.StopReason == "max_tokens" {
@@ -315,8 +316,10 @@ func (h *Services) runAgentLoop(ctx context.Context, cfg agentConfig, messages [
 			if call.Input == nil {
 				call.Input = map[string]any{}
 			}
-			events.StepStart(call.ID, call.Name, call.Input)
-			output, toolErr := h.runAgentTool(ctx, call.Name, call.Input)
+			// The step records the window the tool actually searched.
+			input := h.agentFillWindow(call.Name, call.Input)
+			events.StepStart(call.ID, call.Name, input)
+			output, toolErr := h.runAgentTool(ctx, call.Name, input)
 			if toolErr != nil {
 				output = map[string]any{"error": toolErr.Error()}
 			}
@@ -326,7 +329,7 @@ func (h *Services) runAgentLoop(ctx context.Context, cfg agentConfig, messages [
 				encoded, _ = json.Marshal(output)
 				toolErr = errors.New("tool output too large")
 			}
-			step := agentStep{ID: call.ID, Tool: call.Name, Input: call.Input, Output: output, IsError: toolErr != nil}
+			step := agentStep{ID: call.ID, Tool: call.Name, Input: input, Output: output, IsError: toolErr != nil}
 			steps = append(steps, step)
 			events.Step(step)
 			results = append(results, map[string]any{"type": "tool_result", "tool_use_id": call.ID, "content": string(encoded), "is_error": toolErr != nil})
