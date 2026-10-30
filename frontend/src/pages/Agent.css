@@ -6,6 +6,8 @@
   position: fixed;
   right: 0;
   bottom: 0;
+  /* Layers: filter sidebar 50 < dock 55 < top bar and rail 60 < popovers,
+     menus and dialogs 80 (components/ui) < toasts 100. */
   z-index: 55;
   display: flex;
   background: var(--ls-panel);

@@ -1,8 +1,10 @@
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useFitRangeToData, useHasDataOutsideRange } from '@/hooks/useFitRangeToData';
+import { isSearchMetadataPending, refreshSearchMetadata } from '@/hooks/useSearchLogs';
 import { LogResponse } from '@/lib/api-types';
 import { cn } from '@/lib/utils';
+import { useFacetStore } from '@/stores/useFacetStore';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { parseISO } from 'date-fns';
@@ -396,6 +398,20 @@ export default function LogDistributionChart() {
   useEffect(() => {
     transformData(logData);
   }, [logData, searchStore.sources]);
+
+  // Rows can be replaced without their distribution (a search path that
+  // skips the deferred request, or one that was superseded). While the chart
+  // is on screen, fetch the distribution for the current view itself.
+  const distributionMissing = !!logData && !logData.log_distribution;
+  useEffect(() => {
+    if (!isVisible || isCollapsed || !distributionMissing || isLoading) return;
+    const timer = window.setTimeout(() => {
+      if (!isSearchMetadataPending()) {
+        void refreshSearchMetadata({ includeFacets: useFacetStore.getState().panelOpen });
+      }
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [isVisible, isCollapsed, distributionMissing, isLoading, logData]);
   
   // Time range selection functions
   const handleMouseDown = (e: any) => {
