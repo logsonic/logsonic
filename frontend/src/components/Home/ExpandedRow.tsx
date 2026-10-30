@@ -3,6 +3,8 @@ import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { Check, Copy } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
+import { JsonTree } from './JsonTree';
+
 interface Log {
   _raw?: string;
   id?: string;
@@ -41,9 +43,22 @@ const CopyButton = ({ content }: { content: string }) => {
  * ExpandedRow component to display log data in a structured format
  */
 export const ExpandedRow = ({ data }: { data: Log }) => {
-  const [activeTab, setActiveTab] = useState<'raw'|'fields'>('fields');
+  const [activeTab, setActiveTab] = useState<'raw' | 'fields' | 'tree'>('fields');
   const store = useSearchQueryParamsStore();
   const { parseSearchQuery, createHighlighter } = useSearchParser();
+
+  const treeData = useMemo(() => {
+    // Search results may project or flatten fields; _raw preserves the original JSON structure.
+    if (activeTab === 'tree' && typeof data._raw === 'string') {
+      try {
+        const original = JSON.parse(data._raw);
+        if (original !== null && typeof original === 'object') return original;
+      } catch {
+        // Plain-text logs still have an inspectable tree of their returned fields.
+      }
+    }
+    return data;
+  }, [activeTab, data]);
   
   // Extract search tokens from the current query
   const searchTokens = useMemo(() => {
@@ -97,12 +112,18 @@ export const ExpandedRow = ({ data }: { data: Log }) => {
         <button onClick={() => setActiveTab('raw')} style={tabBtn(activeTab === 'raw')}>
           Raw log
         </button>
+        <button onClick={() => setActiveTab('tree')} style={tabBtn(activeTab === 'tree')}>
+          JSON tree
+        </button>
         <div className="ml-auto">
-          <CopyButton content={getFormattedRawLog()} />
+          <CopyButton
+            content={activeTab === 'tree' ? JSON.stringify(treeData, null, 2) : getFormattedRawLog()}
+          />
         </div>
       </div>
 
       <div style={{ padding: 12 }}>
+        {activeTab === 'tree' && <JsonTree data={treeData} />}
         {activeTab === 'raw' && (
           <pre
             className="overflow-x-auto"
