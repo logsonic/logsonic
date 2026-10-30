@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -268,5 +269,52 @@ func TestAgentAnalyzeReportsCrossSourceMinuteAndCandidateSpike(t *testing.T) {
 	encoded, _ := json.Marshal(out)
 	if !bytes.Contains(encoded, []byte("candidate_spikes")) || !bytes.Contains(encoded, []byte("db.log")) || !bytes.Contains(encoded, []byte("app.log")) {
 		t.Fatalf("analysis %s", encoded)
+	}
+}
+
+// The model often sends ~/… or a path relative to the home folder; both
+// resolve under the home folder, and credential locations there stay refused.
+func TestAgentLocalPathExpandsHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("LOGSONIC_AGENT_INGEST_ROOT", "")
+	log := writeAgentTestFile(t, filepath.Join(home, "Downloads", "Apache_2k.log"), "line\n")
+	want, _ := filepath.EvalSymlinks(log)
+	for _, in := range []string{
+		"~/Downloads/Apache_2k.log",
+		"$HOME/Downloads/Apache_2k.log",
+		"Downloads/Apache_2k.log",
+		` "~/Downloads/Apache_2k.log" `,
+		"file://" + log,
+		log,
+	} {
+		got, err := validateAgentLocalPath(in)
+		if err != nil || got != want {
+			t.Errorf("%q: got %q, %v; want %q", in, got, err, want)
+		}
+	}
+	writeAgentTestFile(t, filepath.Join(home, ".ssh", "id_ed25519"), "KEY\n")
+	writeAgentTestFile(t, filepath.Join(home, "project", ".env"), "SECRET=1\n")
+	for _, bad := range []string{"~/.ssh/id_ed25519", ".ssh", "~/project/.env", "~root/.ssh/id_rsa"} {
+		if _, err := validateAgentLocalPath(bad); err == nil {
+			t.Errorf("accepted %q", bad)
+		}
+	}
+	if _, err := validateAgentLocalPath("~/Downloads/missing.log"); err == nil || !strings.Contains(err.Error(), "no such file") {
+		t.Errorf("missing file error: %v", err)
+	}
+}
+
+// A big folder such as ~/Downloads is listed rather than refused outright;
+// with too many files the error names some so the model can pick.
+func TestAgentIngestLocalLargeFolderNamesFiles(t *testing.T) {
+	dir := t.TempDir()
+	for i := 0; i < 200; i++ {
+		writeAgentTestFile(t, filepath.Join(dir, fmt.Sprintf("file-%03d.log", i)), "line\n")
+	}
+	h := &Services{}
+	_, err := h.agentIngestLocal(context.Background(), dir)
+	if err == nil || !strings.Contains(err.Error(), "has 200 files") || !strings.Contains(err.Error(), "file-000.log") {
+		t.Fatalf("err = %v", err)
 	}
 }

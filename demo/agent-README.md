@@ -62,8 +62,12 @@ storage path for independent runs. Do not delete a running server's index.
   CloudWatch log group, profile, region and time interval in chat. One page of at
   most 1,000 events; truncation is reported. CLI fixture tests do not prove live
   AWS access. Credentials stay in the CLI environment.
-- Local: absolute regular file or non-recursive directory; up to 16 files and
-  64 MiB per file. Hidden files in a directory are skipped; entries that are
+- Local: regular file or non-recursive directory, given as an absolute path,
+  `~/…`, or a path relative to the home folder (`Downloads/app.log`). Anything
+  in the home folder is importable except credential locations. Up to 16
+  files per directory (a bigger folder, such as `~/Downloads`, gets an error
+  naming some files to pick from) and 64 MiB per file. On macOS, the first read
+  of Desktop, Documents or Downloads asks for permission. Hidden files in a directory are skipped; entries that are
   refused or not regular files are skipped and listed in the result.
   Credential locations (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `.env`
   files and similar) are refused. Set `LOGSONIC_AGENT_INGEST_ROOT` to limit

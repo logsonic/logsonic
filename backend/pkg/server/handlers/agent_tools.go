@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -75,6 +77,13 @@ func (h *Services) runAgentTool(ctx context.Context, name string, in map[string]
 	}
 }
 
+// Bounds for importing a whole folder. A folder with more files asks the
+// model to name the files instead.
+const (
+	agentMaxDirEntries = 4096
+	agentMaxDirFiles   = 16
+)
+
 // Folders and files that hold credentials rather than logs. Other dot
 // folders stay importable: ~/.ollama/logs, ~/.pm2/logs and ~/.npm/_logs are
 // common log locations.
@@ -116,16 +125,75 @@ func agentSecretPath(path string) bool {
 	return agentSecretFiles[base] || base == ".env" || strings.HasPrefix(base, ".env.")
 }
 
-// validateAgentLocalPath resolves symlinks and refuses credential locations
-// (checked on both the given and the resolved path) and, when
-// LOGSONIC_AGENT_INGEST_ROOT is set, anything outside that folder.
-func validateAgentLocalPath(path string) (string, error) {
-	if !filepath.IsAbs(path) {
+// agentExpandPath turns the path the model sends into an absolute one.
+// "~", "~/…" and "$HOME/…" expand to the user's home folder, and a relative
+// path is taken as relative to it: "Downloads/app.log" means the user's
+// Downloads folder, not the server's working directory. Surrounding quotes
+// and a file:// prefix are dropped.
+func agentExpandPath(raw string) (string, error) {
+	path := strings.TrimSpace(raw)
+	if len(path) >= 2 && (path[0] == '"' || path[0] == '\'') && path[len(path)-1] == path[0] {
+		path = path[1 : len(path)-1]
+	}
+	if rest, ok := strings.CutPrefix(path, "file://"); ok {
+		if unescaped, err := url.PathUnescape(rest); err == nil {
+			rest = unescaped
+		}
+		path = rest
+	}
+	if path == "" {
+		return "", errors.New("path required")
+	}
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
 		return "", errors.New("absolute path required")
+	}
+	switch {
+	case path == "~" || path == "$HOME":
+		return home, nil
+	case strings.HasPrefix(path, "~/"):
+		path = path[2:]
+	case strings.HasPrefix(path, "$HOME/"):
+		path = path[len("$HOME/"):]
+	case strings.HasPrefix(path, "~"):
+		// ~otheruser/… names another account's home.
+		return "", errors.New("only your own home folder (~/…) or an absolute path is supported")
+	}
+	return filepath.Join(home, path), nil
+}
+
+// agentPathError explains a failure to read a path. On macOS, Desktop,
+// Documents and Downloads are protected: the first read asks the user, and
+// a refusal stays until it is changed in System Settings.
+func agentPathError(path string, err error) error {
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("no such file or folder: %s", path)
+	}
+	if errors.Is(err, fs.ErrPermission) {
+		if runtime.GOOS == "darwin" {
+			return fmt.Errorf("macOS did not allow LogSonic to read %s. Allow it in System Settings > Privacy & Security > Files and Folders (or Full Disk Access), then try again", path)
+		}
+		return fmt.Errorf("permission denied reading %s", path)
+	}
+	return err
+}
+
+// validateAgentLocalPath expands ~ and relative paths (see agentExpandPath),
+// resolves symlinks and refuses credential locations (checked on both the
+// given and the resolved path) and, when LOGSONIC_AGENT_INGEST_ROOT is set,
+// anything outside that folder. Everything else, the whole home folder
+// included, is importable.
+func validateAgentLocalPath(raw string) (string, error) {
+	path, err := agentExpandPath(raw)
+	if err != nil {
+		return "", err
 	}
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		return "", err
+		return "", agentPathError(path, err)
 	}
 	for _, candidate := range []string{filepath.Clean(path), resolved} {
 		if agentSecretPath(candidate) {
@@ -152,22 +220,22 @@ func (h *Services) agentIngestLocal(ctx context.Context, path string) (any, erro
 	}
 	info, err := os.Stat(resolved)
 	if err != nil {
-		return nil, err
+		return nil, agentPathError(resolved, err)
 	}
 	paths := []string{resolved}
 	var skipped []map[string]string
 	if info.IsDir() {
 		dir, err := os.Open(resolved)
 		if err != nil {
-			return nil, err
+			return nil, agentPathError(resolved, err)
 		}
-		entries, readErr := dir.ReadDir(129)
+		entries, readErr := dir.ReadDir(agentMaxDirEntries + 1)
 		dir.Close()
 		if readErr != nil && !errors.Is(readErr, io.EOF) {
-			return nil, readErr
+			return nil, agentPathError(resolved, readErr)
 		}
-		if len(entries) > 128 {
-			return nil, errors.New("directory has more than 128 entries")
+		if len(entries) > agentMaxDirEntries {
+			return nil, fmt.Errorf("directory has more than %d entries; name the log files to import instead", agentMaxDirEntries)
 		}
 		paths = nil
 		// Hidden files (.DS_Store, editor swap files) are skipped quietly;
@@ -189,13 +257,18 @@ func (h *Services) agentIngestLocal(ctx context.Context, path string) (any, erro
 				skipped = append(skipped, map[string]string{"name": entry.Name(), "reason": err.Error()})
 				continue
 			}
-			if len(paths) >= 16 {
-				return nil, errors.New("directory has more than 16 files")
-			}
 			paths = append(paths, child)
 		}
 		if len(paths) == 0 {
 			return nil, errors.New("directory has no importable files")
+		}
+		sort.Strings(paths)
+		if len(paths) > agentMaxDirFiles {
+			names := make([]string, 0, 10)
+			for _, p := range paths[:min(10, len(paths))] {
+				names = append(names, filepath.Base(p))
+			}
+			return nil, fmt.Errorf("directory has %d files, more than %d; import specific files instead (for example %s)", len(paths), agentMaxDirFiles, strings.Join(names, ", "))
 		}
 	}
 	results := make([]any, 0, len(paths))
