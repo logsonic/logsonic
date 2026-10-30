@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -165,7 +166,9 @@ func TestAgentSettingsSaveNeverReturnsKeyAndWrites0600(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
+	// Windows has no Unix modes (files report 0666); the profile folder's ACL
+	// protects the file there.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("agent.json mode %v, want 0600", info.Mode().Perm())
 	}
 	if c := h.currentAgentConfig(); c.Key != "sk-ant-secret-1234" || c.Model != "claude-opus-5-5" {
