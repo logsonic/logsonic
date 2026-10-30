@@ -83,7 +83,7 @@ export LOGSONIC_AGENT_MODEL=claude-sonnet-5-5   # or claude-opus-5-5
 logsonic
 ```
 
-**Local model with Ollama.** Ollama serves an [Anthropic-compatible API](https://docs.ollama.com/api/anthropic-compatibility) on port 11434; it ignores the key. Pick a model that supports tool calling.
+**Local model with Ollama.** Ollama serves an [Anthropic-compatible API](https://docs.ollama.com/api/anthropic-compatibility) on port 11434; it ignores the key. Pick a model that supports tool calling. For a step-by-step setup with Liquid AI's small LFM3 model, including the context size the agent needs and using a GPU on another computer, see [Run the agent on a local model](docs/local-models.md).
 
 ```bash
 ollama pull qwen3-coder
@@ -238,6 +238,7 @@ For Linux, Windows, Docker, source builds, storage locations, and the macOS app 
 - [Installation](docs/installation.md): Homebrew, app bundle, binaries, Docker, source builds, and storage paths.
 - [Configuration](docs/configuration.md): command flags, environment variables, CLI subcommands, and examples.
 - [Getting Started](docs/getting-started.md): importing logs, searching, and MCP setup links.
+- [Local models](docs/local-models.md): run the agent on LFM3 or another model with Ollama on macOS, Linux or Windows.
 - [Live Streaming](docs/live-streaming.md): `logsonic tail`, stdin streaming, server-side file following, and demos.
 - [Timestamp Resolution](docs/timestamp-resolution.md): how LogSonic derives real timestamps and when to override.
 - [Development](docs/development.md): local backend/frontend setup, tests, E2E, and Swagger generation.

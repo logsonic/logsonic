@@ -62,6 +62,9 @@ or Settings > Agent:
   `tool_calls`, `tool` results, streamed tool call fragments) at the boundary.
   The model must support tool calls.
 
+To run the agent on a model on your own computer, see
+[Run the agent on a local model](local-models.md).
+
 The endpoint is `LOGSONIC_AGENT_PROXY_URL`, the model `LOGSONIC_AGENT_MODEL`
 and the key `LOGSONIC_AGENT_PROXY_KEY`. An `https://` endpoint may be any
 host; only `api.anthropic.com` falls back to `ANTHROPIC_API_KEY`, and only
