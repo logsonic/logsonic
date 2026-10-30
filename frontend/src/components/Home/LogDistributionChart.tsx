@@ -607,7 +607,8 @@ export default function LogDistributionChart() {
             onClick={() => setIsCollapsed(!isCollapsed)}
             className="h-5 w-5 p-0"
             style={{ color: 'var(--ls-text-3)' }}
-            aria-label={isCollapsed ? 'Expand event distribution' : 'Collapse event distribution'}
+            aria-label="Event distribution"
+            aria-expanded={!isCollapsed}
           >
             {isCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
           </Button>
