@@ -57,6 +57,9 @@ interface AgentState {
   activeId: string | null;
   /** id of the step whose query currently drives the log table. */
   viewStepId: string | null;
+  /** Investigation grants live only in this page's memory, never persisted. */
+  approvedInvestigations: Record<string, true>;
+  grantRevisions: Record<string, number>;
 
   setPanelOpen: (open: boolean) => void;
   togglePanel: () => void;
@@ -69,6 +72,8 @@ interface AgentState {
   /** Replace the last turn of a session. */
   updateLastTurn: (sessionId: string, update: (turn: AgentTurn) => AgentTurn) => void;
   setViewStep: (id: string | null) => void;
+  grantInvestigation: (id: string, expectedRevision?: number) => void;
+  revokeInvestigation: (id: string) => void;
 }
 
 export const useAgentStore = create<AgentState>()(
@@ -79,6 +84,8 @@ export const useAgentStore = create<AgentState>()(
       sessions: [],
       activeId: null,
       viewStepId: null,
+      approvedInvestigations: {},
+      grantRevisions: {},
 
       setPanelOpen: (panelOpen) => set({ panelOpen }),
       togglePanel: () => set({ panelOpen: !get().panelOpen }),
@@ -90,10 +97,19 @@ export const useAgentStore = create<AgentState>()(
       newSession: () => set({ activeId: null, viewStepId: null }),
       selectSession: (id) => set({ activeId: id, viewStepId: null }),
       deleteSession: (id) =>
-        set((state) => ({
-          sessions: state.sessions.filter((session) => session.id !== id),
-          activeId: state.activeId === id ? null : state.activeId,
-        })),
+        set((state) => {
+          const approvedInvestigations = { ...state.approvedInvestigations };
+          delete approvedInvestigations[id];
+          return {
+            sessions: state.sessions.filter((session) => session.id !== id),
+            activeId: state.activeId === id ? null : state.activeId,
+            approvedInvestigations,
+            grantRevisions: {
+              ...state.grantRevisions,
+              [id]: (state.grantRevisions[id] ?? 0) + 1,
+            },
+          };
+        }),
 
       startTurn: (prompt) => {
         const now = Date.now();
@@ -132,11 +148,36 @@ export const useAgentStore = create<AgentState>()(
         })),
 
       setViewStep: (viewStepId) => set({ viewStepId }),
+      grantInvestigation: (id, expectedRevision) =>
+        set((state) =>
+          expectedRevision !== undefined && (state.grantRevisions[id] ?? 0) !== expectedRevision
+            ? state
+            : { approvedInvestigations: { ...state.approvedInvestigations, [id]: true } }
+        ),
+      revokeInvestigation: (id) =>
+        set((state) => {
+          const approvedInvestigations = { ...state.approvedInvestigations };
+          delete approvedInvestigations[id];
+          return {
+            approvedInvestigations,
+            grantRevisions: {
+              ...state.grantRevisions,
+              [id]: (state.grantRevisions[id] ?? 0) + 1,
+            },
+          };
+        }),
     }),
     {
       name: 'logsonic-agent',
       version: 1,
       storage: createJSONStorage(() => localStorage),
+      // Even a manually injected or stale persisted grant cannot authorize a reload.
+      merge: (persisted, current) => ({
+        ...current,
+        ...(persisted as Partial<AgentState>),
+        approvedInvestigations: current.approvedInvestigations,
+        grantRevisions: current.grantRevisions,
+      }),
       partialize: (state) => ({
         panelOpen: state.panelOpen,
         panelWidth: state.panelWidth,

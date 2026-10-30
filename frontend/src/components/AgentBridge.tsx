@@ -56,7 +56,7 @@ export const AgentBridge = () => {
           id: cmd.id,
           ok: true,
           warnings: result.warnings.length > 0 ? result.warnings : undefined,
-          state: snapshotUIState(routeRef.current),
+          state: snapshotUIState(routeRef.current, result.details),
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

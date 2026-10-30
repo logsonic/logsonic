@@ -64,6 +64,29 @@ jobs:
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
+  go-agent-platforms:
+    # Agent tools handle paths, credentials and child environments, which
+    # differ by OS; the main Go job runs only on Linux.
+    name: Go agent tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: backend
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Placeholder SPA bundle
+        run: mkdir -p pkg/static/dist && printf '<!doctype html><title>ci placeholder</title>\n' > pkg/static/dist/index.html
+      - run: go test -count=1 -run 'Agent|ChildEnv' ./pkg/server/handlers ./pkg/agentmcp ./pkg/server
+
   web:
     name: Web (build, unit tests + coverage, lint/type baselines)
     runs-on: ubuntu-latest

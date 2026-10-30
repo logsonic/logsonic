@@ -25,7 +25,12 @@ import ReactMarkdown from 'react-markdown';
 import { useLocation, useNavigate } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
 
-import { fetchAgentStatus, streamAgentChat, type AgentStatus } from '@/lib/agent-stream';
+import {
+  fetchAgentStatus,
+  streamAgentChat,
+  type AgentStatus,
+  type AgentStreamEvent,
+} from '@/lib/agent-stream';
 import {
   buildMessages,
   externalTool,
@@ -36,6 +41,7 @@ import {
   toolLabel,
 } from '@/lib/agent-turns';
 import { applyStepView, stepView } from '@/lib/agent-view';
+import { API_BASE_URL } from '@/lib/api-client';
 import {
   useActiveSession,
   useAgentStore,
@@ -78,7 +84,7 @@ function proxyEndpointNote(proxyUrl?: string): string {
       // Keep default copy when proxyUrl is not a valid URL.
     }
   }
-  return 'Log excerpts the agent reads are sent to Claude through your local proxy.';
+  return 'Log excerpts the agent reads are sent to the model behind your local endpoint.';
 }
 
 const TABLE_TOOLS = new Set([
@@ -173,7 +179,18 @@ function StepRow({ step }: { step: AgentStep }) {
 function Markdown({ text }: { text: string }) {
   return (
     <div className="ls-agent-md">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        skipHtml
+        components={{
+          img: ({ alt }) => <span>{alt || ''}</span>,
+          a: ({ children, ...props }) => (
+            <a {...props} target="_blank" rel="noreferrer noopener">
+              {children}
+            </a>
+          ),
+        }}
+      >
         {text}
       </ReactMarkdown>
     </div>
@@ -290,10 +307,12 @@ function HistoryList({
   sessions,
   activeId,
   onPick,
+  locked,
 }: {
   sessions: AgentSession[];
   activeId: string | null;
   onPick: () => void;
+  locked: boolean;
 }) {
   const selectSession = useAgentStore((state) => state.selectSession);
   const deleteSession = useAgentStore((state) => state.deleteSession);
@@ -307,6 +326,7 @@ function HistoryList({
           <button
             type="button"
             className="ls-history-open"
+            disabled={locked}
             onClick={() => {
               selectSession(session.id);
               onPick();
@@ -321,6 +341,7 @@ function HistoryList({
             type="button"
             className="ls-history-delete"
             aria-label={`Delete ${session.title}`}
+            disabled={locked}
             onClick={() => deleteSession(session.id)}
           >
             <Trash2 size={13} />
@@ -362,11 +383,21 @@ export default function Agent({
   const startTurn = useAgentStore((state) => state.startTurn);
   const updateLastTurn = useAgentStore((state) => state.updateLastTurn);
   const newSession = useAgentStore((state) => state.newSession);
+  const approvedInvestigations = useAgentStore((state) => state.approvedInvestigations);
+  const grantInvestigation = useAgentStore((state) => state.grantInvestigation);
+  const revokeInvestigation = useAgentStore((state) => state.revokeInvestigation);
   const navigate = useNavigate();
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [statusError, setStatusError] = useState('');
   const [draft, setDraft] = useState('');
   const [showHistory, setShowHistory] = useState(false);
+  const [runningRequest, setRunningRequest] = useState(false);
+  const [approval, setApproval] = useState<
+    (Extract<AgentStreamEvent, { type: 'approval_required' }> & { sessionId: string }) | null
+  >(null);
+  const [approvalError, setApprovalError] = useState('');
+  const [approvalSubmitting, setApprovalSubmitting] = useState(false);
+  const approvalSubmittingRef = useRef(false);
   const request = useRef<AbortController | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -394,6 +425,73 @@ export default function Agent({
   // Abort only when the panel unmounts, not on every re-render.
   useEffect(() => () => request.current?.abort(), []);
 
+  const clearApproval = () => {
+    setApproval(null);
+    setApprovalError('');
+    setApprovalSubmitting(false);
+    approvalSubmittingRef.current = false;
+  };
+
+  const stop = () => {
+    clearApproval();
+    request.current?.abort();
+  };
+
+  const decideApproval = async (approve: boolean, approveAll = false) => {
+    if (
+      !approval ||
+      approvalSubmittingRef.current ||
+      !request.current ||
+      request.current.signal.aborted
+    )
+      return;
+    const current = approval;
+    const controller = request.current;
+    const signal = controller.signal;
+    const revision = useAgentStore.getState().grantRevisions[current.sessionId] ?? 0;
+    approvalSubmittingRef.current = true;
+    setApprovalSubmitting(true);
+    setApprovalError('');
+    try {
+      const response = await fetch(`${API_BASE_URL}/agent/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: current.id,
+          approve,
+          ...(approveAll ? { approve_all: true } : {}),
+        }),
+        signal,
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(
+          typeof data?.error === 'string'
+            ? data.error
+            : `Approval request failed (${response.status}).`
+        );
+      }
+      if (
+        approveAll &&
+        !signal.aborted &&
+        useAgentStore.getState().sessions.some((session) => session.id === current.sessionId)
+      ) {
+        grantInvestigation(current.sessionId, revision);
+      }
+      if (request.current === controller && !signal.aborted) {
+        clearApproval();
+      }
+    } catch (error) {
+      if (request.current === controller && !signal.aborted)
+        setApprovalError(error instanceof Error ? error.message : 'Approval request failed.');
+    } finally {
+      if (request.current === controller && !signal.aborted) {
+        approvalSubmittingRef.current = false;
+        setApprovalSubmitting(false);
+      }
+    }
+  };
+
   // Follow the stream unless the reader scrolled up.
   useEffect(() => {
     const el = scroller.current;
@@ -415,12 +513,20 @@ export default function Agent({
   const run = async (sessionId: string, history: AgentTurn[]) => {
     const controller = new AbortController();
     request.current = controller;
+    setRunningRequest(true);
     stick.current = true;
     let imported = false;
     try {
       await streamAgentChat(
         buildMessages(history),
         (event) => {
+          if (request.current !== controller || controller.signal.aborted) return;
+          if (event.type === 'approval_required') {
+            setApproval({ ...event, sessionId });
+            setApprovalError('');
+            return;
+          }
+          if (event.type === 'done' || event.type === 'error') clearApproval();
           if (
             event.type === 'step' &&
             event.step.tool.startsWith('ingest_') &&
@@ -451,7 +557,8 @@ export default function Agent({
           }
           updateLastTurn(sessionId, (turn) => reduceTurn(turn, event));
         },
-        controller.signal
+        controller.signal,
+        Boolean(useAgentStore.getState().approvedInvestigations[sessionId])
       );
     } catch (error) {
       updateLastTurn(sessionId, (turn) =>
@@ -466,7 +573,11 @@ export default function Agent({
         })
       );
     } finally {
-      if (request.current === controller) request.current = null;
+      if (request.current === controller) {
+        request.current = null;
+        setRunningRequest(false);
+        clearApproval();
+      }
       if (imported) onDataChanged?.();
     }
   };
@@ -475,7 +586,7 @@ export default function Agent({
 
   const send = (text: string) => {
     const prompt = text.trim();
-    if (!prompt || pending || unavailable) return;
+    if (!prompt || pending || request.current || unavailable) return;
     const sessionId = startTurn(prompt);
     setDraft('');
     setShowHistory(false);
@@ -489,7 +600,7 @@ export default function Agent({
   };
 
   const retry = () => {
-    if (!session || pending || turns.length === 0) return;
+    if (!session || pending || request.current || turns.length === 0) return;
     const last = turns[turns.length - 1];
     updateLastTurn(session.id, () => ({
       user: last.user,
@@ -501,13 +612,19 @@ export default function Agent({
     void run(session.id, current?.turns ?? []);
   };
 
+  const requireApprovals = () => {
+    if (!activeId) return;
+    revokeInvestigation(activeId);
+    if (request.current) stop();
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       submit();
     } else if (event.key === 'Escape' && pending) {
       event.preventDefault();
-      request.current?.abort();
+      stop();
     }
   };
 
@@ -552,7 +669,7 @@ export default function Agent({
             type="button"
             aria-label="New investigation"
             title="New investigation"
-            disabled={pending}
+            disabled={pending || runningRequest}
             onClick={() => {
               newSession();
               setShowHistory(false);
@@ -589,6 +706,7 @@ export default function Agent({
             sessions={sessions}
             activeId={activeId}
             onPick={() => setShowHistory(false)}
+            locked={runningRequest}
           />
         ) : turns.length === 0 ? (
           <div className="ls-agent-empty">
@@ -642,6 +760,50 @@ export default function Agent({
       </div>
 
       <div className="ls-agent-foot">
+        {activeId && approvedInvestigations[activeId] && (
+          <div className="ls-agent-grant" role="status">
+            <span>All tools approved for this investigation</span>
+            <button type="button" onClick={requireApprovals}>
+              Require approvals
+            </button>
+          </div>
+        )}
+        {approval && (
+          <section className="ls-agent-approval" role="region" aria-label="Tool approval required">
+            <p>
+              <strong>{approval.reason}</strong> · <code>{approval.tool}</code>
+            </p>
+            <pre>{JSON.stringify(approval.input, null, 2)}</pre>
+            {approvalError && (
+              <p className="ls-agent-approval-error" role="alert">
+                {approvalError}
+              </p>
+            )}
+            <div className="ls-agent-approval-actions">
+              <button
+                type="button"
+                disabled={approvalSubmitting}
+                onClick={() => void decideApproval(false)}
+              >
+                Deny
+              </button>
+              <button
+                type="button"
+                disabled={approvalSubmitting}
+                onClick={() => void decideApproval(true, true)}
+              >
+                Approve all for this investigation
+              </button>
+              <button
+                type="button"
+                disabled={approvalSubmitting}
+                onClick={() => void decideApproval(true)}
+              >
+                Approve once
+              </button>
+            </div>
+          </section>
+        )}
         {(statusError || unavailable) && (
           <div className="ls-agent-unavailable" role="alert">
             {statusError
@@ -676,7 +838,7 @@ export default function Agent({
             <button
               className="ls-agent-send is-stop"
               type="button"
-              onClick={() => request.current?.abort()}
+              onClick={stop}
               aria-label="Stop"
               title="Stop (Esc)"
             >

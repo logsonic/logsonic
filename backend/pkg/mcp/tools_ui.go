@@ -72,12 +72,45 @@ func registerUITools(s *server.MCPServer, c *client) {
 
 	// ----------------------------------------------------------- ui_get_state
 	uiTool(s, c, mcp.NewTool("ui_get_state",
-		mcp.WithDescription("Read what the user currently sees in the LogSonic web UI: route, query, active filters, free text, sources, time range, "+
-			"selected/available columns, sort, page, result_count, the first rows as displayed, and Fields panel state. "+
+		mcp.WithDescription("Read the current LogSonic viewer state and available options: query, filters, sources, time and timezone, columns and widths, layout lock, sort, page, preview rows, sidebar, color rules, saved query drafts, and bounded workspace summaries. "+
 			"Every ui_* tool returns this same state after its change. Fails with no_ui_connected when no UI is open "+
 			"(then use ui_focus, or ask the user to open the server URL)."),
 		mcp.WithReadOnlyHintAnnotation(true),
 	), "get_state", nil)
+
+	uiTool(s, c, mcp.NewTool("ui_list_workspaces",
+		mcp.WithDescription("Refresh and list saved workspace summaries in the connected UI (up to 100, with a truncation indicator)."),
+		mcp.WithReadOnlyHintAnnotation(true),
+	), "list_workspaces", nil)
+
+	uiTool(s, c, mcp.NewTool("ui_get_workspace",
+		mcp.WithDescription("Refresh and read a saved workspace by id without applying it to the viewer. Returns requested_workspace in the state; large workspaces are summarized with truncated=true."),
+		mcp.WithString("id", mcp.Required(), mcp.Description("Workspace id")),
+		mcp.WithReadOnlyHintAnnotation(true),
+	), "get_workspace", func(req mcp.CallToolRequest) (map[string]any, error) {
+		id, err := requiredString(req, "id")
+		return map[string]any{"id": id}, err
+	})
+
+	uiTool(s, c, mcp.NewTool("ui_save_workspace",
+		mcp.WithDescription("Save the current viewer as a new workspace: query, sources, time, sort, columns and widths, color rules, and saved query drafts. Returns saved_workspace id and name. Timezone, column lock, page, and sidebar are viewer preferences and are not saved by the workspace format."),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Workspace name")),
+		mcp.WithString("description", mcp.Description("Optional description")),
+	), "save_workspace", func(req mcp.CallToolRequest) (map[string]any, error) {
+		name, err := requiredString(req, "name")
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"name": name, "description": req.GetString("description", "")}, nil
+	})
+
+	uiTool(s, c, mcp.NewTool("ui_set_viewer_options",
+		mcp.WithDescription("Set viewer-only preferences. timezone must be a valid IANA timezone; column_locked controls column layout editing. These preferences are not saved in workspaces."),
+		mcp.WithString("timezone", mcp.Description("IANA timezone, for example Europe/Zurich")),
+		mcp.WithBoolean("column_locked", mcp.Description("Lock or unlock column layout")),
+	), "set_viewer_options", func(req mcp.CallToolRequest) (map[string]any, error) {
+		return argsWithout(req), nil
+	})
 
 	// ----------------------------------------------------------- ui_navigate
 	uiTool(s, c, mcp.NewTool("ui_navigate",

@@ -17,6 +17,13 @@ export type AgentWireStep = {
 
 export type AgentStreamEvent =
   | { type: 'text'; round: number; delta: string }
+  | {
+      type: 'approval_required';
+      id: string;
+      tool: string;
+      input: Record<string, unknown>;
+      reason: string;
+    }
   | { type: 'step_start'; id: string; tool: string; input: Record<string, unknown> }
   | { type: 'step'; step: AgentWireStep }
   | { type: 'done'; answer: string; steps: AgentWireStep[] }
@@ -52,6 +59,25 @@ export const parseAgentEvent = (name: string, raw: string): AgentStreamEvent | n
   switch (name) {
     case 'text':
       return { type: 'text', round: Number(data.round) || 0, delta: String(data.delta ?? '') };
+    case 'approval_required':
+      if (
+        typeof data.id !== 'string' ||
+        !data.id ||
+        typeof data.tool !== 'string' ||
+        !data.tool ||
+        !data.input ||
+        typeof data.input !== 'object' ||
+        Array.isArray(data.input) ||
+        typeof data.reason !== 'string'
+      )
+        return null;
+      return {
+        type: 'approval_required',
+        id: data.id,
+        tool: data.tool,
+        input: data.input as Record<string, unknown>,
+        reason: data.reason,
+      };
     case 'step_start':
       return {
         type: 'step_start',
@@ -103,12 +129,13 @@ export async function fetchAgentStatus(signal?: AbortSignal): Promise<AgentStatu
 export async function streamAgentChat(
   messages: AgentMessage[],
   onEvent: (event: AgentStreamEvent) => void,
-  signal: AbortSignal
+  signal: AbortSignal,
+  approveAll = false
 ): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/agent/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    body: JSON.stringify({ messages, stream: true }),
+    body: JSON.stringify({ messages, stream: true, ...(approveAll ? { approve_all: true } : {}) }),
     signal,
   });
   const type = response.headers.get('content-type') || '';

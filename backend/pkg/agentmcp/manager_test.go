@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -214,6 +215,20 @@ func TestChildEnvDropsAgentCredentials(t *testing.T) {
 	}
 	if strings.Contains(env, "OVERRIDDEN_VAR=ambient") {
 		t.Fatalf("expected OVERRIDDEN_VAR=ambient to be replaced, got:\n%s", env)
+	}
+}
+
+// Windows environment names ignore case: a key set as Openai_Api_Key is the
+// same variable and must be dropped, and an entry override must replace it.
+func TestChildEnvFoldsCaseOnWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("environment names are case-sensitive here")
+	}
+	t.Setenv("Openai_Api_Key", "sk-openai-secret")
+	t.Setenv("My_Var", "ambient")
+	env := strings.Join(childEnv(map[string]string{"MY_VAR": "custom"}), "\n")
+	if strings.Contains(env, "sk-openai-secret") || strings.Contains(env, "ambient") || !strings.Contains(env, "MY_VAR=custom") {
+		t.Fatalf("env = %s", env)
 	}
 }
 

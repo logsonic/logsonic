@@ -31,6 +31,10 @@ const toolNames: Record<string, string> = {
   ui_fields_panel: 'Change fields panel',
   ui_sidebar: 'Change sidebar',
   ui_open_workspace: 'Open workspace',
+  ui_list_workspaces: 'List workspaces',
+  ui_get_workspace: 'Read workspace',
+  ui_save_workspace: 'Save workspace',
+  ui_set_viewer_options: 'Change viewer options',
   ui_run_search: 'Refresh results',
 };
 
@@ -144,6 +148,8 @@ const wireToStep = (wire: AgentWireStep, fallbackId: string): AgentStep => {
 export function reduceTurn(turn: AgentTurn, event: AgentStreamEvent): AgentTurn {
   const items = turn.items.slice();
   switch (event.type) {
+    case 'approval_required':
+      return turn;
     case 'text': {
       const last = items[items.length - 1];
       if (last?.kind === 'text' && last.round === event.round) {

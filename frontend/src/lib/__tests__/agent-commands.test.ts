@@ -13,9 +13,15 @@ import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useSidebarStore } from '@/stores/useSidebarStore';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
+import { useWorkspaceStore } from '@/stores/useWorkspaceStore';
+import { useColorRuleStore } from '@/stores/useColorRuleStore';
+import { useSavedQueryDraftStore } from '@/stores/useSavedQueryDraftStore';
+import { createWorkspace, getWorkspace, listWorkspaces } from '@/lib/api-client';
 
 vi.mock('@/lib/api-client', () => ({
   getWorkspace: vi.fn(),
+  listWorkspaces: vi.fn(),
+  createWorkspace: vi.fn(),
 }));
 
 const ctx = (route = '/') => {
@@ -34,6 +40,12 @@ beforeEach(() => {
   });
   useFacetStore.setState({ panelOpen: false });
   useLogResultStore.getState().reset();
+  useWorkspaceStore.setState({ workspaces: [], activeWorkspaceId: null });
+  useColorRuleStore.getState().setRules([]);
+  useSavedQueryDraftStore.getState().setAll([]);
+  vi.mocked(listWorkspaces).mockReset();
+  vi.mocked(getWorkspace).mockReset();
+  vi.mocked(createWorkspace).mockReset();
 });
 
 describe('query clause helpers', () => {
@@ -285,5 +297,133 @@ describe('snapshotUIState', () => {
     expect(snap.result_count).toBe(7);
     expect(snap.columns.selected).toEqual(['timestamp', 'message']);
     expect(snap.preview_rows).toEqual([{ timestamp: 't', message: 'm' }]);
+  });
+
+  it('exposes viewer preferences, current styling, drafts, and available options', () => {
+    useSearchQueryParamsStore.setState({
+      timeZone: 'Europe/Zurich',
+      isColumnLocked: true,
+      columnWidths: { message: 420 },
+    });
+    useColorRuleStore
+      .getState()
+      .setRules([
+        { id: 'rule', field: 'level', operator: 'eq', value: 'error', color: 'red', enabled: true },
+      ]);
+    const snap = snapshotUIState('/');
+    expect(snap.columns.widths).toEqual({ message: 420 });
+    expect(snap.columns.locked).toBe(true);
+    expect(snap.time.timezone).toBe('Europe/Zurich');
+    expect(snap.color_rules).toHaveLength(1);
+    expect(snap.available_options.relative_time_presets).toContain('last-7-days');
+    expect(snap.available_options.sidebar_panels).toContain('styling');
+    expect(snap.workspace_format.viewer_preferences_not_saved).toContain('timezone');
+  });
+
+  it('limits workspace summaries and reports truncation', () => {
+    useWorkspaceStore.setState({
+      workspaces: Array.from({ length: 101 }, (_, i) => ({
+        id: String(i),
+        name: `Workspace ${i}`,
+        time: { mode: 'relative', relative: 'last-24-hours' },
+        visualization: { type: 'logs' },
+      })),
+    });
+    const snap = snapshotUIState('/');
+    expect(snap.workspaces.items.length).toBeLessThanOrEqual(100);
+    expect(snap.workspaces.items.length).toBeGreaterThan(0);
+    expect(snap.workspaces.truncated).toBe(true);
+  });
+
+  it('bounds workspace descriptions and styling metadata in the state response', () => {
+    useWorkspaceStore.setState({
+      workspaces: Array.from({ length: 100 }, (_, i) => ({
+        id: String(i),
+        name: `Workspace ${i}`,
+        description: 'x'.repeat(1000),
+        time: { mode: 'relative', relative: 'last-24-hours' },
+        visualization: { type: 'logs' },
+      })),
+    });
+    useColorRuleStore
+      .getState()
+      .setRules(
+        Array.from({ length: 100 }, (_, i) => ({
+          id: String(i),
+          field: 'message',
+          operator: 'contains',
+          value: 'x'.repeat(500),
+          color: 'red',
+          enabled: true,
+        }))
+      );
+    const snap = snapshotUIState('/');
+    expect(JSON.stringify(snap.workspaces).length).toBeLessThan(9000);
+    expect(snap.workspaces.truncated).toBe(true);
+    expect(snap.color_rules_truncated).toBe(true);
+  });
+});
+
+describe('workspace and viewer commands', () => {
+  it('validates timezone and changes viewer-only preferences', async () => {
+    await expect(run('set_viewer_options', { timezone: 'Invalid/Zone' })).rejects.toThrow(
+      /timezone/
+    );
+    await run('set_viewer_options', { timezone: 'Europe/Zurich', column_locked: true });
+    expect(useSearchQueryParamsStore.getState().timeZone).toBe('Europe/Zurich');
+    expect(useSearchQueryParamsStore.getState().isColumnLocked).toBe(true);
+  });
+
+  it('refreshes the workspace list and returns a requested workspace without loading it', async () => {
+    const workspace = {
+      id: 'w1',
+      name: 'Saved',
+      query: 'level:error',
+      time: { mode: 'relative' as const, relative: 'last-7-days' },
+      visualization: { type: 'logs' as const },
+    };
+    vi.mocked(listWorkspaces).mockResolvedValue({ status: 'ok', workspaces: [workspace] });
+    vi.mocked(getWorkspace).mockResolvedValue({ status: 'ok', workspace });
+    await run('list_workspaces');
+    expect(snapshotUIState('/').workspaces.items[0].name).toBe('Saved');
+    const result = await run('get_workspace', { id: 'w1' });
+    expect(getWorkspace).toHaveBeenCalledWith('w1');
+    expect(result.details?.requested_workspace).toEqual(workspace);
+    expect(useWorkspaceStore.getState().activeWorkspaceId).toBeNull();
+  });
+
+  it('saves the entire current view and returns the new workspace identity', async () => {
+    useSearchQueryParamsStore.setState({
+      searchQuery: 'error',
+      sources: ['api'],
+      sortBy: 'level',
+      selectedColumns: ['timestamp', 'level'],
+      columnWidths: { level: 180 },
+    });
+    useColorRuleStore
+      .getState()
+      .setRules([
+        { id: 'r1', field: 'level', operator: 'eq', value: 'error', color: 'red', enabled: true },
+      ]);
+    useSavedQueryDraftStore
+      .getState()
+      .setAll([{ id: 'q1', name: 'Errors', query: 'error', created_at: '2026-01-01T00:00:00Z' }]);
+    vi.mocked(createWorkspace).mockImplementation(async (workspace) => ({
+      status: 'ok',
+      workspace: { ...workspace, id: 'new' },
+    }));
+    const result = await run('save_workspace', { name: ' Errors ', description: 'For review' });
+    expect(result.details?.saved_workspace).toEqual({ id: 'new', name: 'Errors' });
+    const submitted = vi.mocked(createWorkspace).mock.calls[0][0];
+    expect(submitted).toMatchObject({
+      query: 'error',
+      sources: ['api'],
+      sort_by: 'level',
+      columns: ['timestamp', 'level'],
+      column_widths: { level: 180 },
+      color_rules: [{ id: 'r1' }],
+      saved_queries: [{ id: 'q1' }],
+    });
+    expect(useWorkspaceStore.getState().activeWorkspaceId).toBe('new');
   });
 });

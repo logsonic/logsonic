@@ -76,18 +76,18 @@ func TestAgentTurnEndsWithViewOfEvidence(t *testing.T) {
 	var queryInput map[string]any
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
+			Stream   bool `json:"stream"`
 			Messages []struct {
 				Role    string          `json:"role"`
 				Content json.RawMessage `json:"content"`
 			} `json:"messages"`
 		}
 		json.NewDecoder(r.Body).Decode(&body)
-		w.Header().Set("Content-Type", "application/json")
 		switch turns.Add(1) {
 		case 1:
-			json.NewEncoder(w).Encode(map[string]any{"stop_reason": "tool_use", "content": []any{map[string]any{"type": "tool_use", "id": "one", "name": "ingest_local", "input": map[string]any{"path": path}}}})
+			writeAgentProxyTestReply(w, body.Stream, "tool_use", []any{map[string]any{"type": "tool_use", "id": "one", "name": "ingest_local", "input": map[string]any{"path": path}}})
 		case 2:
-			json.NewEncoder(w).Encode(map[string]any{"stop_reason": "tool_use", "content": []any{map[string]any{"type": "tool_use", "id": "two", "name": "query_logs", "input": map[string]any{"query": "failed", "source": "old.log"}}}})
+			writeAgentProxyTestReply(w, body.Stream, "tool_use", []any{map[string]any{"type": "tool_use", "id": "two", "name": "query_logs", "input": map[string]any{"query": "failed", "source": "old.log"}}})
 		default:
 			// The model's own tool_use input is replayed unchanged.
 			if assistant := string(body.Messages[3].Content); strings.Contains(assistant, "start_time") {
@@ -96,7 +96,7 @@ func TestAgentTurnEndsWithViewOfEvidence(t *testing.T) {
 			if result := string(body.Messages[4].Content); !strings.Contains(result, "disk failed") {
 				t.Errorf("query without a window missed the 2005 rows: %s", result)
 			}
-			json.NewEncoder(w).Encode(map[string]any{"stop_reason": "end_turn", "content": []any{map[string]any{"type": "text", "text": "The disk failed on 3 June 2005."}}})
+			writeAgentProxyTestReply(w, body.Stream, "end_turn", []any{map[string]any{"type": "text", "text": "The disk failed on 3 June 2005."}})
 		}
 	}))
 	defer proxy.Close()
@@ -113,11 +113,7 @@ func TestAgentTurnEndsWithViewOfEvidence(t *testing.T) {
 	srv.mcpBaseURL.Store(ts.URL)
 	commands := connectTestBridge(t, ts)
 
-	resp, err := http.Post(ts.URL+"/api/v1/agent/chat", "application/json", bytes.NewBufferString(`{"messages":[{"role":"user","content":"Import old.log and find problems"}]}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
+	result := postApprovedAgentChat(t, ts.URL, `{"messages":[{"role":"user","content":"Import old.log and find problems"}],"stream":true}`)
 	var out struct {
 		Answer string `json:"answer"`
 		Steps  []struct {
@@ -128,9 +124,9 @@ func TestAgentTurnEndsWithViewOfEvidence(t *testing.T) {
 		} `json:"steps"`
 		Error string `json:"error"`
 	}
-	json.NewDecoder(resp.Body).Decode(&out)
-	if resp.StatusCode != 200 || len(out.Steps) != 3 {
-		t.Fatalf("status=%d out=%+v", resp.StatusCode, out)
+	json.Unmarshal(result, &out)
+	if len(out.Steps) != 3 {
+		t.Fatalf("out=%+v", out)
 	}
 	queryInput = out.Steps[1].Input
 	if !strings.HasPrefix(toString(queryInput["start_time"]), "2005-06-03") || !strings.HasPrefix(toString(queryInput["end_time"]), "2005-06-04") {

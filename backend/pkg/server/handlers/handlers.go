@@ -66,8 +66,9 @@ type Services struct {
 
 	// uiBridgeState pairs /ui/command calls with the web UI's /ui/ack; see
 	// ui_bridge.go. Built lazily so a zero-value Services in tests works.
-	uiBridgeOnce  sync.Once
-	uiBridgeState *uiBridge
+	uiBridgeOnce   sync.Once
+	uiBridgeState  *uiBridge
+	agentApprovals agentApprovalRegistry
 }
 
 // NewHandler wires up the HTTP service surface. Pattern + decode logic

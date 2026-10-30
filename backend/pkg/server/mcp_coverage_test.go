@@ -67,6 +67,7 @@ var restRouteTools = map[string]string{
 
 var restRouteExempt = map[string]string{
 	"POST /api/v1/agent/chat":                             "the embedded agent loop; MCP clients already have direct LogSonic tools",
+	"POST /api/v1/agent/approve":                          "browser-only one-call capability; exposing approval to MCP would let the model approve itself",
 	"GET /api/v1/agent/status":                            "local embedded agent proxy status, not an MCP operation",
 	"GET /api/v1/agent/mcp":                               "status of the embedded agent's own MCP client connections, not an MCP operation",
 	"GET /api/v1/agent/settings":                          "the embedded agent's model endpoint settings, not an MCP operation",

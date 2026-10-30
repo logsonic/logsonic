@@ -37,11 +37,13 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useToast } from '@/components/ui/use-toast';
 import {
   AGENT_PROVIDERS,
+  editCommand,
   endpointAdvice,
   endpointHost,
   fetchAgentMCP,
   fetchAgentModels,
   fetchAgentSettings,
+  pathOS,
   providerInfo,
   saveAgentSettings,
   swapEndpointFormat,
@@ -53,6 +55,7 @@ import {
   type AgentSettings as AgentSettingsData,
   type AgentSettingsUpdate,
   type AgentTestResult,
+  type PathOS,
 } from '@/lib/agent-settings';
 import { fetchAgentStatus, type AgentStatus } from '@/lib/agent-stream';
 import { isNativeShell, revealStoragePath } from '@/lib/native';
@@ -87,16 +90,10 @@ const MCP_EXAMPLE = JSON.stringify(
   2
 );
 
-const isMac = () => typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
-
-const shellQuote = (path: string) => `'${path.replace(/'/g, `'\\''`)}'`;
-
-const editCommand = (path: string) => {
-  const quoted = shellQuote(path);
-  const dir = shellQuote(path.replace(/[/\\][^/\\]*$/, '') || '/');
-  return isMac()
-    ? `mkdir -p ${dir} && touch ${quoted} && open -t ${quoted}`
-    : `mkdir -p ${dir} && \${EDITOR:-nano} ${quoted}`;
+const EDIT_SHELL: Record<PathOS, string> = {
+  windows: ' (PowerShell)',
+  mac: ' (Terminal)',
+  unix: ' (shell)',
 };
 
 const STYLE_LABEL: Record<AgentModelList['style'], string> = {
@@ -851,7 +848,7 @@ const AgentSettings: FC = () => {
         <div style={rowStyle(false)}>
           {mcpPath && (
             <CopyBlock
-              label={`1. Create or open the file in your editor${isMac() ? ' (Terminal)' : ''}`}
+              label={`1. Create or open the file in your editor${EDIT_SHELL[pathOS(mcpPath)]}`}
               value={editCommand(mcpPath)}
             />
           )}

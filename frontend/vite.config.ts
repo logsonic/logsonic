@@ -105,7 +105,7 @@ export default defineConfig(({ mode }) => ({
             'timezone-support'
           ],
           'chart-vendor': ['recharts'],
-          'form-vendor': ['react-hook-form', 'zod', '@hookform/resolvers'],
+          'form-vendor': ['react-hook-form', '@hookform/resolvers'],
           'date-vendor': ['date-fns', 'date-fns-tz'],
           'dnd-vendor': ['@dnd-kit/core', '@dnd-kit/modifiers', '@dnd-kit/sortable', '@dnd-kit/utilities'],
           'icons': ['lucide-react'],

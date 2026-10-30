@@ -86,14 +86,18 @@ const (
 
 // Folders and files that hold credentials rather than logs. Other dot
 // folders stay importable: ~/.ollama/logs, ~/.pm2/logs and ~/.npm/_logs are
-// common log locations.
+// common log locations. Names are lower case: macOS and Windows file systems
+// ignore case, so ~/.SSH opens ~/.ssh there.
 var (
 	agentSecretDirs = map[string]bool{
 		".ssh": true, ".gnupg": true, ".aws": true, ".azure": true, ".kube": true,
-		".password-store": true, "Keychains": true,
+		".password-store": true, "keychains": true,
 	}
-	agentSecretConfigDirs = map[string]bool{"gcloud": true, "gh": true}
-	agentSecretFiles      = map[string]bool{
+	// Config folders that hold tokens, under ~/.config (Linux, macOS) or
+	// %APPDATA% (Windows).
+	agentSecretConfigParents = map[string]bool{".config": true, "roaming": true}
+	agentSecretConfigDirs    = map[string]bool{"gcloud": true, "gh": true, "github cli": true}
+	agentSecretFiles         = map[string]bool{
 		".netrc": true, ".git-credentials": true, ".npmrc": true, ".pypirc": true,
 		".pgpass": true, ".my.cnf": true, ".bash_history": true, ".zsh_history": true,
 		".python_history": true, ".psql_history": true, ".mysql_history": true,
@@ -104,32 +108,36 @@ var (
 	}
 )
 
-// agentSecretPath reports whether path names a credential location.
+// agentSecretPath reports whether path names a credential location. It
+// compares without case and accepts either separator so the check holds on
+// case-insensitive file systems and on Windows.
 func agentSecretPath(path string) bool {
+	path = strings.ToLower(filepath.ToSlash(path))
 	if agentSystemSecretFiles[path] {
 		return true
 	}
-	parts := strings.Split(path, string(filepath.Separator))
+	parts := strings.Split(path, "/")
 	for i, part := range parts {
 		if agentSecretDirs[part] {
 			return true
 		}
 		if i+1 < len(parts) {
 			next := parts[i+1]
-			if part == ".config" && agentSecretConfigDirs[next] || part == ".docker" && next == "config.json" {
+			if agentSecretConfigParents[part] && agentSecretConfigDirs[next] || part == ".docker" && next == "config.json" ||
+				part == "system32" && next == "config" {
 				return true
 			}
 		}
 	}
-	base := filepath.Base(path)
+	base := parts[len(parts)-1]
 	return agentSecretFiles[base] || base == ".env" || strings.HasPrefix(base, ".env.")
 }
 
 // agentExpandPath turns the path the model sends into an absolute one.
-// "~", "~/…" and "$HOME/…" expand to the user's home folder, and a relative
-// path is taken as relative to it: "Downloads/app.log" means the user's
-// Downloads folder, not the server's working directory. Surrounding quotes
-// and a file:// prefix are dropped.
+// "~", "~/…" and "$HOME/…" (and "~\…", "%USERPROFILE%\…" on Windows) expand
+// to the user's home folder, and a relative path is taken as relative to it:
+// "Downloads/app.log" means the user's Downloads folder, not the server's
+// working directory. Surrounding quotes and a file:// prefix are dropped.
 func agentExpandPath(raw string) (string, error) {
 	path := strings.TrimSpace(raw)
 	if len(path) >= 2 && (path[0] == '"' || path[0] == '\'') && path[len(path)-1] == path[0] {
@@ -139,11 +147,16 @@ func agentExpandPath(raw string) (string, error) {
 		if unescaped, err := url.PathUnescape(rest); err == nil {
 			rest = unescaped
 		}
+		// file:///C:/logs/a.log names C:/logs/a.log on Windows.
+		if runtime.GOOS == "windows" && len(rest) >= 3 && rest[0] == '/' && rest[2] == ':' {
+			rest = rest[1:]
+		}
 		path = rest
 	}
 	if path == "" {
 		return "", errors.New("path required")
 	}
+	path = filepath.FromSlash(path)
 	if filepath.IsAbs(path) {
 		return filepath.Clean(path), nil
 	}
@@ -151,13 +164,16 @@ func agentExpandPath(raw string) (string, error) {
 	if err != nil || home == "" {
 		return "", errors.New("absolute path required")
 	}
+	sep := string(filepath.Separator)
 	switch {
-	case path == "~" || path == "$HOME":
+	case path == "~" || path == "$HOME" || path == "%USERPROFILE%":
 		return home, nil
-	case strings.HasPrefix(path, "~/"):
+	case strings.HasPrefix(path, "~"+sep):
 		path = path[2:]
-	case strings.HasPrefix(path, "$HOME/"):
-		path = path[len("$HOME/"):]
+	case strings.HasPrefix(path, "$HOME"+sep):
+		path = path[len("$HOME"+sep):]
+	case runtime.GOOS == "windows" && strings.HasPrefix(strings.ToUpper(path), "%USERPROFILE%"+sep):
+		path = path[len("%USERPROFILE%"+sep):]
 	case strings.HasPrefix(path, "~"):
 		// ~otheruser/… names another account's home.
 		return "", errors.New("only your own home folder (~/…) or an absolute path is supported")
@@ -496,6 +512,10 @@ func (h *Services) agentIngestCloudWatch(ctx context.Context, in map[string]any)
 	var env []string
 	for _, v := range os.Environ() {
 		key, _, _ := strings.Cut(v, "=")
+		// Windows environment names ignore case.
+		if runtime.GOOS == "windows" {
+			key = strings.ToUpper(key)
+		}
 		switch key {
 		case "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_SECURITY_TOKEN", "AWS_PROFILE", "AWS_DEFAULT_PROFILE":
 			continue

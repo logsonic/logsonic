@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -507,13 +508,25 @@ func (m *Manager) Close() error {
 // credentials (LOGSONIC_AGENT_*, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN,
 // OPENAI_API_KEY), plus the entry's env. A server that needs one of those lists it in env.
 func childEnv(extra map[string]string) []string {
+	// Windows environment names ignore case, so compare them folded there.
+	fold := func(k string) string {
+		if runtime.GOOS == "windows" {
+			return strings.ToUpper(k)
+		}
+		return k
+	}
+	overridden := make(map[string]bool, len(extra))
+	for k := range extra {
+		overridden[fold(k)] = true
+	}
 	env := []string{}
 	for _, kv := range os.Environ() {
 		key, _, _ := strings.Cut(kv, "=")
+		key = fold(key)
 		if strings.HasPrefix(key, "LOGSONIC_AGENT_") || key == "ANTHROPIC_API_KEY" || key == "ANTHROPIC_AUTH_TOKEN" || key == "OPENAI_API_KEY" {
 			continue
 		}
-		if _, overridden := extra[key]; overridden {
+		if overridden[key] {
 			continue
 		}
 		env = append(env, kv)

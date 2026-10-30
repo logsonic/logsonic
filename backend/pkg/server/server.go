@@ -332,6 +332,7 @@ func NewServer(cfg Config) (*Server, error) {
 	// Agent calls can include a bounded import and several model turns, so they
 	// use their own ten-minute deadline instead of the normal API timeout.
 	r.With(agentLoopbackOnly, requireJSONBody, middleware.ThrottleBacklog(2, 4, 5*time.Second)).Post("/api/v1/agent/chat", h.HandleAgentChat)
+	r.With(agentLoopbackOnly, requireJSONBody).Post("/api/v1/agent/approve", h.HandleAgentApprove)
 	r.With(agentLoopbackOnly).Get("/api/v1/agent/status", h.HandleAgentStatus)
 	r.With(agentLoopbackOnly).Get("/api/v1/agent/mcp", h.HandleAgentMCP)
 	// Model endpoint, model and key saved from Settings > Agent. MCP servers

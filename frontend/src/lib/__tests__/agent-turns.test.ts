@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { AgentStep, AgentTurn } from '@/stores/useAgentStore';
 
-import { splitSSE } from '@/lib/agent-stream';
+import { parseAgentEvent, splitSSE } from '@/lib/agent-stream';
 import { buildMessages, reduceTurn, stepSummary, toolLabel } from '@/lib/agent-turns';
 import { stepView } from '@/lib/agent-view';
 
@@ -21,6 +21,34 @@ describe('splitSSE', () => {
     );
     expect(events).toEqual([['text', '{"a":1}']]);
     expect(rest).toBe('event: done\ndata: {');
+  });
+});
+
+describe('parseAgentEvent', () => {
+  it('parses an approval request with its exact tool arguments', () => {
+    expect(
+      parseAgentEvent(
+        'approval_required',
+        JSON.stringify({
+          id: 'capability-1',
+          tool: 'mcp__remote__write',
+          input: { path: '/tmp/a', content: '<secret>' },
+          reason: 'Writes a file',
+        })
+      )
+    ).toEqual({
+      type: 'approval_required',
+      id: 'capability-1',
+      tool: 'mcp__remote__write',
+      input: { path: '/tmp/a', content: '<secret>' },
+      reason: 'Writes a file',
+    });
+  });
+
+  it('rejects incomplete approval requests', () => {
+    expect(
+      parseAgentEvent('approval_required', '{"tool":"mcp__remote__write","input":{}}')
+    ).toBeNull();
   });
 });
 

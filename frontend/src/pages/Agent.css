@@ -25,11 +25,23 @@
 }
 .ls-agent-dock-resize:hover,
 .ls-agent-dock-resize.is-dragging {
-  background: linear-gradient(to right, transparent 2px, var(--ls-accent) 2px, var(--ls-accent) 4px, transparent 4px);
+  background: linear-gradient(
+    to right,
+    transparent 2px,
+    var(--ls-accent) 2px,
+    var(--ls-accent) 4px,
+    transparent 4px
+  );
 }
 .ls-agent-dock-resize:focus-visible {
   outline: none;
-  background: linear-gradient(to right, transparent 2px, var(--ls-accent) 2px, var(--ls-accent) 4px, transparent 4px);
+  background: linear-gradient(
+    to right,
+    transparent 2px,
+    var(--ls-accent) 2px,
+    var(--ls-accent) 4px,
+    transparent 4px
+  );
 }
 
 .ls-agent {
@@ -163,7 +175,9 @@
   border-radius: var(--ls-radius-lg);
   background: var(--ls-panel);
   line-height: 1.4;
-  transition: border-color 0.12s, background 0.12s;
+  transition:
+    border-color 0.12s,
+    background 0.12s;
 }
 .ls-agent-prompts button:hover:not(:disabled) {
   border-color: var(--ls-accent-border) !important;
@@ -401,7 +415,9 @@
   align-self: center;
   color: var(--ls-text-4);
   opacity: 0;
-  transition: transform 0.15s, opacity 0.12s;
+  transition:
+    transform 0.15s,
+    opacity 0.12s;
 }
 .ls-step-body summary:hover .ls-step-chevron,
 .ls-step-body[open] .ls-step-chevron {
@@ -599,6 +615,74 @@
   flex: none;
   padding: 8px 12px 10px;
 }
+.ls-agent-grant {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: var(--ls-radius);
+  background: var(--ls-accent-soft);
+  color: var(--ls-text);
+  font-size: 12px;
+}
+.ls-agent-grant button {
+  flex: none;
+  padding: 4px 7px;
+  border: 1px solid var(--ls-border-strong);
+  border-radius: 6px;
+  background: var(--ls-panel);
+  color: var(--ls-text);
+  font-size: 11px;
+}
+.ls-agent-approval {
+  margin-bottom: 8px;
+  padding: 10px;
+  border: 1px solid var(--ls-warn);
+  border-radius: var(--ls-radius);
+  background: var(--ls-warn-soft);
+  color: var(--ls-text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.ls-agent-approval p {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+.ls-agent-approval pre {
+  max-height: 120px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--ls-border);
+  border-radius: 6px;
+  background: var(--ls-panel);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ls-agent-approval-error {
+  color: var(--ls-err);
+}
+.ls-agent-approval-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.ls-agent-approval-actions button {
+  padding: 6px 10px;
+  border: 1px solid var(--ls-border-strong);
+  border-radius: 6px;
+  background: var(--ls-panel);
+  color: var(--ls-text);
+}
+.ls-agent-approval-actions button:last-child {
+  background: var(--ls-accent);
+  color: #fff;
+  border-color: var(--ls-accent);
+}
 .ls-agent-unavailable {
   margin-bottom: 8px;
   padding: 8px 10px;
@@ -626,7 +710,9 @@
   border: 1px solid var(--ls-border-strong);
   border-radius: 12px;
   background: var(--ls-panel);
-  transition: border-color 0.12s, box-shadow 0.12s;
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s;
 }
 .ls-agent-compose:focus-within {
   border-color: var(--ls-accent);

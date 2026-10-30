@@ -16,6 +16,72 @@ import (
 	"time"
 )
 
+func writeAgentProxyTestReply(w http.ResponseWriter, stream bool, stop string, blocks []any) {
+	if !stream {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"stop_reason": stop, "content": blocks})
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	for i, block := range blocks {
+		data, _ := json.Marshal(map[string]any{"type": "content_block_start", "index": i, "content_block": block})
+		fmt.Fprintf(w, "data: %s\n\n", data)
+	}
+	data, _ := json.Marshal(map[string]any{"type": "message_delta", "delta": map[string]any{"stop_reason": stop}})
+	fmt.Fprintf(w, "data: %s\n\ndata: {\"type\":\"message_stop\"}\n\n", data)
+}
+
+func postApprovedAgentChat(t *testing.T, baseURL, requestBody string) []byte {
+	t.Helper()
+	resp, err := http.Post(baseURL+"/api/v1/agent/chat", "application/json", strings.NewReader(requestBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("chat status %d", resp.StatusCode)
+	}
+	scanner := bufio.NewScanner(resp.Body)
+	event := ""
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event: ") {
+			event = strings.TrimPrefix(line, "event: ")
+			continue
+		}
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := []byte(strings.TrimPrefix(line, "data: "))
+		switch event {
+		case "approval_required":
+			var approval struct {
+				ID string `json:"id"`
+			}
+			if err := json.Unmarshal(data, &approval); err != nil {
+				t.Fatal(err)
+			}
+			answer, err := http.Post(baseURL+"/api/v1/agent/approve", "application/json", strings.NewReader(`{"id":"`+approval.ID+`","approve":true}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			answer.Body.Close()
+			if answer.StatusCode != 200 {
+				t.Fatalf("approve status %d", answer.StatusCode)
+			}
+		case "done":
+			return data
+		case "error":
+			t.Fatalf("agent SSE error: %s", data)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	t.Fatal("agent stream ended without done")
+	return nil
+}
+
 func TestAgentIngestAndQueryViaProxyTools(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agent.log")
 	if err := os.WriteFile(path, []byte("2026-10-28T10:00:00Z ERROR checkout failed\n"), 0600); err != nil {
@@ -38,6 +104,7 @@ func TestAgentIngestAndQueryViaProxyTools(t *testing.T) {
 		var body struct {
 			Messages []json.RawMessage `json:"messages"`
 			Tools    []json.RawMessage `json:"tools"`
+			Stream   bool              `json:"stream"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)
@@ -45,17 +112,16 @@ func TestAgentIngestAndQueryViaProxyTools(t *testing.T) {
 		if len(body.Tools) < 3 {
 			t.Errorf("tools: %d", len(body.Tools))
 		}
-		w.Header().Set("Content-Type", "application/json")
 		switch turns.Add(1) {
 		case 1:
-			json.NewEncoder(w).Encode(map[string]any{"stop_reason": "tool_use", "content": []any{map[string]any{"type": "tool_use", "id": "one", "name": "ingest_local", "input": map[string]any{"path": path}}}})
+			writeAgentProxyTestReply(w, body.Stream, "tool_use", []any{map[string]any{"type": "tool_use", "id": "one", "name": "ingest_local", "input": map[string]any{"path": path}}})
 		case 2:
 			if len(body.Messages) < 3 {
 				t.Error("tool result missing from messages")
 			}
-			json.NewEncoder(w).Encode(map[string]any{"stop_reason": "tool_use", "content": []any{map[string]any{"type": "tool_use", "id": "two", "name": "query_logs", "input": map[string]any{"query": "checkout", "limit": 10}}}})
+			writeAgentProxyTestReply(w, body.Stream, "tool_use", []any{map[string]any{"type": "tool_use", "id": "two", "name": "query_logs", "input": map[string]any{"query": "checkout", "limit": 10}}})
 		default:
-			json.NewEncoder(w).Encode(map[string]any{"stop_reason": "end_turn", "content": []any{map[string]any{"type": "text", "text": "Found the checkout failure."}}})
+			writeAgentProxyTestReply(w, body.Stream, "end_turn", []any{map[string]any{"type": "text", "text": "Found the checkout failure."}})
 		}
 	}))
 	defer proxy.Close()
@@ -68,12 +134,7 @@ func TestAgentIngestAndQueryViaProxyTools(t *testing.T) {
 	defer srv.services.CloseStorage()
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
-	body, _ := json.Marshal(map[string]any{"messages": []any{map[string]string{"role": "user", "content": "Import and find checkout errors"}}})
-	resp, err := http.Post(ts.URL+"/api/v1/agent/chat", "application/json", bytes.NewReader(body))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
+	body, _ := json.Marshal(map[string]any{"messages": []any{map[string]string{"role": "user", "content": "Import and find checkout errors"}}, "stream": true})
 	var out struct {
 		Answer string `json:"answer"`
 		Steps  []struct {
@@ -81,11 +142,11 @@ func TestAgentIngestAndQueryViaProxyTools(t *testing.T) {
 			Output json.RawMessage `json:"output"`
 		} `json:"steps"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.Unmarshal(postApprovedAgentChat(t, ts.URL, string(body)), &out); err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != 200 || out.Answer == "" || len(out.Steps) != 2 {
-		t.Fatalf("status=%d response=%+v", resp.StatusCode, out)
+	if out.Answer == "" || len(out.Steps) != 2 {
+		t.Fatalf("response=%+v", out)
 	}
 	if out.Steps[0].Tool != "ingest_local" || out.Steps[1].Tool != "query_logs" || !bytes.Contains(out.Steps[1].Output, []byte("checkout failed")) {
 		t.Fatalf("steps=%+v", out.Steps)

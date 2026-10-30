@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -17,7 +18,21 @@ import (
 	l2g "github.com/logsonic/log2grok/pkg/log2grok"
 )
 
+// testSymlink skips the test where Windows refuses to create symlinks
+// (no Developer Mode or admin rights).
+func testSymlink(t *testing.T, oldname, newname string) error {
+	t.Helper()
+	err := os.Symlink(oldname, newname)
+	if err != nil && runtime.GOOS == "windows" {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	return err
+}
+
 func TestAgentCloudWatchUsesOnePageAndExplicitProfile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake aws CLI is a shell script")
+	}
 	bin := t.TempDir()
 	argsFile := filepath.Join(bin, "args")
 	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > '" + argsFile + "'\nprintf '%s' '{\"events\":[{\"message\":\"ERROR cloud failure\",\"timestamp\":1793095200000}],\"nextToken\":\"more\"}'\n"
@@ -120,7 +135,7 @@ func TestAgentLocalPathRefusesCredentialsButAllowsDotLogFolders(t *testing.T) {
 	dir := t.TempDir()
 	secret := writeAgentTestFile(t, filepath.Join(dir, ".ssh", "id_rsa"), "PRIVATE KEY\n")
 	link := filepath.Join(dir, "innocent.log")
-	if err := os.Symlink(secret, link); err != nil {
+	if err := testSymlink(t, secret, link); err != nil {
 		t.Fatal(err)
 	}
 	for _, bad := range []string{
@@ -157,7 +172,7 @@ func TestAgentLocalPathRespectsIngestRoot(t *testing.T) {
 	outside := writeAgentTestFile(t, filepath.Join(dir, "outside", "app.log"), "line\n")
 	sibling := writeAgentTestFile(t, filepath.Join(dir, "allowed-not", "app.log"), "line\n")
 	escape := filepath.Join(root, "escape.log")
-	if err := os.Symlink(outside, escape); err != nil {
+	if err := testSymlink(t, outside, escape); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("LOGSONIC_AGENT_INGEST_ROOT", root)
@@ -194,10 +209,10 @@ func TestAgentIngestLocalDirectorySkipsRefusedEntries(t *testing.T) {
 	writeAgentTestFile(t, filepath.Join(logs, "app.log"), "2026-10-28T10:00:00Z ERROR checkout failed\n")
 	writeAgentTestFile(t, filepath.Join(logs, ".DS_Store"), "x")
 	secret := writeAgentTestFile(t, filepath.Join(dir, ".ssh", "id_rsa"), "PRIVATE KEY\n")
-	if err := os.Symlink(secret, filepath.Join(logs, "key.log")); err != nil {
+	if err := testSymlink(t, secret, filepath.Join(logs, "key.log")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(dir, filepath.Join(logs, "parent")); err != nil {
+	if err := testSymlink(t, dir, filepath.Join(logs, "parent")); err != nil {
 		t.Fatal(err)
 	}
 	out, err := h.agentIngestLocal(context.Background(), logs)
@@ -232,7 +247,7 @@ func TestAgentIngestLocalDirectorySkipsRefusedEntries(t *testing.T) {
 	if err := os.MkdirAll(only, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(secret, filepath.Join(only, "key.log")); err != nil {
+	if err := testSymlink(t, secret, filepath.Join(only, "key.log")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := h.agentIngestLocal(context.Background(), only); err == nil || !strings.Contains(err.Error(), "no importable files") {
@@ -277,6 +292,7 @@ func TestAgentAnalyzeReportsCrossSourceMinuteAndCandidateSpike(t *testing.T) {
 func TestAgentLocalPathExpandsHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir on Windows
 	t.Setenv("LOGSONIC_AGENT_INGEST_ROOT", "")
 	log := writeAgentTestFile(t, filepath.Join(home, "Downloads", "Apache_2k.log"), "line\n")
 	want, _ := filepath.EvalSymlinks(log)
@@ -302,6 +318,51 @@ func TestAgentLocalPathExpandsHome(t *testing.T) {
 	}
 	if _, err := validateAgentLocalPath("~/Downloads/missing.log"); err == nil || !strings.Contains(err.Error(), "no such file") {
 		t.Errorf("missing file error: %v", err)
+	}
+}
+
+// macOS and Windows file systems ignore case, so ~/.SSH opens ~/.ssh there;
+// the credential check must not depend on case or on the separator.
+func TestAgentSecretPathIgnoresCaseAndPlatform(t *testing.T) {
+	home := filepath.Join(string(filepath.Separator)+"home", "u")
+	for _, p := range []string{
+		filepath.Join(home, ".SSH", "id_ed25519"),
+		filepath.Join(home, ".Aws", "credentials"),
+		filepath.Join(home, "Library", "KEYCHAINS", "login.keychain-db"),
+		filepath.Join(home, ".config", "GH", "hosts.yml"),
+		filepath.Join(home, "AppData", "Roaming", "gcloud", "credentials.db"),
+		filepath.Join(home, "AppData", "Roaming", "GitHub CLI", "hosts.yml"),
+		filepath.Join(home, "project", ".ENV"),
+		filepath.Join(home, ".NETRC"),
+		filepath.Join("C:", "Windows", "System32", "config", "SAM"),
+		"/ETC/shadow",
+	} {
+		if !agentSecretPath(p) {
+			t.Errorf("not refused: %q", p)
+		}
+	}
+	for _, p := range []string{
+		filepath.Join(home, ".ollama", "logs", "server.log"),
+		filepath.Join(home, "AppData", "Roaming", "Logsonic", "app.log"),
+		filepath.Join(home, "logs", "config.log"),
+	} {
+		if agentSecretPath(p) {
+			t.Errorf("refused: %q", p)
+		}
+	}
+}
+
+func TestAgentExpandPathWindowsForms(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows path forms")
+	}
+	home := t.TempDir()
+	t.Setenv("USERPROFILE", home)
+	want := filepath.Join(home, "logs", "app.log")
+	for _, in := range []string{`~\logs\app.log`, `~/logs/app.log`, `%USERPROFILE%\logs\app.log`, `logs\app.log`, "file:///" + filepath.ToSlash(want), want} {
+		if got, err := agentExpandPath(in); err != nil || !strings.EqualFold(got, want) {
+			t.Errorf("%q: got %q, %v; want %q", in, got, err, want)
+		}
 	}
 }
 

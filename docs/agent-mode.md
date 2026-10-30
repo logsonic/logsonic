@@ -160,8 +160,15 @@ tickets, writing files). Stdio servers inherit LogSonic's environment minus
 model credentials (`LOGSONIC_AGENT_*`, `ANTHROPIC_API_KEY`,
 `ANTHROPIC_AUTH_TOKEN`, `OPENAI_API_KEY`), plus their own `env`. The system prompt tells the
 agent to call external tools only when the user's request needs them and never
-because log content asks for it; that is an instruction, not a sandbox, so the
-per-server `tools` allowlist is the control for servers that can change things.
+because log content asks for it. The server also pauses every external MCP
+call for approval, including read-only tools, and any import of a path, URL or
+log group that the user did not write in the conversation. Imports the user
+named, searches, viewer changes and saved views run without a prompt. The prompt
+shows the exact arguments and offers Deny, Approve once, or Approve all for the
+current investigation. That grant lives only in browser memory until **Require
+approvals** is selected, a new investigation starts or the page reloads.
+The per-server `tools` allowlist further limits the tools available. See
+[agent security](agent-security.md) for the protocol, tests and deployment limits.
 
 Configuration and exact runnable instructions are in `demo/agent-README.md`.
 Conversation state is held by the frontend in localStorage on this machine.
@@ -207,3 +214,22 @@ model's own arguments are replayed to it unchanged.
 
 Selecting a source the agent has just imported refreshes the UI's source list
 first, so the new source stays selected in the filter panel.
+
+## Viewer awareness and workspace suggestions
+
+`ui_get_state` includes current timezone, column widths and layout lock, color
+rules, saved query drafts, workspace summaries, and the available time, sidebar,
+column, sort and pagination options. Large metadata is bounded and marked when
+truncated. `ui_list_workspaces` refreshes available workspaces, and
+`ui_get_workspace` reads one without applying it. `ui_set_viewer_options` changes
+the display timezone or column lock.
+
+The agent may suggest saving a view worth reopening, and checks existing
+workspaces before suggesting duplicates. A suggestion does not create anything.
+When asked to save the current setup, `ui_save_workspace` uses the same save path
+as the workspace menu, preserving query, sources, time selection, sorting, columns,
+widths, color rules and saved query drafts, without an approval prompt. `save_view` remains the
+separate tool for an explicit finding and evidence window.
+
+The existing workspace format does not retain timezone, layout lock, pagination
+or sidebar state. The model receives this limitation alongside viewer options.

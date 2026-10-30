@@ -262,3 +262,28 @@ export function swapEndpointFormat(raw: string, to: AgentProvider): string | nul
     return value.slice(0, -'/v1/chat/completions'.length) + '/v1/messages';
   return null;
 }
+
+// The command runs where the server stores mcp.json, so the path's shape picks
+// the shell, not the browser: a Linux container viewed from a Mac needs nano.
+export type PathOS = 'windows' | 'mac' | 'unix';
+export const pathOS = (path: string): PathOS =>
+  /^[A-Za-z]:[\\/]|^\\\\/.test(path)
+    ? 'windows'
+    : /^\/Users\/[^/]+\/Library\//.test(path)
+      ? 'mac'
+      : 'unix';
+
+const shellQuote = (path: string) => `'${path.replace(/'/g, `'\\''`)}'`;
+const psQuote = (path: string) => `'${path.replace(/'/g, "''")}'`;
+
+export const editCommand = (path: string) => {
+  const dirPath = path.replace(/[/\\][^/\\]*$/, '');
+  switch (pathOS(path)) {
+    case 'windows':
+      return `New-Item -ItemType Directory -Force -Path ${psQuote(dirPath)} | Out-Null; if (!(Test-Path ${psQuote(path)})) { New-Item -ItemType File -Path ${psQuote(path)} | Out-Null }; notepad ${psQuote(path)}`;
+    case 'mac':
+      return `mkdir -p ${shellQuote(dirPath || '/')} && touch ${shellQuote(path)} && open -t ${shellQuote(path)}`;
+    default:
+      return `mkdir -p ${shellQuote(dirPath || '/')} && \${EDITOR:-nano} ${shellQuote(path)}`;
+  }
+};
