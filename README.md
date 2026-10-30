@@ -60,15 +60,16 @@ We test this with a synthetic day of 188,864 log lines that hides an intrusion, 
 
 ### Connect a model
 
-The agent works with any server that speaks the Anthropic Messages API (`POST …/v1/messages`). The simplest way to connect one is **Settings > Agent** (the gear in the agent dock): pick Claude API, Ollama, LiteLLM or the local proxy, paste an API key if the endpoint needs one, choose the model, then **Test**. Once the endpoint URL is valid, the page lists the models it offers (Anthropic or OpenAI-style `/v1/models`, or Ollama's `/api/tags`); the download button next to **Model** opens that list and fills an empty field. LogSonic makes that request, sending a stored key only to the host it belongs to and never following redirects. These settings are saved in `agent.json` in the LogSonic storage folder, readable only by your user. A saved key is sent only to the endpoint host it was saved for, and the page never shows it again.
+The agent speaks two API formats: the Anthropic Messages API (an endpoint ending in `/v1/messages`) and OpenAI Chat Completions (an endpoint ending in `/chat/completions`, served by OpenAI, Ollama, LiteLLM, vLLM, LM Studio, OpenRouter and most gateways; the model must support tool calls). The simplest way to connect one is **Settings > Agent** (the gear in the agent dock): pick **Anthropic** or **OpenAI compatible**, enter the endpoint URL (the page says which path it must end with and offers a fix for a URL like `https://api.openai.com/v1`), paste an API key if the endpoint needs one, choose the model, then **Test** to send one short request with those fields before you save. Once the endpoint URL is valid, the page lists the models it offers (Anthropic or OpenAI-style `/v1/models`, or Ollama's `/api/tags`); the download button next to **Model** opens that list and fills an empty field. LogSonic makes these requests, sending a stored key only to the host it belongs to and never following redirects. These settings are saved in `agent.json` in the LogSonic storage folder, readable only by your user. In the LogSonic app the page shows the saved key behind a toggle; other local web pages cannot read it. A saved key is sent only to the endpoint host it was saved for; if you change the endpoint to another host and keep the key in the field, saving binds it to the new host.
 
 You can also use environment variables. They win over saved settings, and the settings page shows those fields as locked:
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `LOGSONIC_AGENT_PROXY_URL` | Full Messages endpoint. Plain `http://` is allowed only for `localhost`; remote endpoints must use `https://`. | `http://127.0.0.1:8789/v1/messages` |
-| `LOGSONIC_AGENT_MODEL` | Model name sent with each request | `claude-sonnet-5-5` |
-| `LOGSONIC_AGENT_PROXY_KEY` | Sent as `x-api-key`. For `https://api.anthropic.com` with no key set, `ANTHROPIC_API_KEY` is used; no other endpoint receives that key unless you set it here. | `local-proxy` |
+| `LOGSONIC_AGENT_PROVIDER` | API format: `anthropic` (Messages API) or `openai` (Chat Completions) | `anthropic` |
+| `LOGSONIC_AGENT_PROXY_URL` | Full endpoint, ending in `/v1/messages` (`anthropic`) or `/chat/completions` (`openai`). Plain `http://` is allowed only for `localhost`; remote endpoints must use `https://`. | `http://127.0.0.1:8789/v1/messages` |
+| `LOGSONIC_AGENT_MODEL` | Model name sent with each request | `claude-sonnet-5-5` (none for `openai`) |
+| `LOGSONIC_AGENT_PROXY_KEY` | Sent as `x-api-key` (`anthropic`) or `Authorization: Bearer` (`openai`). With no key set, `ANTHROPIC_API_KEY` is used for `https://api.anthropic.com` and `OPENAI_API_KEY` for `https://api.openai.com`; no other endpoint receives those keys unless you set them here. | `local-proxy` |
 | `LOGSONIC_AGENT_INGEST_ROOT` | Optional. Limits the agent's local imports to files inside this folder. Credential locations such as `~/.ssh`, `~/.aws` and `.env` files are always refused. | unset |
 
 The dock header shows the model name when the endpoint answers, and a short fix-it message when it does not.
@@ -88,6 +89,16 @@ logsonic
 ollama pull qwen3-coder
 export LOGSONIC_AGENT_PROXY_URL=http://localhost:11434/v1/messages
 export LOGSONIC_AGENT_MODEL=qwen3-coder
+logsonic
+```
+
+**OpenAI, or any OpenAI-compatible server.** Set the format to `openai` and give the Chat Completions endpoint. The same works for Ollama (`http://localhost:11434/v1/chat/completions`), vLLM, LM Studio and OpenRouter (`https://openrouter.ai/api/v1/chat/completions`):
+
+```bash
+export LOGSONIC_AGENT_PROVIDER=openai
+export LOGSONIC_AGENT_PROXY_URL=https://api.openai.com/v1/chat/completions
+export OPENAI_API_KEY=sk-...
+export LOGSONIC_AGENT_MODEL=gpt-5
 logsonic
 ```
 
@@ -154,7 +165,7 @@ Example: with the `notes` server above, asking *"Check the on-call notes, then t
 Agent mode is optional; import, search and the MCP server for external AI clients work without it. When you use it:
 
 - Your prompts, the tool results and the log excerpts the agent reads are sent to the model endpoint you configured. With Ollama, or another model on your machine, nothing leaves the machine. With a cloud endpoint, do not use agent mode on logs you may not send to that provider; there is no redaction step.
-- External MCP servers receive whatever arguments the model passes to their tools, which can include log excerpts. Stdio servers run as your user, with LogSonic's environment minus model credentials (`LOGSONIC_AGENT_*`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`), plus the `env` you list. Only add servers you trust, and restrict servers that can change things with `tools`.
+- External MCP servers receive whatever arguments the model passes to their tools, which can include log excerpts. Stdio servers run as your user, with LogSonic's environment minus model credentials (`LOGSONIC_AGENT_*`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `OPENAI_API_KEY`), plus the `env` you list. Only add servers you trust, and restrict servers that can change things with `tools`.
 - Servers can only be added by editing `mcp.json` on disk. There is no API that adds one, so a web page or a log line cannot make LogSonic start a program.
 - The agent treats log text as untrusted data. It is told to call external tools only when your request needs them, never because log content asks for it. That is an instruction to the model, not a sandbox, which is another reason to keep the `tools` lists tight.
 - The agent's local imports refuse credential locations (`~/.ssh`, `~/.aws`, `.env` files and similar). Set `LOGSONIC_AGENT_INGEST_ROOT` to limit them to one folder.

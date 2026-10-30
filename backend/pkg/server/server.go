@@ -339,6 +339,7 @@ func NewServer(cfg Config) (*Server, error) {
 	r.With(agentLoopbackOnly).Get("/api/v1/agent/settings", h.HandleAgentSettings)
 	r.With(agentLoopbackOnly, requireJSONBody).Put("/api/v1/agent/settings", h.HandleUpdateAgentSettings)
 	r.With(agentLoopbackOnly, requireJSONBody, middleware.ThrottleBacklog(2, 4, 5*time.Second)).Post("/api/v1/agent/models", h.HandleAgentModels)
+	r.With(agentLoopbackOnly, requireJSONBody, middleware.ThrottleBacklog(2, 4, 5*time.Second)).Post("/api/v1/agent/test", h.HandleAgentTest)
 
 	// Set up API routes
 	r.Group(func(r chi.Router) {

@@ -658,13 +658,25 @@ func TestAgentSettingsRouteDrivesStatusAndChat(t *testing.T) {
 		t.Fatalf("chat status %d, key %q, model %q", resp.StatusCode, gotKey, gotModel)
 	}
 
-	resp, err = http.Get(ts.URL + "/api/v1/agent/settings")
-	if err != nil {
-		t.Fatal(err)
+	// Another localhost page gets only the hint; LogSonic's own page (same
+	// origin, no Origin header) gets the key so the form can show it.
+	getSettings := func(origin string) string {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/settings", nil)
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return string(raw)
 	}
-	raw, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	if strings.Contains(string(raw), "sk-saved") || !strings.Contains(string(raw), "5678") {
-		t.Fatalf("settings GET: %s", raw)
+	if raw := getSettings("http://localhost:3000"); strings.Contains(raw, "sk-saved") || !strings.Contains(raw, "5678") {
+		t.Fatalf("cross-origin settings GET: %s", raw)
+	}
+	if raw := getSettings(""); !strings.Contains(raw, `"saved_value":"sk-saved-5678"`) {
+		t.Fatalf("same-origin settings GET: %s", raw)
 	}
 }

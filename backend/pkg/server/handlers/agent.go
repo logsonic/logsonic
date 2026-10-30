@@ -101,12 +101,16 @@ type proxyReply struct {
 func (h *Services) HandleAgentStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	cfg := h.currentAgentConfig()
-	u, err := validateAgentEndpoint(cfg.URL)
+	u, err := validateAgentEndpoint(cfg.URL, cfg.Provider)
 	available := false
 	reason := ""
 	if err == nil {
 		if strings.EqualFold(u.Hostname(), "api.anthropic.com") && cfg.KeySource == "none" {
 			reason = "Add an API key in Settings > Agent (or set ANTHROPIC_API_KEY) to use api.anthropic.com"
+		} else if strings.EqualFold(u.Hostname(), "api.openai.com") && cfg.KeySource == "none" {
+			reason = "Add an API key in Settings > Agent (or set OPENAI_API_KEY) to use api.openai.com"
+		} else if cfg.Model == "" {
+			reason = "Pick a model in Settings > Agent"
 		} else {
 			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 			defer cancel()
@@ -126,7 +130,7 @@ func (h *Services) HandleAgentStatus(w http.ResponseWriter, r *http.Request) {
 	} else {
 		reason = err.Error()
 	}
-	out := map[string]any{"available": available, "model": cfg.Model, "proxy_url": cfg.URL, "reason": reason}
+	out := map[string]any{"available": available, "provider": cfg.Provider, "model": cfg.Model, "proxy_url": cfg.URL, "reason": reason}
 	if h.AgentMCP != nil {
 		st := h.AgentMCP.Status()
 		out["mcp"] = map[string]any{"config": st.Config, "servers": len(st.Servers), "connected": st.Connected, "tools": st.ToolCount}
@@ -202,8 +206,12 @@ func (h *Services) HandleAgentChat(w http.ResponseWriter, r *http.Request) {
 		messages = append(messages, agentMessage{Role: m.Role, Content: m.Content})
 	}
 	cfg := h.currentAgentConfig()
-	if _, err := validateAgentEndpoint(cfg.URL); err != nil {
+	if _, err := validateAgentEndpoint(cfg.URL, cfg.Provider); err != nil {
 		writeAgentError(w, http.StatusServiceUnavailable, err.Error(), nil)
+		return
+	}
+	if cfg.Model == "" {
+		writeAgentError(w, http.StatusServiceUnavailable, "no model set; pick one in Settings > Agent", nil)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
@@ -406,8 +414,24 @@ func (s *agentSSE) Step(step agentStep) {
 	s.send("step", map[string]any{"id": step.ID, "tool": step.Tool, "input": step.Input, "output": step.Output, "is_error": step.IsError})
 }
 
+// agentProxyClient refuses redirects, so the API key is never forwarded to
+// another host. timeout 0 means the request context alone bounds the call.
+func agentProxyClient(timeout time.Duration) *http.Client {
+	return &http.Client{Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+}
+
 func agentProxyRequest(ctx context.Context, cfg agentConfig, messages []agentMessage, tools []map[string]any, stream bool) (*http.Request, error) {
-	payload := map[string]any{"model": cfg.Model, "max_tokens": agentMaxTokens, "system": agentSystemPrompt, "messages": messages, "tools": tools}
+	if cfg.Provider == agentProviderOpenAI {
+		return openAIProxyRequest(ctx, cfg, messages, tools, stream)
+	}
+	return anthropicProxyRequest(ctx, cfg, agentSystemPrompt, agentMaxTokens, messages, tools, stream)
+}
+
+func anthropicProxyRequest(ctx context.Context, cfg agentConfig, system string, maxTokens int, messages []agentMessage, tools []map[string]any, stream bool) (*http.Request, error) {
+	payload := map[string]any{"model": cfg.Model, "max_tokens": maxTokens, "system": system, "messages": messages}
+	if len(tools) > 0 {
+		payload["tools"] = tools
+	}
 	if stream {
 		payload["stream"] = true
 	}
@@ -439,7 +463,14 @@ func callAgentProxy(ctx context.Context, cfg agentConfig, messages []agentMessag
 	if err != nil {
 		return out, err
 	}
-	resp, err := (&http.Client{Timeout: agentTimeout}).Do(req)
+	return doAgentProxy(req, cfg.Provider, agentTimeout)
+}
+
+// doAgentProxy sends one non-streaming request and returns the reply in
+// Anthropic block shape, whichever format the endpoint speaks.
+func doAgentProxy(req *http.Request, provider string, timeout time.Duration) (proxyReply, error) {
+	var out proxyReply
+	resp, err := agentProxyClient(timeout).Do(req)
 	if err != nil {
 		return out, err
 	}
@@ -453,6 +484,9 @@ func callAgentProxy(ctx context.Context, cfg agentConfig, messages []agentMessag
 	}
 	if len(data) > 2*1024*1024 {
 		return out, errors.New("proxy response too large")
+	}
+	if provider == agentProviderOpenAI {
+		return parseOpenAIReply(data)
 	}
 	if err := json.Unmarshal(data, &out); err != nil {
 		return out, fmt.Errorf("invalid proxy response: %w", err)
@@ -481,13 +515,16 @@ func callAgentProxyStream(ctx context.Context, cfg agentConfig, messages []agent
 	}
 	// The request context bounds the stream; a client timeout would cut off
 	// a long but healthy generation.
-	resp, err := (&http.Client{}).Do(req)
+	resp, err := agentProxyClient(0).Do(req)
 	if err != nil {
 		return out, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		return out, proxyHTTPError(resp)
+	}
+	if cfg.Provider == agentProviderOpenAI {
+		return readOpenAIStream(resp.Body, onText)
 	}
 
 	blocks := map[int]*streamBlock{}

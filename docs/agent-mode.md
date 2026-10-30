@@ -50,17 +50,43 @@ from whole-source totals. Logs are untrusted data, not instructions.
 
 ## Model endpoint
 
-The Go process calls any server that speaks the Anthropic Messages API, set by
-`LOGSONIC_AGENT_PROXY_URL` (path ending in `/v1/messages`), with
-`LOGSONIC_AGENT_MODEL` and an `x-api-key` from `LOGSONIC_AGENT_PROXY_KEY`. An
-`https://` endpoint may be any host; only `api.anthropic.com` falls back to
-`ANTHROPIC_API_KEY` when no key is set. Settings > Agent saves the endpoint,
-model and key to `<storage>/agent.json` (0600) through `GET`/`PUT
-/api/v1/agent/settings` (loopback only, JSON body). Environment variables win
-over saved values. The saved key is bound to the endpoint host it was saved
-for and is never returned; the page sees only its last four characters.
+The Go process speaks one of two API formats, set by `LOGSONIC_AGENT_PROVIDER`
+or Settings > Agent:
+
+- `anthropic` (the default): the Anthropic Messages API at a path ending in
+  `/v1/messages`, with an `x-api-key` header.
+- `openai`: OpenAI Chat Completions at a path ending in `/chat/completions`,
+  with `Authorization: Bearer`. OpenAI, Ollama, LiteLLM, vLLM, LM Studio and
+  OpenRouter all serve it. The agent keeps its conversation in Messages shape
+  and converts each request and reply (system prompt, function tools,
+  `tool_calls`, `tool` results, streamed tool call fragments) at the boundary.
+  The model must support tool calls.
+
+The endpoint is `LOGSONIC_AGENT_PROXY_URL`, the model `LOGSONIC_AGENT_MODEL`
+and the key `LOGSONIC_AGENT_PROXY_KEY`. An `https://` endpoint may be any
+host; only `api.anthropic.com` falls back to `ANTHROPIC_API_KEY`, and only
+`api.openai.com` to `OPENAI_API_KEY`, when no key is set. Settings > Agent
+saves the format, endpoint, model and key to `<storage>/agent.json` (0600)
+through `GET`/`PUT /api/v1/agent/settings` (loopback only, JSON body).
+Environment variables win over saved values. The saved key is bound to the
+endpoint host it was saved for. `GET /api/v1/agent/settings` returns the key
+itself only to LogSonic's own page (no `Origin` header, or an `Origin` equal to
+the `Host`, and no cross-site `Sec-Fetch-Site`), so the form can show it behind
+a toggle; any other origin, including another `localhost` port, gets only its
+last four characters. In the split development setup (frontend on 8081,
+backend on 8080) the page is cross-origin and sees only the hint. When the
+endpoint moves to another host and the field still holds the key, saving sends
+it again so it is bound to the new host. The model list, which the page
+fetches while the user types, never sends the shown key; the server adds a
+stored key only for the host it belongs to.
+`POST /api/v1/agent/test` (loopback only) sends one short request with the
+fields as typed, saved or not, with one trivial tool declared so that a model
+without tool support fails there. It refuses redirects and reports the
+latency and reply, or which field to fix. Agent chat requests refuse
+redirects too, so a key never follows one to another host.
 `POST /api/v1/agent/models` (loopback only) lists the models at the
-`/v1/models` route beside an endpoint, reading both the Anthropic shape
+`/models` route beside an endpoint (`…/v1/models` for both formats, or
+`/api/v1/models` for OpenRouter), reading both the Anthropic shape
 (`data[].id`, `display_name`, `has_more`/`last_id` paging) and the OpenAI
 shape (`data[].id`), with Ollama's `/api/tags` as a fallback on localhost. It
 sends `x-api-key` and `Authorization: Bearer` with a key the page typed, or
@@ -132,7 +158,7 @@ External MCP servers receive whatever arguments the model passes, which can
 include log excerpts, and may have side effects outside LogSonic (creating
 tickets, writing files). Stdio servers inherit LogSonic's environment minus
 model credentials (`LOGSONIC_AGENT_*`, `ANTHROPIC_API_KEY`,
-`ANTHROPIC_AUTH_TOKEN`), plus their own `env`. The system prompt tells the
+`ANTHROPIC_AUTH_TOKEN`, `OPENAI_API_KEY`), plus their own `env`. The system prompt tells the
 agent to call external tools only when the user's request needs them and never
 because log content asks for it; that is an instruction, not a sandbox, so the
 per-server `tools` allowlist is the control for servers that can change things.

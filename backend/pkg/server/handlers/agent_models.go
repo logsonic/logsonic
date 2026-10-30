@@ -30,8 +30,9 @@ type agentModel struct {
 // page sends is the user's own, typed next to that URL. Otherwise a stored
 // key goes only where the agent would send it anyway: the saved key to its
 // host, LOGSONIC_AGENT_PROXY_KEY to the configured endpoint's host, and
-// ANTHROPIC_API_KEY to https://api.anthropic.com. The page can name any
-// URL, so no stored key may follow it elsewhere.
+// ANTHROPIC_API_KEY to https://api.anthropic.com and OPENAI_API_KEY to
+// https://api.openai.com. The page can name any URL, so no stored key may
+// follow it elsewhere.
 func agentModelsKey(u *url.URL, typed string, saved agentSavedSettings) string {
 	if typed != "" {
 		return typed
@@ -48,15 +49,24 @@ func agentModelsKey(u *url.URL, typed string, saved agentSavedSettings) string {
 	if u.Scheme == "https" && strings.EqualFold(u.Hostname(), "api.anthropic.com") {
 		return os.Getenv("ANTHROPIC_API_KEY")
 	}
+	if u.Scheme == "https" && strings.EqualFold(u.Hostname(), "api.openai.com") {
+		return os.Getenv("OPENAI_API_KEY")
+	}
 	return ""
 }
 
-// agentModelsURL turns a Messages endpoint (…/v1/messages) into the model
-// list beside it (…/v1/models). Anthropic, OpenAI-compatible servers,
-// LiteLLM and Ollama all serve that route.
+// agentModelsURL turns a Messages endpoint (…/v1/messages) or a Chat
+// Completions endpoint (…/chat/completions) into the model list beside it
+// (…/v1/models, or …/models for OpenRouter's /api/v1/chat/completions).
+// Anthropic, OpenAI-compatible servers, LiteLLM and Ollama all serve that
+// route.
 func agentModelsURL(u *url.URL) *url.URL {
 	out := *u
-	out.Path = strings.TrimSuffix(u.Path, "/v1/messages") + "/v1/models"
+	if strings.HasSuffix(u.Path, "/v1/messages") {
+		out.Path = strings.TrimSuffix(u.Path, "/v1/messages") + "/v1/models"
+	} else {
+		out.Path = strings.TrimSuffix(u.Path, "/chat/completions") + "/models"
+	}
 	out.RawQuery, out.Fragment = "", ""
 	return &out
 }
@@ -208,32 +218,20 @@ func isLoopbackEndpoint(u *url.URL) bool {
 // not saved yet; see agentModelsKey for which stored key is used otherwise.
 func (h *Services) HandleAgentModels(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	var req struct {
-		ProxyURL string `json:"proxy_url"`
-		APIKey   string `json:"api_key"`
-	}
+	var req agentEndpointRequest
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&req); err != nil {
 		writeAgentError(w, http.StatusBadRequest, "invalid models request", nil)
 		return
 	}
-	saved, _ := loadAgentSettings(h.StoragePath)
-	raw := strings.TrimSpace(req.ProxyURL)
-	if raw == "" {
-		raw = resolveAgentConfig(saved).URL
-	}
-	endpoint, err := validateAgentEndpoint(raw)
+	cfg, saved, err := h.agentRequestConfig(req)
 	if err != nil {
 		writeAgentError(w, http.StatusBadRequest, err.Error(), nil)
 		return
 	}
-	typed := strings.TrimSpace(req.APIKey)
-	if typed != "" && !validAgentText(typed, 1024) {
-		writeAgentError(w, http.StatusBadRequest, "API key must have no spaces", nil)
-		return
-	}
-	models, style, err := listAgentModels(r.Context(), endpoint, agentModelsKey(endpoint, typed, saved))
+	endpoint, _ := url.Parse(cfg.URL)
+	models, style, err := listAgentModels(r.Context(), endpoint, agentModelsKey(endpoint, strings.TrimSpace(req.APIKey), saved))
 	if err != nil {
 		writeAgentError(w, http.StatusBadGateway, "Could not list models: "+err.Error(), nil)
 		return

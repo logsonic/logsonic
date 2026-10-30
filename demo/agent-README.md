@@ -69,15 +69,18 @@ storage path for independent runs. Do not delete a running server's index.
   files and similar) are refused. Set `LOGSONIC_AGENT_INGEST_ROOT` to limit
   imports to one folder.
 
-Settings > Agent saves the endpoint, model and API key to
-`<storage>/agent.json` (0600); the variables below win over it.
-`LOGSONIC_AGENT_PROXY_URL` is the full Messages endpoint, default
-`http://127.0.0.1:8789/v1/messages`. Plain HTTP is accepted only for
+Settings > Agent saves the API format (Anthropic or OpenAI compatible),
+endpoint, model and API key to `<storage>/agent.json` (0600), and its Test
+button checks them before you save; the variables below win over it.
+`LOGSONIC_AGENT_PROVIDER` is `anthropic` (default) or `openai`.
+`LOGSONIC_AGENT_PROXY_URL` is the full endpoint, ending in `/v1/messages` or
+`/chat/completions`, default `http://127.0.0.1:8789/v1/messages`. Plain HTTP is accepted only for
 localhost; use HTTPS for the Claude API or a remote gateway. The README's
 "Connect a model" section has Claude API, Ollama and LiteLLM setups.
 `LOGSONIC_AGENT_MODEL` defaults to `claude-sonnet-5-5`.
 `LOGSONIC_AGENT_PROXY_KEY` defaults to `local-proxy` (for
-`https://api.anthropic.com`, `ANTHROPIC_API_KEY` when set); override for a
+`https://api.anthropic.com`, `ANTHROPIC_API_KEY` when set, and for
+`https://api.openai.com`, `OPENAI_API_KEY`); override for a
 keyed proxy.
 External MCP servers for the agent go in `<storage>/mcp.json`
 (`LOGSONIC_AGENT_MCP_CONFIG` overrides the path); check them with

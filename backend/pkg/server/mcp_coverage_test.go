@@ -72,6 +72,7 @@ var restRouteExempt = map[string]string{
 	"GET /api/v1/agent/settings":                          "the embedded agent's model endpoint settings, not an MCP operation",
 	"PUT /api/v1/agent/settings":                          "saves the embedded agent's model endpoint and API key; never exposed to agents",
 	"POST /api/v1/agent/models":                           "lists a model endpoint's models for the settings page's model picker",
+	"POST /api/v1/agent/test":                             "sends one test request to a model endpoint for the settings page's Test button",
 	"GET /api/v1/swagger/*":                               "API docs for humans",
 	"GET /api/v1/live/events":                             "SSE stream the browser UI subscribes to; agents read state via ui_get_state",
 	"POST /api/v1/live/stdin":                             "streaming request body for `cmd | logsonic tail`; agents send lines with ingest_lines",

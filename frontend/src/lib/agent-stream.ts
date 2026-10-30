@@ -29,6 +29,7 @@ export type AgentMCPSummary = { config: string; servers: number; connected: numb
 
 export type AgentStatus = {
   available: boolean;
+  provider?: 'anthropic' | 'openai';
   model?: string;
   proxy_url?: string;
   reason?: string;

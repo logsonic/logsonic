@@ -504,13 +504,13 @@ func (m *Manager) Close() error {
 }
 
 // childEnv is the stdio server environment: LogSonic's own, minus model
-// credentials (LOGSONIC_AGENT_*, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN),
-// plus the entry's env. A server that needs one of those lists it in env.
+// credentials (LOGSONIC_AGENT_*, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN,
+// OPENAI_API_KEY), plus the entry's env. A server that needs one of those lists it in env.
 func childEnv(extra map[string]string) []string {
 	env := []string{}
 	for _, kv := range os.Environ() {
 		key, _, _ := strings.Cut(kv, "=")
-		if strings.HasPrefix(key, "LOGSONIC_AGENT_") || key == "ANTHROPIC_API_KEY" || key == "ANTHROPIC_AUTH_TOKEN" {
+		if strings.HasPrefix(key, "LOGSONIC_AGENT_") || key == "ANTHROPIC_API_KEY" || key == "ANTHROPIC_AUTH_TOKEN" || key == "OPENAI_API_KEY" {
 			continue
 		}
 		if _, overridden := extra[key]; overridden {

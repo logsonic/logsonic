@@ -201,11 +201,12 @@ func TestChildEnvDropsAgentCredentials(t *testing.T) {
 	t.Setenv("LOGSONIC_AGENT_PROXY_KEY", "proxy-secret")
 	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-secret")
 	t.Setenv("ANTHROPIC_AUTH_TOKEN", "oauth-secret")
+	t.Setenv("OPENAI_API_KEY", "sk-openai-secret")
 	t.Setenv("PATH_FOR_TEST", "kept")
 	t.Setenv("OVERRIDDEN_VAR", "ambient")
 	entries := childEnv(map[string]string{"GITHUB_TOKEN": "gh", "OVERRIDDEN_VAR": "custom"})
 	env := strings.Join(entries, "\n")
-	if strings.Contains(env, "proxy-secret") || strings.Contains(env, "sk-ant-secret") || strings.Contains(env, "oauth-secret") {
+	if strings.Contains(env, "proxy-secret") || strings.Contains(env, "sk-ant-secret") || strings.Contains(env, "oauth-secret") || strings.Contains(env, "sk-openai-secret") {
 		t.Fatal("agent credentials must not reach MCP child processes")
 	}
 	if !strings.Contains(env, "PATH_FOR_TEST=kept") || !strings.Contains(env, "GITHUB_TOKEN=gh") || !strings.Contains(env, "OVERRIDDEN_VAR=custom") {
