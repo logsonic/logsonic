@@ -97,3 +97,14 @@ func (s *TemplateStorage) IndexDirSize(date string) (int64, error) {
 	})
 	return total, err
 }
+func (s *TemplateStorage) ScanRows(ctx context.Context, o SearchOptions, maxRows int, fn func(map[string]interface{})) (ScanResult, error) {
+	if err := ctx.Err(); err != nil {
+		return ScanResult{}, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if err := s.ready(); err != nil {
+		return ScanResult{}, err
+	}
+	return s.store.ScanRows(ctx, o, maxRows, fn)
+}

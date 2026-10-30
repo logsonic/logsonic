@@ -29,9 +29,11 @@ const SYNTAX_HINTS = [
 // Log Search component renders and updates the SearchQueryParamsStoreState
 // this includes search query and date range. 
 export const LogSearch = ({ 
-    onSearchComplete: _onSearchComplete // reserved for callers that need search completion notifications
+    onSearchComplete: _onSearchComplete, // reserved for callers that need search completion notifications
+    active = true,
   }: {
     onSearchComplete?: (data: LogResponse) => void;
+    active?: boolean;
   }) => {
 
   // Get the store directly using the hook
@@ -47,6 +49,7 @@ export const LogSearch = ({
   // Skip when the user is already typing in an input/textarea/contenteditable.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (!active) return;
       const target = e.target as HTMLElement | null;
       const isEditable =
         target &&
@@ -65,7 +68,7 @@ export const LogSearch = ({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [active]);
 
 
   useEffect(() => {

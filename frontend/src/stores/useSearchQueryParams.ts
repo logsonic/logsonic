@@ -637,6 +637,9 @@ export const useSearchQueryParamsStore = create<SearchQueryParamsStoreState>()(
         
         updateUrlParams: () => {
           if (typeof window === 'undefined') return;
+          // Search state is shared with the Agent log view. A #? URL write
+          // would navigate away from #/agent and unmount its conversation.
+          if (!isLandingRoute(window.location.hash)) return;
           
           const state = get();
           const params = new URLSearchParams();

@@ -14,10 +14,15 @@ import type { SidebarTabId } from '@/components/Home/SidebarPanel';
 import { RELATIVE_DATE_PRESETS } from '@/lib/date-utils';
 import { bleveFieldClause, isQueryableFieldName, tokenizeQuery } from '@/lib/query-clauses';
 import { applyWorkspaceTimeToSearchState } from '@/lib/workspace-utils';
+import { getWorkspace } from '@/lib/api-client';
+import { useAgentStore } from '@/stores/useAgentStore';
 import { useFacetStore } from '@/stores/useFacetStore';
+import { useColorRuleStore } from '@/stores/useColorRuleStore';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
+import { useSavedQueryDraftStore } from '@/stores/useSavedQueryDraftStore';
 import { SIDEBAR_PANELS, useSidebarStore } from '@/stores/useSidebarStore';
+import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import { useWorkspaceStore } from '@/stores/useWorkspaceStore';
 
 export interface AgentCommand {
@@ -36,6 +41,8 @@ export interface AgentCommandResult {
   warnings: string[];
   /** True when the command started a search the ack should wait for. */
   searched: boolean;
+  /** Command-specific data included in the acknowledgement state. */
+  details?: Record<string, unknown>;
 }
 
 export interface AgentFilter {
@@ -46,6 +53,7 @@ export interface AgentFilter {
 
 export const AGENT_ROUTES = [
   '/',
+  '/agent',
   '/import',
   '/settings/patterns',
   '/settings/storage',
@@ -169,7 +177,7 @@ const columnsAdded = (before: string[]): boolean => {
 };
 
 const goHome = (ctx: AgentCommandContext) => {
-  if (ctx.route !== '/') ctx.navigate('/');
+  if (ctx.route !== '/' && ctx.route !== '/agent') ctx.navigate('/');
 };
 
 /** Apply one agent command. Throws with a user-readable message on bad args. */
@@ -188,12 +196,81 @@ export const applyAgentCommand = async (
     case 'get_state':
       return { warnings, searched: false };
 
+    case 'list_workspaces': {
+      await useWorkspaceStore.getState().refreshWorkspaces();
+      const error = useWorkspaceStore.getState().error;
+      if (error) throw new Error(error);
+      return { warnings, searched: false };
+    }
+
+    case 'get_workspace': {
+      const id = requireString(args, 'id');
+      await useWorkspaceStore.getState().refreshWorkspaces();
+      const error = useWorkspaceStore.getState().error;
+      if (error) throw new Error(error);
+      const { workspace } = await getWorkspace(id);
+      const full = JSON.stringify(workspace);
+      return {
+        warnings,
+        searched: false,
+        details:
+          full.length <= 8000
+            ? { requested_workspace: workspace }
+            : {
+                requested_workspace: {
+                  id: workspace.id,
+                  name: workspace.name,
+                  description: workspace.description,
+                  truncated: true,
+                },
+              },
+      };
+    }
+
+    case 'save_workspace': {
+      const name = requireString(args, 'name').trim();
+      const description = args.description === undefined ? '' : asString(args.description);
+      if (description === undefined) throw new Error('description must be a string');
+      const saved = await useWorkspaceStore.getState().saveCurrentWorkspace(name, description);
+      return {
+        warnings,
+        searched: false,
+        details: { saved_workspace: { id: saved.id, name: saved.name } },
+      };
+    }
+
+    case 'set_viewer_options': {
+      if (args.timezone === undefined && args.column_locked === undefined)
+        throw new Error('pass timezone and/or column_locked');
+      if (args.column_locked !== undefined && typeof args.column_locked !== 'boolean')
+        throw new Error('column_locked must be true or false');
+      if (args.timezone !== undefined) {
+        const timezone = requireString(args, 'timezone');
+        try {
+          new Intl.DateTimeFormat('en', { timeZone: timezone });
+        } catch {
+          throw new Error(`invalid timezone ${timezone}`);
+        }
+        store.setTimeZone(timezone);
+      }
+      if (args.column_locked !== undefined) {
+        store.setColumnLocked(args.column_locked);
+      }
+      return { warnings, searched: false };
+    }
+
     case 'navigate': {
       const route = requireString(args, 'route');
       if (!AGENT_ROUTES.includes(route)) {
         throw new Error(`unknown route ${route}; one of ${AGENT_ROUTES.join(', ')}`);
       }
-      ctx.navigate(route);
+      if (route === '/agent') {
+        // The agent is a dock beside the log view, not a page of its own.
+        useAgentStore.getState().setPanelOpen(true);
+        ctx.navigate('/');
+      } else {
+        ctx.navigate(route);
+      }
       return { warnings, searched: false };
     }
 
@@ -289,8 +366,23 @@ export const applyAgentCommand = async (
     case 'set_sources': {
       const sources = asStringList(args.sources ?? [], 'sources');
       goHome(ctx);
-      store.setSources(sources);
-      store.setSourcesInitialized(true);
+      // A source the agent just imported is not in the cached source list
+      // yet, and the sidebar drops selected names it does not know. Refresh
+      // the list first so the new source stays selected.
+      const info = useSystemInfoStore.getState();
+      const cached = info.systemInfo?.storage_info?.source_names;
+      if (cached && sources.some((s) => !cached.includes(s))) {
+        await info.refreshSystemInfo(true).catch(() => undefined);
+      }
+      // An empty list means "all sources", as ui_set_sources documents. An
+      // initialized empty selection would instead query no source at all.
+      const known = useSystemInfoStore.getState().systemInfo?.storage_info?.source_names ?? [];
+      if (cached) {
+        const unknown = sources.filter((s) => !known.includes(s));
+        if (unknown.length > 0) warnings.push(`unknown sources: ${unknown.join(', ')}`);
+      }
+      store.setSources(sources.length > 0 ? sources : [...known]);
+      store.setSourcesInitialized(sources.length > 0 || known.length > 0);
       if (run) runSearch();
       return { warnings, searched: run };
     }
@@ -410,11 +502,42 @@ export const applyAgentCommand = async (
 
 const PREVIEW_ROWS = 5;
 
+const boundedItems = <T>(items: T[], maxItems: number, maxChars: number) => {
+  const selected: T[] = [];
+  let chars = 0;
+  for (const item of items) {
+    const length = JSON.stringify(item).length;
+    if (selected.length >= maxItems || chars + length > maxChars) break;
+    selected.push(item);
+    chars += length;
+  }
+  return { items: selected, total: items.length, truncated: selected.length < items.length };
+};
+
 /** What the agent sees after every command: the UI as the user sees it. */
-export const snapshotUIState = (route: string) => {
+export const snapshotUIState = (route: string, details: Record<string, unknown> = {}) => {
   const s = useSearchQueryParamsStore.getState();
   const facets = useFacetStore.getState();
   const results = useLogResultStore.getState();
+  const workspaces = boundedItems(
+    useWorkspaceStore
+      .getState()
+      .workspaces.map((w) => ({
+        id: w.id,
+        name: w.name.slice(0, 120),
+        description: w.description?.slice(0, 160),
+        query: w.query?.slice(0, 120),
+        sources: w.sources?.slice(0, 8),
+        sources_truncated: (w.sources?.length ?? 0) > 8,
+        time: w.time,
+        favorite: !!w.favorite,
+        updated_at: w.updated_at,
+      })),
+    100,
+    4096
+  );
+  const colorRules = boundedItems(useColorRuleStore.getState().colorRules, 50, 3072);
+  const savedQueryDrafts = boundedItems(useSavedQueryDraftStore.getState().savedQueries, 50, 3072);
   const { filters, text } = splitQuery(s.searchQuery);
   // The first rows as the table shows them (selected columns only), so the
   // agent can confirm what is on screen without a second query.
@@ -436,11 +559,14 @@ export const snapshotUIState = (route: string) => {
       relative: s.isRelative ? s.relativeValue : undefined,
       start: new Date(s.UTCTimeSinceMs).toISOString(),
       end: new Date(s.UTCTimeToMs).toISOString(),
+      timezone: s.timeZone,
     },
     columns: {
       selected: s.selectedColumns,
       available: s.availableColumns,
       mandatory: s.mandatoryColumns,
+      widths: s.columnWidths,
+      locked: s.isColumnLocked,
     },
     sort: { field: s.sortBy, order: s.sortOrder },
     page: s.currentPage,
@@ -454,6 +580,32 @@ export const snapshotUIState = (route: string) => {
     // Only meaningful on the log view, where the sidebar lives.
     sidebar: route === '/' ? useSidebarStore.getState().current : null,
     active_workspace_id: useWorkspaceStore.getState().activeWorkspaceId,
+    color_rules: colorRules.items,
+    color_rules_truncated: colorRules.truncated,
+    saved_query_drafts: savedQueryDrafts.items,
+    saved_query_drafts_truncated: savedQueryDrafts.truncated,
+    workspaces,
+    available_options: {
+      relative_time_presets: RELATIVE_DATE_PRESETS.map((p) => p.value),
+      sidebar_panels: SIDEBAR_PANELS,
+      column_modes: ['set', 'show', 'hide'],
+      sort_orders: ['asc', 'desc'],
+      page: { min: 1, page_size_min: 1, page_size_max: 10000 },
+    },
+    workspace_format: {
+      saved_fields: [
+        'query',
+        'sources',
+        'time',
+        'sort',
+        'columns',
+        'column_widths',
+        'color_rules',
+        'saved_queries',
+      ],
+      viewer_preferences_not_saved: ['timezone', 'column_locked', 'page', 'sidebar'],
+    },
+    ...details,
   };
 };
 

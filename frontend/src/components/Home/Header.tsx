@@ -1,4 +1,21 @@
 import {
+  Bot,
+  ExternalLink,
+  HardDrive,
+  Monitor,
+  Moon,
+  MoreHorizontal,
+  Plus,
+  Sparkles,
+  Sun,
+  Trash2,
+} from 'lucide-react';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+import SystemInfoModal from './SystemInfoModal';
+
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -7,24 +24,25 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { useClearLogs } from '@/hooks/useApi';
 import { getSystemInfo } from '@/lib/api-client';
 import { isNativeShell } from '@/lib/native';
-import { formatBytes } from "@/lib/utils";
+import { formatBytes } from '@/lib/utils';
 import { useLogResultStore } from '@/stores/useLogResultStore';
 import { useSearchQueryParamsStore } from '@/stores/useSearchQueryParams';
 import { useSystemInfoStore } from '@/stores/useSystemInfoStore';
 import { useThemeStore } from '@/stores/useThemeStore';
-import { Bot, ExternalLink, HardDrive, Monitor, Moon, Sun, Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import SystemInfoModal from './SystemInfoModal';
 
 // Mirrors SidebarTabId in SidebarPanel.tsx (kept local: this file's import
 // block predates the import/order rule and any new import here fails lint).
@@ -32,6 +50,9 @@ type ActiveSection = 'filter' | 'fields' | 'sources' | 'styling' | null;
 
 interface HeaderProps {
   activeSection?: ActiveSection;
+  /** Whether the agent dock is open; the toggle is hidden when no handler is given. */
+  agentOpen?: boolean;
+  onToggleAgent?: () => void;
 }
 
 const SECTION_LABEL: Record<Exclude<ActiveSection, null>, string> = {
@@ -44,7 +65,11 @@ const SECTION_LABEL: Record<Exclude<ActiveSection, null>, string> = {
 /**
  * Application header component with navigation and action buttons using Radix navigation menu
  */
-export const Header = ({ activeSection = null }: HeaderProps = {}) => {
+export const Header = ({
+  activeSection = null,
+  agentOpen = false,
+  onToggleAgent,
+}: HeaderProps = {}) => {
   const { execute: clearLogs, isLoading } = useClearLogs();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -57,8 +82,8 @@ export const Header = ({ activeSection = null }: HeaderProps = {}) => {
   const native = isNativeShell();
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const resetLogResults = useLogResultStore(state => state.reset);
-  const resetSearchParams = useSearchQueryParamsStore(state => state.resetStore);
+  const resetLogResults = useLogResultStore((state) => state.reset);
+  const resetSearchParams = useSearchQueryParamsStore((state) => state.resetStore);
 
   // Handle clearing all logs. The dialog is dismissed up-front so the user
   // sees the toast/refresh against the empty index rather than staring at a
@@ -68,9 +93,9 @@ export const Header = ({ activeSection = null }: HeaderProps = {}) => {
     try {
       await clearLogs();
       toast({
-        title: "Logs cleared",
-        description: "All logs have been successfully deleted.",
-        variant: "default",
+        title: 'Logs cleared',
+        description: 'All logs have been successfully deleted.',
+        variant: 'default',
       });
       const data = await getSystemInfo(true);
       setSystemInfo(data);
@@ -80,15 +105,15 @@ export const Header = ({ activeSection = null }: HeaderProps = {}) => {
       resetSearchParams();
     } catch (error) {
       toast({
-        title: "Error",
+        title: 'Error',
         description: `Failed to clear logs: ${error.message}`,
-        variant: "destructive",
+        variant: 'destructive',
       });
     }
   };
 
   const handleSystemInfoClick = () => {
-      setSystemInfoOpen(true);
+    setSystemInfoOpen(true);
   };
 
   // Reset delete confirmation whenever alert dialog is closed
@@ -100,207 +125,123 @@ export const Header = ({ activeSection = null }: HeaderProps = {}) => {
   };
 
   return (
-    <div className="h-full">
-      <div
-        className="flex items-center justify-between h-full px-3"
-      >
-        {/* Page title / breadcrumbs */}
-        <div
-          className="flex items-center"
-          style={{ gap: 6, fontSize: 13, fontWeight: 500, color: 'var(--ls-text)' }}
-        >
-          <span style={{ color: 'var(--ls-text-3)' }}>LogSonic</span>
-          <span style={{ color: 'var(--ls-text-4)', margin: '0 6px' }}>/</span>
-          <span>{activeSection ? SECTION_LABEL[activeSection] : 'Home'}</span>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex items-center gap-1.5">
-          <TooltipProvider>
-            <Tooltip delayDuration={300}>
-              <TooltipTrigger asChild>
-                {native ? (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    style={{ color: 'var(--ls-text-2)' }}
-                    onClick={cycleTheme}
-                    aria-label="Cycle theme (auto / light / dark)"
-                  >
-                    {theme === 'auto' ? (
-                      <Sun className="h-3.5 w-3.5" />
-                    ) : theme === 'light' ? (
-                      <Moon className="h-3.5 w-3.5" />
-                    ) : (
-                      <Monitor className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    style={{ color: 'var(--ls-text-2)' }}
-                    onClick={toggleTheme}
-                    aria-label="Toggle theme"
-                  >
-                    {effectiveTheme === 'dark' ? (
-                      <Sun className="h-3.5 w-3.5" />
-                    ) : (
-                      <Moon className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                )}
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">
-                {native ? (
-                  <p>
-                    {theme === 'auto'
-                      ? 'Light theme'
-                      : theme === 'light'
-                        ? 'Dark theme'
-                        : 'Auto (follow system)'}
-                  </p>
-                ) : (
-                  <p>{effectiveTheme === 'dark' ? 'Light theme' : 'Dark theme'}</p>
-                )}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          {/* The shell's View menu already offers "Open in Browser" for this
-              app instance -- an external marketing link is browser-redundant
-              chrome inside the native window (macos-b1). */}
-          {!native && (
-            <TooltipProvider>
-              <Tooltip delayDuration={300}>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    style={{ color: 'var(--ls-text-2)' }}
-                    onClick={() => window.open('https://logsonic.io', '_blank', 'noopener,noreferrer')}
-                    aria-label="Visit logsonic.io"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">
-                  <p>Visit logsonic.io</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-
-          <TooltipProvider>
-            <Tooltip delayDuration={300}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  style={{ color: 'var(--ls-text-2)' }}
-                  onClick={() => navigate('/settings/mcp')}
-                  aria-label="MCP Integration"
-                >
-                  <Bot className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">
-                <p>MCP Integration</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <TooltipProvider>
-            <Tooltip delayDuration={300}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="h-7 px-2 flex items-center gap-1.5"
-                  style={{ color: 'var(--ls-text-2)' }}
-                  onClick={() => handleSystemInfoClick()}
-                  aria-label="System Information"
-                >
-                  <HardDrive className="h-3.5 w-3.5" />
-                  <span className="text-[11px] font-medium" style={{ fontFamily: 'var(--ls-font-mono)' }}>
-                    {systemInfo ? formatBytes(systemInfo.storage_info.storage_size_bytes) : '…'}
-                  </span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">
-                <p>System Information</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <AlertDialog open={deleteDialogOpen} onOpenChange={handleAlertOpenChange}>
-            <TooltipProvider>
-              <Tooltip delayDuration={300}>
-                <TooltipTrigger asChild>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="ls-danger-btn h-7 w-7"
-                      style={{ color: 'var(--ls-text-2)' }}
-                      aria-label="Clear logs"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </AlertDialogTrigger>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">
-                  <p>Clear All Logs</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Clear All Indexes</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This action will permanently delete all logs from storage. This action cannot be undone.
-                  
-                  <div className="mt-4">
-                    <div className="mb-2 text-sm font-medium">Type "delete" to confirm:</div>
-                    <Input 
-                      type="text" 
-                      value={deleteConfirmation} 
-                      onChange={(e) => setDeleteConfirmation(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && deleteConfirmation === 'delete' && !isLoading) {
-                          handleClearLogs();
-                        }
-                      }}
-                      placeholder="delete"
-                      className="mb-2"
-                    />
-                  </div>
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  className="ls-danger-action text-white"
-                  onClick={handleClearLogs}
-                  disabled={isLoading || deleteConfirmation !== 'delete'}
-                >
-                  {isLoading ? "Deleting..." : "Delete All"}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-
-        </div>
+    <div className="ls-app-header">
+      <div className="ls-header-identity">
+        <span className="ls-header-brand">LogSonic</span>
+        <span className="ls-header-divider" />
+        <span className="ls-header-location">
+          {activeSection ? SECTION_LABEL[activeSection] : 'Log explorer'}
+        </span>
       </div>
-
-      {/* System Info Modal */}
-      <SystemInfoModal
-        open={systemInfoOpen}
-        onOpenChange={setSystemInfoOpen}
-      />
+      <div className="ls-header-actions">
+        <span className="ls-workspace-location">
+          <HardDrive size={13} /> Local workspace
+        </span>
+        <button type="button" className="ls-header-button" onClick={() => navigate('/import')}>
+          <Plus size={14} /> Import
+        </button>
+        {onToggleAgent && (
+          <button
+            type="button"
+            className="ls-header-button ls-header-agent"
+            aria-pressed={agentOpen}
+            onClick={onToggleAgent}
+            title="Toggle the agent panel (⌘J)"
+          >
+            <Sparkles size={14} /> Agent
+            <kbd aria-hidden="true">⌘J</kbd>
+          </button>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="ls-header-icon"
+          onClick={native ? cycleTheme : toggleTheme}
+          aria-label={native ? 'Cycle theme (auto / light / dark)' : 'Toggle theme'}
+        >
+          {effectiveTheme === 'dark' ? (
+            <Sun size={15} />
+          ) : theme === 'auto' && native ? (
+            <Monitor size={15} />
+          ) : (
+            <Moon size={15} />
+          )}
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="ls-header-icon"
+              aria-label="Workspace options"
+            >
+              <MoreHorizontal size={18} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-52">
+            <DropdownMenuItem onSelect={handleSystemInfoClick}>
+              <HardDrive size={14} className="mr-2" /> Storage & system{' '}
+              <span className="ml-auto pl-4 text-xs opacity-60">
+                {systemInfo ? formatBytes(systemInfo.storage_info.storage_size_bytes) : ''}
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => navigate('/settings/mcp')}>
+              <Bot size={14} className="mr-2" /> MCP integration
+            </DropdownMenuItem>
+            {!native && (
+              <DropdownMenuItem
+                onSelect={() => window.open('https://logsonic.io', '_blank', 'noopener,noreferrer')}
+              >
+                <ExternalLink size={14} className="mr-2" /> LogSonic website
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => setDeleteDialogOpen(true)}
+              className="text-destructive"
+            >
+              <Trash2 size={14} className="mr-2" /> Clear logs…
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={handleAlertOpenChange}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear All Indexes</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action will permanently delete all logs from storage. This action cannot be
+              undone.
+              <div className="mt-4">
+                <div className="mb-2 text-sm font-medium">Type "delete" to confirm:</div>
+                <Input
+                  type="text"
+                  value={deleteConfirmation}
+                  onChange={(e) => setDeleteConfirmation(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && deleteConfirmation === 'delete' && !isLoading) {
+                      handleClearLogs();
+                    }
+                  }}
+                  placeholder="delete"
+                  className="mb-2"
+                />
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="ls-danger-action text-white"
+              onClick={handleClearLogs}
+              disabled={isLoading || deleteConfirmation !== 'delete'}
+            >
+              {isLoading ? 'Deleting...' : 'Delete All'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <SystemInfoModal open={systemInfoOpen} onOpenChange={setSystemInfoOpen} />
     </div>
   );
-}; 
+};

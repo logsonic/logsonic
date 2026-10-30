@@ -37,6 +37,13 @@ export const searchFingerprint = (store: SearchWindowState): string => {
 };
 
 let activeMetadataController: AbortController | null = null;
+let activeMetadataRequest: Promise<void> | null = null;
+
+/** Resolves once the in-flight chart distribution request (if any) settles. */
+export const waitForSearchMetadata = (): Promise<void> => activeMetadataRequest ?? Promise.resolve();
+
+/** True while a chart distribution request is in flight. */
+export const isSearchMetadataPending = (): boolean => activeMetadataController !== null;
 
 /**
  * The deferred second request: chart distribution (and, when the Fields
@@ -45,7 +52,16 @@ let activeMetadataController: AbortController | null = null;
  * projects the returned row; the server's facet scan builds its own field
  * list, so the projection does not starve the facets.
  */
-export const refreshSearchMetadata = async (opts: { includeFacets: boolean; params?: LogQueryParams }): Promise<void> => {
+export const refreshSearchMetadata = (opts: { includeFacets: boolean; params?: LogQueryParams }): Promise<void> => {
+  const request = loadSearchMetadata(opts);
+  activeMetadataRequest = request;
+  void request.finally(() => {
+    if (activeMetadataRequest === request) activeMetadataRequest = null;
+  });
+  return request;
+};
+
+const loadSearchMetadata = async (opts: { includeFacets: boolean; params?: LogQueryParams }): Promise<void> => {
   const query = useSearchQueryParamsStore.getState();
   const facetStore = useFacetStore.getState();
   const fingerprint = searchFingerprint(query);
@@ -72,12 +88,16 @@ export const refreshSearchMetadata = async (opts: { includeFacets: boolean; para
       include_facets: opts.includeFacets,
     }, controller.signal);
     if (activeMetadataController !== controller) return;
+    // The view changed while this was loading (a newer search will fetch
+    // its own): do not paint the old window's distribution over it.
+    if (searchFingerprint(useSearchQueryParamsStore.getState()) !== fingerprint) return;
     const current = useLogResultStore.getState().logData;
     if (current) {
       useLogResultStore.getState().setLogData({
         ...current,
         total_count: metadata.total_count,
-        log_distribution: metadata.log_distribution,
+        // [] rather than undefined, so the chart knows it was loaded.
+        log_distribution: metadata.log_distribution ?? [],
       });
     }
     if (opts.includeFacets && metadata.facets) {

@@ -26,6 +26,15 @@ LogSonic can be configured with command-line flags or environment variables.
 - `LOGSONIC_AUTO_PORT`: auto-select a free port if busy (`1`, `true`, `yes`, `on`)
 - `RETENTION_DAYS`: delete indexed logs older than N days
 - `LOGSONIC_ALLOWED_HOSTS`: same as `-allowed-hosts`
+- Agent model settings can also be saved from **Settings > Agent** into `<storage>/agent.json` (mode 0600). The `LOGSONIC_AGENT_PROVIDER`, `LOGSONIC_AGENT_PROXY_*` and `MODEL` variables below win over saved values. A saved API key is used only while the endpoint has the host it was saved for, ahead of the `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` fallbacks. The page shows the saved key (behind a toggle) only when it is served by LogSonic itself, as in the Mac app
+- `LOGSONIC_AGENT_PROVIDER`: the model API format, `anthropic` (Messages API, default) or `openai` (Chat Completions)
+- `LOGSONIC_AGENT_PROXY_URL`: the agent's model endpoint. Its path must end in `/v1/messages` for `anthropic` or `/chat/completions` for `openai`. `http://` only for localhost; any host over `https://`. Default `http://127.0.0.1:8789/v1/messages` (`https://api.openai.com/v1/chat/completions` for `openai`)
+- `LOGSONIC_AGENT_MODEL`: model name sent to that endpoint (default `claude-sonnet-5-5`; no default for `openai`)
+- `LOGSONIC_AGENT_PROXY_KEY`: sent as `x-api-key` (`anthropic`) or `Authorization: Bearer` (`openai`); with no key set, `ANTHROPIC_API_KEY` is used for `https://api.anthropic.com` and `OPENAI_API_KEY` for `https://api.openai.com` (default `local-proxy`)
+- `LOGSONIC_AGENT_MCP_CONFIG`: path of the agent's external MCP server list (default `<storage>/mcp.json`)
+- `LOGSONIC_AGENT_INGEST_ROOT`: when set, the agent's `ingest_local` tool only imports files inside this folder (symlinks are resolved first). Credential locations (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `.env` files and similar) are refused whether or not it is set (default: unset: any path, including anything in the home folder; `~/…` and paths relative to the home folder are accepted)
+
+See [Agent mode in the README](../README.md#agent-mode) for local and cloud model setups and the `mcp.json` format.
 
 The **Logsonic.app** bundle shows the UI in an in-app window by default. Pass `--browser` (or `LOGSONIC_BROWSER=1`) to open the system browser instead. The CLI also auto-selects the first free port starting at `8080`, and does not open a browser unless you pass `-open` or `-browser`.
 

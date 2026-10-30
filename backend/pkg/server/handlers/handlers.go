@@ -23,8 +23,11 @@ type Services struct {
 	storage storage.StorageInterface
 	Live    *TailManager
 
-	StoragePath string
-	Build       BuildInfo
+	StoragePath  string
+	Build        BuildInfo
+	AgentUITools AgentUIToolProvider
+	// AgentMCP serves tools from external MCP servers (nil: none).
+	AgentMCP AgentMCPProvider
 
 	// PatternTimestamps persists per-pattern Resolution alongside the
 	// log2grok library. Saved patterns thus restore their last-used
@@ -63,8 +66,9 @@ type Services struct {
 
 	// uiBridgeState pairs /ui/command calls with the web UI's /ui/ack; see
 	// ui_bridge.go. Built lazily so a zero-value Services in tests works.
-	uiBridgeOnce  sync.Once
-	uiBridgeState *uiBridge
+	uiBridgeOnce   sync.Once
+	uiBridgeState  *uiBridge
+	agentApprovals agentApprovalRegistry
 }
 
 // NewHandler wires up the HTTP service surface. Pattern + decode logic
@@ -132,7 +136,13 @@ func (s *Services) CloseStorage() error {
 	type closer interface {
 		Close() error
 	}
-	// Watches first: they own followers and a state file, and their
+	// External MCP servers first: stdio servers are child processes.
+	if c, ok := s.AgentMCP.(closer); ok {
+		if err := c.Close(); err != nil {
+			log.Printf("agent mcp: close: %v", err)
+		}
+	}
+	// Watches next: they own followers and a state file, and their
 	// Finished callbacks must land before the catalog's final flush.
 	if s.Watches != nil {
 		if err := s.Watches.Close(); err != nil {

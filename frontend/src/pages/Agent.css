@@ -1,0 +1,816 @@
+/* Agent dock: conversation on the right, log table on the left.
+   The trail of tool steps is the one distinctive element; everything else
+   stays quiet so the evidence in the table carries the weight. */
+
+.ls-agent-dock {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  /* Layers: filter sidebar 50 < dock 55 < top bar and rail 60 < popovers,
+     menus and dialogs 80 (components/ui) < toasts 100. */
+  z-index: 55;
+  display: flex;
+  background: var(--ls-panel);
+  border-left: 1px solid var(--ls-border);
+  box-shadow: -8px 0 24px -18px rgba(24, 24, 27, 0.35);
+}
+.ls-agent-dock-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 2;
+}
+.ls-agent-dock-resize:hover,
+.ls-agent-dock-resize.is-dragging {
+  background: linear-gradient(
+    to right,
+    transparent 2px,
+    var(--ls-accent) 2px,
+    var(--ls-accent) 4px,
+    transparent 4px
+  );
+}
+.ls-agent-dock-resize:focus-visible {
+  outline: none;
+  background: linear-gradient(
+    to right,
+    transparent 2px,
+    var(--ls-accent) 2px,
+    var(--ls-accent) 4px,
+    transparent 4px
+  );
+}
+
+.ls-agent {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  color: var(--ls-text);
+  font-family: var(--ls-font-sans);
+  font-size: 13px;
+}
+.ls-agent button {
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+}
+.ls-agent button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.ls-agent button:focus-visible,
+.ls-agent summary:focus-visible,
+.ls-agent textarea:focus-visible {
+  outline: 2px solid var(--ls-accent);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ header */
+.ls-agent-head {
+  flex: none;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--ls-border);
+}
+.ls-agent-head-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.ls-agent-head-title strong {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ls-agent-status {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--ls-text-3);
+  white-space: nowrap;
+}
+.ls-agent-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ls-text-4);
+}
+.ls-agent-status.is-up::before {
+  background: var(--ls-ok);
+}
+.ls-agent-status.is-down::before {
+  background: var(--ls-err);
+}
+.ls-agent-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.ls-agent-head-actions button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--ls-radius);
+  color: var(--ls-text-3);
+}
+.ls-agent-head-actions button:hover:not(:disabled),
+.ls-agent-head-actions button[aria-pressed='true'] {
+  background: var(--ls-bg-2);
+  color: var(--ls-text);
+}
+
+/* ------------------------------------------------------------ body */
+.ls-agent-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 16px 8px;
+}
+
+.ls-agent-empty {
+  padding: 12px 2px;
+}
+.ls-agent-empty h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.ls-agent-empty p {
+  margin: 0 0 18px;
+  color: var(--ls-text-2);
+  line-height: 1.5;
+  max-width: 46ch;
+}
+.ls-agent-prompts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.ls-agent-prompts button {
+  text-align: left;
+  padding: 9px 12px;
+  border: 1px solid var(--ls-border) !important;
+  border-radius: var(--ls-radius-lg);
+  background: var(--ls-panel);
+  line-height: 1.4;
+  transition:
+    border-color 0.12s,
+    background 0.12s;
+}
+.ls-agent-prompts button:hover:not(:disabled) {
+  border-color: var(--ls-accent-border) !important;
+  background: var(--ls-accent-softer);
+}
+.ls-agent-prompts.is-secondary button {
+  border-style: dashed !important;
+  color: var(--ls-text-2);
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------------ thread */
+.ls-agent-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.ls-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ls-turn-user {
+  align-self: flex-end;
+  max-width: 88%;
+  padding: 8px 12px;
+  border-radius: 12px 12px 4px 12px;
+  background: var(--ls-bg-2);
+}
+.ls-turn-user p {
+  margin: 0;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ls-turn-agent {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* markdown answer */
+.ls-agent-md {
+  line-height: 1.58;
+  overflow-wrap: anywhere;
+}
+.ls-agent-md > :first-child {
+  margin-top: 0;
+}
+.ls-agent-md > :last-child {
+  margin-bottom: 0;
+}
+.ls-agent-md p,
+.ls-agent-md ul,
+.ls-agent-md ol {
+  margin: 0 0 8px;
+}
+.ls-agent-md ul,
+.ls-agent-md ol {
+  padding-left: 18px;
+}
+.ls-agent-md ul {
+  list-style: disc;
+}
+.ls-agent-md ol {
+  list-style: decimal;
+}
+.ls-agent-md li + li {
+  margin-top: 3px;
+}
+.ls-agent-md h1,
+.ls-agent-md h2,
+.ls-agent-md h3,
+.ls-agent-md h4 {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.ls-agent-md strong {
+  font-weight: 600;
+}
+.ls-agent-md code {
+  font-family: var(--ls-font-mono);
+  font-size: 11.5px;
+  padding: 0 3px;
+  border-radius: 4px;
+  background: var(--ls-bg-2);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.ls-agent-md pre {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: var(--ls-radius);
+  background: var(--ls-bg-1);
+  border: 1px solid var(--ls-border-subtle);
+  overflow-x: auto;
+}
+.ls-agent-md pre code {
+  padding: 0;
+  background: none;
+}
+.ls-agent-md table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.ls-agent-md th,
+.ls-agent-md td {
+  padding: 4px 10px 4px 0;
+  border-bottom: 1px solid var(--ls-border);
+  text-align: left;
+  white-space: nowrap;
+}
+.ls-agent-md th {
+  font-weight: 600;
+  color: var(--ls-text-2);
+}
+.ls-agent-md blockquote {
+  margin: 0 0 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--ls-border-strong);
+  color: var(--ls-text-2);
+}
+.ls-agent-md a {
+  color: var(--ls-accent-text);
+  text-decoration: underline;
+}
+
+.ls-caret {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  margin-top: -6px;
+  background: var(--ls-accent);
+  border-radius: 1px;
+  animation: ls-blink 1s steps(2, start) infinite;
+}
+
+/* ------------------------------------------------------------ trail */
+.ls-trail {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+/* The thread that ties steps together. */
+.ls-trail::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 14px;
+  bottom: 14px;
+  width: 1px;
+  background: var(--ls-border-strong);
+}
+.ls-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: start;
+  padding: 3px 0;
+}
+.ls-step-node {
+  position: relative;
+  z-index: 1;
+  width: 23px;
+  height: 23px;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  border: 1px solid var(--ls-border-strong);
+  background: var(--ls-panel);
+  color: var(--ls-text-3);
+}
+.ls-step.is-running .ls-step-node {
+  border-color: var(--ls-accent);
+  color: var(--ls-accent);
+  box-shadow: 0 0 0 3px var(--ls-accent-soft);
+}
+.ls-step.is-error .ls-step-node {
+  border-color: var(--ls-err);
+  color: var(--ls-err);
+  background: var(--ls-err-soft);
+}
+.ls-step.is-on-screen .ls-step-node {
+  border-color: var(--ls-accent);
+  background: var(--ls-accent);
+  color: #fff;
+}
+.ls-step-body {
+  min-width: 0;
+}
+.ls-step-body summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 25px;
+  padding: 3px 0;
+  cursor: pointer;
+  list-style: none;
+}
+.ls-step-body summary::-webkit-details-marker {
+  display: none;
+}
+.ls-step-title {
+  flex: none;
+  font-weight: 550;
+  color: var(--ls-text);
+}
+.ls-step-summary {
+  min-width: 0;
+  color: var(--ls-text-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ls-step.is-error .ls-step-summary {
+  color: var(--ls-err);
+  white-space: normal;
+}
+.ls-step-chevron {
+  flex: none;
+  align-self: center;
+  color: var(--ls-text-4);
+  opacity: 0;
+  transition:
+    transform 0.15s,
+    opacity 0.12s;
+}
+.ls-step-body summary:hover .ls-step-chevron,
+.ls-step-body[open] .ls-step-chevron {
+  opacity: 1;
+}
+.ls-step-body[open] .ls-step-chevron {
+  transform: rotate(90deg);
+}
+.ls-step-detail {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 6px;
+}
+.ls-step-detail span {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11px;
+  color: var(--ls-text-3);
+}
+.ls-step-detail pre {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 7px 9px;
+  border-radius: var(--ls-radius);
+  background: var(--ls-bg-1);
+  border: 1px solid var(--ls-border-subtle);
+  font-family: var(--ls-font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ls-step-show {
+  margin-top: 3px;
+  padding: 2px 8px;
+  height: 22px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--ls-text-3) !important;
+  border: 1px solid transparent !important;
+  white-space: nowrap;
+}
+.ls-step-show:hover:not(:disabled) {
+  color: var(--ls-accent-text) !important;
+  border-color: var(--ls-accent-border) !important;
+  background: var(--ls-accent-softer) !important;
+}
+/* Pointer devices reveal the action on hover so summaries keep their room. */
+@media (hover: hover) {
+  .ls-step .ls-step-show {
+    position: absolute;
+    right: 0;
+    top: 3px;
+    margin: 0;
+    opacity: 0;
+    background: var(--ls-panel) !important;
+  }
+  .ls-step:hover .ls-step-show,
+  .ls-step .ls-step-show:focus-visible,
+  .ls-step.is-on-screen .ls-step-show {
+    opacity: 1;
+  }
+  .ls-step.is-on-screen .ls-step-body summary {
+    padding-right: 72px;
+  }
+}
+.ls-step.is-on-screen .ls-step-show {
+  color: var(--ls-accent-text) !important;
+  background: var(--ls-accent-soft) !important;
+}
+.ls-step-apply-error {
+  grid-column: 2 / -1;
+  font-size: 11.5px;
+  color: var(--ls-err);
+}
+
+/* ------------------------------------------------------------ status */
+.ls-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ls-text-3);
+  font-size: 12px;
+}
+.ls-thinking-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+.ls-thinking-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ls-accent);
+  animation: ls-dot 1.2s infinite ease-in-out;
+}
+.ls-thinking-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.ls-thinking-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.ls-turn-error {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--ls-radius);
+  background: var(--ls-err-soft);
+  color: var(--ls-err);
+  line-height: 1.45;
+}
+.ls-turn-error button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 550;
+}
+.ls-turn-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--ls-text-4);
+}
+.ls-turn-meta button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ls-text-3);
+}
+.ls-turn-meta button:hover {
+  color: var(--ls-text);
+}
+
+/* ------------------------------------------------------------ history */
+.ls-history {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ls-history li {
+  display: flex;
+  align-items: center;
+  border-radius: var(--ls-radius);
+}
+.ls-history li:hover,
+.ls-history li.is-active {
+  background: var(--ls-bg-1);
+}
+.ls-history-open {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 8px 10px;
+}
+.ls-history-open strong {
+  display: block;
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ls-history-open small {
+  font-size: 11.5px;
+  color: var(--ls-text-3);
+}
+.ls-history-delete {
+  width: 28px;
+  height: 28px;
+  margin-right: 4px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--ls-radius);
+  color: var(--ls-text-4);
+  opacity: 0;
+}
+.ls-history li:hover .ls-history-delete,
+.ls-history-delete:focus-visible {
+  opacity: 1;
+}
+.ls-history-delete:hover {
+  color: var(--ls-err);
+  background: var(--ls-err-soft);
+}
+.ls-history-empty {
+  color: var(--ls-text-3);
+  padding: 8px 2px;
+}
+
+/* ------------------------------------------------------------ composer */
+.ls-agent-foot {
+  flex: none;
+  padding: 8px 12px 10px;
+}
+.ls-agent-grant {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: var(--ls-radius);
+  background: var(--ls-accent-soft);
+  color: var(--ls-text);
+  font-size: 12px;
+}
+.ls-agent-grant button {
+  flex: none;
+  padding: 4px 7px;
+  border: 1px solid var(--ls-border-strong);
+  border-radius: 6px;
+  background: var(--ls-panel);
+  color: var(--ls-text);
+  font-size: 11px;
+}
+.ls-agent-approval {
+  margin-bottom: 8px;
+  padding: 10px;
+  border: 1px solid var(--ls-warn);
+  border-radius: var(--ls-radius);
+  background: var(--ls-warn-soft);
+  color: var(--ls-text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.ls-agent-approval p {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+.ls-agent-approval pre {
+  max-height: 120px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--ls-border);
+  border-radius: 6px;
+  background: var(--ls-panel);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ls-agent-approval-error {
+  color: var(--ls-err);
+}
+.ls-agent-approval-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.ls-agent-approval-actions button {
+  padding: 6px 10px;
+  border: 1px solid var(--ls-border-strong);
+  border-radius: 6px;
+  background: var(--ls-panel);
+  color: var(--ls-text);
+}
+.ls-agent-approval-actions button:last-child {
+  background: var(--ls-accent);
+  color: #fff;
+  border-color: var(--ls-accent);
+}
+.ls-agent-unavailable {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: var(--ls-radius);
+  background: var(--ls-warn-soft);
+  color: var(--ls-warn);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.ls-agent-settings-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.ls-agent-compose {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--ls-border-strong);
+  border-radius: 12px;
+  background: var(--ls-panel);
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s;
+}
+.ls-agent-compose:focus-within {
+  border-color: var(--ls-accent);
+  box-shadow: 0 0 0 3px var(--ls-accent-soft);
+}
+.ls-agent-compose textarea {
+  flex: 1;
+  min-height: 24px;
+  max-height: 200px;
+  padding: 5px 0;
+  border: 0;
+  outline: none !important;
+  resize: none;
+  background: transparent;
+  color: var(--ls-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.ls-agent-compose textarea::placeholder {
+  color: var(--ls-text-4);
+}
+.ls-agent-send {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--ls-accent) !important;
+  color: #fff !important;
+}
+.ls-agent-send:hover:not(:disabled) {
+  background: var(--ls-accent-hover) !important;
+}
+.ls-agent-send:disabled {
+  background: var(--ls-bg-3) !important;
+  color: var(--ls-text-4) !important;
+  opacity: 1 !important;
+}
+.ls-agent-send.is-stop {
+  background: var(--ls-text) !important;
+  color: var(--ls-panel) !important;
+}
+.ls-agent-note {
+  margin: 6px 2px 0;
+  font-size: 11px;
+  color: var(--ls-text-4);
+  line-height: 1.4;
+}
+
+/* ------------------------------------------------------------ motion */
+.ls-spin {
+  animation: ls-spin 0.9s linear infinite;
+}
+@keyframes ls-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ls-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+@keyframes ls-blink {
+  to {
+    visibility: hidden;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ls-spin,
+  .ls-thinking-dots i,
+  .ls-caret {
+    animation: none;
+  }
+}
+
+/* Narrow windows: the dock covers the workspace instead of squeezing it. */
+@media (max-width: 820px) {
+  .ls-agent-dock {
+    left: var(--ls-rail-w);
+    width: auto !important;
+    border-left: 0;
+    box-shadow: none;
+  }
+  .ls-agent-dock-resize {
+    display: none;
+  }
+}
+.ls-agent .ls-step.is-on-screen .ls-step-show:disabled {
+  opacity: 1;
+  cursor: default;
+}

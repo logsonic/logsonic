@@ -20,24 +20,25 @@ export const useSearchParser = () => {
    */
   const parseSearchQuery = useCallback((query: string): SearchToken[] => {
     if (!query) return [];
-    
+
     const tokens: SearchToken[] = [];
-    
+
     // Regular expression to match different parts of a Bleve query
     // Handles terms, phrases, field scoping, required/excluded modifiers, numeric values, and ranges
-    const tokenRegex = /([+-])?(?:([a-zA-Z0-9_]+):)?(?:"([^"]+)"|\/([^/]+)\/|((?:[<>]=?|=)\s*\d+(?:,\d{3})*(?:\.\d+)?(?:[eE][+-]?\d+)?)|(\d+(?:,\d{3})*(?:\.\d+)?(?:[eE][+-]?\d+)?)|([^\s+-:]+))/g;
-    
+    const tokenRegex =
+      /([+-])?(?:([a-zA-Z0-9_]+):)?(?:"([^"]+)"|\/([^/]+)\/|((?:[<>]=?|=)\s*\d+(?:,\d{3})*(?:\.\d+)?(?:[eE][+-]?\d+)?)|(\d+(?:,\d{3})*(?:\.\d+)?(?:[eE][+-]?\d+)?)|([^\s+-:]+))/g;
+
     let match;
     while ((match = tokenRegex.exec(query)) !== null) {
       const [_, modifier, field, phrase, regex, range, number, term] = match;
-      
+
       if (phrase) {
         tokens.push({
           type: 'phrase',
           value: phrase,
           field: field,
           required: modifier === '+',
-          excluded: modifier === '-'
+          excluded: modifier === '-',
         });
       } else if (regex) {
         tokens.push({
@@ -45,7 +46,7 @@ export const useSearchParser = () => {
           value: regex,
           field: field,
           required: modifier === '+',
-          excluded: modifier === '-'
+          excluded: modifier === '-',
         });
       } else if (range) {
         tokens.push({
@@ -53,7 +54,7 @@ export const useSearchParser = () => {
           value: range,
           field: field,
           required: modifier === '+',
-          excluded: modifier === '-'
+          excluded: modifier === '-',
         });
       } else if (number) {
         tokens.push({
@@ -61,19 +62,22 @@ export const useSearchParser = () => {
           value: number,
           field: field,
           required: modifier === '+',
-          excluded: modifier === '-'
+          excluded: modifier === '-',
         });
       } else if (term) {
+        // Bleve boolean operators are syntax, not search text; highlighting
+        // them would mark every "or" inside words such as "order".
+        if (!field && !modifier && (term === 'OR' || term === 'AND' || term === 'NOT')) continue;
         tokens.push({
           type: 'term',
           value: term,
           field: field,
           required: modifier === '+',
-          excluded: modifier === '-'
+          excluded: modifier === '-',
         });
       }
     }
-    
+
     return tokens;
   }, []);
 
@@ -86,26 +90,26 @@ export const useSearchParser = () => {
     // The returned function highlights text based on the provided search tokens
     return (text: string, fieldName: string = ''): ReactNode => {
       if (!text || !searchTokens.length) return text;
-      
+
       // Skip highlighting for excluded terms
-      const relevantTokens = searchTokens.filter(token => {
+      const relevantTokens = searchTokens.filter((token) => {
         // If token specifies a field, only use it for that field
         if (token.field && token.field !== fieldName) return false;
         // Skip excluded terms for highlighting
         if (token.excluded) return false;
         return true;
       });
-      
+
       if (!relevantTokens.length) return text;
-      
+
       // For simple implementation, split by each token and join with highlighted spans
       const textLower = text.toLowerCase();
       const matches: { index: number; length: number }[] = [];
-      
+
       // Find all matches for all tokens
-      relevantTokens.forEach(token => {
+      relevantTokens.forEach((token) => {
         const searchValue = token.value.toLowerCase();
-        
+
         if (token.type === 'regex') {
           try {
             const regex = new RegExp(searchValue, 'gi');
@@ -119,22 +123,22 @@ export const useSearchParser = () => {
         } else {
           let startIndex = 0;
           let index;
-          
+
           while ((index = textLower.indexOf(searchValue, startIndex)) !== -1) {
             matches.push({ index, length: searchValue.length });
             startIndex = index + searchValue.length;
           }
         }
       });
-      
+
       // Sort matches by index
       matches.sort((a, b) => a.index - b.index);
-      
+
       // Merge overlapping matches
       const mergedMatches: { index: number; length: number }[] = [];
       for (const match of matches) {
         const lastMatch = mergedMatches[mergedMatches.length - 1];
-        
+
         if (lastMatch && match.index <= lastMatch.index + lastMatch.length) {
           // Extend the last match if this one overlaps with it
           lastMatch.length = Math.max(
@@ -145,44 +149,41 @@ export const useSearchParser = () => {
           mergedMatches.push({ ...match });
         }
       }
-      
+
       // No matches found
       if (!mergedMatches.length) return text;
-      
+
       // Build the result with highlighted spans
       const result: ReactNode[] = [];
       let lastIndex = 0;
-      
+
       mergedMatches.forEach((match, i) => {
         // Add text before the match
         if (match.index > lastIndex) {
           result.push(text.substring(lastIndex, match.index));
         }
-        
+
         // Add the highlighted match
         result.push(
-          <span 
-            key={`highlight-${i}`} 
-            className="bg-yellow-300 text-black"
-          >
+          <span key={`highlight-${i}`} className="bg-yellow-300 text-black">
             {text.substring(match.index, match.index + match.length)}
           </span>
         );
-        
+
         lastIndex = match.index + match.length;
       });
-      
+
       // Add any remaining text
       if (lastIndex < text.length) {
         result.push(text.substring(lastIndex));
       }
-      
+
       return result;
     };
   }, []);
 
   return {
     parseSearchQuery,
-    createHighlighter
+    createHighlighter,
   };
-}; 
+};

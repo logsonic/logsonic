@@ -7,7 +7,7 @@
   width: 100%;
   height: 100%;
   background: var(--ls-bg-1);
-  font-family: var(--ls-font-mono);
+  font-family: var(--ls-font-sans);
 }
 
 /* Style for when table is locked */
@@ -45,7 +45,7 @@
 }
 
 .log-table tbody td {
-  font-family: var(--ls-font-mono);
+  font-family: var(--ls-font-sans);
   font-size: 12px;
   color: var(--ls-text);
   vertical-align: middle;
@@ -179,6 +179,67 @@ th {
   transition: background-color 0.08s ease;
   position: relative;
 }
+
+/* Match the table's 34px virtualization estimate and reserve mono for data. */
+.log-table tbody tr.log-row:not(:has(td[colspan])) {
+  height: 34px;
+}
+.log-table tbody tr.log-row:not(:has(td[colspan])) > td {
+  height: 34px;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  border-bottom: 1px solid var(--ls-border-subtle);
+}
+.log-table td[data-column-id="timestamp"],
+.log-table td[data-column-id="time"],
+.log-table td[data-column-id="@timestamp"],
+.log-table td[data-column-id="id"],
+.log-table td[data-column-id="_id"],
+.log-table td[data-column-id="request_id"],
+.log-table td[data-column-id="trace_id"],
+.log-table td[data-column-id="span_id"],
+.log-table td[data-column-id="status"],
+.log-table td[data-column-id="status_code"] {
+  font-family: var(--ls-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+}
+
+/* Color rules identify a row without replacing the reading surface. */
+.log-table tr.log-row[class*="bg-"] > td {
+  background: color-mix(in srgb, var(--ls-panel) 97%, var(--row-accent, var(--ls-accent))) !important;
+}
+.log-table tr.log-row.bg-red-100,
+.log-table tr.log-row.bg-pink-100 { --row-accent: var(--ls-err); }
+.log-table tr.log-row.bg-yellow-100,
+.log-table tr.log-row.bg-amber-100 { --row-accent: var(--ls-warn); }
+.log-table tr.log-row.bg-green-100 { --row-accent: var(--ls-ok); }
+.log-table tr.log-row.bg-blue-100 { --row-accent: var(--ls-info); }
+.log-table tr.log-row[class*="bg-"] > td:first-child {
+  box-shadow: inset 2px 0 var(--row-accent, var(--ls-accent));
+}
+.log-table tr.log-row[class*="bg-"]:hover > td {
+  background: color-mix(in srgb, var(--ls-panel) 92%, var(--row-accent, var(--ls-accent))) !important;
+}
+.log-table tr.log-row.selected-row > td {
+  background: var(--ls-accent-softer) !important;
+}
+.log-table tr.log-row.selected-row > td:first-child {
+  box-shadow: inset 2px 0 var(--ls-accent);
+}
+
+.log-table .ls-lvl {
+  height: 17px;
+  gap: 4px;
+  padding: 0 5px;
+  font-family: var(--ls-font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  border: 1px solid color-mix(in srgb, currentColor 17%, transparent);
+  background: color-mix(in srgb, currentColor 6%, var(--ls-panel));
+}
+.log-table .ls-lvl-dot { width: 5px; height: 5px; }
 
 .log-table .log-row:hover {
   background-color: var(--ls-bg-2) !important;

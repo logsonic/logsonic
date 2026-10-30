@@ -62,9 +62,17 @@ func (c *client) post(path string, payload any) (json.RawMessage, error) {
 	return c.do(http.MethodPost, path, nil, payload)
 }
 
+func (c *client) postContext(ctx context.Context, path string, payload any) (json.RawMessage, error) {
+	return c.doContext(ctx, http.MethodPost, path, nil, payload)
+}
+
 // do calls the LogSonic REST API. A nil payload sends no body; a 4xx/5xx
 // becomes an error carrying the server's JSON so the agent sees why.
 func (c *client) do(method, path string, params url.Values, payload any) (json.RawMessage, error) {
+	return c.doContext(context.Background(), method, path, params, payload)
+}
+
+func (c *client) doContext(ctx context.Context, method, path string, params url.Values, payload any) (json.RawMessage, error) {
 	baseURL := c.serverBaseURL()
 	u := baseURL + "/api/v1" + path
 	if len(params) > 0 {
@@ -78,7 +86,7 @@ func (c *client) do(method, path string, params url.Values, payload any) (json.R
 		}
 		body = bytes.NewReader(b)
 	}
-	req, err := http.NewRequest(method, u, body)
+	req, err := http.NewRequestWithContext(ctx, method, u, body)
 	if err != nil {
 		return nil, err
 	}

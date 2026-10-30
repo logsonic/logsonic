@@ -235,10 +235,12 @@ func TestFacetsScanRespectsFilters(t *testing.T) {
 	}
 }
 
-// The scan crosses search-after batch boundaries (facetScanBatchSize) on
+// The scan crosses search-after batch boundaries (scanBatchSize) on
 // anything larger than one batch; computed_over must equal the window
 // exactly -- no duplicated or dropped rows at the seams.
 func TestFacetsScanCountsExactlyAcrossBatches(t *testing.T) {
+	defer func(old int) { scanBatchSize = old }(scanBatchSize)
+	scanBatchSize = 1000
 	store, err := NewStorage(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -274,7 +276,7 @@ func TestFacetsScanCountsExactlyAcrossBatches(t *testing.T) {
 
 // Regression test for a hang found while building now-11's bench harness
 // (backend/bench/): every document shares one timestamp, so the scan's
-// shrinking tail window (`remaining` below facetScanBatchSize once agg.rows
+// shrinking tail window (`remaining` below scanBatchSize once agg.rows
 // nears MaxFacetSampleRows) can land on a page the search-after cursor
 // cannot advance past -- the same already-seen page comes back forever,
 // `len(result.Hits) < request.Size` never fires because the batch is always

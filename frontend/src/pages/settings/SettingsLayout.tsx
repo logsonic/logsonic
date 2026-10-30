@@ -1,4 +1,13 @@
-import { ArrowLeft, FolderSearch, HardDrive, Info, Settings as SettingsIcon, SlidersHorizontal, Terminal } from 'lucide-react';
+import {
+  ArrowLeft,
+  Bot,
+  FolderSearch,
+  HardDrive,
+  Info,
+  Settings as SettingsIcon,
+  SlidersHorizontal,
+  Terminal,
+} from 'lucide-react';
 import { FC, ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -30,6 +39,12 @@ const NAV: NavItem[] = [
     label: 'Watched folders',
     path: '/settings/watches',
     icon: <FolderSearch size={14} />,
+  },
+  {
+    id: 'agent',
+    label: 'Agent',
+    path: '/settings/agent',
+    icon: <Bot size={14} />,
   },
   {
     id: 'mcp',

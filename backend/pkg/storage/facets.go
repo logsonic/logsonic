@@ -2,16 +2,12 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"logsonic/pkg/types"
-
-	"github.com/blevesearch/bleve/v2"
-	"github.com/blevesearch/bleve/v2/search/query"
 )
 
 // Facet limits. See specs/now-02-faceted-fields-sidebar.md, "Design decisions".
@@ -32,7 +28,6 @@ const (
 	// FacetsResponse.ComputedOver/Sampled, is the honest equivalent: opt-in
 	// per request, capped, and explicit about what it covered.
 	MaxFacetSampleRows = 20_000
-	facetScanBatchSize = 1000
 	// highCardinalityRatio marks a field as high-cardinality (IDs, request
 	// numbers) when it has more distinct values than this share of the rows
 	// aggregated -- but only once at least highCardinalityMinRows rows were
@@ -170,157 +165,13 @@ func AggregateFacets(hits []map[string]interface{}) *types.FacetsResponse {
 // SearchPage, up to MaxFacetSampleRows; Sampled reports whether the window
 // held more rows than that.
 func (s *Storage) Facets(ctx context.Context, options SearchOptions) (*types.FacetsResponse, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	empty := &types.FacetsResponse{ComputedOver: 0, Fields: []types.FacetField{}}
-	if options.EndDate.Before(options.StartDate) {
-		return empty, nil
-	}
-	dates, err := s.List()
-	if err != nil {
-		return nil, fmt.Errorf("failed to list existing dates: %w", err)
-	}
-	selectedDates := intersectingDates(dates, options.StartDate, options.EndDate)
-	if len(selectedDates) == 0 {
-		return empty, nil
-	}
-	for _, date := range selectedDates {
-		if _, err := s.getOrCreateIndex(date); err != nil {
-			return nil, fmt.Errorf("failed to get index for date %s: %w", date, err)
-		}
-	}
-
-	// The read lock is held for the whole scan (up to MaxFacetSampleRows /
-	// facetScanBatchSize batches), like SearchPage holds it for one page.
-	// Clear/PruneOlderThan take the write lock, so a retention sweep and a
-	// large facet scan stall each other; no deadlock, but a lease-per-batch
-	// (re-resolving indexes between batches) is on the next-10 list.
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	indexes := make([]bleve.Index, 0, len(selectedDates))
-	timestampsIndexed := true
-	fieldSet := map[string]struct{}{"timestamp": {}} // needed for the exact-range filter
-	for _, date := range selectedDates {
-		index, ok := s.indices[date]
-		if !ok {
-			continue
-		}
-		indexes = append(indexes, index)
-		if !timestampIsIndexed(index) {
-			timestampsIndexed = false
-		}
-		fields, fieldErr := index.Fields()
-		if fieldErr != nil {
-			return nil, fmt.Errorf("failed to list fields for date %s: %w", date, fieldErr)
-		}
-		for _, field := range fields {
-			// Never pull _raw (the whole line) or ordering metadata through the
-			// scan: they are not faceted and would dominate the bytes read.
-			if field == "_raw" || field == "_seq" || field == "_all" || field == "_id" {
-				continue
-			}
-			fieldSet[field] = struct{}{}
-		}
-	}
-	if len(indexes) == 0 {
-		return empty, nil
-	}
-	requested := make([]string, 0, len(fieldSet))
-	for field := range fieldSet {
-		requested = append(requested, field)
-	}
-	sort.Strings(requested)
-
-	baseQuery, err := buildPageQuery(options.Query, options.Sources)
-	if err != nil {
-		return nil, err
-	}
-	if timestampsIndexed {
-		inclusive := true
-		timeQuery := query.NewDateRangeInclusiveQuery(options.StartDate, options.EndDate, &inclusive, &inclusive)
-		timeQuery.SetField("timestamp")
-		baseQuery = bleve.NewConjunctionQuery(baseQuery, timeQuery)
-	}
-	alias := bleve.NewIndexAlias(indexes...)
-
 	agg := newFacetAggregator()
-	// Dedupe by document ID across batches: the shared timestampSort cursor
-	// re-includes rows that share a timestamp at a search-after seam (see
-	// search_page_seams_test.go / ISSUES.md), and a facet count must be
-	// exact for the rows it claims to cover.
-	seen := make(map[string]struct{}, facetScanBatchSize)
-	var searchAfter []string
-	var total uint64
-	first := true
-	for agg.rows < MaxFacetSampleRows {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		request := bleve.NewSearchRequest(baseQuery)
-		request.Size = facetScanBatchSize
-		if remaining := MaxFacetSampleRows - agg.rows; remaining < request.Size {
-			request.Size = remaining
-		}
-		request.Fields = requested
-		request.SortByCustom(timestampSort("desc"))
-		if len(searchAfter) > 0 {
-			request.SetSearchAfter(searchAfter)
-		}
-		result, searchErr := alias.SearchInContext(ctx, request)
-		if searchErr != nil {
-			return nil, searchErr
-		}
-		if first {
-			total = result.Total
-			first = false
-		}
-		if len(result.Hits) == 0 {
-			break
-		}
-		newHits := 0
-		for _, hit := range result.Hits {
-			if _, dup := seen[hit.ID]; dup {
-				continue
-			}
-			seen[hit.ID] = struct{}{}
-			newHits++
-			entry, timestamp, ok := pageHitToLog(hit.ID, hit.Fields)
-			if !ok || timestamp.Before(options.StartDate) || timestamp.After(options.EndDate) {
-				continue
-			}
-			agg.Add(entry)
-		}
-		// A batch that added nothing new means the search-after cursor did
-		// not advance -- observed in practice when a tied sort key sits
-		// exactly at the shrinking tail window (`remaining` below
-		// facetScanBatchSize): the same already-`seen` page comes back
-		// forever, `len(result.Hits) < request.Size` never fires because the
-		// batch is always full, and the loop never reaches
-		// MaxFacetSampleRows. Bail out rather than spin: this is the same
-		// tied-timestamp/unindexed-_seq class of bug as the search-after-seam
-		// entry in ISSUES.md, just surfacing as a hang instead of a
-		// miscount. next-10's cursor-paging fix is the real cure; this stops
-		// the scan from holding s.mu.RLock() forever in the meantime.
-		if newHits == 0 {
-			out := agg.Result()
-			out.Sampled = uint64(agg.rows) < total
-			return out, nil
-		}
-		last := result.Hits[len(result.Hits)-1]
-		searchAfter = last.DecodedSort
-		if len(searchAfter) == 0 {
-			searchAfter = last.Sort
-		}
-		if len(searchAfter) == 0 || len(result.Hits) < request.Size {
-			break
-		}
+	options.Fields = nil
+	scan, err := s.ScanRows(ctx, options, MaxFacetSampleRows, agg.Add)
+	if err != nil {
+		return nil, err
 	}
 	out := agg.Result()
-	// On legacy shards (timestamp not indexed) Total counts candidates, not
-	// rows inside the exact range, so Sampled may over-report there; the
-	// bounded scan itself is still correct.
-	out.Sampled = uint64(agg.rows) < total && agg.rows >= MaxFacetSampleRows
+	out.Sampled = scan.Truncated
 	return out, nil
 }

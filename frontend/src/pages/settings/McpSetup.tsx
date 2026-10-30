@@ -1,7 +1,9 @@
-import { Check, Copy, ExternalLink, Terminal } from 'lucide-react';
-import { FC, useState } from 'react';
+import { ExternalLink, Terminal } from 'lucide-react';
+import { FC } from 'react';
 
 import { SettingsLayout } from './SettingsLayout';
+
+import { CopyBlock } from '@/components/settings/CopyBlock';
 
 const serverOrigin = import.meta.env.DEV
   ? 'http://localhost:8080'
@@ -9,58 +11,6 @@ const serverOrigin = import.meta.env.DEV
 
 const GITHUB_URL = 'https://github.com/logsonic/logsonic';
 const GITHUB_MCP_URL = `${GITHUB_URL}/tree/main/mcp`;
-
-const CopyBlock: FC<{ label: string; value: string }> = ({ label, value }) => {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(value).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    });
-  };
-
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <div className="flex items-center justify-between" style={{ marginBottom: 6, gap: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--ls-text-2)' }}>{label}</span>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="inline-flex items-center"
-          style={{
-            gap: 4,
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: 11,
-            color: copied ? 'var(--ls-ok)' : 'var(--ls-text-3)',
-            padding: '2px 4px',
-          }}
-        >
-          {copied ? <Check size={11} /> : <Copy size={11} />}
-          {copied ? 'Copied' : 'Copy'}
-        </button>
-      </div>
-      <pre
-        style={{
-          margin: 0,
-          padding: '10px 14px',
-          background: 'var(--ls-bg-2)',
-          border: '1px solid var(--ls-border)',
-          borderRadius: 'var(--ls-radius)',
-          fontSize: 12,
-          fontFamily: 'var(--ls-font-mono)',
-          color: 'var(--ls-text)',
-          overflowX: 'auto',
-          whiteSpace: 'pre',
-        }}
-      >
-        {value}
-      </pre>
-    </div>
-  );
-};
 
 const Section: FC<{ title: string; badge?: string; children: React.ReactNode }> = ({ title, badge, children }) => (
   <div style={{ marginBottom: 24 }}>

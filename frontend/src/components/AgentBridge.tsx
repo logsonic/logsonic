@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
+import { waitForSearchMetadata } from '@/hooks/useSearchLogs';
 import {
   AgentCommand,
   applyAgentCommand,
@@ -42,12 +43,20 @@ export const AgentBridge = () => {
       };
       try {
         const result = await applyAgentCommand(cmd, ctx);
-        if (result.searched) await waitForSearch();
+        if (result.searched) {
+          await waitForSearch();
+          // The chart's distribution loads after the rows; ack once it has
+          // too, so the event distribution matches the view the agent set.
+          await Promise.race([
+            waitForSearchMetadata(),
+            new Promise((resolve) => setTimeout(resolve, 5000)),
+          ]);
+        }
         await ackUICommand({
           id: cmd.id,
           ok: true,
           warnings: result.warnings.length > 0 ? result.warnings : undefined,
-          state: snapshotUIState(routeRef.current),
+          state: snapshotUIState(routeRef.current, result.details),
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

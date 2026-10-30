@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"logsonic/docs"
+	"logsonic/pkg/agentmcp"
 	lsmcp "logsonic/pkg/mcp"
 	"logsonic/pkg/server/handlers"
 	"logsonic/pkg/types"
@@ -215,6 +216,13 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 	mcpFallbackBaseURL := fmt.Sprintf("http://%s%s", cfg.Host, cfg.Port)
 	srv.mcpBaseURL.Store(mcpFallbackBaseURL)
+	// External MCP servers for the agent come from <storage>/mcp.json (or
+	// LOGSONIC_AGENT_MCP_CONFIG); they start on the first agent request.
+	h.AgentMCP = agentmcp.NewManager(agentmcp.DefaultPath(h.StoragePath))
+	h.AgentUITools = lsmcp.NewUIAdapter(func() string {
+		base, _ := srv.mcpBaseURL.Load().(string)
+		return base
+	})
 
 	// Serve static files from embedded filesystem
 	embeddedFS := static.GetFileSystem()
@@ -321,6 +329,18 @@ func NewServer(cfg Config) (*Server, error) {
 	// than the API timeout; a timeout mid-way would leave a half-deleted
 	// source. No body, so the JSON-body rule the group enforces is moot.
 	r.Delete("/api/v1/sources/{name}", h.HandleDeleteSource)
+	// Agent calls can include a bounded import and several model turns, so they
+	// use their own ten-minute deadline instead of the normal API timeout.
+	r.With(agentLoopbackOnly, requireJSONBody, middleware.ThrottleBacklog(2, 4, 5*time.Second)).Post("/api/v1/agent/chat", h.HandleAgentChat)
+	r.With(agentLoopbackOnly, requireJSONBody).Post("/api/v1/agent/approve", h.HandleAgentApprove)
+	r.With(agentLoopbackOnly).Get("/api/v1/agent/status", h.HandleAgentStatus)
+	r.With(agentLoopbackOnly).Get("/api/v1/agent/mcp", h.HandleAgentMCP)
+	// Model endpoint, model and key saved from Settings > Agent. MCP servers
+	// have no write route: they are added by editing mcp.json on disk.
+	r.With(agentLoopbackOnly).Get("/api/v1/agent/settings", h.HandleAgentSettings)
+	r.With(agentLoopbackOnly, requireJSONBody).Put("/api/v1/agent/settings", h.HandleUpdateAgentSettings)
+	r.With(agentLoopbackOnly, requireJSONBody, middleware.ThrottleBacklog(2, 4, 5*time.Second)).Post("/api/v1/agent/models", h.HandleAgentModels)
+	r.With(agentLoopbackOnly, requireJSONBody, middleware.ThrottleBacklog(2, 4, 5*time.Second)).Post("/api/v1/agent/test", h.HandleAgentTest)
 
 	// Set up API routes
 	r.Group(func(r chi.Router) {

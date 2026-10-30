@@ -9,6 +9,7 @@ import (
 	"logsonic/pkg/ingestfile"
 	"logsonic/pkg/types"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -420,6 +421,39 @@ func decodeSessionRecords(session IngestSession, lines []string) ([]l2g.LineResu
 			router = newAdaptiveDecoder(opts.SmartDecoder)
 		}
 		results := router.Decode(lines)
+		// log2grok's structured JSON captures contain JSON string literals,
+		// including their quotes. Unquote them before timestamp inference and
+		// storage; otherwise a valid JSON timestamp is treated as missing and
+		// the whole import gets the current synthetic time.
+		for i := range results {
+			if !strings.HasPrefix(results[i].Pattern, "structured:JSON") {
+				continue
+			}
+			for key, value := range results[i].Fields {
+				if len(value) < 2 || value[0] != '"' || value[len(value)-1] != '"' {
+					continue
+				}
+				var decoded string
+				if json.Unmarshal([]byte(value), &decoded) == nil {
+					results[i].Fields[key] = decoded
+				}
+			}
+		}
+		// Discovery can prefer an inferred text pattern over the JSON
+		// skeleton when JSON lines differ in their keys (session lines
+		// without src_ip, say). That pattern splits the object at arbitrary
+		// punctuation and loses its fields, so decode such lines as JSON.
+		for i := range results {
+			if strings.HasPrefix(results[i].Pattern, "structured:JSON") {
+				continue
+			}
+			if fields, ok := jsonLineFields(results[i].Raw); ok {
+				results[i].Matched = true
+				results[i].Pattern = "structured:JSON Lines"
+				results[i].Fields = fields
+				results[i].Error = ""
+			}
+		}
 		if primary, ok := router.PrimaryPattern(); ok {
 			opts.Name = primary.Name
 		}
