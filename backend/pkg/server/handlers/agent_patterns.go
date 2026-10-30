@@ -312,7 +312,7 @@ func (m *patternMiner) result(sortBy string, limit, valuesPerField int) map[stri
 		if m.rows >= 50 && float64(fs.rows) <= 0.02*float64(m.rows) {
 			sparse = append(sparse, sparseField{name, fs.rows, fs.first, fs.last})
 		}
-		if fs.values == nil || len(fs.values) < 2 {
+		if len(fs.values) < 2 {
 			continue
 		}
 		threshold := max(1, int(0.02*float64(fs.rows)))
